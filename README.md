@@ -32,6 +32,7 @@ Quit a game before installing or removing its fix.
 
 | Game | What the fix is for | Needs |
 | --- | --- | --- |
+| Beast of Reincarnation | Startup video plays with sound, no picture | D3DMetal, CrossOver Preview 27 |
 | CONTROL Resonant | Lit rooms behind windows drawn in flat colours | D3DMetal |
 | Devil May Cry 5 | Crashes when a skill preview plays | D3DMetal |
 | DYNASTY WARRIORS: ORIGINS | Cutscenes with sound and no picture | D3DMetal, CrossOver Preview 27 |
@@ -68,7 +69,9 @@ For Wo Long, Nioh 3 and KINGDOM HEARTS Dream Drop Distance, that the fix needs
 nothing of the engine is read off how it works, not established by a run on an
 untouched CrossOver.
 
-**Game Porting Toolkit 4.0b3.** On 2026-10-13 and 14, with D3DMetal 4.0b3 and
+**Game Porting Toolkit 4.0b3.** The app marks five titles as not needing their
+fix from 4.0b3 on: the four below and Mortal Shell 2, which was also played
+without its fix on 4.0b3, cutscenes included (2026-10-14). On 2026-10-13 and 14, with D3DMetal 4.0b3 and
 every fix removed, CONTROL Resonant drew its windows correctly, RESONANCE
 started and played, and both Life is Strange titles played without problems:
 none of the four needs its fix there. (The Life is Strange freeze was never
@@ -86,6 +89,14 @@ Media Foundation and uses the same reader as Persona 5 Strikers. Both must run
 on **DXMT**: with a Steam Play tool, set `CX_GRAPHICS_BACKEND=dxmt %command%`.
 Measured on 2026-10-14 on CrossOver Preview 27 through NotProton, with nothing
 else installed: the videos play.
+
+### Nioh 3 decodes its own video too
+
+Its cutscenes are VP9. CrossOver Preview 27 decodes them through VideoToolbox
+with magenta blocks in the bright areas, so its fix decodes them itself, with
+the same reader, and asks for it before CrossOver's decoder. Measured on
+2026-10-14 on CrossOver Preview 27 through NotProton: the picture is clean and
+smooth.
 
 ### NieR Replicant decodes its own video, and needs a prefix
 
@@ -108,6 +119,14 @@ nothing runs in it, and the installer refuses otherwise. The CrossOver route is
 the one measured with the game. The Steam Play route was tested on a prefix --
 install, check, remove, and Wine reading the key back -- but not yet with
 KINGDOM HEARTS itself running from one.
+
+### Beast of Reincarnation needs CrossOver Preview
+
+On stable CrossOver 26.3 its video stalls after two frames unless the engine
+carries a change from winevideo, which MacGameVideoFix installs. CrossOver
+Preview 27 does not need it: its own video decoder already behaves that way.
+Measured on 2026-10-14 on CrossOver Preview 27 through NotProton, D3DMetal,
+with nothing else installed: the startup video plays.
 
 ### DYNASTY WARRIORS: ORIGINS needs CrossOver Preview
 
