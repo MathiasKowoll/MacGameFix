@@ -33,6 +33,8 @@ Quit a game before installing or removing its fix.
 | Game | What the fix is for | Needs |
 | --- | --- | --- |
 | CONTROL Resonant | Lit rooms behind windows drawn in flat colours | D3DMetal |
+| Devil May Cry 5 | Crashes when a skill preview plays | D3DMetal |
+| DYNASTY WARRIORS: ORIGINS | Cutscenes with sound and no picture | D3DMetal, CrossOver Preview 27 |
 | God of War | White specks on characters in dim light | DXMT |
 | KINGDOM HEARTS Dream Drop Distance | Cutscenes with a solid green picture; a crash dialog on exit | D3DMetal, a prefix |
 | KINGDOM HEARTS HD 1.5+2.5 ReMIX | The same, for the six titles of the package | D3DMetal, a prefix |
@@ -40,8 +42,14 @@ Quit a game before installing or removing its fix.
 | Life is Strange: Reunion | Freezes after a while | D3DMetal 4 |
 | Marvel's Spider-Man 2 | T-pose, a broken symbiote, black blocks in the sandstorm | D3DMetal |
 | Mortal Shell 2 | Crash on the first cutscene | D3DMetal |
+| NieR Replicant ver.1.22474487139 | Crashes when the first video starts | D3DMetal, a prefix |
 | NINJA GAIDEN 4 | Says the VP9 codec is missing, then exits; on D3DMetal 4, nothing is ever drawn | D3DMetal 3 or 4.0b3, CrossOver Preview 27 |
+| Nioh | "Failure to play movie", then a crash | DXMT |
+| Nioh 2 | Cutscene refuses to play, then a crash | DXMT |
 | Nioh 3 | "Failed to play movie" | D3DMetal |
+| Persona 5 Strikers | Video never starts; sound only | DXMT |
+| RESIDENT EVIL 2 | Crashes when a video plays | D3DMetal |
+| RESIDENT EVIL 3 | Crashes when a video plays | D3DMetal |
 | RESONANCE: A Plague Tale Legacy | "Shader Model 6.7 is not supported" | D3DMetal |
 | TMNT: Splintered Fate | Opens a window, then closes | D3DMetal |
 | The Witcher 3: Wild Hunt | Black screen at start; DLSS said to be unsupported | D3DMetal |
@@ -69,6 +77,24 @@ nothing went wrong rather than a fault cured.) Spider-Man 2, The Witcher 3, Torm
 needed theirs, and God of War runs on DXMT, which the toolkit does not change. Every
 fix stays, for anyone on 4.0b2 and earlier.
 
+### Nioh and Nioh 2 decode their own video
+
+Their cutscenes are WMV3, which no CrossOver decodes. Nioh plays them through
+DirectShow, and its fix gives the video the Windows Media reader Windows would
+give it, with a WMV3 decoder of its own behind it. Nioh 2 plays them through
+Media Foundation and uses the same reader as Persona 5 Strikers. Both must run
+on **DXMT**: with a Steam Play tool, set `CX_GRAPHICS_BACKEND=dxmt %command%`.
+Measured on 2026-10-14 on CrossOver Preview 27 through NotProton, with nothing
+else installed: the videos play.
+
+### NieR Replicant decodes its own video, and needs a prefix
+
+Its video is WMV2 with WMA v2 audio, which no CrossOver decodes; its fix uses
+the same reader as Persona 5 Strikers. Measured on 2026-10-14 on CrossOver
+Preview 27 through NotProton, with nothing else installed: the intro plays
+with its sound. Like KINGDOM HEARTS below, its fix also tells Wine, in the
+game's prefix, to load the DLL beside it, so the app asks which prefix.
+
 ### KINGDOM HEARTS needs a prefix
 
 Its fix adds a DLL beside the game and also tells Wine, in the registry of that
@@ -82,6 +108,15 @@ nothing runs in it, and the installer refuses otherwise. The CrossOver route is
 the one measured with the game. The Steam Play route was tested on a prefix --
 install, check, remove, and Wine reading the key back -- but not yet with
 KINGDOM HEARTS itself running from one.
+
+### DYNASTY WARRIORS: ORIGINS needs CrossOver Preview
+
+Its cutscenes are VP9 in WebM, like NINJA GAIDEN 4's, and the same holds:
+stable CrossOver 26.3 cannot open them, while CrossOver Preview 27 can, by
+itself. The fix is a bridge that carries each decoded frame from the game's
+D3D11 video device to its D3D12 renderer. Measured on 2026-10-14 on CrossOver
+Preview 27 through NotProton, D3DMetal, with nothing else installed: the
+cutscene plays with its sound.
 
 ### NINJA GAIDEN 4 needs CrossOver Preview
 
@@ -101,6 +136,26 @@ Measured on 2026-10-14: on CrossOver Preview 27 through NotProton, with D3DMetal
 repair, in a diagnostic build, brought the game up on 4.0b3 with Metal 4 on and
 off, on a CrossOver carrying MacGameVideoFix's engine. D3DMetal 4.0b2 with the
 repair was not run.
+
+### Devil May Cry 5 and RESIDENT EVIL 2 and 3 decode their own videos
+
+Some of their videos are VC-1: Devil May Cry 5's skill previews on the
+Customize screen, and the two RESIDENT EVIL games' cutscenes. That is the same
+codec as Persona 5 Strikers' videos, and these games use the same reader.
+Measured on 2026-10-14 on CrossOver Preview 27 through NotProton, with nothing
+else installed: the previews and the videos play, with their sound.
+
+### Persona 5 Strikers decodes its own video
+
+Its cutscenes are VC-1 with WMA Pro audio, which no CrossOver decodes. The fix
+adds `mgvf-asf-reader.dll` beside the game: a video reader built on FFmpeg
+(LGPL; its notice is installed with it), used only when CrossOver cannot open
+the video. The game must run on **DXMT**. With a Steam Play tool such as
+NotProton, set the launch option `CX_GRAPHICS_BACKEND=dxmt %command%`.
+
+Measured on 2026-10-14 on CrossOver Preview 27 through NotProton, with nothing
+else installed: the intro videos play with sound in sync. Stable CrossOver 26.3
+without MacGameVideoFix's codec was not run.
 
 ### Spider-Man 2 downloads one thing
 
