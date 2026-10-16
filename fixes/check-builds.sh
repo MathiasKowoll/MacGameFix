@@ -2,11 +2,11 @@
 #
 # Does every shipped DLL still match the source it claims to come from?
 #
-#     runtime/check-builds.sh            report
-#     runtime/check-builds.sh --verbose  and say what differs
+#     fixes/check-builds.sh            report
+#     fixes/check-builds.sh --verbose  and say what differs
 #
 # WHY THIS EXISTS. One afternoon this repository held three different builds of
-# the same proxy at once: the source said one thing, runtime/amd_ags_x64.dll was
+# the same proxy at once: the source said one thing, the shipped amd_ags_x64.dll was
 # several revisions behind it, and the copy installed in the game was a third
 # build that matched neither. Nothing anywhere said so. Every measurement taken
 # against "the fix" was really a measurement of whichever of the three happened
@@ -16,9 +16,10 @@
 # It asks the binaries, not a manifest. A manifest is one more thing to forget
 # to update; a rebuild cannot be out of date with itself.
 #
-# NOTHING IS HARDCODED except one compile flag. For each shipped DLL:
+# NOTHING IS HARDCODED except one compile flag. For each DLL in fixes/:
 #   - the carrier is read from the forwarders it exports  (X_real.<symbol>)
-#   - the source is read from the log file it names        (<name>.log)
+#   - the source is the file in fixes/ or tools/ that writes the log it names
+#     (<name>.log)
 #   - the export table is read from the DLL itself, so no game has to be
 #     installed for this to run
 # It then rebuilds from that source and compares.
@@ -32,7 +33,11 @@
 # scripts. Without one it says so and stops rather than reporting everything
 # clean, because "no compiler" and "no drift" must never look the same.
 #
-# Part of MacGameVideoFix — https://github.com/MathiasKowoll/MacGameVideoFix
+# After those, three checks that need no compiler: no bottle name of this Mac in
+# anything published, the MGVF-GAME lines against process-features.json, and
+# the copies inside a built MacGameFix.app against fixes/.
+#
+# Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 set -uo pipefail
@@ -91,13 +96,6 @@ for dll in "$HERE"/*.dll; do
   # nothing useful about them -- and reported as unknown they read like drift.
   # What is checked instead is that they still hash to what was published.
   case "$name" in
-    engine-*.dll)
-      # An engine set, not a proxy: no carrier, no log, and nothing here to
-      # rebuild it from. It is checked further down against its laid-out
-      # mirror -- and the controller set against its strip and its export
-      # table -- so it is named here rather than left reading as an unknown.
-      printf '  %-32s --   engine set, checked below\n' "$name"
-      continue ;;
     ng3-*.dll|mgvf-asf-reader.dll)
       case "$name" in
         ng3-*) record="$HERE/ng3-THIRD-PARTY-LICENCES.md" ;;
@@ -125,8 +123,9 @@ for dll in "$HERE"/*.dll; do
     continue
   fi
 
+  # NINJA GAIDEN 4's fix is built from a probe kept in tools/ (flags_for).
   src=""
-  for d in runtime diagnostics; do
+  for d in fixes tools; do
     for candidate in "$ROOT/$d"/*.c; do
       [ -f "$candidate" ] || continue
       LC_ALL=C grep -qaF "\"$mark\"" "$candidate" 2>/dev/null && { src="$candidate"; break 2; }
@@ -189,9 +188,9 @@ done
 #
 # Bottle names are made up by whoever makes the bottle: ours are not a fact
 # about anyone else's machine, and they are not ours to publish. They had leaked
-# twice -- once into the wiki, once into comments inside installers that travel
-# in the fixes bundle -- so this reads the names actually on THIS machine and
-# refuses to find them in anything that goes out.
+# twice -- once into the wiki, once into comments inside installers that ship in
+# the app -- so this reads the names actually on THIS machine and refuses to
+# find them in anything that goes out.
 #
 # A bottle simply called "Steam" cannot be checked this way and is not: the word
 # appears legitimately all over a project about Steam games. Names that are
@@ -204,7 +203,8 @@ while IFS= read -r root; do
     n="$(basename "${b%/}")"
     [ ${#n} -gt 5 ] || continue
     case "$n" in Steam|steam) continue ;; esac
-    hits="$(grep -rl -- "$n" "$HERE" "$ROOT/crossover" "$ROOT/wiki" "$ROOT/README.md" 2>/dev/null \
+    hits="$(grep -rl -- "$n" "$HERE" "$ROOT/tools" "$ROOT/legacy" "$ROOT/README.md" \
+              "$ROOT/process-features.json" "$ROOT"/app/*.swift "$ROOT"/app/*.sh 2>/dev/null \
             | grep -v '/check-builds\.sh$' || true)"
     [ -n "$hits" ] || continue
     echo "  bottle name leaked: \"$n\" appears in" >&2
@@ -214,312 +214,74 @@ while IFS= read -r root; do
 done < <(. "$HERE/bottles.sh"; bottle_roots)
 [ "$name_leak" = 0 ] && echo "  no bottle name of this machine appears in anything shipped or published"
 
-# The MGVF-GAME lines against the app's own table.
+# The MGVF-GAME lines against the table.
 #
-# Those lines are a second copy of something the app already knows -- name,
-# executable, which installer -- and this repository has been bitten by a second
-# copy often enough to know what happens next. They exist because the fixes
-# tarball ships the installers and not the app, so a launcher applying one fix
-# to one game has nowhere else to read it from. This is what makes the copy
-# safe: it is compared on every run, and the executable is the identity, since
-# there is no AppID anywhere here and the folder name is Valve's to choose.
+# The app is built from both: build-app.sh takes every MGVF-GAME line of a
+# folder installer and reads the rest of the row from process-features.json by
+# executable. A line whose executable has no row is left out of the app with
+# one line of build output, and a row no installer declares is never offered,
+# so the two are compared here, where a mismatch is an error. The executable is
+# the identity: there is no AppID anywhere here, and the folder name is
+# Valve's to choose.
 echo
 decl_drift=0
 if python3 - "$ROOT" <<'PY'
-import re, sys, pathlib
+import json, re, sys, pathlib
 root = pathlib.Path(sys.argv[1])
-sw = (root/"app/MacGameVideoFix.swift").read_text()
-
-def switch(anchor):
-    i = sw.index(anchor); body = sw[i:sw.index("\n    }", i)]
-    out = {}
-    for m in re.finditer(r'case ([^:\n]+):\s*return ("([^"]*)"|nil)', body):
-        for c in m.group(1).split(","):
-            out[c.strip().lstrip(".")] = m.group(3)
-    d = re.search(r'default:\s*return "([^"]*)"', body)
-    return out, (d.group(1) if d else None)
-
-names, _ = switch("    var name: String {")
-exes, _ = switch("    var executable: String? {")
-inst, di = switch("    var installer: String {")
-# A case with no executable is a catch-all, not a title a launcher can match.
-want = {names[c]: (exes[c], inst.get(c, di)) for c in names if exes.get(c)}
+rows = json.loads((root/"process-features.json").read_text())["processes"]
 
 got = {}
-for f in sorted((root/"runtime").glob("install-*.sh")):
+bad = []
+for f in sorted((root/"fixes").glob("install-*.sh")):
     for line in re.findall(r'^# MGVF-GAME: (.+)$', f.read_text(), re.M):
         parts = [x.strip() for x in line.split("|")]
         name, exe = parts[0], (parts[1] if len(parts) > 1 else "")
-        got[name] = (exe, f.name)
+        if exe in got:
+            bad.append(f"{exe} is declared by both {got[exe][1]} and {f.name}")
+        got[exe] = (name, f.name)
 
-bad = []
-note = []
-for name, (exe, script) in sorted(got.items()):
-    if name not in want:
-        # A bottle-scoped installer is not in the app's LIST. The reason has now
-        # changed twice, so it is worth being exact about what is true today.
-        #
-        # Originally: the app asked for a game folder and could not know the
-        # bottle, so it could not run this installer at all.
-        #
-        # That stopped being true when the wizard gained a bottle picker: the app
-        # sets MGVF_BOTTLE from the bottle a person chose, and install-ng3-fix.sh
-        # takes a bottle as its first argument. So the app CAN run it. It does not
-        # yet, because nobody has wired the title into the app's table -- and that
-        # is a different sentence from "it cannot", which is what this note used
-        # to say. Whoever adds it should know the pieces are already there.
-        #
-        # This note used to end "-- a launcher runs it", and on that reasoning the
-        # files were kept out of the bundle as well. That was right while a
-        # launcher downloaded the fixes tarball separately. It inverted on
-        # 2026-08-31, when the launcher became the app's HOST instead: a launcher
-        # that embeds this bundle knows the bottle and can run the installer, but
-        # only if the files travelled with it. So they ship now, and the check
-        # below says whether they actually did -- because a subset payload fails
-        # as "this title has no fix", which is not a sentence anyone can act on.
-        #
-        # Replaced rather than deleted. An exception that simply disappears reads
-        # later as though it was never reasoned about, which is how a note saying
-        # four errors were expected sat over a real defect for months.
-        if "MGVF-SCOPE: bottle" in (root/"runtime"/script).read_text():
-            shipped = (root/"app"/"MacGameVideoFix.app"/"Contents"/"Resources"/script)
-            if shipped.exists():
-                note.append(f"{name}: bottle-scoped, so not in the app's list "
-                            f"({script}) -- but it ships, for a host launcher to run")
-            else:
-                bad.append(f"{name}: bottle-scoped and {script} does NOT ship; "
-                           f"a launcher hosting the app cannot fix this title")
-            continue
-        bad.append(f"declared but not a game the app knows: {name}"); continue
-    if want[name] != (exe, script):
-        bad.append(f"{name}: declares {exe} via {script}, app says {want[name][0]} via {want[name][1]}")
-for name in sorted(want):
-    if name not in got:
-        bad.append(f"the app has {name} and no installer declares it")
+for exe, (name, script) in sorted(got.items()):
+    row = rows.get(exe)
+    if row is None:
+        bad.append(f"{script} declares {name} ({exe}), and process-features.json has no row for it")
+    elif row.get("title") != name:
+        bad.append(f"{script} calls {exe} \"{name}\", process-features.json calls it \"{row.get('title')}\"")
+for exe in sorted(set(rows) - set(got)):
+    bad.append(f"process-features.json has {rows[exe].get('title')} ({exe}) and no installer declares it")
 
-for n in note:
-    print(f"  declaration: {n}")
 for b in bad:
     print(f"  declaration: {b}")
 sys.exit(1 if bad else 0)
 PY
 then
-  echo "  declarations: every MGVF-GAME line agrees with the app's table"
+  echo "  declarations: every MGVF-GAME line has its row in process-features.json, and every row its line"
 else
   decl_drift=1
 fi
 
-# The other copy of every one of these: the app runs the bundle's, not these.
+# The other copy of every one of these: the app runs the copies in its bundle
+# (or in a newer signed catalog), not these. A copy that differs from fixes/
+# is an app built before the last change here.
 echo
-bundle="$ROOT/app/MacGameVideoFix.app/Contents/Resources"
+bundle="$ROOT/app/MacGameFix.app/Contents/Resources"
 bundle_drift=0
 if [ -d "$bundle" ]; then
-  # *.sys, *.exe and *.so as well: the controller set ships two PE files that
-  # are not .dll and a unix half that is a .so, and the media pair's unix half
-  # was never in this list at all, so a stale winegstreamer.so in the app went
-  # unreported for as long as the list said "*.dll".
-  for f in "$HERE"/*.dll "$HERE"/*.sys "$HERE"/*.exe "$HERE"/*.so \
-           "$HERE"/install-*.sh "$HERE"/stage-codecs.sh "$HERE"/pe.pl; do
+  compared=0
+  for f in "$HERE"/*.dll "$HERE"/install-*.sh "$HERE"/pe.pl "$HERE"/bottles.sh "$HERE"/sm2-shadertool \
+           "$HERE"/*-LICENCES.md; do
     [ -f "$f" ] || continue
     b="$bundle/$(basename "$f")"
     [ -f "$b" ] || continue
+    compared=$((compared + 1))
     cmp -s "$f" "$b" || { echo "  bundle stale: $(basename "$f")"; bundle_drift=$((bundle_drift + 1)); }
   done
-  [ "$bundle_drift" = 0 ] && echo "  bundle: every copy matches runtime/"
-
-# Everything the fixes tarball ships must also be in the app.
-#
-# The two artefacts are for different consumers -- the tarball for anyone who is
-# not the launcher, the app for a launcher that hosts it -- and they are allowed
-# to differ. They are not allowed to differ BY OMISSION. A launcher embedding an
-# app that is a subset of the tarball fails as "this title has no fix", which is
-# not a sentence anyone can act on, and it fails at a user rather than here.
-#
-# Written the day this stopped being hypothetical: the app was missing NINJA
-# GAIDEN 3's four DLLs, its installer, its licence file and manifest.json.
-if [ -d "$ROOT/app/MacGameVideoFix.app/Contents/Resources" ]; then
-  tb="$(mktemp -d)"
-  # A bundle that does not build is reported, not skipped. This block used to
-  # fall through in silence when make-fixes-bundle.sh failed, and that silence
-  # is how an installer with no MGVF-SCOPE line -- which makes the bundle build
-  # exit 255, and the app build stop after it -- sat in the tree unnoticed.
-  if "$HERE/make-fixes-bundle.sh" "$tb" >"$tb/build.log" 2>&1; then
-    missing=$(comm -23 \
-      <(tar tzf "$(ls "$tb"/fixes-*.tar.gz | head -1)" | sed 's|.*/||' | grep -v '^$' | sort -u) \
-      <(ls "$ROOT/app/MacGameVideoFix.app/Contents/Resources" | sort -u))
-    if [ -z "$missing" ]; then
-      echo "  payload: everything the fixes bundle ships is also in the app"
-    else
-      echo "  payload: the app is a SUBSET of the fixes bundle -- missing:"
-      printf '%s\n' "$missing" | sed 's/^/    /'
-      # Counted. It used to set a variable the exit line never read.
-      bundle_drift=$((bundle_drift + 1))
-    fi
-  else
-    echo "  payload: make-fixes-bundle.sh FAILED, so the app cannot be compared with the bundle:"
-    grep -iE 'error' "$tb/build.log" | head -5 | sed 's/^/    /'
-    bundle_drift=$((bundle_drift + 1))
-  fi
-  rm -rf "$tb"
-fi
+  [ "$bundle_drift" = 0 ] && echo "  bundle: all $compared copies in MacGameFix.app match fixes/"
 else
-  echo "  bundle: not built"
-fi
-
-# The payload folder is the same bytes as the flat engine-* files, laid out the
-# way an engine is so a patcher can overlay it. Two copies drift; that is the
-# whole reason this check exists.
-echo
-payload_drift=0
-for pair in "engine-winegstreamer.dll:wine/x86_64-windows/winegstreamer.dll" \
-            "engine-winegstreamer.so:wine/x86_64-unix/winegstreamer.so" \
-            "engine-built-for.json:built-for.json"; do
-  flat="$HERE/${pair%%:*}"
-  laid="$HERE/engine-payload/${pair##*:}"
-  if [ ! -f "$flat" ] || [ ! -f "$laid" ]; then
-    echo "  payload missing: ${pair##*:}"; payload_drift=$((payload_drift + 1)); continue
-  fi
-  cmp -s "$flat" "$laid" || { echo "  payload drifted: ${pair##*:}"; payload_drift=$((payload_drift + 1)); }
-done
-[ "$payload_drift" = 0 ] && echo "  payload: engine-payload/ matches the flat engine-* files"
-
-# The optional set has a mirror of its own, runtime/engine-payload-controller/,
-# so that overlaying engine-payload/ never installs it. Same rule, same check.
-#
-# THE LIST IS BUILT, NOT WRITTEN DOWN. It was written down, and it named the four
-# files the set had when it was four. The set became ten and the list did not
-# follow, so hidclass.sys and the five xinput DLLs -- six of the ten binaries
-# that actually install -- were compared against nothing at all and could have
-# drifted between the flat files and the mirror without a word. A hand-written
-# list beside a set that grows is the second copy that goes stale, which is the
-# same lesson install-engine-controller.sh learned about PE_NAMES.
-#
-# So the PE names come from the installer that owns them, and the two files that
-# are not PE are named because they are the two exceptions: winebus.so goes to a
-# different directory, and the stamp is not a binary at all.
-controller_drift=0
-controller_pairs=""
-# PE_NAMES spans a line continuation, so it is accumulated to the closing quote
-# rather than read a line at a time. The first attempt at this read only the
-# first line, found four names, and reported success -- which is the same shape
-# as the bug being fixed and was caught only by counting what came out.
-controller_pe="$(awk '
-  /^PE_NAMES=/ { acc = $0; sub(/^PE_NAMES="/, "", acc); collecting = 1; next }
-  collecting { acc = acc " " $0 }
-  collecting && /"[[:space:]]*$/ { sub(/".*$/, "", acc); gsub(/\\/, " ", acc); print acc; exit }
-' "$HERE/install-engine-controller.sh")"
-controller_pe_count=0
-for f in $controller_pe; do
-  case "$f" in *.dll|*.sys|*.exe) ;; *) continue ;; esac
-  controller_pairs="$controller_pairs engine-controller-$f:wine/x86_64-windows/$f"
-  controller_pe_count=$((controller_pe_count + 1))
-done
-# A parse that silently found nothing would compare nothing and pass.
-if [ "$controller_pe_count" -lt 9 ]; then
-  echo "  controller payload: only $controller_pe_count PE names parsed out of install-engine-controller.sh -- refusing to call that a check"
-  controller_drift=$((controller_drift + 1))
-fi
-controller_pairs="$controller_pairs engine-controller-winebus.so:wine/x86_64-unix/winebus.so"
-controller_pairs="$controller_pairs engine-controller-built-for.json:built-for.json"
-for pair in $controller_pairs; do
-  flat="$HERE/${pair%%:*}"
-  laid="$HERE/engine-payload-controller/${pair##*:}"
-  if [ ! -f "$flat" ] || [ ! -f "$laid" ]; then
-    echo "  controller payload missing: ${pair##*:}"; controller_drift=$((controller_drift + 1)); continue
-  fi
-  cmp -s "$flat" "$laid" || { echo "  controller payload drifted: ${pair##*:}"; controller_drift=$((controller_drift + 1)); }
-done
-[ "$controller_drift" = 0 ] && echo "  payload: engine-payload-controller/ matches the flat engine-controller-* files ($((controller_pe_count + 2)) compared)"
-
-# The four files are our own builds and ship stripped: for the three PE ones no
-# .debug_ section, no symbol table, and an export table and an import table
-# identical to the unstripped file's -- build-controller-bus.sh proves that as
-# it strips. What is checked here is that what ships is still that file:
-# stripped, and with the counts the payload README records, read the way the
-# codec hashes are read out of CODEC-LICENCES.md. Without the tool it says so
-# and counts it, because "no reader" and "no drift" must never look the same.
-#
-# The fourth is the unix half, a Mach-O, and it has no COFF tables to compare.
-# The same question is asked in its own terms -- the exported symbols and the
-# linked libraries are what a loader reads, and a file that still carries local
-# symbols is the unstripped one -- with nm and otool, which ship with macOS.
-# It shares the loop and therefore the toolchain gate above it, which is worth
-# knowing when the gate reports: a machine without llvm-readobj checks neither
-# half rather than only the PE one.
-CREADME="$HERE/engine-payload-controller/README.md"
-READOBJ="$MINGW_BIN/llvm-readobj"; [ -x "$READOBJ" ] || READOBJ="$(command -v llvm-readobj 2>/dev/null || true)"
-OBJDUMP="$MINGW_BIN/llvm-objdump"; [ -x "$OBJDUMP" ] || OBJDUMP="$(command -v llvm-objdump 2>/dev/null || true)"
-if [ ! -f "$CREADME" ]; then
-  echo "  controller: no engine-payload-controller/README.md to read counts from"; controller_drift=$((controller_drift + 1))
-elif [ -z "$READOBJ" ] || [ -z "$OBJDUMP" ]; then
-  echo "  controller: no llvm-readobj / llvm-objdump, so the strip and the tables cannot be verified"; controller_drift=$((controller_drift + 1))
-else
-  rows=0
-  while IFS='|' read -r _ rel _bytes exports imports _; do
-    rel="$(echo "$rel" | tr -d ' \`')"; exports="$(echo "$exports" | tr -d ' ,')"; imports="$(echo "$imports" | tr -d ' ,')"
-    case "$rel" in wine/x86_64-windows/*|wine/x86_64-unix/*) ;; *) continue ;; esac
-    rows=$((rows + 1))
-    f="$HERE/engine-controller-$(basename "$rel")"
-    if [ ! -f "$f" ]; then
-      echo "  controller missing: $rel"; controller_drift=$((controller_drift + 1)); continue
-    fi
-    bad=""
-    case "$rel" in
-    wine/x86_64-unix/*)
-      # The unix half. The README's third and fourth columns carry exported
-      # symbols and linked libraries for this row, which is what those two
-      # numbers mean for a Mach-O.
-      locals="$(nm -a "$f" | grep -cE '^[0-9a-f]+ [a-z] ' || true)"
-      [ "$locals" = 0 ] || bad="$bad, carries $locals local symbols, so it is not the stripped file"
-      have_exp="$(nm -gU "$f" | grep -c . || true)"
-      have_imp="$(otool -L "$f" | tail -n +2 | grep -c . || true)"
-      [ "$have_exp" = "$exports" ] || bad="$bad, exports $have_exp symbols where the README records $exports"
-      [ "$have_imp" = "$imports" ] || bad="$bad, links $have_imp libraries where the README records $imports"
-      ;;
-    *)
-      "$OBJDUMP" -h "$f" | grep -q '\.debug_' && bad="$bad, carries .debug_ sections"
-      syms="$("$READOBJ" --file-header "$f" | sed -n 's/.*SymbolCount: *//p')"
-      [ "$syms" = 0 ] || bad="$bad, has a symbol table ($syms symbols)"
-      have_exp="$("$READOBJ" --coff-exports "$f" | grep -cE '^[[:space:]]*Name:')"
-      have_imp="$("$READOBJ" --coff-imports "$f" | grep -cE '^[[:space:]]*Symbol:')"
-      [ "$have_exp" = "$exports" ] || bad="$bad, exports $have_exp where the README records $exports"
-      [ "$have_imp" = "$imports" ] || bad="$bad, imported symbols $have_imp where the README records $imports"
-      ;;
-    esac
-    [ -z "$bad" ] || { echo "  controller drifted: $(basename "$rel")${bad}"; controller_drift=$((controller_drift + 1)); }
-  done < "$CREADME"
-  if [ "$rows" = 0 ]; then
-    echo "  controller: the README records no wine/ rows to check against"; controller_drift=$((controller_drift + 1))
-  elif [ "$controller_drift" = 0 ]; then
-    echo "  controller: all $rows stripped, with the counts the README records"
-  fi
-fi
-
-# The codecs are other people's binaries copied out of winevideo's build, so
-# they are checked the way the NINJA GAIDEN 3 DLLs are: against a recorded
-# hash. Three of these sat in an engine for days while nobody could say where
-# they came from, which is the whole argument for the table.
-codec_bad=0
-LIC="$HERE/engine-payload/CODEC-LICENCES.md"
-if [ -f "$LIC" ]; then
-  while IFS='|' read -r _ rel bytes sha _; do
-    rel="$(echo "$rel" | tr -d ' `')"; sha="$(echo "$sha" | tr -d ' `')"
-    case "$rel" in lib64/*) ;; *) continue ;; esac
-    f="$HERE/engine-payload/$rel"
-    if [ ! -f "$f" ]; then
-      echo "  codec missing: $rel"; codec_bad=$((codec_bad + 1)); continue
-    fi
-    have="$(shasum -a 256 "$f" | cut -d' ' -f1)"
-    [ "$have" = "$sha" ] || { echo "  codec drifted: $rel"; codec_bad=$((codec_bad + 1)); }
-  done < "$LIC"
-  [ "$codec_bad" = 0 ] && echo "  codecs: all match the sha256s in CODEC-LICENCES.md"
-else
-  echo "  codecs: no CODEC-LICENCES.md"; codec_bad=1
+  echo "  bundle: app/MacGameFix.app is not built, so there is nothing to compare"
 fi
 
 echo
 echo "  $checked rebuilt and compared, $drifted drifted, $missing_source unattributed"
 [ "$drifted" = 0 ] && [ "$bundle_drift" = 0 ] && [ "$missing_source" = 0 ] \
-  && [ "$decl_drift" = 0 ] && [ "$name_leak" = 0 ] && [ "$payload_drift" = 0 ] \
-  && [ "$controller_drift" = 0 ] && [ "$codec_bad" = 0 ] || exit 1
+  && [ "$decl_drift" = 0 ] && [ "$name_leak" = 0 ] || exit 1
 exit 0

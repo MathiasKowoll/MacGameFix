@@ -27,4 +27,4 @@ different FFmpeg is the same script with `FFVER` and `FFSHA` changed.
 
 ## The binary, as shipped here
 
-- `mgvf-asf-reader.dll` — `fcbb9a130bdc2d9fb377d3ea4a3e4eaa54974657b92d635f487ea323c013f09c`
+- `mgvf-asf-reader.dll` — `18334f0e8392e230b1c6f4d7df9ef38ce42558a1e11c8427453ef8d7803ddbd6`

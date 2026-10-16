@@ -313,7 +313,10 @@ has one.
 **Building a fix's DLL.** `fixes/build-proxy.sh` and
 `fixes/build-asf-reader.sh` need llvm-mingw (or another x86_64-w64-mingw32
 toolchain). Users never run them: the built DLLs are in `fixes/` and ship in the
-app. `fixes/check-builds.sh` checks that each DLL is the one its source builds.
+app. `fixes/check-builds.sh` rebuilds each DLL from its source and compares the
+two, checks the third-party ones against their recorded sha256, and compares
+the MGVF-GAME lines with `process-features.json` and a built app's copies with
+`fixes/`.
 
 ## How each fix is made
 
