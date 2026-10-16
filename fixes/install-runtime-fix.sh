@@ -146,7 +146,14 @@ case "$MODE" in
   # which puts someone's home directory and library layout into any log they
   # paste into a bug report -- and the caller already knows the path, it just
   # passed it in.
-  status
+  # An older build of ours is "outdated"; installing again replaces it. Only
+  # this answer changes: --restore and --install read status() as it is.
+  state="$(status)"
+  if [ "$state" = installed ] && ! cmp -s "$LIVE" "$PROXY"; then
+    echo "an older build of the fix is in place; installing again brings this one" >&2; echo outdated
+  else
+    echo "$state"
+  fi
   exit 0
   ;;
 

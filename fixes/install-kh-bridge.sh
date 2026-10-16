@@ -348,7 +348,10 @@ case "$MODE" in
   # the file cannot answer for any executable -- and in that last case the
   # queries can start a wineserver in a bottle where none was running.
   if is_ours "$LIVE" && [ -f "$REAL" ]; then
-    if override_ok; then echo installed; else echo broken; fi
+    # An older bridge is "outdated"; installing again replaces it and
+    # re-asserts the overrides, so they need not be asked about first.
+    if ! cmp -s "$LIVE" "$PROXY"; then echo "an older build of the fix is in place; installing again brings this one" >&2; echo outdated
+    elif override_ok; then echo installed; else echo broken; fi
   elif is_ours "$LIVE"; then echo broken
   elif [ ! -f "$LIVE" ] && [ -f "$REAL" ]; then echo half
   else echo absent; fi

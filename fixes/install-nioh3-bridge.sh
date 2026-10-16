@@ -76,8 +76,11 @@ is_ours() { [ -f "$1" ] && LC_ALL=C grep -qa "$MARKER" "$1"; }
 case "$MODE" in
 --status)
   if is_ours "$LIVE" && [ -f "$REAL" ]; then
-    if cmp -s "$LIVE" "$PROXY" && cmp -s "$LIVE_READER" "$READER" && [ -f "$FIRST" ]; then echo installed
-    else echo "an older build of the fix is in place; install again" >&2; echo broken; fi
+    # A missing reader or setting is a repair; an older bridge or reader, an update.
+    if [ ! -f "$LIVE_READER" ] || [ ! -f "$FIRST" ]; then
+      echo "a file of the fix is missing; install again" >&2; echo broken
+    elif cmp -s "$LIVE" "$PROXY" && cmp -s "$LIVE_READER" "$READER"; then echo installed
+    else echo "an older build of the fix is in place; installing again brings this one" >&2; echo outdated; fi
   elif is_ours "$LIVE"; then echo broken
   elif [ ! -f "$LIVE" ] && [ -f "$REAL" ]; then echo half
   else echo absent; fi

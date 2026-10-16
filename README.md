@@ -97,6 +97,11 @@ until you turn it on, and the fixes stay in the games' own folders as before.
     refused and the catalog in use stays.
   - A new game in the catalog shows up as a notification, but nothing is
     installed for it until you mark it.
+  - A newer build of a fix already in a marked game replaces the older one.
+    The installers compare the files they put in place with the catalog's, and
+    the window shows *Older build: install to update*; the agent installs it
+    again once the game is closed. Spider-Man 2's says *Needs repair* instead,
+    since its shaders are rebuilt for each game build as well.
 - **Reporting.** When a fix fails to install, the agent says so in a
   notification with a *Report on GitHub* button. It opens a new issue, already
   filled in with the game, the versions and the installer's last lines. Your
@@ -297,7 +302,13 @@ throwaway home and a fake game and catalog:
 - what a game runs on, read from a fake Steam Play setup, and the user's choice
   over it;
 - while Steam writes the game and while the game runs;
+- an older build of a fix replaced with the catalog's;
 - a failing installer's report.
+
+`fixes/test-installers.sh` takes every folder installer through its life on
+throwaway folders, with no game needed: installed, an older build, updated,
+restored to the game's own file, and an older or missing reader where a fix
+has one.
 
 **Building a fix's DLL.** `fixes/build-proxy.sh` and
 `fixes/build-asf-reader.sh` need llvm-mingw (or another x86_64-w64-mingw32

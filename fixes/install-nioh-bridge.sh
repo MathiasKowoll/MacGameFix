@@ -82,10 +82,12 @@ done
 
 case "$MODE" in
 --status)
-  # An older bridge, or a missing or older reader, is one an install repairs.
+  # A missing reader is one an install repairs; an older bridge or reader,
+  # one it updates.
   if is_ours "$LIVE" && [ -f "$REAL" ]; then
-    if cmp -s "$LIVE" "$PROXY" && cmp -s "$LIVE_READER" "$READER"; then echo installed
-    else echo "an older build of the fix is in place; install again" >&2; echo broken; fi
+    if [ ! -f "$LIVE_READER" ]; then echo "the reader is missing; install again" >&2; echo broken
+    elif cmp -s "$LIVE" "$PROXY" && cmp -s "$LIVE_READER" "$READER"; then echo installed
+    else echo "an older build of the fix is in place; installing again brings this one" >&2; echo outdated; fi
   elif is_ours "$LIVE"; then echo broken
   elif [ ! -f "$LIVE" ] && [ -f "$REAL" ]; then echo half
   else echo absent; fi

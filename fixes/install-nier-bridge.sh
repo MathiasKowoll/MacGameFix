@@ -331,9 +331,10 @@ if [ -n "${MGVF_BOTTLE:-}" ] && is_plain_prefix "${MGVF_BOTTLE%/}"; then
   case "$MODE" in
   --status)
     if is_ours "$LIVE" && [ -f "$REAL" ]; then
-      if cmp -s "$LIVE" "$PROXY" && [ -f "$LIVE_READER" ] && cmp -s "$LIVE_READER" "$READER"
-      then echo installed
-      else echo "an older build of the fix is in place; install again" >&2; echo broken; fi
+      # A missing reader is a repair; an older bridge or reader, an update.
+      if [ ! -f "$LIVE_READER" ]; then echo "the reader is missing; install again" >&2; echo broken
+      elif cmp -s "$LIVE" "$PROXY" && cmp -s "$LIVE_READER" "$READER"; then echo installed
+      else echo "an older build of the fix is in place; installing again brings this one" >&2; echo outdated; fi
     elif is_ours "$LIVE"; then echo broken
     elif [ ! -f "$LIVE" ] && [ -f "$REAL" ]; then echo half
     else echo absent; fi
@@ -386,8 +387,13 @@ case "$MODE" in
   # the bottle. It asks when a server is up, and also when the server check or
   # the file cannot answer -- and in that last case the query can start a
   # wineserver in a bottle where none was running.
+  # A missing reader is a repair and an older bridge or reader an update, both
+  # told from the files before any bottle is asked.
   if is_ours "$LIVE" && [ -f "$REAL" ]; then
-    if override_ok; then echo installed; else echo broken; fi
+    if [ ! -f "$LIVE_READER" ]; then echo "the reader is missing; install again" >&2; echo broken
+    elif ! cmp -s "$LIVE" "$PROXY" || ! cmp -s "$LIVE_READER" "$READER"; then
+      echo "an older build of the fix is in place; installing again brings this one" >&2; echo outdated
+    elif override_ok; then echo installed; else echo broken; fi
   elif is_ours "$LIVE"; then echo broken
   elif [ ! -f "$LIVE" ] && [ -f "$REAL" ]; then echo half
   else echo absent; fi

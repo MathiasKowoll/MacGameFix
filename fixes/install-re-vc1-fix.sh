@@ -63,10 +63,10 @@ fi
 case "$MODE" in
 --status)
   if is_ours "$LIVE" && [ -f "$REAL" ]; then
-    # Either file out of date, or the reader missing, is one the app repairs
-    # by installing again; it knows four words and "broken" is that one.
-    if cmp -s "$LIVE" "$PROXY" && cmp -s "$LIVE_READER" "$READER"; then echo installed
-    else echo "an older build of the fix is in place; install again" >&2; echo broken; fi
+    # The reader missing is a repair; either file out of date, an update.
+    if [ ! -f "$LIVE_READER" ]; then echo "the reader is missing; install again" >&2; echo broken
+    elif cmp -s "$LIVE" "$PROXY" && cmp -s "$LIVE_READER" "$READER"; then echo installed
+    else echo "an older build of the fix is in place; installing again brings this one" >&2; echo outdated; fi
   elif is_ours "$LIVE"; then echo broken
   elif [ ! -f "$LIVE" ] && [ -f "$REAL" ]; then echo half
   else echo absent; fi

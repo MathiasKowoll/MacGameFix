@@ -91,7 +91,10 @@ x64_state() {
 
 case "$MODE" in
 --status)
-  if is_ours "$LIVE" && [ -f "$REAL" ]; then echo installed
+  # An older build of ours is "outdated"; installing again replaces it.
+  if is_ours "$LIVE" && [ -f "$REAL" ]; then
+    if cmp -s "$LIVE" "$PROXY"; then echo installed
+    else echo "an older build of the fix is in place; installing again brings this one" >&2; echo outdated; fi
   elif is_ours "$LIVE"; then echo broken
   elif [ ! -f "$LIVE" ] && [ -f "$REAL" ]; then echo half
   else echo absent; fi

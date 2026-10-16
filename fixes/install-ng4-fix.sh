@@ -114,7 +114,10 @@ status() {
   # but DirectStorage is still live, the fix is in place and not working, which
   # is what `broken` means.
   if is_ours "$CARRIER" && [ -f "$REAL" ]; then
-    if [ -f "$GAME/dstoragecore.dll" ]; then echo broken; else echo installed; fi
+    # An older build of ours is "outdated"; installing again replaces it.
+    if [ -f "$GAME/dstoragecore.dll" ]; then echo broken
+    elif ! cmp -s "$CARRIER" "$PROXY"; then echo "an older build of the fix is in place; installing again brings this one" >&2; echo outdated
+    else echo installed; fi
   elif is_ours "$CARRIER"; then echo broken
   elif [ ! -f "$CARRIER" ] && [ -f "$REAL" ]; then echo half
   else echo absent; fi

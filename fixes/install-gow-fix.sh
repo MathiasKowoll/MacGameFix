@@ -55,10 +55,10 @@ is_ours() { [ -f "$1" ] && LC_ALL=C grep -qa "$MARKER" "$1"; }
 case "$MODE" in
 --status)
   if is_ours "$LIVE" && [ -f "$REAL" ]; then
-    # An older build of ours still works, but installing again brings the
-    # current one; the app knows four words and "broken" means "apply again".
+    # An older build of ours still works, and installing again brings the
+    # current one: "outdated".
     if cmp -s "$LIVE" "$PROXY"; then echo installed
-    else echo "an older build of the fix is in place; install again" >&2; echo broken; fi
+    else echo "an older build of the fix is in place; installing again brings this one" >&2; echo outdated; fi
   elif is_ours "$LIVE"; then echo broken
   elif [ ! -f "$LIVE" ] && [ -f "$REAL" ]; then echo half
   else echo absent; fi

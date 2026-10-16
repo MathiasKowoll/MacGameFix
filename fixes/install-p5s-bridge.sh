@@ -76,7 +76,10 @@ case "$MODE" in
   # Without its reader the bridge still works where the codec is staged, and
   # nowhere else -- an install from before the reader existed. Broken, so the
   # app offers the repair, which is an install.
-  if is_ours "$LIVE" && [ -f "$REAL" ] && [ -f "$LIVE_READER" ]; then echo installed
+  # An older bridge or reader is "outdated"; installing again replaces both.
+  if is_ours "$LIVE" && [ -f "$REAL" ] && [ -f "$LIVE_READER" ]; then
+    if cmp -s "$LIVE" "$PROXY" && cmp -s "$LIVE_READER" "$READER"; then echo installed
+    else echo "an older build of the fix is in place; installing again brings this one" >&2; echo outdated; fi
   elif is_ours "$LIVE" && [ -f "$REAL" ]; then echo broken
   elif is_ours "$LIVE"; then echo broken
   elif [ ! -f "$LIVE" ] && [ -f "$REAL" ]; then echo half

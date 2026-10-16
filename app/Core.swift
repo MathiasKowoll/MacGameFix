@@ -190,12 +190,13 @@ struct Prefix: Hashable, Identifiable {
 }
 
 enum FixState: Equatable {
-    case unknown, installed, absent, half, broken, noCarrier
+    case unknown, installed, outdated, absent, half, broken, noCarrier
 
     var label: String {
         switch self {
         case .unknown: return "…"
         case .installed: return "Installed"
+        case .outdated: return "Older build: install to update"
         case .absent: return "Not installed"
         case .half: return "Half installed"
         case .broken: return "Needs repair"
@@ -206,6 +207,7 @@ enum FixState: Equatable {
     var color: Color {
         switch self {
         case .installed: return .green
+        case .outdated: return .blue
         case .half, .broken: return .orange
         case .noCarrier: return .red
         default: return .secondary
@@ -478,16 +480,18 @@ enum Catalog {
 // MARK: - One installer, from anywhere
 
 enum Fixer {
-    /// The installer's word for a folder: installed, absent, half, broken; nil
-    /// when it found nothing there for the fix to ride on.
+    /// The installer's word for a folder: installed, outdated (an older build of
+    /// the fix, which installing again replaces), absent, half, broken;
+    /// noCarrier when it found nothing there for the fix to ride on.
     static func status(_ game: Game, folder: URL, prefix: String?, catalog: URL) async -> FixState {
         let out = Collected()
         let code = await run(game, folder: folder, prefix: prefix, catalog: catalog, ["--status"]) { out.add($0) }
         let word = out.all.map { $0.trimmingCharacters(in: .whitespaces) }
-            .first { ["installed", "broken", "half", "absent"].contains($0) }
+            .first { ["installed", "outdated", "broken", "half", "absent"].contains($0) }
         guard code == 0, let word else { return .noCarrier }
         switch word {
         case "installed": return .installed
+        case "outdated": return .outdated
         case "half": return .half
         case "broken": return .broken
         default: return .absent

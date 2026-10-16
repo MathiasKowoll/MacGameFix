@@ -39,14 +39,19 @@ RES="$T/res"
 mkdir -p "$RES"
 cat > "$RES/install-fake.sh" <<'SH'
 #!/bin/bash
+# Build 2 of the fake fix; a marker holding anything else is an older build.
 dir="$1"
 case "${2:-}" in
-  --status) [ -f "$dir/fixed.marker" ] && echo installed || echo absent; exit 0 ;;
+  --status)
+    if [ ! -f "$dir/fixed.marker" ]; then echo absent
+    elif [ "$(cat "$dir/fixed.marker")" = 2 ]; then echo installed
+    else echo outdated; fi
+    exit 0 ;;
   --restore) rm -f "$dir/fixed.marker"; exit 0 ;;
 esac
 echo "installing into $dir"
 if [ -f "$dir/FAIL" ]; then echo "cannot write $dir/fake.dll"; exit 1; fi
-touch "$dir/fixed.marker"
+echo 2 > "$dir/fixed.marker"
 SH
 # Made for DXMT, with a codec only CrossOver Preview 27 ships; and a second
 # game made for D3DMetal whose fix D3DMetal 4.0b3 makes unnecessary.
@@ -166,5 +171,10 @@ check 'has "$(menu)" "summary | 1 in place"' "and the menu bar counts it in plac
 printf '{"kept":[{"name":"Fake Game","folder":"%s"},{"name":"Gone Game","folder":"%s"}],"updates":false}' "$GAME" "$T/gone" > "$SUPPORT/MacGameFix/automatic.json"
 OUT="$(menu)"
 check 'has "$OUT" "summary | 1 to review" && has "$OUT" "Gone Game | Folder not found"' "a marked game whose folder is gone is to review"
+
+echo "== an older build of a fix"
+printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false,"runtimes":{"%s|Fake Game":{"source":"your choice","build":"27.0.0.41069","backend":"dxmt","noD3DMetal":false,"setUpHere":false}}}' "$GAME" "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
+echo 1 > "$GAME/fixed.marker"; steam 7 4
+check 'has "$(agent)" "ok Fake Game: The fix is updated to the newer build." && [ "$(cat "$GAME/fixed.marker")" = 2 ]' "an older build in the game folder is replaced with the catalog's"
 
 [ "$fail" = 0 ] && echo "==> MacGameFix automation: signed catalogs, what each game runs on, the agent's updates, waits and reports, the menu bar's summary" || exit 1

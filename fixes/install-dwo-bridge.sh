@@ -109,7 +109,14 @@ status() {
 
 case "$MODE" in
 --status)
-  status
+  # An older build of ours is "outdated"; installing again replaces it. Only
+  # this answer changes: --restore and --install read status() as it is.
+  state="$(status)"
+  if [ "$state" = installed ] && ! cmp -s "$LIVE" "$PROXY"; then
+    echo "an older build of the fix is in place; installing again brings this one" >&2; echo outdated
+  else
+    echo "$state"
+  fi
   exit 0
   ;;
 
@@ -133,7 +140,32 @@ case "$MODE" in
   [ -f "$PROXY" ] || { echo "error: proxy DLL not found at $PROXY" >&2; exit 1; }
 
   if [ "$(status)" = installed ]; then
-    echo "the bridge is already installed, nothing to do"
+    if cmp -s "$LIVE" "$PROXY"; then
+      echo "the bridge is already installed, nothing to do"
+      exit 0
+    fi
+    # An older build of ours: the game's own libxess stays where it was saved,
+    # and only our file is replaced, once this build forwards everything.
+    if is_ours "$REAL"; then
+      echo "error: $REAL is not the game's own libxess. Verify the game files in Steam, then run this again." >&2
+      exit 1
+    fi
+    if ! real_exports="$(/usr/bin/perl "$EXPORTS" exports "$REAL" 2>&1)" \
+       || ! proxy_exports="$(/usr/bin/perl "$EXPORTS" exports "$PROXY" 2>&1)"; then
+      echo "error: cannot read the exports to compare; the older build stays in place" >&2
+      exit 1
+    fi
+    missing="$(comm -23 <(printf '%s\n' "$real_exports" | sort) \
+                        <(printf '%s\n' "$proxy_exports" | sort))"
+    if [ -n "$missing" ]; then
+      echo "error: the game's own libxess exports symbols this build of the bridge does not;" >&2
+      echo "       the older build stays in place:" >&2
+      echo "$missing" | sed 's/^/       /' >&2
+      exit 1
+    fi
+    cp "$PROXY" "$LIVE.new" && mv -f "$LIVE.new" "$LIVE" || {
+      rm -f "$LIVE.new"; echo "error: could not replace the older build of the bridge" >&2; exit 1; }
+    echo "updated: an older build of the bridge was in place; it is now this release's"
     exit 0
   fi
 

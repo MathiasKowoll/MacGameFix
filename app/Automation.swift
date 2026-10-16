@@ -237,11 +237,12 @@ enum Agent {
                 }
                 let after = await Fixer.status(game, folder: folder, prefix: kept.prefix, catalog: catalogDir)
                 if code == 0 && after == .installed {
-                    event = AgentEvent(date: now, game: game.name,
-                                       message: changed && !memory.build.isEmpty && memory.build != build
-                                           ? "Steam changed the game; the fix is back in place."
-                                           : "The fix was missing and is back in place.",
-                                       failed: false)
+                    let message = word == .outdated
+                        ? "The fix is updated to the newer build."
+                        : changed && !memory.build.isEmpty && memory.build != build
+                            ? "Steam changed the game; the fix is back in place."
+                            : "The fix was missing and is back in place."
+                    event = AgentEvent(date: now, game: game.name, message: message, failed: false)
                 } else {
                     event = failure(game, now,
                                     code != 0 ? "The installer failed (status \(code))." : "The fix did not take.",
