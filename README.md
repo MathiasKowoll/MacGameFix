@@ -385,5 +385,9 @@ page under `legacy/wiki/`.
 
 ## License
 
-[GPL-3.0-or-later](LICENSE). The DLLs built on FFmpeg carry their own notices
-in `fixes/`.
+[GPL-3.0-or-later](LICENSE), and the app carries the text. The reader built on
+FFmpeg (LGPL-2.1-or-later) carries its own notice and the LGPL's text
+(`fixes/mgvf-asf-reader-LICENCES.md`, installed beside the games that use it),
+and every release attaches the FFmpeg source tarball it was built from. NINJA
+GAIDEN 3's third-party DLLs, which the app does not carry, say where their
+source is in `fixes/ng3-THIRD-PARTY-LICENCES.md`.

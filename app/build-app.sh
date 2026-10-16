@@ -167,6 +167,9 @@ else
   echo "    note: app/AppIcon.icns is missing, so this build has no icon"
 fi
 
+# The app is GPL-3.0-or-later, and the licence travels with it.
+cp "$ROOT/LICENSE" "$RES/LICENSE"
+
 echo "==> bundling ${#PAYLOAD[@]} files"
 for f in "${PAYLOAD[@]}"; do
   cp -a "$ROOT/fixes/$f" "$RES/$f"
