@@ -100,7 +100,7 @@ check 'has "$R" "Fake Game | CrossOver Preview 27, D3DMetal 4.0b3, DXMT — NotP
 options 'CX_GRAPHICS_BACKEND=d3dmetal %command%'
 check 'has "$(report)" "Does not fit: made for DXMT, and this game runs on D3DMetal"' "the wrong backend does not fit"
 options '%command%'
-check 'has "$(report)" "Cannot tell: made for DXMT, and the backend is automatic"' "an automatic backend cannot be told"
+check 'has "$(report)" "Does not fit: made for DXMT, and this game runs on D3DMetal, the automatic backend"' "an automatic backend is D3DMetal"
 echo 26.3.0.39832 > "$STEAM/compatibilitytools.d/notproton-test/build"
 options 'CX_GRAPHICS_BACKEND=dxmt %command%'
 check 'has "$(report)" "Does not fit: needs CrossOver Preview 27; this is CrossOver 26.3"' "an older CrossOver does not fit a codec it lacks"

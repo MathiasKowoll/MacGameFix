@@ -48,7 +48,8 @@ set to run on and compares it with the table:
 
 - **With a Steam Play tool** (NotProton): the tool Steam is told to use for the
   game, the CrossOver build that tool runs, the D3DMetal version inside it, and
-  `CX_GRAPHICS_BACKEND` in the game's launch options. A tool that runs on FEX
+  `CX_GRAPHICS_BACKEND` in the game's launch options. Without that variable
+  CrossOver runs Direct3D 11 and 12 games on D3DMetal. A tool that runs on FEX
   has no D3DMetal.
 - **In a CrossOver bottle:** the bottle's CrossOver version, the matching
   CrossOver app's D3DMetal, and the bottle's own `CX_GRAPHICS_BACKEND`.
@@ -59,9 +60,8 @@ Each game then shows one line, *Runs on*, and one of:
 - **Not needed:** the game plays without the fix on what it runs on.
 - **Does not fit,** and what to change. For example, God of War's fix is made
   for DXMT, so a game set to D3DMetal says `CX_GRAPHICS_BACKEND=dxmt`.
-- **Cannot tell,** when nothing on the Mac says it. The usual case is a launch
-  option with no `CX_GRAPHICS_BACKEND`, where CrossOver decides the backend
-  itself, or a game more than one place could run.
+- **Cannot tell,** when nothing on the Mac says it: a game more than one place
+  could run, or a FEX tool with no backend set.
 
 In the last two cases *Change…* lets you say what the game runs on, and your
 word is kept over what the app finds. The app asks before installing a fix that

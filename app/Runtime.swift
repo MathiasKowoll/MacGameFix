@@ -39,6 +39,10 @@ struct GameRuntime: Codable, Hashable {
     /// to the account and is the same in every Steam signed in to it.)
     var setUpHere = false
 
+    /// The backend the game gets. Left automatic, CrossOver runs Direct3D 11
+    /// and 12 games on D3DMetal; FEX has none, and what it picks is not known here.
+    var effectiveBackend: String? { backend ?? (noD3DMetal ? nil : "d3dmetal") }
+
     /// "CrossOver 26.3" or "CrossOver Preview 27", from the build's first number.
     var crossover: String? {
         guard let major = build.flatMap({ $0.split(separator: ".").first }).flatMap({ Int($0) }) else { return nil }
@@ -50,7 +54,11 @@ struct GameRuntime: Codable, Hashable {
     var summary: String {
         var parts = [crossover ?? "CrossOver unknown"]
         if noD3DMetal { parts.append("no D3DMetal (FEX)") } else if let d = d3dmetal { parts.append("D3DMetal \(d)") }
-        parts.append(backend.map { $0 == "dxmt" ? "DXMT" : $0 == "d3dmetal" ? "D3DMetal" : $0.uppercased() } ?? "automatic backend")
+        if let b = backend {
+            parts.append(Game.backendName(b))
+        } else {
+            parts.append(noD3DMetal ? "automatic backend" : "D3DMetal (automatic)")
+        }
         return parts.joined(separator: ", ") + " — " + source
     }
 }
@@ -382,10 +390,11 @@ extension Game {
             let name = Self.backendName(backend)
             if backend == "d3dmetal" && r.noD3DMetal {
                 bad.append("made for D3DMetal, which FEX does not have")
-            } else if let have = r.backend {
+            } else if let have = r.effectiveBackend {
                 if have != backend {
-                    bad.append("made for \(name), and this game runs on \(Self.backendName(have)); "
-                               + "CX_GRAPHICS_BACKEND=\(backend) runs it on \(name)")
+                    bad.append("made for \(name), and this game runs on \(Self.backendName(have))"
+                               + (r.backend == nil ? ", the automatic backend" : "")
+                               + "; CX_GRAPHICS_BACKEND=\(backend) runs it on \(name)")
                 }
             } else {
                 unknown.append("made for \(name), and the backend is automatic: set CX_GRAPHICS_BACKEND=\(backend), "
@@ -403,7 +412,7 @@ extension Game {
             }
         }
         if !bad.isEmpty { return .mismatch(bad) }
-        if !notNeededFrom.isEmpty, backend != "dxmt", r.backend != "dxmt", let have = r.d3dmetal,
+        if !notNeededFrom.isEmpty, backend != "dxmt", r.effectiveBackend == "d3dmetal", let have = r.d3dmetal,
            D3DMetalVersion(have) >= D3DMetalVersion(notNeededFrom) {
             return .notNeeded("the game plays without it on D3DMetal \(notNeededFrom) and later")
         }

@@ -428,7 +428,7 @@ struct RuntimeLine: View {
             Picker("Backend", selection: Binding(
                 get: { base.backend ?? "" },
                 set: { var r = base; r.source = "your choice"; r.backend = $0.isEmpty ? nil : $0; model.choose(hit, r) })) {
-                Text("Automatic").tag("")
+                Text("Automatic (D3DMetal)").tag("")
                 Text("D3DMetal").tag("d3dmetal")
                 Text("DXMT").tag("dxmt")
                 Text("DXVK").tag("dxvk")
