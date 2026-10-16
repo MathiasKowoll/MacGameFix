@@ -1,3 +1,6 @@
 .DS_Store
 *.zip
 *.app/
+__pycache__/
+# Written by app/build-app.sh: the signed catalog a release carries.
+app/dist/

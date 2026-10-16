@@ -1,0 +1,178 @@
+# Nioh
+
+Koei Tecmo's in-house engine, and the second title fixed by the bridge written
+for [Persona 5 Strikers](Persona-5-Strikers.md) — with no change to what that
+bridge does.
+
+| | |
+| --- | --- |
+| Video | WMV3 in ASF, played through DirectShow rather than Media Foundation |
+| Played by | `IGraphBuilder` into VMR9, presenting onto a shared D3D9 surface |
+| Symptom | `Failure to play movie. (RTM_ID_EV0001)`, then a crash |
+| Fix | The fix's own WMV3 reader (or a staged decoder), then hand the game a share handle that exists |
+| Backend | **DXMT only.** The sidecar needs `GetSharedHandle`, `E_NOTIMPL` under D3DMetal |
+| CrossOver | Stable 26.3 (`cxoffice-26.3.0rc2`), with winevideo 0.5 in the bottle — 27 Aug 2026; CrossOver Preview 27 through NotProton with nothing staged (2026-10-14) |
+
+## Without a codec in the engine (2026-10-14)
+
+On CrossOver Preview 27, with nothing staged, the WMV3 failed three times
+over, each failure hiding the next.
+
+1. **The file never reached the ASF reader.** Wine's prefixes carry no
+   `Media Type\Extensions` key for `.wmv`, which on Windows names the WM ASF
+   Reader as its source. So `AddSourceFilter` gave the file to the generic async
+   source, and every decoder was offered the raw bytes: the log showed the WMV
+   decoder offered `MEDIATYPE_Stream` and nothing else. The bridge now watches
+   the game's `CoCreateInstance` for a filter graph (`dshow-graph.c`). For a
+   `.wmv`, `AddSourceFilter` returns the WM ASF Reader as Windows would.
+   `RenderFile` would do the same, but only after wine's own attempt has failed.
+2. **The ASF reader could not open it.** Wine's WM ASF Reader opens through
+   wmvcore's `IWMReader`, and wine's reader prepares every stream decoded as it
+   opens. Without a WMV3 decoder the open fails at once (`0x80004005`). The
+   reader `qasf` creates is wrapped (`wm-reader.c`). Wine's own reader opens
+   first, and keeps the file if it can; otherwise ours opens it with FFmpeg and
+   speaks the reader's protocol to `qasf`: status from another thread, buffers
+   borrowed through `AllocateForOutput`, decoded frames through `OnSample`.
+3. **Wine's WMVideo Decoder DMO cannot be created** (`0xd0000001`), so a DMO
+   of ours (`wmv-dmo.c`) is created in its place. In the run that played it was
+   created but not used, because the reader above hands over frames already
+   decoded.
+
+The result: `AddSourceFilter(movie/EV0001.wmv)` returned the WM ASF Reader,
+our reader opened the 1920x1080 WMV3, and the renderer chose RGB32. Frames were
+delivered and accepted, and the picture reached the shared surface on DXMT.
+The video played.
+
+All three pieces live in `mgvf-asf-reader.dll`. The bridge arms them only when
+that file is beside the game.
+
+## Verified on 26.3, and what the failure was not
+
+27 Aug 2026, winevideo 0.5 on `cxoffice-26.3.0rc2`, bottle backend `dxmt`, with
+the shipped bridge and nothing else: the cutscene plays, picture and all. The
+bridge does one thing and the log says so —
+
+    CreateRenderTarget(1920x1080 fmt=21, SHARED requested) -> 0x00000000, handle 0000000040000002
+
+— one shared render target, a handle that exists, and no StretchRect afterwards
+because the frames go up through the d3d9 bridge itself.
+
+A day was spent on this title in a different engine, where it dies in seconds,
+and none of it was the fix. What kills it there is Steam:
+
+    src\common\pipes.cpp (879) : CClientPipe::BWriteAndReadResult: BWrite failed
+    src\common\pipes.cpp (879) : Fatal assert; application exiting
+
+Four runs, always the same, and always before any call to the bridge — no
+moment reads `Received stats and achievements from Steam` instead. The pipe is
+the whole difference, and it is the backend. Same engine, same bottle, same
+Steam, same DLL, one variable changed:
+
+    CX_GRAPHICS_BACKEND=dxmt
+
+and the line that read `BWrite failed` reads `Received stats and achievements
+from Steam` instead. The game runs, the cutscenes play, the videos play. Under
+`d3dmetal` the Steam pipe breaks and the title kills itself before it touches
+video at all -- which is why a day went into its cutscene and none of it was
+about video.
+
+This page has always said DXMT only, because `GetSharedHandle` is `E_NOTIMPL`
+under D3DMetal. What it could not say is what a wrong backend looks like from
+outside: not a missing picture, not an error about a surface, but Steam
+disconnecting and a fatal assert in `pipes.cpp`. Nothing in that message points
+at a graphics backend, and it is worth knowing that it can.
+
+For anyone driving this through a launcher: RaccoonBot had DXMT selected for this
+title in its own options screen and passed `d3dmetal` anyway -- its game detail
+view launched with defaults rather than saved settings. A setting being right in
+the UI is not the same as the process receiving it, and what told them apart was
+dumping the environment from inside the process.
+
+Also measured and worth deleting from anyone's mental model: the two levers this
+title is listed as needing, `BEAST_FORCE_NV12` and `BEAST_REFUSE_D3D_MANAGER`,
+never fire. `MFCreateDXGIDeviceManager` is not called once in any run. That row
+was inherited from Persona 5 Strikers rather than measured here.
+
+## Two faults, one behind the other
+
+The title failed twice over, and the first fault hid the second.
+
+**The decoder was never there.** Nioh's cutscenes are WMV3, which no CrossOver
+ships. Wine's chain for it runs `qasf` → `wmvdecod.dll`, a shim → winegstreamer's
+`wg_wmv_decoder`, which probes a fixed WMV3-to-I420 transform before it will
+construct anything. With nothing able to serve that, `IDMOWrapperFilter::Init`
+returned `0xD0000001` and the graph never built. That is the message on screen.
+
+Staging `libgstlibav` beside the game supplies it, exactly as for Strikers. The
+staging turned out to be broken for everyone in a way described under
+[Findings](Findings.md) — a missing `libgsttag` meant the plugin had never
+loaded at all — and once fixed, `Init` returned `S_OK` and the full DirectShow
+graph built.
+
+**Then it crashed instead.** With the decoder in place the game reached a point
+it had never reached before, and died on a worker thread at
+`mov rdx, [rdx+0x10]` with `rdx` at zero.
+
+That null has a source. The game asks D3D9 for a shared render target; Wine
+creates it, returns `S_OK`, and hands back a share handle of zero. The game
+takes the handle at face value and dereferences it.
+
+    CreateRenderTarget(1920x1080 fmt=21, SHARED requested) -> S_OK, handle 0
+      << succeeded but handed back no handle: nothing to share
+
+## The fix is one slot number
+
+The Strikers bridge already knew what to do with that: create a real texture on
+the D3D11 side, take a real shared handle from it, and give the game that
+instead of the null. What it did not know was where Nioh creates its device.
+
+The bridge watched `IDirect3D9::CreateDevice`, slot 16. Nioh goes through
+`Direct3DCreate9Ex` and creates its device with `CreateDeviceEx`, slot 20 — so
+the bridge armed a vtable the game never called, logged two lines, and watched
+the cutscene fail from the sidelines. The crash in that run was the game's own;
+no call had reached bridge code at all.
+
+With slot 20 hooked, the whole path runs:
+
+    IDirect3D9Ex::CreateDeviceEx -> S_OK
+    sidecar: 1920x1080 texture, GetSharedHandle -> S_OK, handle 40000082
+      handed the game a real shared handle instead of null
+    OpenSharedResource: our handle -- made a texture on the game's own device
+    StretchRect INTO it   << ON OUR SHARED SURFACE
+    source luma [420]: average 11, range 0..166   << has picture
+
+Slot 20 is written only on objects that came from `Direct3DCreate9Ex`; on a
+plain `IDirect3D9` that index is past the end of the vtable.
+
+The luma readings are the reason this is recorded as fixed rather than as
+reported fixed. A bridge that hands over a valid but empty surface gives a game
+that runs and a screen that stays black, and nothing distinguishes the two from
+outside.
+
+## Caveats
+
+Do not use this on a game with anti-cheat. The fix patches a running process.
+
+Measured on DXMT only. The 26.3 run is the one at the top of this page; the
+earlier runs were made on `crossover-preview-arm64-20260821`, and they stand as
+a record rather than a route, since Preview is no longer a supported engine
+here. Under D3DMetal the sidecar has nothing to build on — `GetSharedHandle` is
+`E_NOTIMPL` there — so it is not expected to work, but that has not been run
+either.
+
+[Nioh 2](Nioh-2.md) turned out to use the same path and is fixed by the same
+bridge, with no code change and even the same built proxy.
+
+## What it cost
+
+Three runs. The first arrived at the crash with the bridge watching the wrong
+slot and produced a two-line log, which was enough to establish that the crash
+was not ours. The second, with `CreateDeviceEx` hooked, armed the device and
+reached gameplay. The third reached a cutscene and played it.
+
+The independent confirmation that this was the right shape came from
+[winevideo](https://github.com/Jfishin/winevideo), which names Nioh, Nioh 2 and
+Persona 5 Strikers as one shared-texture cutscene path and repairs it with a
+bridge and a sidecar of its own — inside a patched Wine `d3d9.dll` rather than
+from the game process. The comparison is under *Living outside CrossOver* in
+[Findings](Findings.md).

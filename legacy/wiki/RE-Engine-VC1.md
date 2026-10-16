@@ -1,0 +1,118 @@
+# Devil May Cry 5, RESIDENT EVIL 2 and RESIDENT EVIL 3
+
+Three Capcom titles on the same engine, with the same fault. The answer was
+the staged codec; since 2026-10-14 all three carry their own decoder in the
+game folder instead, and need nothing of the engine. See the next section.
+
+| | |
+| --- | --- |
+| Symptom | Crashes when a particular video plays. In Devil May Cry 5 it is the skill previews on the Customize screen |
+| Cause | The video is VC-1, and CrossOver ships no VC-1 decoder |
+| Fix | The fix's own VC-1 reader in the game folder (`install-re-vc1-fix.sh`); the staged codec still works and is used first where present |
+| Backend | D3DMetal, D3D12 |
+| CrossOver | Stable 26.3 with the codec staged; CrossOver Preview 27 through NotProton with nothing staged (2026-10-14) |
+
+## Without the codec (2026-10-14)
+
+Its fix now goes in the game folder. `amd_ags_x64.dll`, which the game imports,
+is replaced by a proxy built from `runtime/mf-reader-fallback.c` that does one
+thing. When `MFCreateSourceReaderFromByteStream` refuses a stream, the proxy
+hands that stream to `mgvf-asf-reader.dll`, the FFmpeg-based reader written for
+[Persona 5 Strikers](Persona-5-Strikers.md), and returns that reader in place
+of the refusal. No device, no vtable and no other call is touched. A stream
+Media Foundation opens never reaches the proxy, so where the codec is staged it
+still plays first.
+
+Measured on CrossOver Preview 27 through NotProton, D3DMetal, nothing staged.
+Media Foundation refused the first preview (`0xc00d36bb`), and the reader
+opened it: VC-1, 320x180, no audio, and no device manager, so the frames go out
+in system memory. The previews on the Customize screen play, and loop: each
+clip reaches its end, and the game seeks back to the start and plays it again.
+
+**RESIDENT EVIL 2 and 3**, the same day and the same way: Media Foundation
+refused the video, the reader opened it (VC-1, 1920x1080, no audio inside the
+ASF, about one and one and a half minutes long), and the videos played with
+their sound. RESIDENT EVIL 2 and 3 ship the very same `amd_ags_x64.dll` (same sha256),
+so one build of the proxy serves both; Devil May Cry 5's AGS is an older
+version with other exports and has its own. `install-re-vc1-fix.sh` installs
+all three and picks the build by the executable it finds.
+
+**Not measured yet:** stable 26.3 without the staged codec.
+
+## Two kinds of video, and only one of them works out of the box
+
+RE Engine plays more than one format, which is what made this confusing before it
+was measured. Asking GStreamer to name the elements it builds shows both:
+
+    creating element "h264parse"
+    creating element "vtdec_hw"          <- Apple VideoToolbox, in hardware
+
+    creating element "asfdemux"
+    creating element "avdec_vc1"         <- from the staged codec
+
+The first is H.264 and CrossOver decodes it on its own, in hardware. The second
+is the one that crashes without the codec:
+
+    video/x-wmv, wmvversion=(int)3, format=(string)WVC1
+    Using libavcodec version 60.3.100
+
+`WVC1` is VC-1 Advanced Profile in an ASF container. And `60.3.100` is the
+FFmpeg 6.0 inside the staged tree — the same `Lavc60.3.100` the plugin carries,
+which is how we know the decoder comes from what this project stages rather than
+from anything CrossOver ships.
+
+## What the crash looks like
+
+A null pointer, dereferenced by the game itself:
+
+    page fault on read access to 0x0000000000000000
+    rip: devilmaycry5+0x29526cb
+    movq (%rcx), %rax        with rcx = 0
+
+Every resolvable frame belongs to the game. `winegstreamer`, `mfplat`,
+`mfreadwrite` and `mfasfsrcsnk` are all loaded, and so is `libgstasf` — the
+container is opened and demuxed. What is missing is the decoder, and the game
+does not check what it got back before using it.
+
+That last part matters for reading the symptom: the crash is not where the fault
+is. Nothing in the graphics stack is involved, and the address it dies at says
+nothing about video.
+
+## Why the same fix covers three games
+
+The control is the bottle's own configuration. With `GST_PLUGIN_PATH` commented
+out, all three crash; with it in place, all three play. One line, three titles,
+same engine.
+
+The decoder trace above was taken on Devil May Cry 5, at the Customize screen,
+which is a reliable place to reproduce it in about a minute of play. RESIDENT
+EVIL 2 and RESIDENT EVIL 3 were confirmed by the same with-and-without
+comparison rather than by their own traces.
+
+## Confirmed on stable 26.3
+
+These three are among the entries here confirmed on a stable 26.3 as CodeWeavers
+ships it, and the reason is the fix itself: it stages its own decoder, so what
+the engine ships stops mattering. The same is true of Persona 5 Strikers. These
+three and that one were confirmed on `crossover-preview-arm64-20260821` as well,
+which stands as a record rather than a route: Preview is no longer a supported
+engine here.
+
+The staged tree is per engine — one directory for each CrossOver, symlinked into
+that engine's own libraries — so a title confirmed on two engines means both
+were staged, not that one staging serves two.
+
+## What to do
+
+Open the app, let it stage the codec for the CrossOver you run, and apply it to
+the bottle these games live in. There is no proxy DLL, no registry override and
+no file placed beside the game — the whole repair is one environment variable
+naming a directory of decoders that CrossOver does not ship.
+
+This is the same staging Persona 5 Strikers and the Nioh titles need, which is
+worth saying plainly: it is not three more fixes, it is three more games covered
+by one that already existed.
+
+[How the codec staging works](How-the-codec-staging-works.md) explains what that
+staging actually does — why the decoder cannot simply be pointed at, what is
+copied and what is symlinked, and why each CrossOver gets its own directory.

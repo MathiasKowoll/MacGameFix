@@ -1,20 +1,32 @@
 # MacGameFix
 
-A small macOS application that installs, checks and removes the **game-folder
-fixes** of [MacGameVideoFix](https://github.com/MathiasKowoll/MacGameVideoFix):
-the ones that live entirely inside a game's own folder.
+Fixes for Windows games on a Mac that go into the game's own folder, and the
+small macOS application that installs, checks and removes them.
 
 None of them changes CrossOver. They work with CrossOver as CodeWeavers ships
 it, with CrossOver Preview, and with Steam Play tools for macOS such as
-[NotProton](https://github.com/NotProtonNot/NotProton). That is the whole point
-of this app: the fixes that need a patched engine — a staged GStreamer codec, a
-`winegstreamer` carrying winevideo's patches or ours — stay in MacGameVideoFix,
-and nothing here depends on them.
+[NotProton](https://github.com/NotProtonNot/NotProton): a proxy DLL beside the
+game, and for a few titles registry keys in the game's own prefix.
 
-It is published as its own repository, where the built application and its
-release notes live:
+This repository is where the fixes live now. They started in
+[MacGameVideoFix](https://github.com/MathiasKowoll/MacGameVideoFix), which also
+patched CrossOver itself: staged GStreamer codecs, its own `winegstreamer`, a
+controller bus. That project is archived. On CrossOver Preview 27 none of the
+games here needs anything in the engine (for three of them that is read off how
+the fix works rather than run; see "Measured, and what was not"), so the work
+that is still alive is the DLLs and their installers, and that is what moved
+here. The history of every fix, and the engine work, stays in the
+archived repository.
 
-> <https://github.com/MathiasKowoll/MacGameFix>
+## What is in this repository
+
+| Folder | What it holds |
+| --- | --- |
+| `app/` | The application: `Core.swift` (installers, games, libraries), `Automation.swift` (the background agent, signed catalog updates, reports), `MacGameFix.swift` (the window); `build-app.sh` and `test-automation.sh`. |
+| `fixes/` | One installer per fix (`install-*.sh`), the DLLs they put in place, the C source of each DLL and the scripts that build them (`build-proxy.sh`, `build-asf-reader.sh`, `check-builds.sh`), and the third-party notices. |
+| `process-features.json` | The table: per game executable, its symptom, backend, toolkit, codec and engine needs. The app is built from it. |
+| `tools/` | The probes and capture scripts the fixes were found with: video and Media Foundation observers, HID traces, a game survey. |
+| `legacy/` | What MacGameVideoFix's wiki and notes found, per game and in general (`legacy/wiki/Findings.md`, `legacy/wiki/Diagnosing-a-new-game.md`). Kept as written; some pages describe the engine work that stayed behind. |
 
 ## What it does
 
@@ -27,6 +39,37 @@ release notes live:
   the game's own files back.
 
 Quit a game before installing or removing its fix.
+
+## Keeping fixes applied, and new fixes
+
+From version 1.4.0 the app can look after the fixes by itself. All of it is off
+until you turn it on, and the fixes stay in the games' own folders as before.
+
+- **Keep it applied.** Mark a game with *Keep it applied*, and turn on *Keep
+  the marked fixes applied in the background*. That starts a small agent
+  (a LaunchAgent, `io.github.macgamefix.agent`) that looks at the marked games
+  every two minutes. When Steam updates or verifies a game and its fix is gone,
+  the agent installs it again. It waits until the game is closed and Steam has
+  finished writing it.
+- **New fixes.** With *Get new fixes from GitHub* on, the agent looks at the
+  latest release of this repository once a day. When the release carries a newer
+  catalog of fixes, the agent takes it without a new app: the installers and
+  every file they use.
+  - The catalog is signed. The app takes it only when the signature matches the
+    key built into the app, and every file matches its hash. Anything else is
+    refused and the catalog in use stays.
+  - A new game in the catalog shows up as a notification, but nothing is
+    installed for it until you mark it.
+- **Reporting.** When a fix fails to install, the agent says so in a
+  notification with a *Report on GitHub* button. It opens a new issue, already
+  filled in with the game, the versions and the installer's last lines. Your
+  home folder, account name and the Mac's serial number are taken out. Nothing
+  is sent until you read it and press *Submit*. The window lists what the
+  agent did, with the same button.
+
+Turning the agent off removes it. Its settings and what it did are in
+`~/Library/Application Support/MacGameFix`, and its log is in
+`~/Library/Logs/MacGameFix-agent.log`.
 
 ## The games
 
@@ -57,10 +100,10 @@ Quit a game before installing or removing its fix.
 | Tormented Souls 2 | Fatal error before the first frame | D3DMetal |
 | Wo Long: Fallen Dynasty | Cutscene with sound and a black picture | D3DMetal |
 
-The list is not written by hand. The build takes every installer in
-MacGameVideoFix that declares a game-folder fix, and keeps the games for which
-MacGameVideoFix's own table records no engine requirement, and either no codec
-or a CrossOver that ships that codec as CodeWeavers distributes it.
+The list is not written by hand. The build takes every installer in `fixes/`
+that declares a game-folder fix, and keeps the games for which the table
+records no engine requirement, and either no codec or a CrossOver that ships
+that codec as CodeWeavers distributes it.
 
 **Measured, and what was not.** Every fix here was measured on a CrossOver 26.3
 that carried MacGameVideoFix's engine patches, which do not touch these fixes;
@@ -123,7 +166,7 @@ KINGDOM HEARTS itself running from one.
 ### Beast of Reincarnation needs CrossOver Preview
 
 On stable CrossOver 26.3 its video stalls after two frames unless the engine
-carries a change from winevideo, which MacGameVideoFix installs. CrossOver
+carries a change from winevideo, which MacGameVideoFix installed. CrossOver
 Preview 27 does not need it: its own video decoder already behaves that way.
 Measured on 2026-10-14 on CrossOver Preview 27 through NotProton, D3DMetal,
 with nothing else installed: the startup video plays.
@@ -140,7 +183,7 @@ cutscene plays with its sound.
 ### NINJA GAIDEN 4 needs CrossOver Preview
 
 Its videos are VP9 in WebM. Stable CrossOver 26.3 cannot open a WebM, so there
-the game reaches its menu with every video missing; MacGameVideoFix stages the
+the game reaches its menu with every video missing; MacGameVideoFix staged the
 codec for it, which this app does not do. CrossOver Preview 27 ships what it
 needs: its own GStreamer opens the WebM and VideoToolbox decodes the VP9.
 
@@ -191,15 +234,36 @@ downloaded copy. **Right click > Open** once, and confirm.
 
 ## Building it
 
-From a checkout of MacGameVideoFix:
-
 ```
-app-gamefix/build-app.sh
+app/build-app.sh
 ```
 
-It compiles `MacGameFix.swift`, chooses the games as described above, copies
-the installers and every file they name from `runtime/` unchanged, and fails if
-the bundle differs from `runtime/` in a single byte.
+It compiles the app, chooses the games as described above, copies the
+installers and every file they name from `fixes/` unchanged, and fails if the
+bundle differs from `fixes/` in a single byte.
+
+**The release's catalog.**
+- **When it is written:** when the signing key is at
+  `~/.config/macgamefix/catalog-signing.key` (or `$MACGAMEFIX_SIGNING_KEY`), the
+  build also writes `app/dist/catalog.zip`, `app/dist/catalog.json` and
+  `app/dist/catalog.json.sig`. Attach all three to the release so installed apps
+  take the new fixes.
+- **The key:** it never enters the repository, and only the public half is in
+  `Automation.swift`. Losing it means a new key in a new app, since catalogs
+  signed with another key are refused. `MacGameFix --new-signing-key <file>`
+  makes one and prints the public half.
+
+**Testing it.** `app/test-automation.sh` checks all of it offline, with a
+throwaway home and a fake game and catalog:
+- refused and accepted catalogs;
+- the agent after a game update;
+- while Steam writes the game and while the game runs;
+- a failing installer's report.
+
+**Building a fix's DLL.** `fixes/build-proxy.sh` and
+`fixes/build-asf-reader.sh` need llvm-mingw (or another x86_64-w64-mingw32
+toolchain). Users never run them: the built DLLs are in `fixes/` and ship in the
+app. `fixes/check-builds.sh` checks that each DLL is the one its source builds.
 
 ## Credits
 
@@ -212,10 +276,11 @@ the bundle differs from `runtime/` in a single byte.
 - **The God of War fix** comes from a r/macgaming post, "God Of War 2018 White
   Dot Fix (through Crossover)", whose author found the depth test behind the
   white specks.
-- Everything else, and the findings behind every fix, is in
-  [MacGameVideoFix](https://github.com/MathiasKowoll/MacGameVideoFix) and its
-  [wiki](https://github.com/MathiasKowoll/MacGameVideoFix/wiki).
+- Everything else, and the findings behind every fix, is in `legacy/` here and
+  in the archived [MacGameVideoFix](https://github.com/MathiasKowoll/MacGameVideoFix)
+  with its full history.
 
 ## License
 
-[GPL-3.0-or-later](https://github.com/MathiasKowoll/MacGameVideoFix/blob/main/LICENSE).
+[GPL-3.0-or-later](LICENSE). The DLLs built on FFmpeg carry their own notices
+in `fixes/`.
