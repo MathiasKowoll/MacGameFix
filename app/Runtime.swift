@@ -416,6 +416,11 @@ extension Game {
            D3DMetalVersion(have) >= D3DMetalVersion(notNeededFrom) {
             return .notNeeded("the game plays without it on D3DMetal \(notNeededFrom) and later")
         }
+        // Whether it is needed at all hangs on a version nothing here could read.
+        if !notNeededFrom.isEmpty, backend != "dxmt", r.effectiveBackend == "d3dmetal", r.d3dmetal == nil {
+            unknown.append("not needed from D3DMetal \(notNeededFrom) on, and which D3DMetal this is "
+                           + "is not known: say it below")
+        }
         if !unknown.isEmpty { return .unknown(unknown) }
         return .fits
     }

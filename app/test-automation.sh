@@ -48,11 +48,15 @@ echo "installing into $dir"
 if [ -f "$dir/FAIL" ]; then echo "cannot write $dir/fake.dll"; exit 1; fi
 touch "$dir/fixed.marker"
 SH
-# Made for DXMT, with a codec only CrossOver Preview 27 ships.
+# Made for DXMT, with a codec only CrossOver Preview 27 ships; and a second
+# game made for D3DMetal whose fix D3DMetal 4.0b3 makes unnecessary.
 cat > "$RES/games.json" <<'JSON'
 {"games": [{"name": "Fake Game", "exe": "FakeGame.exe", "carrierDir": "", "script": "install-fake.sh",
   "needsPrefix": false, "symptom": "test", "backend": "dxmt", "gptk": "", "gptkAlso": "",
-  "codecShippedBy": "CrossOver Preview 27", "engineFreeOn": "", "notNeededFrom": "", "why": ""}]}
+  "codecShippedBy": "CrossOver Preview 27", "engineFreeOn": "", "notNeededFrom": "", "why": ""},
+ {"name": "Fake Two", "exe": "FakeTwo.exe", "carrierDir": "", "script": "install-fake.sh",
+  "needsPrefix": false, "symptom": "test", "backend": "d3dmetal", "gptk": "", "gptkAlso": "",
+  "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "4.0b3", "why": ""}]}
 JSON
 /usr/bin/python3 - "$RES" <<'PY'
 import hashlib, json, pathlib, sys
@@ -81,7 +85,10 @@ check 'has "$(update "$T/release" --pubkey "$PUB")" "up to date"' "the same cata
 STEAM="$SUPPORT/Steam"
 mkdir -p "$STEAM/config" "$STEAM/compatibilitytools.d/notproton-test" "$STEAM/steamapps/compatdata/4242" \
   "$STEAM/userdata/1/config"
-printf '"InstallConfigStore"\n{\n "Software"\n {\n  "Valve"\n  {\n   "Steam"\n   {\n    "CompatToolMapping"\n    {\n     "4242"\n     {\n      "name" "notproton-test"\n     }\n    }\n   }\n  }\n }\n}\n' > "$STEAM/config/config.vdf"
+printf '"InstallConfigStore"\n{\n "Software"\n {\n  "Valve"\n  {\n   "Steam"\n   {\n    "CompatToolMapping"\n    {\n     "4242"\n     {\n      "name" "notproton-test"\n     }\n     "4343"\n     {\n      "name" "notproton-test"\n     }\n    }\n   }\n  }\n }\n}\n' > "$STEAM/config/config.vdf"
+mkdir -p "$STEAM/steamapps/common/Fake Two" "$STEAM/steamapps/compatdata/4343"
+touch "$STEAM/steamapps/common/Fake Two/FakeTwo.exe" "$STEAM/steamapps/compatdata/4343/notproton-run.log"
+printf '"AppState"\n{\n\t"appid"\t\t"4343"\n\t"StateFlags"\t\t"4"\n\t"installdir"\t\t"Fake Two"\n\t"buildid"\t\t"1"\n}\n' > "$STEAM/steamapps/appmanifest_4343.acf"
 echo 27.0.0.41069-fex > "$STEAM/compatibilitytools.d/notproton-test/build"
 echo rosetta > "$STEAM/compatibilitytools.d/notproton-test/flavor"
 touch "$STEAM/steamapps/compatdata/4242/notproton-run.log"
@@ -92,6 +99,7 @@ options() { # launch options for the game
   printf '"UserLocalConfigStore"\n{\n "Software"\n {\n  "Valve"\n  {\n   "Steam"\n   {\n    "Apps"\n    {\n    }\n    "apps"\n    {\n     "4242"\n     {\n      "LaunchOptions" "%s"\n     }\n    }\n   }\n  }\n }\n}\n' "$1" > "$STEAM/userdata/1/config/localconfig.vdf"
 }
 report() { "$BIN" --runtime-report 2>&1; }
+line() { report | /usr/bin/grep "^$1 |" || true; }
 
 echo "== what the game runs on"
 options 'CX_GRAPHICS_BACKEND=dxmt %command%'
@@ -106,6 +114,12 @@ echo 26.3.0.39832 > "$STEAM/compatibilitytools.d/notproton-test/build"
 options 'CX_GRAPHICS_BACKEND=dxmt %command%'
 check 'has "$(report)" "Does not fit: needs CrossOver Preview 27; this is CrossOver 26.3"' "an older CrossOver does not fit a codec it lacks"
 echo 27.0.0.41069-fex > "$STEAM/compatibilitytools.d/notproton-test/build"
+check 'has "$(line "Fake Two")" "Not needed: the game plays without it on D3DMetal 4.0b3 and later"' "a fix this D3DMetal makes unnecessary says so"
+/usr/libexec/PlistBuddy -c 'Set :CFBundleShortVersionString 4.0b2' "$GPTK/Info.plist"
+check 'has "$(line "Fake Two")" "Fits what this game runs on"' "and on an older D3DMetal it fits"
+mv "$GPTK/Info.plist" "$GPTK/Info.plist.away"
+check 'has "$(line "Fake Two")" "Cannot tell: not needed from D3DMetal 4.0b3 on, and which D3DMetal this is is not known"' "when the D3DMetal version cannot be read, the user is asked"
+mv "$GPTK/Info.plist.away" "$GPTK/Info.plist"; /usr/libexec/PlistBuddy -c 'Set :CFBundleShortVersionString 4.0b3' "$GPTK/Info.plist"
 
 echo "== the agent"
 printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false}' "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
