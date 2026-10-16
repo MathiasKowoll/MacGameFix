@@ -31,13 +31,48 @@ struct KeptGame: Codable, Hashable {
     var folder: String
     /// The prefix chosen for a title that writes registry keys.
     var prefix: String?
-    var key: String { folder + "|" + name }
+    var key: String { gameKey(URL(fileURLWithPath: folder), name) }
 }
 
 struct AutoSettings: Codable {
     var kept: [KeptGame] = []
     /// Take newer catalogs from the releases.
     var updates = true
+    /// What the user said a game runs on, by KeptGame.key; it wins over detection.
+    var runtimes: [String: GameRuntime] = [:]
+
+    init() {}
+
+    // Fields a later version added are absent from an older file: read what is there.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        kept = try c.decodeIfPresent([KeptGame].self, forKey: .kept) ?? []
+        updates = try c.decodeIfPresent(Bool.self, forKey: .updates) ?? true
+        runtimes = try c.decodeIfPresent([String: GameRuntime].self, forKey: .runtimes) ?? [:]
+    }
+
+    /// What a game runs on: the user's choice; else the one place detection
+    /// found; else, of several, the Steam Play tool Steam maps this game to and
+    /// that has run it.
+    func runtime(for key: String, detected: [GameRuntime]) -> GameRuntime? {
+        if let chosen = runtimes[key] { return chosen }
+        if detected.count == 1 { return detected[0] }
+        let setUp = detected.filter(\.setUpHere)
+        guard setUp.count == 1 else { return nil }
+        var r = setUp[0]
+        r.source += ", set for this game in Steam"
+        return r
+    }
+
+    /// The fix against what the game runs on, or why that cannot be told.
+    func fit(_ game: Game, key: String, detected: [GameRuntime]) -> Fit {
+        guard let r = runtime(for: key, detected: detected) else {
+            return .unknown([detected.isEmpty
+                ? "nothing on this Mac says what runs this game; choose it below"
+                : "\(detected.count) places could run this game; choose which one below"])
+        }
+        return game.fit(on: r)
+    }
 
     static func load() -> AutoSettings {
         guard let data = try? Data(contentsOf: Paths.settings),
@@ -68,6 +103,19 @@ struct GameMemory: Codable {
     var catalog = 0
     var checked = Date.distantPast
     var state = ""
+    /// The last verdict told to the user, so a fix that does not fit is said once.
+    var fit = ""
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        build = try c.decodeIfPresent(String.self, forKey: .build) ?? ""
+        catalog = try c.decodeIfPresent(Int.self, forKey: .catalog) ?? 0
+        checked = try c.decodeIfPresent(Date.self, forKey: .checked) ?? .distantPast
+        state = try c.decodeIfPresent(String.self, forKey: .state) ?? ""
+        fit = try c.decodeIfPresent(String.self, forKey: .fit) ?? ""
+    }
 }
 
 struct AgentState: Codable {
@@ -135,8 +183,27 @@ enum Agent {
             let build = steam?.buildid ?? ""
             let catalog = manifest?.version ?? 0
             let changed = memory.build != build || memory.catalog != catalog
-            guard changed || now.timeIntervalSince(memory.checked) > recheck else { continue }
+            // Only a fix that fits what the game runs on goes in by itself; the
+            // rest is said once, and the game is left as it is. A change of
+            // launch options or of the user's choice counts as a change.
+            let fit = settings.fit(game, key: kept.key, detected: Runtimes.detect(folder: folder))
+            let fitChanged = memory.fit != fit.label
+            guard changed || fitChanged || now.timeIntervalSince(memory.checked) > recheck else { continue }
             if isRunning(game) { continue } // Looked at again once it is closed.
+
+            if !fit.allowsAutomatic {
+                if memory.fit != fit.label {
+                    events.append(AgentEvent(date: now, game: game.name, message: "Not applied. " + fit.label,
+                                             failed: false))
+                }
+                memory.fit = fit.label
+                memory.build = build
+                memory.catalog = manifest?.version ?? 0
+                memory.checked = now
+                state.games[kept.key] = memory
+                continue
+            }
+            memory.fit = fit.label
 
             let word = await Fixer.status(game, folder: folder, prefix: kept.prefix, catalog: catalogDir)
             var event: AgentEvent?

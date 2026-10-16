@@ -222,6 +222,9 @@ struct Hit: Identifiable {
     var state: FixState = .unknown
     var selected = false
     var outcome: String?
+    /// What the game was found to run on: usually one, none when nothing tells.
+    var runtimes: [GameRuntime] = []
+    var key: String { gameKey(folder, game.name) }
 
     var id: String { folder.path + "|" + game.name }
 
@@ -371,6 +374,47 @@ enum Libraries {
             if parts.count >= 4, parts[1] == "installdir" { return String(parts[3]) }
         }
         return nil
+    }
+}
+
+/// The key settings and state keep a game folder under. The same folder can
+/// be written /var/... or /private/var/..., depending on which call returned
+/// it; resolving it makes the two one.
+func gameKey(_ folder: URL, _ name: String) -> String {
+    folder.resolvingSymlinksInPath().standardizedFileURL.path + "|" + name
+}
+
+// MARK: - Finding the games
+
+extension Libraries {
+    /// Every supported game in these libraries, with the prefixes a fix that
+    /// writes registry keys could use and what the game runs on.
+    static func find(_ games: [Game], extra: [URL]) -> (libraries: [URL], hits: [Hit]) {
+        let fm = FileManager.default
+        let libs = all(extra: extra)
+        var hits: [Hit] = []
+        var seen = Set<String>()
+        for lib in libs {
+            // A folder the user added may be a game folder itself.
+            var candidates = [lib]
+            candidates += ((try? fm.contentsOfDirectory(at: lib, includingPropertiesForKeys: [.isDirectoryKey])) ?? [])
+                .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+            for folder in candidates {
+                for g in games where g.isRooted(at: folder) {
+                    let key = folder.standardizedFileURL.path + "|" + g.name
+                    guard seen.insert(key).inserted else { continue }
+                    var h = Hit(game: g, folder: folder)
+                    if g.needsPrefix {
+                        h.prefixes = prefixes(for: folder)
+                        h.prefix = h.prefixes.first
+                    }
+                    h.runtimes = Runtimes.detect(folder: folder)
+                    hits.append(h)
+                }
+            }
+        }
+        hits.sort { $0.game.name.lowercased() < $1.game.name.lowercased() }
+        return (libs, hits)
     }
 }
 

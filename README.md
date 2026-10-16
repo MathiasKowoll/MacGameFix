@@ -22,7 +22,7 @@ archived repository.
 
 | Folder | What it holds |
 | --- | --- |
-| `app/` | The application: `Core.swift` (installers, games, libraries), `Automation.swift` (the background agent, signed catalog updates, reports), `MacGameFix.swift` (the window); `build-app.sh` and `test-automation.sh`. |
+| `app/` | The application: `Core.swift` (installers, games, libraries), `Runtime.swift` (what each game runs on), `Automation.swift` (the background agent, signed catalog updates, reports), `MacGameFix.swift` (the window); `build-app.sh` and `test-automation.sh`. |
 | `fixes/` | One installer per fix (`install-*.sh`), the DLLs they put in place, the C source of each DLL and the scripts that build them (`build-proxy.sh`, `build-asf-reader.sh`, `check-builds.sh`), and the third-party notices. |
 | `process-features.json` | The table: per game executable, its symptom, backend, toolkit, codec and engine needs. The app is built from it. |
 | `tools/` | The probes and capture scripts the fixes were found with: video and Media Foundation observers, HID traces, a game survey. |
@@ -39,6 +39,34 @@ archived repository.
   the game's own files back.
 
 Quit a game before installing or removing its fix.
+
+## What each game runs on
+
+A fix is made for one graphics backend (D3DMetal or DXMT) and, for some games,
+one CrossOver or toolkit version. From 1.4.0 the app looks at what each game is
+set to run on and compares it with the table:
+
+- **With a Steam Play tool** (NotProton): the tool Steam is told to use for the
+  game, the CrossOver build that tool runs, the D3DMetal version inside it, and
+  `CX_GRAPHICS_BACKEND` in the game's launch options. A tool that runs on FEX
+  has no D3DMetal.
+- **In a CrossOver bottle:** the bottle's CrossOver version, the matching
+  CrossOver app's D3DMetal, and the bottle's own `CX_GRAPHICS_BACKEND`.
+
+Each game then shows one line, *Runs on*, and one of:
+
+- **Fits** what the game runs on.
+- **Not needed:** the game plays without the fix on what it runs on.
+- **Does not fit,** and what to change. For example, God of War's fix is made
+  for DXMT, so a game set to D3DMetal says `CX_GRAPHICS_BACKEND=dxmt`.
+- **Cannot tell,** when nothing on the Mac says it. The usual case is a launch
+  option with no `CX_GRAPHICS_BACKEND`, where CrossOver decides the backend
+  itself, or a game more than one place could run.
+
+In the last two cases *Change…* lets you say what the game runs on, and your
+word is kept over what the app finds. The app asks before installing a fix that
+does not fit or is not needed. The background agent installs a fix by itself
+only when it fits, and says once why it left any other alone. `MacGameFix --runtime-report` prints the same lines in a terminal.
 
 ## Keeping fixes applied, and new fixes
 
@@ -257,6 +285,8 @@ bundle differs from `fixes/` in a single byte.
 throwaway home and a fake game and catalog:
 - refused and accepted catalogs;
 - the agent after a game update;
+- what a game runs on, read from a fake Steam Play setup, and the user's choice
+  over it;
 - while Steam writes the game and while the game runs;
 - a failing installer's report.
 

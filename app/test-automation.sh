@@ -47,10 +47,11 @@ echo "installing into $dir"
 if [ -f "$dir/FAIL" ]; then echo "cannot write $dir/fake.dll"; exit 1; fi
 touch "$dir/fixed.marker"
 SH
+# Made for DXMT, with a codec only CrossOver Preview 27 ships.
 cat > "$RES/games.json" <<'JSON'
 {"games": [{"name": "Fake Game", "exe": "FakeGame.exe", "carrierDir": "", "script": "install-fake.sh",
-  "needsPrefix": false, "symptom": "test", "backend": "", "gptk": "", "gptkAlso": "", "codecShippedBy": "",
-  "engineFreeOn": "", "notNeededFrom": "", "why": ""}]}
+  "needsPrefix": false, "symptom": "test", "backend": "dxmt", "gptk": "", "gptkAlso": "",
+  "codecShippedBy": "CrossOver Preview 27", "engineFreeOn": "", "notNeededFrom": "", "why": ""}]}
 JSON
 /usr/bin/python3 - "$RES" <<'PY'
 import hashlib, json, pathlib, sys
@@ -71,6 +72,39 @@ check '[ ! -e "$SUPPORT/MacGameFix/catalog/current" ]' "nothing refused was put 
 check 'has "$(update "$T/release" --pubkey "$PUB")" "catalog 4000000000"' "a signed catalog is taken"
 check '[ "$(readlink "$SUPPORT/MacGameFix/catalog/current")" = 4000000000 ] && [ -x "$SUPPORT/MacGameFix/catalog/current/install-fake.sh" ]' "and switched to, its installer executable"
 check 'has "$(update "$T/release" --pubkey "$PUB")" "up to date"' "the same catalog again is up to date"
+
+# What the game runs on, as Steam and NotProton would leave it: Steam maps the
+# game to a NotProton tool, the tool names its CrossOver build, the runner
+# carries D3DMetal, NotProton has run the game, and its launch options pick
+# the backend.
+STEAM="$SUPPORT/Steam"
+mkdir -p "$STEAM/config" "$STEAM/compatibilitytools.d/notproton-test" "$STEAM/steamapps/compatdata/4242" \
+  "$STEAM/userdata/1/config"
+printf '"InstallConfigStore"\n{\n "Software"\n {\n  "Valve"\n  {\n   "Steam"\n   {\n    "CompatToolMapping"\n    {\n     "4242"\n     {\n      "name" "notproton-test"\n     }\n    }\n   }\n  }\n }\n}\n' > "$STEAM/config/config.vdf"
+echo 27.0.0.41069-fex > "$STEAM/compatibilitytools.d/notproton-test/build"
+echo rosetta > "$STEAM/compatibilitytools.d/notproton-test/flavor"
+touch "$STEAM/steamapps/compatdata/4242/notproton-run.log"
+GPTK="$SUPPORT/notproton/runners/crossover-27.0.0.41069-fex/CrossOver/lib/apple_gptk/external/D3DMetal.framework/Versions/A/Resources"
+mkdir -p "$GPTK"
+/usr/libexec/PlistBuddy -c 'Add :CFBundleShortVersionString string 4.0b3' "$GPTK/Info.plist" >/dev/null
+options() { # launch options for the game
+  printf '"UserLocalConfigStore"\n{\n "Software"\n {\n  "Valve"\n  {\n   "Steam"\n   {\n    "Apps"\n    {\n    }\n    "apps"\n    {\n     "4242"\n     {\n      "LaunchOptions" "%s"\n     }\n    }\n   }\n  }\n }\n}\n' "$1" > "$STEAM/userdata/1/config/localconfig.vdf"
+}
+report() { "$BIN" --runtime-report 2>&1; }
+
+echo "== what the game runs on"
+options 'CX_GRAPHICS_BACKEND=dxmt %command%'
+steam 1 4
+R="$(report)"
+check 'has "$R" "Fake Game | CrossOver Preview 27, D3DMetal 4.0b3, DXMT — NotProton, notproton-test" && has "$R" "| Fits what this game runs on"' "a NotProton game: its build, D3DMetal and backend, and the fix fits"
+options 'CX_GRAPHICS_BACKEND=d3dmetal %command%'
+check 'has "$(report)" "Does not fit: made for DXMT, and this game runs on D3DMetal"' "the wrong backend does not fit"
+options '%command%'
+check 'has "$(report)" "Cannot tell: made for DXMT, and the backend is automatic"' "an automatic backend cannot be told"
+echo 26.3.0.39832 > "$STEAM/compatibilitytools.d/notproton-test/build"
+options 'CX_GRAPHICS_BACKEND=dxmt %command%'
+check 'has "$(report)" "Does not fit: needs CrossOver Preview 27; this is CrossOver 26.3"' "an older CrossOver does not fit a codec it lacks"
+echo 27.0.0.41069-fex > "$STEAM/compatibilitytools.d/notproton-test/build"
 
 echo "== the agent"
 printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false}' "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
@@ -98,4 +132,13 @@ check 'has "$REPORT" "issues/new" && has "$REPORT" "cannot write ~/Library"' "wi
 check '! has "$REPORT" "$MACGAMEFIX_HOME"' "and the home folder replaced by ~"
 check '[ "$(/usr/bin/python3 -c "import json,sys; print(len(json.load(open(sys.argv[1]))[\"events\"]))" "$SUPPORT/MacGameFix/agent-state.json")" = 5 ]' "the agent's events are kept for the window"
 
-[ "$fail" = 0 ] && echo "==> MacGameFix automation: signed catalogs, the agent's updates, waits and reports" || exit 1
+echo "== the agent and what the game runs on"
+rm -f "$GAME/FAIL" "$GAME/fixed.marker"; options 'CX_GRAPHICS_BACKEND=d3dmetal %command%'; steam 6 4
+OUT="$(agent)"
+check 'has "$OUT" "ok Fake Game: Not applied. Does not fit" && [ ! -f "$GAME/fixed.marker" ]' "a fix that does not fit is not applied, and it is said"
+check '[ -z "$(agent)" ]' "and said once"
+printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false,"runtimes":{"%s|Fake Game":{"source":"your choice","build":"27.0.0.41069","backend":"dxmt","noD3DMetal":false,"setUpHere":false}}}' "$GAME" "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
+check 'has "$(report)" "You said" || has "$(report)" "your choice"' "the user's word on what the game runs on wins over detection"
+check 'has "$(agent)" "back in place" && [ -f "$GAME/fixed.marker" ]' "and once the user says it fits, the agent applies it"
+
+[ "$fail" = 0 ] && echo "==> MacGameFix automation: signed catalogs, what each game runs on, the agent's updates, waits and reports" || exit 1

@@ -62,14 +62,30 @@ final class Model: ObservableObject {
         if !state.lastUpdate.isEmpty { updateLine = state.lastUpdate }
     }
 
+    // MARK: What a game runs on
+
+    /// The CrossOver builds and D3DMetal versions this Mac carries, to choose from.
+    lazy var choices = Runtimes.installedChoices()
+
+    func runtime(_ hit: Hit) -> GameRuntime? { settings.runtime(for: hit.key, detected: hit.runtimes) }
+    func chosen(_ hit: Hit) -> Bool { settings.runtimes[hit.key] != nil }
+    func fit(_ hit: Hit) -> Fit { settings.fit(hit.game, key: hit.key, detected: hit.runtimes) }
+
+    /// The user's word on what a game runs on; nil goes back to what was found.
+    func choose(_ hit: Hit, _ runtime: GameRuntime?) {
+        settings.runtimes[hit.key] = runtime
+        settings.save()
+        objectWillChange.send()
+    }
+
     // MARK: Automatic
 
     func isKept(_ hit: Hit) -> Bool {
-        settings.kept.contains { $0.name == hit.game.name && $0.folder == hit.folder.path }
+        settings.kept.contains { $0.key == hit.key }
     }
 
     func setKept(_ hit: Hit, _ on: Bool) {
-        settings.kept.removeAll { $0.name == hit.game.name && $0.folder == hit.folder.path }
+        settings.kept.removeAll { $0.key == hit.key }
         if on {
             settings.kept.append(KeptGame(name: hit.game.name, folder: hit.folder.path,
                                           prefix: hit.game.needsPrefix ? hit.prefix?.path.path : nil))
@@ -138,32 +154,7 @@ final class Model: ObservableObject {
         let extra = extraFolders
         let games = self.games
         Task {
-            let (libs, found) = await Task.detached { () -> ([URL], [Hit]) in
-                let fm = FileManager.default
-                let libs = Libraries.all(extra: extra)
-                var hits: [Hit] = []
-                var seen = Set<String>()
-                for lib in libs {
-                    // A folder the user added may be a game folder itself.
-                    var candidates = [lib]
-                    candidates += ((try? fm.contentsOfDirectory(at: lib, includingPropertiesForKeys: [.isDirectoryKey])) ?? [])
-                        .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
-                    for folder in candidates {
-                        for g in games where g.isRooted(at: folder) {
-                            let key = folder.standardizedFileURL.path + "|" + g.name
-                            guard seen.insert(key).inserted else { continue }
-                            var h = Hit(game: g, folder: folder)
-                            if g.needsPrefix {
-                                h.prefixes = Libraries.prefixes(for: folder)
-                                h.prefix = h.prefixes.first
-                            }
-                            hits.append(h)
-                        }
-                    }
-                }
-                hits.sort { $0.game.name.lowercased() < $1.game.name.lowercased() }
-                return (libs, hits)
-            }.value
+            let (libs, found) = await Task.detached { Libraries.find(games, extra: extra) }.value
             libraries = libs
             hits = found
             for i in hits.indices { hits[i] = await probe(hits[i]) }
@@ -192,6 +183,22 @@ final class Model: ObservableObject {
         guard !targets.isEmpty else {
             status = install ? "Nothing selected needs installing." : "Nothing selected is installed."
             return
+        }
+        if install {
+            let doubtful = targets.compactMap { hit -> String? in
+                switch fit(hit) {
+                case .mismatch, .notNeeded: return "\(hit.game.name): \(fit(hit).label)"
+                default: return nil
+                }
+            }
+            if !doubtful.isEmpty {
+                let alert = NSAlert()
+                alert.messageText = "Install fixes that do not fit?"
+                alert.informativeText = doubtful.joined(separator: "\n\n")
+                alert.addButton(withTitle: "Install Anyway")
+                alert.addButton(withTitle: "Cancel")
+                guard alert.runModal() == .alertFirstButtonReturn else { return }
+            }
         }
         busy = true
         Task {
@@ -230,6 +237,7 @@ struct HitRow: View {
     let busy: Bool
     let kept: Bool
     let onKeep: (Bool) -> Void
+    @ObservedObject var model: Model
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -265,6 +273,7 @@ struct HitRow: View {
                 if let b = hit.blocker {
                     Text(b).font(.caption).foregroundStyle(.red)
                 }
+                RuntimeLine(hit: hit, model: model)
                 Toggle("Keep it applied: put it back after a game update", isOn: Binding(get: { kept }, set: onKeep))
                     .font(.caption)
                     .disabled(hit.blocker != nil || busy)
@@ -315,7 +324,8 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, minHeight: 180)
             } else {
                 List($model.hits) { $hit in
-                    HitRow(hit: $hit, busy: model.busy, kept: model.isKept(hit)) { model.setKept(hit, $0) }
+                    HitRow(hit: $hit, busy: model.busy, kept: model.isKept(hit), onKeep: { model.setKept(hit, $0) },
+                           model: model)
                 }
                 .frame(minHeight: 260)
             }
@@ -353,6 +363,84 @@ struct ContentView: View {
         .padding(16)
         .frame(minWidth: 720, minHeight: 560)
         .onAppear { model.scan() }
+    }
+}
+
+/// What the game runs on, whether the fix fits it, and a way to say otherwise.
+struct RuntimeLine: View {
+    let hit: Hit
+    @ObservedObject var model: Model
+    @State private var editing = false
+
+    var body: some View {
+        let fit = model.fit(hit)
+        let runtime = model.runtime(hit)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(runtime.map { (model.chosen(hit) ? "You said: " : "Runs on: ") + $0.summary }
+                     ?? "Runs on: unknown")
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                Spacer()
+                Button(editing ? "Done" : "Change…") { editing.toggle() }.font(.caption).buttonStyle(.link)
+            }
+            Text(fit.label).font(.caption).foregroundStyle(color(fit))
+            if editing { editor(runtime) }
+        }
+    }
+
+    private func color(_ fit: Fit) -> Color {
+        switch fit {
+        case .fits: return .green
+        case .notNeeded: return .secondary
+        case .mismatch: return .red
+        case .unknown: return .orange
+        }
+    }
+
+    @ViewBuilder private func editor(_ current: GameRuntime?) -> some View {
+        let base = current ?? GameRuntime(source: "your choice")
+        VStack(alignment: .leading, spacing: 4) {
+            if hit.runtimes.count > 1 {
+                Picker("Found", selection: Binding(
+                    get: { model.settings.runtimes[hit.key] },
+                    set: { model.choose(hit, $0) })) {
+                    Text("Not chosen").tag(GameRuntime?.none)
+                    ForEach(hit.runtimes, id: \.self) { r in Text(r.summary).tag(Optional(r)) }
+                }
+            }
+            Picker("CrossOver", selection: Binding(
+                get: { base.build ?? "" },
+                set: { var r = base; r.source = "your choice"; r.build = $0.isEmpty ? nil : $0; model.choose(hit, r) })) {
+                Text("Unknown").tag("")
+                ForEach(model.choices.builds, id: \.self) { b in
+                    Text(GameRuntime(source: "", build: b).crossover.map { "\($0) (\(b))" } ?? b).tag(b)
+                }
+            }
+            Picker("D3DMetal", selection: Binding(
+                get: { base.noD3DMetal ? "none" : (base.d3dmetal ?? "") },
+                set: { var r = base; r.source = "your choice"
+                       r.noD3DMetal = $0 == "none"; r.d3dmetal = ($0.isEmpty || $0 == "none") ? nil : $0
+                       model.choose(hit, r) })) {
+                Text("Unknown").tag("")
+                Text("None (FEX)").tag("none")
+                ForEach(model.choices.d3dmetal, id: \.self) { v in Text(v).tag(v) }
+            }
+            Picker("Backend", selection: Binding(
+                get: { base.backend ?? "" },
+                set: { var r = base; r.source = "your choice"; r.backend = $0.isEmpty ? nil : $0; model.choose(hit, r) })) {
+                Text("Automatic").tag("")
+                Text("D3DMetal").tag("d3dmetal")
+                Text("DXMT").tag("dxmt")
+                Text("DXVK").tag("dxvk")
+                Text("WineD3D").tag("wined3d")
+            }
+            if model.chosen(hit) {
+                Button("Use what MacGameFix found") { model.choose(hit, nil) }.font(.caption)
+            }
+        }
+        .font(.caption)
+        .frame(maxWidth: 460)
+        .disabled(model.busy)
     }
 }
 
@@ -434,6 +522,22 @@ enum Entry {
                 }
                 return 0
             }
+        }
+        if args.contains("--runtime-report") {
+            // Every supported game found, what it runs on, and whether its fix fits.
+            let settings = AutoSettings.load()
+            let (dir, _) = Catalog.active()
+            for hit in Libraries.find(Catalog.games(in: dir), extra: []).hits {
+                let runtime = settings.runtime(for: hit.key, detected: hit.runtimes)
+                print("\(hit.game.name) | \(runtime?.summary ?? "unknown (\(hit.runtimes.count) found)") | "
+                      + settings.fit(hit.game, key: hit.key, detected: hit.runtimes).label)
+                if args.contains("--verbose") {
+                    for r in hit.runtimes {
+                        print("    found: \(r.summary)\(r.setUpHere ? " (set for this game in Steam, and run)" : "")")
+                    }
+                }
+            }
+            exit(0)
         }
         if let source = value("--update-from") {
             let key = value("--pubkey") ?? Updater.publicKey
