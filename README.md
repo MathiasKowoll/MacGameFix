@@ -22,7 +22,7 @@ archived repository.
 
 | Folder | What it holds |
 | --- | --- |
-| `app/` | The application: `Core.swift` (installers, games, libraries), `Runtime.swift` (what each game runs on), `Automation.swift` (the background agent, signed catalog updates, reports), `MacGameFix.swift` (the window); `build-app.sh` and `test-automation.sh`. |
+| `app/` | The application: `Core.swift` (installers, games, libraries), `Runtime.swift` (what each game runs on), `Automation.swift` (the background agent, signed catalog updates, reports), `MenuBar.swift` (the agent's menu bar item), `MacGameFix.swift` (the window), `AppIcon.icon` (the icon); `build-app.sh` and `test-automation.sh`. |
 | `fixes/` | One installer per fix (`install-*.sh`), the DLLs they put in place, the C source of each DLL and the scripts that build them (`build-proxy.sh`, `build-asf-reader.sh`, `check-builds.sh`), and the third-party notices. |
 | `process-features.json` | The table: per game executable, its symptom, backend, toolkit, codec and engine needs. The app is built from it. |
 | `tools/` | The probes and capture scripts the fixes were found with: video and Media Foundation observers, HID traces, a game survey. |
@@ -73,12 +73,21 @@ only when it fits, and says once why it left any other alone. `MacGameFix --runt
 From version 1.4.0 the app can look after the fixes by itself. All of it is off
 until you turn it on, and the fixes stay in the games' own folders as before.
 
-- **Keep it applied.** Mark a game with *Keep it applied*, and turn on *Keep
-  the marked fixes applied in the background*. That starts a small agent
-  (a LaunchAgent, `io.github.macgamefix.agent`) that looks at the marked games
-  every two minutes. When Steam updates or verifies a game and its fix is gone,
-  the agent installs it again. It waits until the game is closed and Steam has
-  finished writing it.
+- **Keep it applied.** Mark a game with *Keep it applied*, and turn on *Run in
+  the background, from the menu bar*. That starts a small agent (a LaunchAgent,
+  `io.github.macgamefix.agent`) that starts when you log in and looks at the
+  marked games every two minutes. When Steam updates or verifies a game and its
+  fix is gone, the agent installs it again. It waits until the game is closed
+  and Steam has finished writing it.
+- **The menu bar.** The agent lives there as a raccoon. Its menu is a summary,
+  however many games are marked: how many fixes are in place, to review,
+  left alone because they do not fit, or not looked at yet. A count you can act
+  on opens the window on those games; the window has the detail. The menu also
+  looks at every game or for new fixes on demand.
+  - A dot by the raccoon's ear means something new to look at: new fixes, a fix
+    that failed, or one left alone. It goes away when you open the window.
+  - *Quit MacGameFix* stops the agent until you log in again or open the
+    window. If it crashes, it starts again by itself.
 - **New fixes.** With *Get new fixes from GitHub* on, the agent looks at the
   latest release of this repository once a day. When the release carries a newer
   catalog of fixes, the agent takes it without a new app: the installers and
@@ -95,7 +104,7 @@ until you turn it on, and the fixes stay in the games' own folders as before.
   is sent until you read it and press *Submit*. The window lists what the
   agent did, with the same button.
 
-Turning the agent off removes it. Its settings and what it did are in
+Turning the option off removes the agent. Its settings and what it did are in
 `~/Library/Application Support/MacGameFix`, and its log is in
 `~/Library/Logs/MacGameFix-agent.log`.
 

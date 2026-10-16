@@ -10,7 +10,8 @@
 // themselves: --status says what is there, a plain run installs, --restore
 // undoes. This file is the window: it finds the folders, asks, and shows the
 // answers. Core.swift runs the installers; Automation.swift keeps marked fixes
-// applied in the background and takes newer fixes from the releases.
+// applied in the background and takes newer fixes from the releases; MenuBar.swift
+// is that background agent's menu bar item.
 //
 // Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -35,16 +36,33 @@ final class Model: ObservableObject {
     @Published var agentOn = LaunchAgent.enabled
     @Published var events: [AgentEvent] = []
     @Published var updateLine = ""
+    /// What the agent knows of each marked game.
+    @Published var keptLines: [KeptLine] = []
+    /// Only the games that need the user; the menu bar opens the window so.
+    @Published var onlyReview = CommandLine.arguments.contains("--review")
     var resources = URL(fileURLWithPath: ".")
 
     private let extraKey = "extraFolders"
 
+    /// Posted when the user has seen what the agent did; the menu bar drops its dot.
+    static let seenNotification = Notification.Name("io.github.macgamefix.seen")
+
     init() {
         loadCatalog()
         refreshEvents()
-        // A moved app leaves the agent pointing at the old place.
-        if agentOn, let me = Bundle.main.executablePath, LaunchAgent.installedProgram != me {
-            try? LaunchAgent.enable(executable: me)
+        settings.seen = Date()
+        settings.save()
+        DistributedNotificationCenter.default().postNotificationName(Self.seenNotification, object: nil,
+                                                                     deliverImmediately: true)
+        // A moved app leaves the agent pointing at the old place, and an older
+        // app wrote an older job. A menu bar item the user quit comes back
+        // when the window opens.
+        if agentOn, let me = Bundle.main.executablePath {
+            if LaunchAgent.isCurrent(executable: me) {
+                LaunchAgent.start()
+            } else {
+                try? LaunchAgent.enable(executable: me)
+            }
         }
     }
 
@@ -59,7 +77,18 @@ final class Model: ObservableObject {
     func refreshEvents() {
         let state = AgentState.load()
         events = state.events.reversed()
+        keptLines = KeptLine.all(settings: settings, state: state)
         if !state.lastUpdate.isEmpty { updateLine = state.lastUpdate }
+    }
+
+    func keptLine(_ hit: Hit) -> KeptLine? { keptLines.first { $0.key == hit.key } }
+    var toReview: [KeptLine] { keptLines.filter(\.needsUser) }
+
+    /// Stops keeping a game whose folder is gone.
+    func forget(_ line: KeptLine) {
+        settings.kept.removeAll { $0.key == line.key }
+        settings.save()
+        refreshEvents()
     }
 
     // MARK: What a game runs on
@@ -91,6 +120,7 @@ final class Model: ObservableObject {
                                           prefix: hit.game.needsPrefix ? hit.prefix?.path.path : nil))
         }
         settings.save()
+        refreshEvents()
     }
 
     func setAgent(_ on: Bool) {
@@ -274,6 +304,15 @@ struct HitRow: View {
                     Text(b).font(.caption).foregroundStyle(.red)
                 }
                 RuntimeLine(hit: hit, model: model)
+                if let line = model.keptLine(hit), line.word == "Failed" {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("In the background: \(line.detail ?? "the fix did not take.")")
+                            .font(.caption).foregroundStyle(.orange)
+                        if let r = line.report, let url = URL(string: r) {
+                            Button("Report on GitHub…") { NSWorkspace.shared.open(url) }.font(.caption).buttonStyle(.link)
+                        }
+                    }
+                }
                 Toggle("Keep it applied: put it back after a game update", isOn: Binding(get: { kept }, set: onKeep))
                     .font(.caption)
                     .disabled(hit.blocker != nil || busy)
@@ -323,9 +362,17 @@ struct ContentView: View {
                 }
                 .frame(maxWidth: .infinity, minHeight: 180)
             } else {
-                List($model.hits) { $hit in
-                    HitRow(hit: $hit, busy: model.busy, kept: model.isKept(hit), onKeep: { model.setKept(hit, $0) },
-                           model: model)
+                if !model.toReview.isEmpty {
+                    Toggle("Only the marked games to review (\(model.toReview.count))", isOn: $model.onlyReview)
+                        .font(.callout)
+                }
+                List {
+                    ForEach($model.hits) { $hit in
+                        if !model.onlyReview || model.keptLine(hit)?.needsUser == true {
+                            HitRow(hit: $hit, busy: model.busy, kept: model.isKept(hit),
+                                   onKeep: { model.setKept(hit, $0) }, model: model)
+                        }
+                    }
                 }
                 .frame(minHeight: 260)
             }
@@ -448,14 +495,25 @@ struct RuntimeLine: View {
 /// agent did, with a way to report a failure.
 struct AutomaticView: View {
     @ObservedObject var model: Model
+    @State private var open = false
 
     var body: some View {
-        DisclosureGroup("Automatic") {
+        DisclosureGroup("Automatic", isExpanded: $open) {
             VStack(alignment: .leading, spacing: 6) {
-                Toggle("Keep the marked fixes applied in the background", isOn: Binding(
+                ForEach(model.keptLines.filter { $0.word == "Folder not found" }, id: \.key) { line in
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("\(line.name): marked, and its folder is gone (\(line.detail ?? ""))")
+                            .font(.caption).foregroundStyle(.orange).lineLimit(1).truncationMode(.middle)
+                        Spacer()
+                        Button("Stop Keeping It") { model.forget(line) }.font(.caption)
+                    }
+                }
+                Toggle("Run in the background, from the menu bar", isOn: Binding(
                     get: { model.agentOn }, set: { model.setAgent($0) }))
-                Text("An agent looks at each game marked “Keep it applied” every two minutes. When Steam updates "
-                     + "or verifies the game and the fix is gone, it installs it again, once the game is closed.")
+                Text("MacGameFix stays in the menu bar and starts when you log in. Every two minutes it looks at "
+                     + "each game marked “Keep it applied”: when Steam updates or verifies the game and the fix is "
+                     + "gone, it installs it again, once the game is closed. Its menu says what it keeps and what "
+                     + "it did.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Toggle("Get new fixes from GitHub", isOn: Binding(
                     get: { model.settings.updates }, set: { model.setUpdates($0) }))
@@ -485,6 +543,7 @@ struct AutomaticView: View {
             }
             .padding(.top, 4)
         }
+        .onAppear { open = model.keptLines.contains { $0.condition == .review } }
     }
 }
 
@@ -496,8 +555,9 @@ struct MacGameFixApp: App {
 }
 
 /// One binary, several ways to run: the window; --agent, which the LaunchAgent
-/// starts; and, for the tests and the release, --agent-once, --update-from,
-/// --make-catalog and --new-signing-key, which do one thing and exit.
+/// starts and which lives in the menu bar; and, for the tests and the release,
+/// --agent-once, --menu-report, --runtime-report, --update-from, --make-catalog
+/// and --new-signing-key, which do one thing and exit.
 @main
 enum Entry {
     static func main() {
@@ -513,7 +573,18 @@ enum Entry {
             done.wait()
             exit(box.code)
         }
-        if args.contains("--agent") { Agent.runForever() }
+        if args.contains("--agent") { MainActor.assumeIsolated { Agent.runForever() } }
+        if args.contains("--menu-report") {
+            // The menu bar item's summary, the games behind it, and its dot.
+            let settings = AutoSettings.load(), state = AgentState.load()
+            let lines = KeptLine.all(settings: settings, state: state)
+            print("news | \(state.news(since: settings.seen) ? "yes" : "no")")
+            for group in KeptLine.summary(lines) { print("summary | \(group.text)") }
+            for line in lines {
+                print("\(line.name) | \(line.word)\(line.detail.map { " | " + $0 } ?? "")\(line.report == nil ? "" : " | report")")
+            }
+            exit(0)
+        }
         if args.contains("--agent-once") {
             wait {
                 for e in await Agent.pass(notify: false) {

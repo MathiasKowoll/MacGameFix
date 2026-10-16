@@ -2,8 +2,8 @@
 // applied, a catalog of fixes that updates itself from the releases, and a
 // report the user can send when a fix does not take.
 //
-// - The agent (a LaunchAgent running this binary with --agent) looks at every
-//   marked game every two minutes. When Steam has changed the game since the last
+// - The agent (a LaunchAgent running this binary with --agent, which lives in
+//   the menu bar: MenuBar.swift) looks at every marked game every two minutes. When Steam has changed the game since the last
 //   look (a new build, or a verify that put the original files back), or a new
 //   catalog arrived, it asks the installer, and installs again when the fix is
 //   gone -- only with the game closed and Steam done writing it.
@@ -40,6 +40,8 @@ struct AutoSettings: Codable {
     var updates = true
     /// What the user said a game runs on, by KeptGame.key; it wins over detection.
     var runtimes: [String: GameRuntime] = [:]
+    /// When the user last opened the window: what the agent did before it has been seen.
+    var seen = Date.distantPast
 
     init() {}
 
@@ -49,6 +51,7 @@ struct AutoSettings: Codable {
         kept = try c.decodeIfPresent([KeptGame].self, forKey: .kept) ?? []
         updates = try c.decodeIfPresent(Bool.self, forKey: .updates) ?? true
         runtimes = try c.decodeIfPresent([String: GameRuntime].self, forKey: .runtimes) ?? [:]
+        seen = try c.decodeIfPresent(Date.self, forKey: .seen) ?? .distantPast
     }
 
     /// What a game runs on: the user's choice; else the one place detection
@@ -96,6 +99,10 @@ struct AgentEvent: Codable, Identifiable {
     var failed: Bool
     /// GitHub's new-issue page, filled in, for a failure.
     var report: String?
+
+    /// Something the user would want to look at: new fixes, a failure, a fix
+    /// left alone because it does not fit.
+    var asksForALook: Bool { failed || game.isEmpty || message.hasPrefix("Not applied") }
 }
 
 struct GameMemory: Codable {
@@ -135,6 +142,10 @@ struct AgentState: Codable {
         if let data = try? JSONEncoder().encode(self) { try? data.write(to: Paths.state, options: .atomic) }
     }
 
+    /// Whether something the agent did asks for a look and came after `seen`:
+    /// the menu bar's dot.
+    func news(since seen: Date) -> Bool { events.contains { $0.date > seen && $0.asksForALook } }
+
     mutating func record(_ event: AgentEvent) {
         events.append(event)
         if events.count > 50 { events.removeFirst(events.count - 50) }
@@ -149,13 +160,16 @@ enum Agent {
     static let updateEvery: TimeInterval = 24 * 3600
 
     /// One look at every marked game, and at the releases when it is time.
+    /// `everything` looks at each marked game even when nothing changed it, and
+    /// `updateNow` asks the releases at once; the menu's two commands.
     /// Returns what it did, for the log and the tests.
-    static func pass(now: Date = Date(), notify: Bool) async -> [AgentEvent] {
+    static func pass(now: Date = Date(), notify: Bool, everything: Bool = false,
+                     updateNow: Bool = false) async -> [AgentEvent] {
         let settings = AutoSettings.load()
         var state = AgentState.load()
         var events: [AgentEvent] = []
 
-        if settings.updates && now.timeIntervalSince(state.lastUpdateCheck) > updateEvery {
+        if updateNow || (settings.updates && now.timeIntervalSince(state.lastUpdateCheck) > updateEvery) {
             state.lastUpdateCheck = now
             let before = Set(Catalog.games(in: Catalog.active().dir).map(\.name))
             do {
@@ -165,6 +179,8 @@ enum Agent {
                 if !added.isEmpty {
                     events.append(AgentEvent(date: now, game: "", message: "New fixes: " + added.joined(separator: ", "),
                                              failed: false))
+                } else if line.hasPrefix("New fixes installed") {
+                    events.append(AgentEvent(date: now, game: "", message: "The fixes were updated.", failed: false))
                 }
             } catch {
                 state.lastUpdate = "Update check failed: \(error.localizedDescription)"
@@ -188,7 +204,7 @@ enum Agent {
             // launch options or of the user's choice counts as a change.
             let fit = settings.fit(game, key: kept.key, detected: Runtimes.detect(folder: folder))
             let fitChanged = memory.fit != fit.label
-            guard changed || fitChanged || now.timeIntervalSince(memory.checked) > recheck else { continue }
+            guard changed || fitChanged || everything || now.timeIntervalSince(memory.checked) > recheck else { continue }
             if isRunning(game) { continue } // Looked at again once it is closed.
 
             if !fit.allowsAutomatic {
@@ -252,18 +268,15 @@ enum Agent {
                    report: Report.url(game: game.name, problem: problem, output: output, catalog: catalog).absoluteString)
     }
 
-    /// The LaunchAgent's process: a pass every two minutes, for as long as it runs.
+    /// The LaunchAgent's process: a menu bar item, and a pass every two
+    /// minutes, for as long as it runs. Quitting it from the menu ends it until
+    /// the next login, or until the window opens again.
+    @MainActor
     static func runForever() -> Never {
         let app = NSApplication.shared
-        app.setActivationPolicy(.prohibited)
-        Notifier.start()
-        Task {
-            while true {
-                let events = await pass(notify: true)
-                for e in events { print("\(e.date) \(e.game): \(e.message)") }
-                try? await Task.sleep(nanoseconds: 120 * 1_000_000_000)
-            }
-        }
+        app.setActivationPolicy(.accessory)
+        let delegate = MenuBarAgent()
+        app.delegate = delegate
         app.run()
         exit(0)
     }
@@ -527,29 +540,40 @@ enum LaunchAgent {
     static var plist: URL { Paths.home.appendingPathComponent("Library/LaunchAgents/\(label).plist") }
     static var enabled: Bool { FileManager.default.fileExists(atPath: plist.path) }
 
-    /// The program the installed agent runs, so a moved app can be noticed.
-    static var installedProgram: String? {
-        guard let d = NSDictionary(contentsOf: plist), let args = d["ProgramArguments"] as? [String] else { return nil }
-        return args.first
+    /// The job: started at login in the user's graphical session, started
+    /// again if it crashes, and left stopped when the user quits it.
+    static func job(executable: String) -> NSDictionary {
+        let log = Paths.home.appendingPathComponent("Library/Logs/MacGameFix-agent.log").path
+        return [
+            "Label": label,
+            "ProgramArguments": [executable, "--agent"],
+            "RunAtLoad": true,
+            "KeepAlive": ["SuccessfulExit": false],
+            "LimitLoadToSessionType": "Aqua",
+            "ThrottleInterval": 60,
+            "ProcessType": "Interactive",
+            "StandardOutPath": log,
+            "StandardErrorPath": log,
+        ]
+    }
+
+    /// Whether the installed job is the one this app would write: an older
+    /// one, or one pointing at a moved app, is written again.
+    static func isCurrent(executable: String) -> Bool {
+        NSDictionary(contentsOf: plist) == job(executable: executable)
     }
 
     static func enable(executable: String) throws {
         let fm = FileManager.default
         try fm.createDirectory(at: plist.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let log = Paths.home.appendingPathComponent("Library/Logs/MacGameFix-agent.log").path
-        let d: NSDictionary = [
-            "Label": label,
-            "ProgramArguments": [executable, "--agent"],
-            "RunAtLoad": true,
-            "KeepAlive": true,
-            "ThrottleInterval": 60,
-            "ProcessType": "Background",
-            "StandardOutPath": log,
-            "StandardErrorPath": log,
-        ]
         launchctl(["bootout", "gui/\(getuid())/\(label)"])
-        try d.write(to: plist)
+        try job(executable: executable).write(to: plist)
         launchctl(["bootstrap", "gui/\(getuid())", plist.path])
+    }
+
+    /// Starts the job if it is loaded and not running, as after Quit.
+    static func start() {
+        launchctl(["kickstart", "gui/\(getuid())/\(label)"])
     }
 
     static func disable() {

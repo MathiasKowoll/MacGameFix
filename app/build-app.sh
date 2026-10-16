@@ -126,7 +126,7 @@ rm -rf "$APP"
 mkdir -p "$MACOS" "$RES" "$CACHE"
 
 echo "==> compiling"
-swiftc "$HERE/Core.swift" "$HERE/Runtime.swift" "$HERE/Automation.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
+swiftc "$HERE/Core.swift" "$HERE/Runtime.swift" "$HERE/Automation.swift" "$HERE/MenuBar.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
   -o "$MACOS/MacGameFix" \
   -framework SwiftUI -framework AppKit -framework IOKit -framework UserNotifications \
   -target arm64-apple-macos14.0 \
@@ -146,14 +146,22 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleIconName</key><string>AppIcon</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
 </dict></plist>
 PLIST
 
-# The icon MacGameVideoFix used, kept: one project, renamed.
+# RaccoonBot's raccoon, the same one the menu bar draws. AppIcon.icon is the
+# Icon Composer source; with Xcode's actool it becomes Assets.car (the icon
+# macOS 26 and later show) and AppIcon.icns. Without Xcode, the committed
+# AppIcon.icns, which actool made from the same source.
 echo "==> icon"
-if [ -f "$HERE/AppIcon.icns" ]; then
+if ACTOOL="$(xcrun --find actool 2>/dev/null)" && [ -d "$HERE/AppIcon.icon" ]; then
+  "$ACTOOL" "$HERE/AppIcon.icon" --compile "$RES" --app-icon AppIcon \
+    --output-partial-info-plist "$CACHE/icon-partial.plist" --platform macosx \
+    --minimum-deployment-target 14.0 --development-region en > /dev/null
+elif [ -f "$HERE/AppIcon.icns" ]; then
   cp "$HERE/AppIcon.icns" "$RES/AppIcon.icns"
 else
   echo "    note: app/AppIcon.icns is missing, so this build has no icon"

@@ -28,6 +28,7 @@ steam() { # buildid, StateFlags
   printf '"AppState"\n{\n\t"appid"\t\t"4242"\n\t"StateFlags"\t\t"%s"\n\t"installdir"\t\t"Fake Game"\n\t"buildid"\t\t"%s"\n}\n' "$2" "$1" > "$MANIFEST"
 }
 agent() { "$BIN" --agent-once 2>&1; }
+menu() { "$BIN" --menu-report 2>&1; }
 # A refusal exits 1; what is checked is what it says.
 update() { "$BIN" --update-from "$@" 2>&1 || true; }
 has() { case "$1" in *"$2"*) return 0 ;; esac; return 1; }
@@ -131,14 +132,25 @@ REPORT="$(echo "$OUT" | sed -n 's/^report //p' | /usr/bin/python3 -c 'import sys
 check 'has "$REPORT" "issues/new" && has "$REPORT" "cannot write ~/Library"' "with a filled-in issue holding the installer output"
 check '! has "$REPORT" "$MACGAMEFIX_HOME"' "and the home folder replaced by ~"
 check '[ "$(/usr/bin/python3 -c "import json,sys; print(len(json.load(open(sys.argv[1]))[\"events\"]))" "$SUPPORT/MacGameFix/agent-state.json")" = 5 ]' "the agent's events are kept for the window"
+OUT="$(menu)"
+check 'has "$OUT" "summary | 1 to review" && has "$OUT" "Fake Game | Failed | The installer failed (status 1). | report"' "the menu bar counts the failure, and the window has it with its report"
+check 'has "$OUT" "news | yes"' "and the menu bar shows its dot"
+printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false,"seen":9999999999}' "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
+check 'has "$(menu)" "news | no"' "until the window has been opened"
+printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false}' "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
 
 echo "== the agent and what the game runs on"
 rm -f "$GAME/FAIL" "$GAME/fixed.marker"; options 'CX_GRAPHICS_BACKEND=d3dmetal %command%'; steam 6 4
 OUT="$(agent)"
 check 'has "$OUT" "ok Fake Game: Not applied. Does not fit" && [ ! -f "$GAME/fixed.marker" ]' "a fix that does not fit is not applied, and it is said"
 check '[ -z "$(agent)" ]' "and said once"
+check 'has "$(menu)" "summary | 1 left alone: the fix does not fit"' "the menu bar counts it as left alone"
 printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false,"runtimes":{"%s|Fake Game":{"source":"your choice","build":"27.0.0.41069","backend":"dxmt","noD3DMetal":false,"setUpHere":false}}}' "$GAME" "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
 check 'has "$(report)" "You said" || has "$(report)" "your choice"' "the user's word on what the game runs on wins over detection"
 check 'has "$(agent)" "back in place" && [ -f "$GAME/fixed.marker" ]' "and once the user says it fits, the agent applies it"
+check 'has "$(menu)" "summary | 1 in place"' "and the menu bar counts it in place"
+printf '{"kept":[{"name":"Fake Game","folder":"%s"},{"name":"Gone Game","folder":"%s"}],"updates":false}' "$GAME" "$T/gone" > "$SUPPORT/MacGameFix/automatic.json"
+OUT="$(menu)"
+check 'has "$OUT" "summary | 1 to review" && has "$OUT" "Gone Game | Folder not found"' "a marked game whose folder is gone is to review"
 
-[ "$fail" = 0 ] && echo "==> MacGameFix automation: signed catalogs, what each game runs on, the agent's updates, waits and reports" || exit 1
+[ "$fail" = 0 ] && echo "==> MacGameFix automation: signed catalogs, what each game runs on, the agent's updates, waits and reports, the menu bar's summary" || exit 1
