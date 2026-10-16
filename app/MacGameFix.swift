@@ -27,7 +27,7 @@ final class Model: ObservableObject {
     @Published var hits: [Hit] = []
     @Published var libraries: [URL] = []
     @Published var log: [String] = []
-    @Published var busy = false
+    @Published var busy = false { didSet { WindowApp.busy = busy } }
     @Published var status = ""
 
     @Published var games: [Game] = []
@@ -548,7 +548,34 @@ struct AutomaticView: View {
     }
 }
 
+/// The window's process ends with its window: the agent, when it is on, is a
+/// process of its own in the menu bar, and a window process left without a
+/// window only sat in the Dock. One that is installing or removing a fix
+/// finishes that first.
+@MainActor
+final class WindowApp: NSObject, NSApplicationDelegate {
+    static var busy = false {
+        didSet {
+            if !busy && quitWaiting {
+                quitWaiting = false
+                NSApp.reply(toApplicationShouldTerminate: true)
+            }
+        }
+    }
+    private static var quitWaiting = false
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard Self.busy else { return .terminateNow }
+        Self.quitWaiting = true
+        return .terminateLater
+    }
+}
+
 struct MacGameFixApp: App {
+    @NSApplicationDelegateAdaptor(WindowApp.self) private var delegate
+
     var body: some Scene {
         WindowGroup("MacGameFix") { ContentView() }
             .windowResizability(.contentMinSize)
