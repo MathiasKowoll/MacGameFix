@@ -223,6 +223,7 @@ struct Hit: Identifiable {
     var prefix: Prefix?
     var state: FixState = .unknown
     var selected = false
+    /// What went wrong the last time this game's fix was installed or removed.
     var outcome: String?
     /// What the game was found to run on: usually one, none when nothing tells.
     var runtimes: [GameRuntime] = []

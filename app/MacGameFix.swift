@@ -249,7 +249,8 @@ final class Model: ObservableObject {
                     let took = install ? h.state == .installed : h.state == .absent
                     if code != 0 { failed += 1; h.outcome = "Failed — see the log" }
                     else if !took { failed += 1; h.outcome = "Did not take — see the log" }
-                    else { h.outcome = install ? "Installed" : "Removed" }
+                    // A success is already in the state beside it, and in the status line.
+                    else { h.outcome = nil }
                     h.selected = false
                     hits[i] = h
                 }
@@ -279,7 +280,7 @@ struct HitRow: View {
                     Text(hit.game.name).font(.headline)
                     Spacer()
                     if let o = hit.outcome {
-                        Text(o).font(.caption).foregroundStyle(o.hasPrefix("Installed") || o.hasPrefix("Removed") ? .green : .orange)
+                        Text(o).font(.caption).foregroundStyle(.orange)
                     }
                     Text(hit.state.label).font(.callout).foregroundStyle(hit.state.color)
                 }
