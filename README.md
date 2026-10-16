@@ -315,6 +315,56 @@ has one.
 toolchain). Users never run them: the built DLLs are in `fixes/` and ship in the
 app. `fixes/check-builds.sh` checks that each DLL is the one its source builds.
 
+## How each fix is made
+
+Every fix is one installer in `fixes/` and the files it puts in the game
+folder. A proxy DLL takes the name of a DLL the game already loads, keeps the
+game's own as `<name>_real.dll`, and forwards every export to it; the source
+named below is the code that runs inside it. The source of each shipped DLL is
+the one that writes the log name the DLL carries, which is how
+`fixes/check-builds.sh` finds it. What was found, and how, is in the game's
+page under `legacy/wiki/`.
+
+| Installer | Games | What goes in the game folder | Built from | Findings |
+| --- | --- | --- | --- | --- |
+| `install-runtime-fix.sh` | Beast of Reincarnation, Life is Strange: Double Exposure, Life is Strange: Reunion, Mortal Shell 2 | `libogg_64.dll` under `Engine/Binaries/ThirdParty/Ogg/Win64` | `ue5-media-fix.c` | [Beast](legacy/wiki/Beast-of-Reincarnation.md), [Double Exposure](legacy/wiki/Life-is-Strange-Double-Exposure.md), [Reunion](legacy/wiki/Life-is-Strange-Reunion.md), [Mortal Shell 2](legacy/wiki/Mortal-Shell-2.md) |
+| `install-ctl-fix.sh` | CONTROL Resonant | `PxFoundation_x64.dll` (from `PxFoundation_x64-ctl.dll`) | `ctl-window-fix.c` | [CONTROL Resonant](legacy/wiki/Control-Resonant.md) |
+| `install-re-vc1-fix.sh` | Devil May Cry 5, RESIDENT EVIL 2, RESIDENT EVIL 3 | `amd_ags_x64.dll` (from `amd_ags_x64-dmc5.dll`, or `amd_ags_x64-re2.dll` for both RE titles), and the reader | `mf-reader-fallback.c` | [RE Engine VC-1](legacy/wiki/RE-Engine-VC1.md) |
+| `install-dwo-bridge.sh` | DYNASTY WARRIORS: ORIGINS, Wo Long: Fallen Dynasty | `libxess.dll` | `dwo-video-bridge.c` | [DYNASTY WARRIORS: ORIGINS](legacy/wiki/Dynasty-Warriors-Origins.md), [Wo Long](legacy/wiki/Wo-Long-Fallen-Dynasty.md) |
+| `install-gow-fix.sh` | God of War | `libSceJobManager.dll` (from `libSceJobManager-gow.dll`) and `gow-depth-fix.ini` | `gow-depth-fix.c` | [God of War](legacy/wiki/God-of-War.md) |
+| `install-kh-bridge.sh` | KINGDOM HEARTS Dream Drop Distance, KINGDOM HEARTS HD 1.5+2.5 ReMIX | `dinput8.dll` (from `dinput8-kh.dll`); the original is the bottle's or prefix's own `dinput8`, copied beside it | `dwo-video-bridge.c` | [KINGDOM HEARTS](legacy/wiki/Kingdom-Hearts.md) |
+| `install-sm2-fix.sh` | Marvel's Spider-Man 2 | `amd_ags_x64.dll` (from `amd_ags_x64-sm2.dll`), and shaders rewritten from the game's own executable by `sm2-shadertool` | `sm2-tpose-fix.c` with `sm2fix_core.c`; the tool from `sm2-shadertool.c` and `sm2-shaderfix.c` | [Spider-Man 2](legacy/wiki/Spider-Man-2.md) |
+| `install-nier-bridge.sh` | NieR Replicant ver.1.22474487139 | `dinput8.dll` (from `dinput8-nier.dll`), the original copied from the bottle or prefix, and the reader | `dwo-video-bridge.c` | [NieR Replicant](legacy/wiki/NieR-Replicant.md) |
+| `install-ng4-fix.sh` | NINJA GAIDEN 4 | `dstorage.dll` (from `dstorage-ng4.dll`); `dstoragecore.dll` renamed aside | `tools/ng4-observe.c`, built with `-DNG4_FIX` | [NINJA GAIDEN 4](legacy/wiki/Ninja-Gaiden-4.md) |
+| `install-nioh-bridge.sh` | Nioh, Nioh 2 | `GfeSDK.dll`, and the reader | `p5s-video-bridge.c` | [Nioh](legacy/wiki/Nioh.md), [Nioh 2](legacy/wiki/Nioh-2.md) |
+| `install-nioh3-bridge.sh` | Nioh 3 | `amd_ags_x64.dll` (from `amd_ags_x64-nioh3.dll`), and the reader | `dwo-video-bridge.c` | [Nioh 3](legacy/wiki/Nioh-3.md) |
+| `install-p5s-bridge.sh` | Persona 5 Strikers | `amd_ags_x64.dll`, and the reader | `p5s-video-bridge.c` | [Persona 5 Strikers](legacy/wiki/Persona-5-Strikers.md) |
+| `install-resonance-fix.sh` | RESONANCE: A Plague Tale Legacy | `NvCloth_x64.dll` (from `NvCloth_x64-resonance.dll`) | `shader-floor-fix.c` | [RESONANCE](legacy/wiki/Resonance-A-Plague-Tale-Legacy.md) |
+| `install-tmnt-fix.sh` | TMNT: Splintered Fate | `fmod.dll` (from `fmod-tmnt.dll`) | `d3d12-guards.c` | [TMNT](legacy/wiki/TMNT-Splintered-Fate.md) |
+| `install-tormented-fix.sh` | Tormented Souls 2 | `OpenColorIO_2_3.dll` under `TormentedSouls2/Binaries/Win64` (from `OpenColorIO_2_3-tormented.dll`) | `d3d12-guards.c` | [Tormented Souls 2](legacy/wiki/Tormented-Souls-2.md) |
+| `install-w3-fix.sh` | The Witcher 3: Wild Hunt | `amd_fidelityfx_loader_dx12.dll` under `bin/x64_dx12` (from `amd_fidelityfx_loader_dx12-w3.dll`), and a `bin/x64` link | `w3-streamout-fix.c` | [The Witcher 3](legacy/wiki/The-Witcher-3.md) |
+
+- **The reader** (`mgvf-asf-reader.dll`) is `asf-reader.c`, `wmv-dmo.c`,
+  `wm-reader.c` and `dshow-graph.c` over a static FFmpeg 9.0.2 cut down to the
+  demuxers and decoders these games need, built by `fixes/build-asf-reader.sh`.
+  Its notices are in `fixes/mgvf-asf-reader-LICENCES.md`.
+- **The proxies** are built by `fixes/build-proxy.sh <the game's DLL>
+  <source.c>`, which reads the exports from the game's own DLL so the
+  forwarders match it. NINJA GAIDEN 4's source is a probe that becomes the fix
+  with `MGVF_CFLAGS="-DNG4_FIX"`, as the script's comments say.
+- **`sm2-shadertool`** is a Mac program, built with clang as its source's header
+  shows.
+- **Work by others:** Spider-Man 2's diagnosis, raw views and rewritten
+  shaders are macprotips', as `sm2-tpose-fix.c` says, and `sm2-shaderfix.c` is
+  their rewriter ported to C; The Witcher 3's rule is tholtman1-del's; God of
+  War's depth test was found in a r/macgaming post. See Credits.
+- **Sources no shipped fix builds from:** `ue5-runtime-fix.c` and
+  `electra-h264-fix.c` (earlier sources of the Unreal fix, whose builds
+  `install-runtime-fix.sh` still recognises), `sleep-yield-fix.c`
+  (METAL GEAR SOLID 4) and `hide-wine.c`. NINJA GAIDEN 3: Razor's Edge has an
+  installer here (`install-ng3-fix.sh`, with its `ng3-*` files), but it changes
+  a bottle rather than a game folder, so the app does not offer it.
+
 ## Credits
 
 - **[witcher3-crossover-fix](https://github.com/tholtman1-del/witcher3-crossover-fix)
