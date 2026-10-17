@@ -106,6 +106,10 @@ g="$W/gow"; mkdir -p "$g"; touch "$g/GoW.exe"
 fake "$FIX/libSceJobManager-gow.dll" "$g/libSceJobManager.dll" gow-depth-fix.log
 cycle gow install-gow-fix.sh "$g" "$g/libSceJobManager.dll" "$FIX/libSceJobManager-gow.dll"
 
+g="$W/mk11"; b="$g/Binaries/Retail"; mkdir -p "$b"; touch "$b/MK11_DX12.exe"
+fake "$FIX/amd_ags_x64-mk11.dll" "$b/amd_ags_x64.dll" mk11-face-fix.log
+cycle mk11 install-mk11-fix.sh "$g" "$b/amd_ags_x64.dll" "$FIX/amd_ags_x64-mk11.dll"
+
 g="$W/nioh"; mkdir -p "$g"; touch "$g/nioh.exe"
 fake "$FIX/GfeSDK.dll" "$g/GfeSDK.dll" p5s-video-bridge.log
 cycle nioh install-nioh-bridge.sh "$g" "$g/GfeSDK.dll" "$FIX/GfeSDK.dll" "$g/mgvf-asf-reader.dll" "$FIX/mgvf-asf-reader.dll"

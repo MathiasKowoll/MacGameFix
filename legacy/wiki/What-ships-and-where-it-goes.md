@@ -35,6 +35,7 @@ refuses a release where the shipped copy differs.
 | `NvCloth_x64-resonance.dll` | `shader-floor-fix.c` | RESONANCE: A Plague Tale Legacy |
 | `PxFoundation_x64-ctl.dll` | `ctl-window-fix.c` | CONTROL Resonant |
 | `amd_fidelityfx_loader_dx12-w3.dll` | `w3-streamout-fix.c` | The Witcher 3: Wild Hunt |
+| `amd_ags_x64-mk11.dll` | `mk11-face-fix.c` | Mortal Kombat 11 |
 
 **Where they go:** into the game's own folder, beside the executable, with the
 game's original renamed to `<name>_real.dll`. The installer for each title

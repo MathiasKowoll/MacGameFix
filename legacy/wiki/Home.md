@@ -142,6 +142,7 @@ videos".
 | [The Witcher 3: Wild Hunt](The-Witcher-3.md) | REDengine 3 | Black screen at start; DLSS said to be unsupported | The stream-output pipeline refused; Streamline's Wine check answered | D3DMetal | 12 | 4.0b2 | Stock | 26.3, our winegstreamer | Reaches the menu and plays; DLSS works, frame generation does not. Ray tracing stays off since the game's 2026-10-08 update: one of its ray-tracing shaders uses a 64-bit atomic compare-exchange that Metal refuses to compile (measured on an M4 Max) |
 | [Marvel's Spider-Man 2](Spider-Man-2.md) | Insomniac, in-house | Characters stay in a T-pose; the symbiote breaks; brief black blocks in the sandstorm | macprotips' raw views for the 2 GB mesh pool, and a barrier after the fog copy | D3DMetal | 12 | 4.0b2 | Stock | Preview 27, through NotProton | Fixed -- T-pose and symbiote; the black blocks were not seen again in a session with the barrier |
 | [God of War](God-of-War.md) | Santa Monica, in-house | White specks on characters in dim light | The EQUAL depth test after the prepass created as GREATER_EQUAL | **DXMT** | 11 | not measured | Stock | Preview 27, through NotProton | Fixed under Rosetta and under FEX; D3DMetal not measured |
+| [Mortal Kombat 11](Mortal-Kombat-11.md) | NetherRealm, in-house | Dark smeared patches on bare faces once they animate | The face tangent recompute skipped | D3DMetal | 12 | 4.0b3 | Stock | Preview 27, through NotProton | Most patches gone, faint ones remain; the cause was not found. DirectX 12 only |
 
 **One engine, and update its toolkit.** The supported engine is stable
 CrossOver 26.3.0.39832 and nothing else: the winegstreamer pair this project
@@ -213,8 +214,8 @@ the equation. The findings below that mention it are kept, because they record
 what was measured and a deleted measurement is not a correction. They are
 history. None of them is guidance about where to run a game.
 
-**Two rows were measured on Preview 27, through NotProton:** Marvel's
-Spider-Man 2 and God of War. Their fixes sit in the game folder and need
+**Some rows were measured on Preview 27, through NotProton:** Marvel's
+Spider-Man 2, God of War and Mortal Kombat 11. Their fixes sit in the game folder and need
 nothing from the engine, which is exactly the kind of title Preview could
 always run, so their CrossOver cell names where the runs were made.
 

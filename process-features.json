@@ -94,6 +94,14 @@
       "env": {},
       "symptom": "Cutscene runs with sound, picture solid green; a crash dialog on leaving"
     },
+    "MK11_DX12.exe": {
+      "title": "Mortal Kombat 11",
+      "backend": "d3dmetal",
+      "codec": "",
+      "gptk": "",
+      "env": {},
+      "symptom": "Dark smeared patches on bare faces once they animate"
+    },
     "MortalShell2-Win64-Shipping.exe": {
       "title": "Mortal Shell 2",
       "backend": "d3dmetal",

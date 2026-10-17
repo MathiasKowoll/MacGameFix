@@ -127,6 +127,7 @@ Turning the option off removes the agent. Its settings and what it did are in
 | Life is Strange: Double Exposure | Freezes after a while | D3DMetal 4 |
 | Life is Strange: Reunion | Freezes after a while | D3DMetal 4 |
 | Marvel's Spider-Man 2 | T-pose, a broken symbiote, black blocks in the sandstorm | D3DMetal |
+| Mortal Kombat 11 | Dark smeared patches on bare faces once they animate; faint ones remain with the fix | D3DMetal, DirectX 12 |
 | Mortal Shell 2 | Crash on the first cutscene | D3DMetal |
 | NieR Replicant ver.1.22474487139 | Crashes when the first video starts | D3DMetal, a prefix |
 | NINJA GAIDEN 4 | Says the VP9 codec is missing, then exits; on D3DMetal 4, nothing is ever drawn | D3DMetal 3 or 4.0b3, CrossOver Preview 27 |
@@ -149,7 +150,7 @@ that codec as CodeWeavers distributes it.
 
 **Measured, and what was not.** Every fix here was measured on a CrossOver 26.3
 that carried MacGameVideoFix's engine patches, which do not touch these fixes;
-Spider-Man 2 and God of War on CrossOver Preview 27 through NotProton.
+Spider-Man 2, God of War and Mortal Kombat 11 on CrossOver Preview 27 through NotProton.
 For Wo Long, Nioh 3 and KINGDOM HEARTS Dream Drop Distance, that the fix needs
 nothing of the engine is read off how it works, not established by a run on an
 untouched CrossOver.
@@ -162,7 +163,7 @@ started and played, and both Life is Strange titles played without problems:
 none of the four needs its fix there. (The Life is Strange freeze was never
 reproduced on demand, even on 4.0b2, so for those two the sessions show that
 nothing went wrong rather than a fault cured.) Spider-Man 2, The Witcher 3, Tormented Souls 2, TMNT and Wo Long still
-needed theirs, and God of War runs on DXMT, which the toolkit does not change. Every
+needed theirs, Mortal Kombat 11's was made on 4.0b3, and God of War runs on DXMT, which the toolkit does not change. Every
 fix stays, for anyone on 4.0b2 and earlier.
 
 ### Nioh and Nioh 2 decode their own video
@@ -337,6 +338,7 @@ page under `legacy/wiki/`.
 | `install-gow-fix.sh` | God of War | `libSceJobManager.dll` (from `libSceJobManager-gow.dll`) and `gow-depth-fix.ini` | `gow-depth-fix.c` | [God of War](legacy/wiki/God-of-War.md) |
 | `install-kh-bridge.sh` | KINGDOM HEARTS Dream Drop Distance, KINGDOM HEARTS HD 1.5+2.5 ReMIX | `dinput8.dll` (from `dinput8-kh.dll`); the original is the bottle's or prefix's own `dinput8`, copied beside it | `dwo-video-bridge.c` | [KINGDOM HEARTS](legacy/wiki/Kingdom-Hearts.md) |
 | `install-sm2-fix.sh` | Marvel's Spider-Man 2 | `amd_ags_x64.dll` (from `amd_ags_x64-sm2.dll`), and shaders rewritten from the game's own executable by `sm2-shadertool` | `sm2-tpose-fix.c` with `sm2fix_core.c`; the tool from `sm2-shadertool.c` and `sm2-shaderfix.c` | [Spider-Man 2](legacy/wiki/Spider-Man-2.md) |
+| `install-mk11-fix.sh` | Mortal Kombat 11 | `amd_ags_x64.dll` under `Binaries/Retail` (from `amd_ags_x64-mk11.dll`) | `mk11-face-fix.c` with `sm2fix_core.c` | [Mortal Kombat 11](legacy/wiki/Mortal-Kombat-11.md) |
 | `install-nier-bridge.sh` | NieR Replicant ver.1.22474487139 | `dinput8.dll` (from `dinput8-nier.dll`), the original copied from the bottle or prefix, and the reader | `dwo-video-bridge.c` | [NieR Replicant](legacy/wiki/NieR-Replicant.md) |
 | `install-ng4-fix.sh` | NINJA GAIDEN 4 | `dstorage.dll` (from `dstorage-ng4.dll`); `dstoragecore.dll` renamed aside | `tools/ng4-observe.c`, built with `-DNG4_FIX` | [NINJA GAIDEN 4](legacy/wiki/Ninja-Gaiden-4.md) |
 | `install-nioh-bridge.sh` | Nioh, Nioh 2 | `GfeSDK.dll`, and the reader | `p5s-video-bridge.c` | [Nioh](legacy/wiki/Nioh.md), [Nioh 2](legacy/wiki/Nioh-2.md) |
