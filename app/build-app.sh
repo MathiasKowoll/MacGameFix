@@ -32,7 +32,7 @@ APP="$HERE/MacGameFix.app"
 MACOS="$APP/Contents/MacOS"
 RES="$APP/Contents/Resources"
 CACHE="${TMPDIR:-/tmp}/mgf-swift-cache"
-VERSION="1.4.1"
+VERSION="1.4.2"
 # The oldest app that can use the catalog this build writes: the first with a
 # catalog it can take from a release.
 CATALOG_MIN_APP="1.4.0"
