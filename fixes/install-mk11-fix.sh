@@ -11,19 +11,22 @@
 # WHAT IT FIXES. The skin of every fighter whose face is uncovered -- forehead,
 # brows, around the eyes -- turns into smeared dark patches with hard edges,
 # which follow the light and change from frame to frame. A face is clean right
-# after a screen loads and breaks once it animates; masked fighters never show
-# it. Same on D3DMetal and on DXMT, at every graphics setting.
+# after a screen loads and breaks once it animates, worst in the character
+# select and the fatalities; masked fighters never show it. Same on D3DMetal and
+# on DXMT, at every graphics setting.
 #
-# After a face is deformed for its expression, two compute passes give it a
-# fresh tangent frame, and on this Mac that frame comes out wrong where the face
-# deforms. The fix skips those two passes, so a face keeps the tangent frame it
-# was animated with: most of the patches go, faint ones remain. Why the
-# recomputed frame is wrong is not known; legacy/wiki/Mortal-Kombat-11.md has
-# what was ruled out. A game update that changes either shader makes the fix
-# match nothing and do nothing, which is safe.
+# A face's expression adds per-vertex deltas the game reads from a three-float
+# (R32G32B32_FLOAT) buffer view, and D3DMetal reads such a view as if it held
+# two floats an element, so every expression moves the face's vertices by a
+# small wrong amount; the normals the game recomputes afterwards turn that into
+# the patches. The fix creates those views as one-float views three times as
+# long and puts in two rewrites of the face morph shader that read them.
+# legacy/wiki/Mortal-Kombat-11.md has the measurements. A game update that
+# changes either morph shader makes the rewrite match nothing; the log says so.
 #
-# DirectX 12 only: choose "DirectX 12" when Steam asks how to start the game.
-# The DirectX 11 executable shows the same patches and is not covered.
+# One install covers both executables, whichever Steam starts: MK11_DX12.exe on
+# D3DMetal and MK11.exe (DirectX 11) on DXMT load the same amd_ags_x64.dll, and
+# the fix sees which API the executable imports.
 #
 # THE CARRIER IS THE GAME'S OWN. amd_ags_x64.dll is AMD's GPU services library,
 # the game imports it statically, and its exports are forwarded straight back
@@ -32,13 +35,16 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
+# The fourth field of MGVF-GAME names the other executable the game runs as, so
+# the app knows it is running whichever Steam started.
+#
 # MGVF-SCOPE: folder
-# MGVF-GAME: Mortal Kombat 11 | MK11_DX12.exe | Binaries/Retail
-# MGVF-WHY: Skips the face tangent recompute whose result comes out as dark patches on this Mac. DirectX 12 only.
+# MGVF-GAME: Mortal Kombat 11 | MK11_DX12.exe | Binaries/Retail | MK11.exe
+# MGVF-WHY: Has the face morph read its three-float deltas the way D3DMetal and DXMT can, which removes the dark patches. DirectX 12 and 11 alike.
 
 set -euo pipefail
 
-usage() { sed -n '3,33p' "$0" >&2; exit 1; }
+usage() { sed -n '3,36p' "$0" >&2; exit 1; }
 [ $# -ge 1 ] || usage
 
 GAME="$1"
