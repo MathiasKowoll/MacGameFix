@@ -108,6 +108,9 @@ final class Collected: @unchecked Sendable {
 struct Game: Decodable, Identifiable, Hashable {
     let name: String
     let exe: String
+    /// Other executables the title runs as (Mortal Kombat 11's DirectX 11 one);
+    /// absent from catalogs older than the field.
+    let alsoRuns: [String]?
     let carrierDir: String
     let script: String
     let needsPrefix: Bool
@@ -569,7 +572,7 @@ func isRunning(_ game: Game) -> Bool {
     guard (try? proc.run()) != nil else { return false }
     let data = pipe.fileHandleForReading.readDataToEndOfFile()
     proc.waitUntilExit()
-    let exe = game.exe.lowercased()
+    let exes = ([game.exe] + (game.alsoRuns ?? [])).map { $0.lowercased() }
     return String(decoding: data, as: UTF8.self).lowercased()
-        .split(separator: "\n").contains { $0.contains(exe) }
+        .split(separator: "\n").contains { line in exes.contains { line.contains($0) } }
 }

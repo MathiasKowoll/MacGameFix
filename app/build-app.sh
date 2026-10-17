@@ -57,7 +57,11 @@ for script in sorted((root / "fixes").glob("install-*.sh")):
     scope = re.search(r"^# MGVF-SCOPE: (\S+)", text, re.M)
     why = re.search(r"^# MGVF-WHY: (.*)$", text, re.M)
     for m in re.finditer(r"^# MGVF-GAME: (.*?) \| (.*?) \|(.*)$", text, re.M):
-        name, exe, carrier = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
+        # An optional fourth field names the other executables the title runs as
+        # (MK11.exe beside MK11_DX12.exe), so the app knows it is running either way.
+        rest = m.group(3).split("|")
+        name, exe, carrier = m.group(1).strip(), m.group(2).strip(), rest[0].strip()
+        also = [x.strip() for x in rest[1].split(",") if x.strip()] if len(rest) > 1 else []
         p = procs.get(exe)
         reason = None
         if not scope or scope.group(1) != "folder":
@@ -73,6 +77,7 @@ for script in sorted((root / "fixes").glob("install-*.sh")):
         games.append({
             "name": name,
             "exe": exe,
+            "alsoRuns": also,
             "carrierDir": carrier,
             "script": script.name,
             # The one installer that writes registry keys sources bottles.sh to
