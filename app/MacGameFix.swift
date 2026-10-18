@@ -297,6 +297,8 @@ final class Model: ObservableObject {
             for i in hits.indices { hits[i] = await probe(hits[i]) }
             busy = false
             status = found.isEmpty ? "No supported game found in these folders." : "\(found.count) game(s) found."
+            // The CrossOver installs too, which a tab opened during this look could not ask for.
+            if engineRows.isEmpty { scanEngine() }
         }
     }
 
