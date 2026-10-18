@@ -1,0 +1,11 @@
+{
+  "build": "26.3.0.39832",
+  "crossover": "CrossOver 26.3",
+  "wine": "Wine version 11.0",
+  "patches": "wine-11.0",
+  "files": {
+    "x86_64-windows/winebus.sys": "9760923623bedfa289731a4a03785417045c4ffdb587a63794423d491398e278",
+    "x86_64-windows/mmdevapi.dll": "2fbab2f617124a9ad5e1b380996d2b4a330eddd0f76dd6afb4c50cdea0c7eba6",
+    "x86_64-unix/winecoreaudio.so": "7326573cdb266a8a0c25416297c98522c27b92d53f252d1d1c4392597722f134"
+  }
+}

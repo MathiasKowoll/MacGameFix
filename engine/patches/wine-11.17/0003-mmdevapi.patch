@@ -1,0 +1,61 @@
+--- a/dlls/mmdevapi/devenum.c
++++ b/dlls/mmdevapi/devenum.c
+@@ -366,10 +366,9 @@
+     return hr;
+ }
+ 
+-static HRESULT set_driver_prop_value(GUID *id, const EDataFlow flow, const PROPERTYKEY *prop)
++static HRESULT get_driver_prop_value(const GUID *id, const PROPERTYKEY *prop, PROPVARIANT *pv)
+ {
+     struct get_prop_value_params params;
+-    PROPVARIANT pv;
+     char *dev_name;
+     unsigned int size = 0;
+ 
+@@ -381,7 +380,7 @@
+     params.device      = dev_name;
+     params.guid        = id;
+     params.prop        = prop;
+-    params.value       = &pv;
++    params.value       = pv;
+     params.buffer      = NULL;
+     params.buffer_size = &size;
+ 
+@@ -404,12 +403,21 @@
+ 
+     free(dev_name);
+ 
+-    if (SUCCEEDED(params.result)) {
++    return params.result;
++}
++
++static HRESULT set_driver_prop_value(GUID *id, const EDataFlow flow, const PROPERTYKEY *prop)
++{
++    PROPVARIANT pv;
++    HRESULT hr;
++
++    hr = get_driver_prop_value(id, prop, &pv);
++    if (SUCCEEDED(hr)) {
+         MMDevice_SetPropValue(id, flow, prop, &pv);
+         PropVariantClear(&pv);
+     }
+ 
+-    return params.result;
++    return hr;
+ }
+ 
+ struct product_name_overrides
+@@ -1627,6 +1635,13 @@
+         StringFromGUID2(&This->parent->devguid, pv->pwszVal, 39);
+         return S_OK;
+     }
++
++    /* Asked of the driver rather than kept in the registry: games match it against a
++     * device's HID container, and an endpoint whose device is gone must not match. */
++    if (IsEqualPropertyKey(*key, DEVPKEY_Device_ContainerId)
++            && This->parent->state == DEVICE_STATE_ACTIVE
++            && SUCCEEDED(get_driver_prop_value(&This->parent->devguid, key, pv)))
++        return S_OK;
+ 
+     hres = MMDevice_GetPropValue(&This->parent->devguid, This->parent->flow, key, pv);
+     if (FAILED(hres))

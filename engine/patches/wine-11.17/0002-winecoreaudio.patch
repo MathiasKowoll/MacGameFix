@@ -1,0 +1,69 @@
+--- a/dlls/winecoreaudio.drv/coreaudio.c
++++ b/dlls/winecoreaudio.drv/coreaudio.c
+@@ -1865,6 +1865,31 @@
+         }
+     }
+     return STATUS_UNSUCCESSFUL;
++}
++
++/* Apple's USB audio driver puts the device's location ID in the endpoint's UID:
++ * "AppleUSBAudioEngine:<manufacturer>:<product>:<location ID in hex>:<interface>".
++ * winebus.sys builds the same container from that location ID for the device's HID
++ * functions, so that games can pair a controller with its audio output; keep the
++ * two in sync. */
++static BOOL get_usb_container_id(const char *device, GUID *guid)
++{
++    static const GUID usb_location_base = {0, 0x27f2, 0x4948, {0x96, 0x54, 0x15, 0x28, 0x04, 0xaf, 0x63, 0x78}};
++    static const char prefix[] = "AppleUSBAudioEngine:";
++    const char *start, *end;
++    unsigned long location;
++    char *parsed;
++
++    if(strncmp(device, prefix, strlen(prefix)) || !(end = strrchr(device, ':')))
++        return FALSE;
++    for(start = end; start > device && start[-1] != ':'; start--);
++    location = strtoul(start, &parsed, 16);
++    if(parsed != end || !location || location > 0xffffffff)
++        return FALSE;
++
++    *guid = usb_location_base;
++    guid->Data1 = location;
++    return TRUE;
+ }
+ 
+ static NTSTATUS unix_get_prop_value(void *args)
+@@ -1893,6 +1918,26 @@
+             out->vt = VT_LPWSTR;
+             out->pwszVal = params->buffer;
+             ntdll_umbstowcs(buf, len, out->pwszVal, len);
++            params->result = S_OK;
++            return STATUS_SUCCESS;
++        }
++    }
++
++    if(IsEqualPropertyKey(*prop, DEVPKEY_Device_ContainerId)){
++        GUID container;
++
++        if(get_usb_container_id(params->device, &container)){
++            PROPVARIANT *out = params->value;
++
++            if(*params->buffer_size < sizeof(container)){
++                params->result = E_NOT_SUFFICIENT_BUFFER;
++                *params->buffer_size = sizeof(container);
++                return STATUS_SUCCESS;
++            }
++
++            out->vt = VT_CLSID;
++            out->puuid = params->buffer;
++            *out->puuid = container;
+             params->result = S_OK;
+             return STATUS_SUCCESS;
+         }
+@@ -2397,6 +2442,7 @@
+             value32->ulVal = value.ulVal;
+             break;
+         case VT_LPWSTR:
++        case VT_CLSID:
+             value32->ptr = params32->buffer;
+             break;
+         default:

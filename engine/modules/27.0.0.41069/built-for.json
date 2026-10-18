@@ -1,0 +1,14 @@
+{
+  "build": "27.0.0.41069",
+  "crossover": "CrossOver Preview 20261006",
+  "wine": "Wine version 11.17",
+  "patches": "wine-11.17",
+  "files": {
+    "aarch64-unix/winecoreaudio.so": "e460998b9ff87a5cf997b4ed6d063a7aa3a67ae04d069fad87886e4b4094c034",
+    "aarch64-windows/mmdevapi.dll": "705c59d3f09482c54ed8233bc902c4253e7109201272522a8902ac4b1e9b98c3",
+    "aarch64-windows/winebus.sys": "7f65b148cc8a0ab744fb412c10cd6ff77bb8bc849c8f8148084c2c60d746a359",
+    "x86_64-unix/winecoreaudio.so": "f5c1067dc3e18aba8c072960135461ce8cf0a23597be2541ff300c916804cf08",
+    "x86_64-windows/mmdevapi.dll": "8186dd06e755137ffeb8221cfb7b48ba8503dcf5b2a6fe4474e3d37163046cda",
+    "x86_64-windows/winebus.sys": "7eaca015bc040a9b7c74c0db66b604bd0ee094c59b881ff05b900046e78781f3"
+  }
+}

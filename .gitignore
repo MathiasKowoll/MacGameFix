@@ -4,3 +4,5 @@
 __pycache__/
 # Written by app/build-app.sh: the signed catalog a release carries.
 app/dist/
+# engine/build.sh: copied Wine trees, build directories and runner backups.
+engine/.build/
