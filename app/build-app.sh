@@ -32,10 +32,12 @@ APP="$HERE/MacGameFix.app"
 MACOS="$APP/Contents/MacOS"
 RES="$APP/Contents/Resources"
 CACHE="${TMPDIR:-/tmp}/mgf-swift-cache"
-VERSION="1.4.2"
+VERSION="1.5.0"
 # The oldest app that can use the catalog this build writes: the first with a
 # catalog it can take from a release.
 CATALOG_MIN_APP="1.4.0"
+# The Wine modules' catalog came with 1.5.0.
+MODULES_MIN_APP="1.5.0"
 # The private half of the key whose public half Automation.swift carries. It
 # never enters the repository; without it the build writes no release catalog.
 SIGNING_KEY="${MACGAMEFIX_SIGNING_KEY:-$HOME/.config/macgamefix/catalog-signing.key}"
@@ -131,7 +133,7 @@ rm -rf "$APP"
 mkdir -p "$MACOS" "$RES" "$CACHE"
 
 echo "==> compiling"
-swiftc "$HERE/Core.swift" "$HERE/Runtime.swift" "$HERE/Automation.swift" "$HERE/MenuBar.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
+swiftc "$HERE/Core.swift" "$HERE/Runtime.swift" "$HERE/Engine.swift" "$HERE/Automation.swift" "$HERE/MenuBar.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
   -o "$MACOS/MacGameFix" \
   -framework SwiftUI -framework AppKit -framework IOKit -framework UserNotifications \
   -target arm64-apple-macos14.0 \
@@ -182,15 +184,30 @@ done
 for s in "${SCRIPTS[@]}"; do chmod +x "$RES/$s"; done
 cp "$STAGE/games.json" "$RES/games.json"
 
-# catalog.json: what this catalog is -- built now, so a newer build wins -- and
-# every file with its hash. The agent compares a release's catalog with it.
-/usr/bin/python3 - "$RES" "$CATALOG_MIN_APP" "games.json" "${PAYLOAD[@]}" <<'PY'
+# The Wine modules (engine/): their installer, and every built module with
+# engine-modules.json, as bundle-engine.py lays them out.
+echo "==> Wine modules"
+cp -a "$ROOT/engine/engine-modules.sh" "$RES/engine-modules.sh"
+ENGINE=(engine-modules.sh engine-modules.json)
+/usr/bin/python3 "$HERE/bundle-engine.py" "$ROOT/engine/modules" "$RES" > "$STAGE/engine-names"
+while IFS= read -r n; do ENGINE+=("$n"); done < "$STAGE/engine-names"
+[ -f "$RES/engine-modules.json" ] || { echo "error: the Wine modules could not be bundled" >&2; exit 1; }
+echo "    ${#ENGINE[@]} files"
+
+# catalog.json and modules.json: what each catalog is -- built now, so a newer
+# build wins -- and every file with its hash. The agent compares a release's
+# catalogs with them, each on its own: the game fixes, and the Wine modules.
+manifest() { # <name> <minimum app> <files...>
+  /usr/bin/python3 - "$RES" "$@" <<'PY'
 import hashlib, json, pathlib, sys, time
-res, minimum, names = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3:]
+res, out, minimum, names = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4:]
 files = {n: hashlib.sha256((res / n).read_bytes()).hexdigest() for n in names}
 json.dump({"version": int(time.time()), "minimumApp": minimum, "files": files},
-          open(res / "catalog.json", "w"), indent=2, sort_keys=True)
+          open(res / out, "w"), indent=2, sort_keys=True)
 PY
+}
+manifest catalog.json "$CATALOG_MIN_APP" games.json "${PAYLOAD[@]}"
+manifest modules.json "$MODULES_MIN_APP" "${ENGINE[@]}"
 
 echo "==> signing (ad-hoc)"
 codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || \
@@ -201,14 +218,17 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || \
 for f in "${PAYLOAD[@]}"; do
   cmp -s "$ROOT/fixes/$f" "$RES/$f" || { echo "error: $f in the bundle differs from fixes/$f" >&2; exit 1; }
 done
-echo "==> the payload is byte-identical to fixes/"
+cmp -s "$ROOT/engine/engine-modules.sh" "$RES/engine-modules.sh" \
+  || { echo "error: engine-modules.sh in the bundle differs from engine/" >&2; exit 1; }
+echo "==> the payload is byte-identical to fixes/ and engine/"
 
 # The release's catalog: catalog.zip, catalog.json and its signature, for the
 # agent of every installed MacGameFix to take without a new app.
 if [ -f "$SIGNING_KEY" ]; then
   rm -rf "$HERE/dist"
   "$MACOS/MacGameFix" --make-catalog "$HERE/dist" --key "$SIGNING_KEY"
-  echo "==> release catalog in $HERE/dist: attach catalog.zip, catalog.json and catalog.json.sig to the release"
+  echo "==> release catalogs in $HERE/dist: attach catalog.zip, catalog.json, catalog.json.sig, modules.zip,"
+  echo "    modules.json and modules.json.sig to the release"
 else
   echo "    note: no signing key at $SIGNING_KEY, so no release catalog; installed apps keep theirs"
 fi

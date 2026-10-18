@@ -1,9 +1,11 @@
-// MacGameFix -- fixes that go into a game's own folder, and nothing else.
+// MacGameFix -- fixes that go into a game's own folder, and Wine modules.
 //
-// Every fix this app carries lives in a game's own folder: a proxy DLL beside
-// the game, and for one title registry keys in that game's own prefix. None of
-// them changes CrossOver, so they work with CrossOver as CodeWeavers ships it,
-// with CrossOver Preview, and with a Steam Play tool such as NotProton.
+// Every game fix this app carries lives in a game's own folder: a proxy DLL
+// beside the game, and for one title registry keys in that game's own prefix.
+// None of them changes CrossOver, so they work with CrossOver as CodeWeavers
+// ships it, with CrossOver Preview, and with a Steam Play tool such as NotProton.
+// The one exception is its own tab: the Wine modules (Engine.swift), which go
+// into a CrossOver app or a NotProton runner.
 //
 // The app decides nothing about a fix. The installers under Resources are the
 // same files fixes/ holds, and they answer every question about a game folder
@@ -36,11 +38,22 @@ final class Model: ObservableObject {
     @Published var agentOn = LaunchAgent.enabled
     @Published var events: [AgentEvent] = []
     @Published var updateLine = ""
+    /// A newer catalog the agent verified and was told to ask about first.
+    @Published var waitingCatalog: Int?
+    @Published var waitingModules: Int?
+    @Published var modulesLine = ""
     /// What the agent knows of each marked game.
     @Published var keptLines: [KeptLine] = []
     /// Only the games that need the user; the menu bar opens the window so.
     @Published var onlyReview = CommandLine.arguments.contains("--review")
+    /// The CrossOver apps and NotProton runners the Wine modules can go into.
+    @Published var engineRows: [EngineRow] = []
+    /// The CrossOver builds the Wine modules' catalog carries modules for.
+    @Published var engineBuilds: [EngineBuild] = []
+    @Published var modulesVersion = 0
     var resources = URL(fileURLWithPath: ".")
+    /// The Wine modules' catalog in use, apart from the fixes'.
+    var modulesDir = URL(fileURLWithPath: ".")
 
     private let extraKey = "extraFolders"
 
@@ -71,6 +84,10 @@ final class Model: ObservableObject {
         let (dir, manifest) = Catalog.active()
         resources = dir
         games = Catalog.games(in: dir)
+        let modules = Catalog.active(.modules)
+        modulesDir = modules.dir
+        engineBuilds = Engine.builds(in: modules.dir)
+        modulesVersion = modules.manifest?.version ?? 0
         catalogVersion = manifest?.version ?? 0
     }
 
@@ -79,6 +96,9 @@ final class Model: ObservableObject {
         events = state.events.reversed()
         keptLines = KeptLine.all(settings: settings, state: state)
         if !state.lastUpdate.isEmpty { updateLine = state.lastUpdate }
+        waitingCatalog = state.waiting
+        waitingModules = state.waitingModules
+        modulesLine = state.lastModulesUpdate
     }
 
     func keptLine(_ hit: Hit) -> KeptLine? { keptLines.first { $0.key == hit.key } }
@@ -132,9 +152,57 @@ final class Model: ObservableObject {
         agentOn = LaunchAgent.enabled
     }
 
-    func setUpdates(_ on: Bool) {
-        settings.updates = on
+    /// How new fixes arrive: installed by themselves, offered first, or not looked for.
+    enum UpdateMode: String, CaseIterable, Identifiable {
+        case automatic = "Install them automatically"
+        case ask = "Ask before installing them"
+        case off = "Do not look for them"
+        var id: String { rawValue }
+    }
+
+    var updateMode: UpdateMode {
+        !settings.updates ? .off : settings.askFirst ? .ask : .automatic
+    }
+
+    func setUpdateMode(_ mode: UpdateMode) {
+        settings.updates = mode != .off
+        settings.askFirst = mode == .ask
         settings.save()
+        objectWillChange.send()
+    }
+
+    /// The same, on their own, for the Wine modules.
+    var modulesMode: UpdateMode {
+        !settings.modulesUpdates ? .off : settings.modulesAskFirst ? .ask : .automatic
+    }
+
+    func setModulesMode(_ mode: UpdateMode) {
+        settings.modulesUpdates = mode != .off
+        settings.modulesAskFirst = mode == .ask
+        settings.save()
+        objectWillChange.send()
+    }
+
+    /// Installs the newer Wine modules' catalog now.
+    func checkForModules() {
+        guard !busy else { return }
+        busy = true
+        status = "Looking for new Wine modules…"
+        Task {
+            var line: String
+            do {
+                line = try await Updater.update(.modules)
+                var state = AgentState.load()
+                state.availableModules = 0
+                state.lastModulesUpdate = line
+                state.save()
+            } catch { line = "Could not update: \(error.localizedDescription)" }
+            loadCatalog()
+            refreshEvents()
+            busy = false
+            status = line
+            scanEngine()
+        }
     }
 
     func checkForFixes() {
@@ -142,8 +210,16 @@ final class Model: ObservableObject {
         busy = true
         status = "Looking for new fixes…"
         Task {
-            do { updateLine = try await Updater.update() } catch { updateLine = "Could not update: \(error.localizedDescription)" }
+            do {
+                updateLine = try await Updater.update()
+                // What the user installed by hand is no longer waiting for them.
+                var state = AgentState.load()
+                state.available = 0
+                state.lastUpdate = updateLine
+                state.save()
+            } catch { updateLine = "Could not update: \(error.localizedDescription)" }
             loadCatalog()
+            refreshEvents()
             busy = false
             status = updateLine
             scan()
@@ -261,6 +337,66 @@ final class Model: ObservableObject {
     }
 }
 
+// MARK: - Wine modules
+
+/// One CrossOver the Wine modules can go into, with what its installer says.
+struct EngineRow: Identifiable {
+    let target: EngineTarget
+    var state: EngineState = .unknown
+    /// What the last install or removal left, when it needs the user.
+    var outcome: String?
+
+    var id: String { target.id }
+}
+
+extension Model {
+    /// Finds the CrossOver apps and runners and asks the installer about each.
+    func scanEngine() {
+        guard !busy else { return }
+        busy = true
+        status = "Looking at CrossOver and the NotProton runners…"
+        Task {
+            let found = await Task.detached { Engine.targets() }.value
+            var rows = found.map { EngineRow(target: $0) }
+            for i in rows.indices { rows[i].state = await Engine.status(rows[i].target, catalog: modulesDir) }
+            engineRows = rows
+            busy = false
+            status = found.isEmpty ? "No CrossOver or NotProton runner found." : "\(found.count) CrossOver install(s) found."
+        }
+    }
+
+    func engineApply(_ row: EngineRow, install: Bool) {
+        guard !busy else { return }
+        busy = true
+        status = "\(install ? "Installing the modules into" : "Removing the modules from") \(row.target.name)…"
+        Task {
+            note(""); note("▸ Wine modules — \(row.target.name) — \(row.target.root.path)")
+            let code = await Engine.run(row.target, catalog: modulesDir, install ? [] : ["--restore"]) { line in
+                Task { @MainActor in self.note("  " + line) }
+            }
+            await Task.yield()
+            let state = await Engine.status(row.target, catalog: modulesDir)
+            if let i = engineRows.firstIndex(where: { $0.id == row.id }) {
+                engineRows[i].state = state
+                // As with the games, the state asked afterwards is the authority.
+                let took = install ? state == .installed : state == .absent
+                engineRows[i].outcome = code != 0 ? "Failed — see the log in Settings"
+                    : took ? nil : "Did not take — see the log in Settings"
+            }
+            // What the user chose here is what the agent keeps: in, or left out.
+            let path = row.target.key
+            if code == 0 {
+                settings.modulesKept.removeAll { Engine.resolved($0) == path }
+                settings.modulesDeclined.removeAll { Engine.resolved($0) == path }
+                if install { settings.modulesKept.append(path) } else { settings.modulesDeclined.append(path) }
+                settings.save()
+            }
+            busy = false
+            status = code == 0 ? "Done: \(row.target.name)." : "\(row.target.name) needs attention."
+        }
+    }
+}
+
 // MARK: - Interface
 
 struct HitRow: View {
@@ -329,9 +465,34 @@ struct ContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            TabView {
+                GamesView(model: model).padding(.top, 6)
+                    .tabItem { Text("Games") }
+                EngineView(model: model).padding(.top, 6)
+                    .tabItem { Text("Wine Modules") }
+                SettingsView(model: model).padding(.top, 6)
+                    .tabItem { Text("Settings") }
+            }
+            HStack {
+                if model.busy { ProgressView().controlSize(.small) }
+                Text(model.status).font(.callout)
+            }
+        }
+        .padding(16)
+        .frame(minWidth: 720, minHeight: 560)
+        .onAppear { model.scan() }
+    }
+}
+
+/// The games and their fixes, which go into each game's own folder.
+struct GamesView: View {
+    @ObservedObject var model: Model
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("MacGameFix").font(.title2.bold())
-                Text("Fixes that go into a game's own folder. Nothing here changes CrossOver, so they work with "
+                Text("Fixes that go into a game's own folder. Nothing in them changes CrossOver, so they work with "
                      + "CrossOver as it ships, CrossOver Preview, and Steam Play tools such as NotProton. "
                      + "Quit a game before installing or removing its fix.")
                     .font(.callout).foregroundStyle(.secondary)
@@ -377,40 +538,121 @@ struct ContentView: View {
                 }
                 .frame(minHeight: 260)
             }
+        }
+    }
+}
 
-            AutomaticView(model: model)
+/// The Wine modules: the part of MacGameFix that does change CrossOver.
+struct EngineView: View {
+    @ObservedObject var model: Model
 
-            DisclosureGroup("Folders searched (\(model.libraries.count))") {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(model.libraries, id: \.self) { lib in
-                        HStack {
-                            Text(lib.path).font(.caption).lineLimit(1).truncationMode(.middle)
-                            if model.extraFolders.contains(lib) {
-                                Button("Remove") { model.removeExtra(lib) }.font(.caption).disabled(model.busy)
-                            }
-                        }
-                    }
-                }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Wine Modules").font(.title2.bold())
+                Text("Unlike the game fixes, these go into CrossOver itself: three patched Wine files that let games "
+                     + "find a DualSense's haptics on a USB cable. They replace CrossOver's own in a CrossOver app or "
+                     + "a NotProton runner; MacGameFix keeps the originals and puts them back when you remove them. "
+                     + "Quit every game of that CrossOver first.")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("In a CrossOver app, macOS asks you to allow MacGameFix under App Management, and the app is "
+                     + "signed again ad hoc. A CrossOver or NotProton update puts CrossOver's own files back; install "
+                     + "the modules again after one.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-
-            DisclosureGroup("Log") {
-                ScrollView {
-                    Text(model.log.joined(separator: "\n"))
-                        .font(.system(.caption, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                }
-                .frame(height: 160)
-            }
-
             HStack {
-                if model.busy { ProgressView().controlSize(.small) }
-                Text(model.status).font(.callout)
+                Button("Look Again") { model.scanEngine() }.disabled(model.busy)
+                Spacer()
+                Text("Modules for: " + (model.engineBuilds.isEmpty ? "none in this catalog"
+                     : model.engineBuilds.map(\.crossover).joined(separator: ", ")))
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+            }
+            if model.engineRows.isEmpty {
+                VStack {
+                    Spacer()
+                    Text(model.busy ? "Looking…" : "No CrossOver or NotProton runner found.").foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, minHeight: 180)
+            } else {
+                List(model.engineRows) { row in EngineRowView(row: row, model: model) }
+                    .frame(minHeight: 260)
             }
         }
-        .padding(16)
-        .frame(minWidth: 720, minHeight: 560)
-        .onAppear { model.scan() }
+        .onAppear { if model.engineRows.isEmpty { model.scanEngine() } }
+    }
+}
+
+struct EngineRowView: View {
+    let row: EngineRow
+    @ObservedObject var model: Model
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text(row.target.name).font(.headline)
+                    Spacer()
+                    if let o = row.outcome { Text(o).font(.caption).foregroundStyle(.orange) }
+                    Text(row.state.label).font(.callout).foregroundStyle(row.state.color)
+                }
+                Text("Build \(row.target.build)" + (row.target.fex ? " · Intel (Rosetta) and FEX sides" : " · Intel (Rosetta) side"))
+                    .font(.caption).foregroundStyle(.secondary)
+                Text(row.target.root.path).font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+                HStack {
+                    Button(row.state == .outdated ? "Update" : "Install") { model.engineApply(row, install: true) }
+                        .disabled(model.busy || row.state == .installed || row.state == .noModules || row.state == .unknown)
+                    Button("Remove") { model.engineApply(row, install: false) }
+                        .disabled(model.busy || row.state == .absent || row.state == .noModules || row.state == .unknown)
+                }
+                .font(.caption)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+/// What runs in the background, where the games are looked for, and the log.
+struct SettingsView: View {
+    @ObservedObject var model: Model
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                AutomaticView(model: model)
+
+                GroupBox("Folders searched (\(model.libraries.count))") {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(model.libraries, id: \.self) { lib in
+                            HStack {
+                                Text(lib.path).font(.caption).lineLimit(1).truncationMode(.middle)
+                                Spacer()
+                                if model.extraFolders.contains(lib) {
+                                    Button("Remove") { model.removeExtra(lib) }.font(.caption).disabled(model.busy)
+                                }
+                            }
+                        }
+                        Button("Add Folder…") { model.addFolder() }.font(.caption).disabled(model.busy)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(4)
+                }
+
+                GroupBox("Log") {
+                    ScrollView {
+                        Text(model.log.joined(separator: "\n"))
+                            .font(.system(.caption, design: .monospaced))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                    .frame(height: 180)
+                }
+            }
+            .padding(.trailing, 6)
+        }
     }
 }
 
@@ -492,14 +734,13 @@ struct RuntimeLine: View {
     }
 }
 
-/// The background part of the window: the agent, the updates, and what the
-/// agent did, with a way to report a failure.
+/// The background part of the Settings tab: the agent, the updates, and what
+/// the agent did, with a way to report a failure.
 struct AutomaticView: View {
     @ObservedObject var model: Model
-    @State private var open = false
 
     var body: some View {
-        DisclosureGroup("Automatic", isExpanded: $open) {
+        GroupBox("Automatic") {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(model.keptLines.filter { $0.word == "Folder not found" }, id: \.key) { line in
                     HStack(alignment: .firstTextBaseline) {
@@ -516,10 +757,36 @@ struct AutomaticView: View {
                      + "gone, it installs it again, once the game is closed. Its menu says what it keeps and what "
                      + "it did.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                Toggle("Get new fixes from GitHub", isOn: Binding(
-                    get: { model.settings.updates }, set: { model.setUpdates($0) }))
+                Picker("New game fixes", selection: Binding(
+                    get: { model.updateMode }, set: { model.setUpdateMode($0) })) {
+                    ForEach(Model.UpdateMode.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .frame(maxWidth: 460)
+                if let waiting = model.waitingCatalog {
+                    HStack {
+                        Text("New fixes are ready: catalog \(waiting)").font(.callout).foregroundStyle(.orange)
+                        Button("Install New Fixes") { model.checkForFixes() }.disabled(model.busy)
+                    }
+                }
+                Picker("New Wine modules", selection: Binding(
+                    get: { model.modulesMode }, set: { model.setModulesMode($0) })) {
+                    ForEach(Model.UpdateMode.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .frame(maxWidth: 460)
+                if let waiting = model.waitingModules {
+                    HStack {
+                        Text("New Wine modules are ready: catalog \(waiting)").font(.callout).foregroundStyle(.orange)
+                        Button("Install New Wine Modules") { model.checkForModules() }.disabled(model.busy)
+                    }
+                }
+                Text("The agent looks at GitHub once a day, for the two on their own. Asked first, it checks the new "
+                     + "catalog's signature and tells you, and installs nothing until you do. On automatic, the Wine "
+                     + "modules also go back into the NotProton runners you installed them into after an update, "
+                     + "and into a runner for a new CrossOver build; a CrossOver app is only ever reported.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 HStack {
-                    Text("Fixes catalog \(model.catalogVersion)").font(.caption).foregroundStyle(.secondary)
+                    Text("Fixes catalog \(model.catalogVersion) · Wine modules catalog \(model.modulesVersion)")
+                        .font(.caption).foregroundStyle(.secondary)
                     if !model.updateLine.isEmpty {
                         Text("— " + model.updateLine).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
@@ -542,9 +809,9 @@ struct AutomaticView: View {
                     }
                 }
             }
-            .padding(.top, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(4)
         }
-        .onAppear { open = model.keptLines.contains { $0.condition == .review } }
     }
 }
 
@@ -584,8 +851,9 @@ struct MacGameFixApp: App {
 
 /// One binary, several ways to run: the window; --agent, which the LaunchAgent
 /// starts and which lives in the menu bar; and, for the tests and the release,
-/// --agent-once, --menu-report, --runtime-report, --update-from, --make-catalog
-/// and --new-signing-key, which do one thing and exit.
+/// --agent-once, --menu-report, --runtime-report, --engine-report,
+/// --engine-install, --engine-remove, --update-from, --make-catalog and
+/// --new-signing-key, which do one thing and exit.
 @main
 enum Entry {
     static func main() {
@@ -638,11 +906,42 @@ enum Entry {
             }
             exit(0)
         }
+        if args.contains("--engine-report") {
+            // Every CrossOver app and NotProton runner, and what the Wine modules' installer says of it.
+            let (dir, _) = Catalog.active(.modules)
+            wait {
+                for t in Engine.targets() {
+                    print("\(t.name) | \(t.build)\(t.fex ? " | fex" : "") | \(await Engine.status(t, catalog: dir))")
+                }
+                return 0
+            }
+        }
+        if let root = value("--engine-install") ?? value("--engine-remove") {
+            // One CrossOver, by the folder that holds lib/wine, for the tests.
+            let (dir, _) = Catalog.active(.modules)
+            let path = Engine.resolved(root)
+            guard let target = Engine.targets().first(where: { $0.key == path })
+            else { print("not a CrossOver this app knows: \(root)"); exit(1) }
+            let remove = args.contains("--engine-remove")
+            wait {
+                let code = await Engine.run(target, catalog: dir, remove ? ["--restore"] : []) { print($0) }
+                // As from the window: what is put in is kept, what is taken out is left alone.
+                if code == 0 {
+                    var settings = AutoSettings.load()
+                    settings.modulesKept.removeAll { Engine.resolved($0) == target.key }
+                    settings.modulesDeclined.removeAll { Engine.resolved($0) == target.key }
+                    if remove { settings.modulesDeclined.append(target.key) } else { settings.modulesKept.append(target.key) }
+                    settings.save()
+                }
+                return code
+            }
+        }
         if let source = value("--update-from") {
             let key = value("--pubkey") ?? Updater.publicKey
+            let kind: CatalogKind = value("--kind") == "modules" ? .modules : .fixes
             wait {
                 do {
-                    print(try await Updater.update(from: URL(fileURLWithPath: source), publicKey: key))
+                    print(try await Updater.update(kind, from: URL(fileURLWithPath: source), publicKey: key))
                     return 0
                 } catch {
                     print("refused: \(error.localizedDescription)")
@@ -662,12 +961,17 @@ enum Entry {
         if let out = value("--make-catalog"), let key = value("--key") {
             let resources = value("--from").map { URL(fileURLWithPath: $0) }
                 ?? Bundle.main.resourceURL ?? URL(fileURLWithPath: ".")
-            guard let manifest = Catalog.manifest(in: resources) else { print("no catalog.json"); exit(1) }
+            // Each catalog the folder has a manifest for: the fixes', and the Wine modules'.
+            let kinds = CatalogKind.allCases.filter { Catalog.manifest(in: resources, $0) != nil }
+            guard !kinds.isEmpty else { print("no catalog.json"); exit(1) }
             do {
-                try Updater.makeRelease(from: resources, to: URL(fileURLWithPath: out), keyFile: URL(fileURLWithPath: key),
-                                        version: manifest.version, minimumApp: manifest.minimumApp,
-                                        names: manifest.files.keys.sorted())
-                print("catalog \(manifest.version) written to \(out)")
+                for kind in kinds {
+                    let manifest = Catalog.manifest(in: resources, kind)!
+                    try Updater.makeRelease(kind, from: resources, to: URL(fileURLWithPath: out),
+                                            keyFile: URL(fileURLWithPath: key), version: manifest.version,
+                                            minimumApp: manifest.minimumApp, names: manifest.files.keys.sorted())
+                    print("\(kind.stem) \(manifest.version) written to \(out)")
+                }
                 exit(0)
             } catch {
                 print("could not write the catalog: \(error.localizedDescription)")

@@ -112,13 +112,16 @@ final class MenuBarAgent: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// A pass of the agent. `everything` looks at every marked game even when
     /// Steam has not changed it; `updates` asks the releases for new fixes now.
-    func look(everything: Bool = false, updates: Bool = false) {
+    func look(everything: Bool = false, updates: Bool = false, modules: Bool = false) {
         guard !looking else { return }
         looking = true
         Task {
-            let events = await Agent.pass(notify: true, everything: everything, updateNow: updates)
+            let events = await Agent.pass(notify: true, everything: everything, updateNow: updates, modulesNow: modules)
             for e in events { print("\(e.date) \(e.game): \(e.message)") }
             if updates { Notifier.post(AgentEvent(date: Date(), game: "", message: AgentState.load().lastUpdate, failed: false)) }
+            if modules {
+                Notifier.post(AgentEvent(date: Date(), game: "", message: AgentState.load().lastModulesUpdate, failed: false))
+            }
             lastLook = Date()
             looking = false
             refreshIcon()
@@ -166,12 +169,21 @@ final class MenuBarAgent: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         let catalog = Catalog.active().manifest?.version ?? 0
         menu.addItem(note(state.lastUpdate.isEmpty ? "Fixes catalog \(catalog)" : state.lastUpdate))
+        if !state.lastModulesUpdate.isEmpty { menu.addItem(note(state.lastModulesUpdate)) }
         let lookNow = action("Look at the Games Now", #selector(lookNow))
-        let check = action("Check for New Fixes", #selector(checkNow))
+        // Asked first: the catalog the agent verified waits for this.
+        let check = action(state.waiting.map { "Install New Fixes (catalog \($0))" } ?? "Check for New Fixes",
+                           #selector(checkNow))
         lookNow.isEnabled = !looking && !lines.isEmpty
         check.isEnabled = !looking
         menu.addItem(lookNow)
         menu.addItem(check)
+        // Asked first, the Wine modules' catalog waits on its own.
+        if let waiting = state.waitingModules {
+            let modules = action("Install New Wine Modules (catalog \(waiting))", #selector(modulesNow))
+            modules.isEnabled = !looking
+            menu.addItem(modules)
+        }
         menu.addItem(action("Open MacGameFix…", #selector(openWindowItem)))
         menu.addItem(.separator())
         menu.addItem(action("Quit MacGameFix", #selector(quit)))
@@ -195,6 +207,7 @@ final class MenuBarAgent: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func lookNow() { look(everything: true) }
     @objc private func checkNow() { look(updates: true) }
+    @objc private func modulesNow() { look(modules: true) }
     @objc private func openWindowItem() { openWindow() }
     @objc private func openReview() { openWindow(review: true) }
     @objc private func quit() { NSApp.terminate(nil) }

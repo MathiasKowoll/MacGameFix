@@ -18,6 +18,8 @@ enum Paths {
     /// What the app and the agent keep: settings, the agent's state, catalogs.
     static var support: URL { home.appendingPathComponent("Library/Application Support/MacGameFix") }
     static var catalogs: URL { support.appendingPathComponent("catalog") }
+    /// The Wine modules' catalogs, kept apart from the fixes'.
+    static var modules: URL { support.appendingPathComponent("modules") }
     static var settings: URL { support.appendingPathComponent("automatic.json") }
     static var state: URL { support.appendingPathComponent("agent-state.json") }
     static var installLock: URL { support.appendingPathComponent("installer.lock") }
@@ -440,23 +442,38 @@ struct CatalogManifest: Codable {
     var zipSHA256: String?
 }
 
+/// The two catalogs a release carries, each signed and versioned on its own, so
+/// that new Wine modules for a new CrossOver come without touching the game
+/// fixes, and the other way round. Each has its own setting for updates.
+enum CatalogKind: String, CaseIterable {
+    case fixes, modules
+
+    /// The manifest's name, in the bundle and among a release's assets; the
+    /// zip and the signature share the stem (catalog.zip, modules.json.sig).
+    var stem: String { self == .fixes ? "catalog" : "modules" }
+    /// Where downloaded catalogs of this kind go, each under its version.
+    var store: URL { self == .fixes ? Paths.catalogs : Paths.modules }
+    /// For the lines the agent and the window write.
+    var noun: String { self == .fixes ? "fixes" : "Wine modules" }
+}
+
 enum Catalog {
     static var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
     }
 
-    static func manifest(in dir: URL) -> CatalogManifest? {
-        guard let data = try? Data(contentsOf: dir.appendingPathComponent("catalog.json")) else { return nil }
+    static func manifest(in dir: URL, _ kind: CatalogKind = .fixes) -> CatalogManifest? {
+        guard let data = try? Data(contentsOf: dir.appendingPathComponent("\(kind.stem).json")) else { return nil }
         return try? JSONDecoder().decode(CatalogManifest.self, from: data)
     }
 
     /// The catalog to use: a downloaded one when it is newer than the bundle's
     /// and this app is new enough for it, else the bundle's own.
-    static func active() -> (dir: URL, manifest: CatalogManifest?) {
+    static func active(_ kind: CatalogKind = .fixes) -> (dir: URL, manifest: CatalogManifest?) {
         let bundled = Bundle.main.resourceURL ?? URL(fileURLWithPath: ".")
-        let mine = manifest(in: bundled)
-        let current = Paths.catalogs.appendingPathComponent("current").resolvingSymlinksInPath()
-        if let theirs = manifest(in: current),
+        let mine = manifest(in: bundled, kind)
+        let current = kind.store.appendingPathComponent("current").resolvingSymlinksInPath()
+        if let theirs = manifest(in: current, kind),
            theirs.version > (mine?.version ?? 0),
            !versionLess(appVersion, theirs.minimumApp) {
             return (current, theirs)

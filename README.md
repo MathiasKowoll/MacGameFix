@@ -26,6 +26,7 @@ archived repository.
 | `fixes/` | One installer per fix (`install-*.sh`), the DLLs they put in place, the C source of each DLL and the scripts that build them (`build-proxy.sh`, `build-asf-reader.sh`, `check-builds.sh`), and the third-party notices. |
 | `process-features.json` | The table: per game executable, its symptom, backend, toolkit, codec and engine needs. The app is built from it. |
 | `tools/` | The probes and capture scripts the fixes were found with: video and Media Foundation observers, HID traces, a game survey. |
+| `engine/` | Not a game fix: three patched Wine modules that go into CrossOver itself, so that games find a DualSense's haptic output on a cable. The built modules per CrossOver build, their installer (`engine-modules.sh`), the patches and `build.sh`; see [`engine/README.md`](engine/README.md). The app's Wine Modules tab installs them. |
 | `legacy/` | What MacGameVideoFix's wiki and notes found, per game and in general (`legacy/wiki/Findings.md`, `legacy/wiki/Diagnosing-a-new-game.md`). Kept as written; some pages describe the engine work that stayed behind. |
 
 ## What it does
@@ -39,6 +40,11 @@ archived repository.
   the game's own files back.
 
 Quit a game before installing or removing its fix.
+
+The window has three tabs: **Games**, the fixes above; **Wine Modules**, the one
+part that changes CrossOver itself (three Wine files for a DualSense's haptics on
+a cable, see [`engine/README.md`](engine/README.md)); and **Settings**, with the
+background agent, new fixes, the folders searched and the log.
 
 ## What each game runs on
 
@@ -88,10 +94,25 @@ until you turn it on, and the fixes stay in the games' own folders as before.
     that failed, or one left alone. It goes away when you open the window.
   - *Quit MacGameFix* stops the agent until you log in again or open the
     window. If it crashes, it starts again by itself.
-- **New fixes.** With *Get new fixes from GitHub* on, the agent looks at the
-  latest release of this repository once a day. When the release carries a newer
-  catalog of fixes, the agent takes it without a new app: the installers and
-  every file they use.
+- **New fixes and new Wine modules.** The agent looks at the latest release of
+  this repository once a day. A release carries two catalogs, each signed and
+  versioned on its own: the game fixes (the installers and every file they use)
+  and the Wine modules. New modules for a new CrossOver build come without
+  touching the fixes, and the other way round. Settings has one choice for each,
+  *New game fixes* and *New Wine modules*:
+  - *Install them automatically*: the agent takes the catalog without a new app.
+  - *Ask before installing them*: the agent checks the catalog's signature and
+    tells you, and installs nothing. *Install New Fixes* or *Install New Wine
+    Modules*, in the menu bar or in Settings, takes it.
+  - *Do not look for them*: the agent does not ask the releases.
+
+  With the Wine modules on automatic, the agent also keeps them where you put
+  them: it puts them back into a NotProton runner after a CrossOver or NotProton
+  update put CrossOver's own files back, updates them when newer ones come, and
+  installs them into a runner that appears for a new CrossOver build once they
+  are in a runner already. It waits until that CrossOver's games are closed, and
+  leaves alone a runner you took them out of. A CrossOver app is only ever
+  reported, since changing one asks for App Management and signs the app again.
   - The catalog is signed. The app takes it only when the signature matches the
     key built into the app, and every file matches its hash. Anything else is
     refused and the catalog in use stays.

@@ -36,8 +36,17 @@ struct KeptGame: Codable, Hashable {
 
 struct AutoSettings: Codable {
     var kept: [KeptGame] = []
-    /// Take newer catalogs from the releases.
+    /// Look for newer catalogs of fixes in the releases.
     var updates = true
+    /// With `updates`, ask before installing a newer catalog instead of taking it.
+    var askFirst = false
+    /// The same two for the Wine modules, which update on their own (Engine.swift).
+    var modulesUpdates = true
+    var modulesAskFirst = false
+    /// The CrossOver folders the user put the Wine modules into, which the agent
+    /// keeps them in, and those the user took them out of, which it leaves alone.
+    var modulesKept: [String] = []
+    var modulesDeclined: [String] = []
     /// What the user said a game runs on, by KeptGame.key; it wins over detection.
     var runtimes: [String: GameRuntime] = [:]
     /// When the user last opened the window: what the agent did before it has been seen.
@@ -50,6 +59,11 @@ struct AutoSettings: Codable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         kept = try c.decodeIfPresent([KeptGame].self, forKey: .kept) ?? []
         updates = try c.decodeIfPresent(Bool.self, forKey: .updates) ?? true
+        askFirst = try c.decodeIfPresent(Bool.self, forKey: .askFirst) ?? false
+        modulesUpdates = try c.decodeIfPresent(Bool.self, forKey: .modulesUpdates) ?? true
+        modulesAskFirst = try c.decodeIfPresent(Bool.self, forKey: .modulesAskFirst) ?? false
+        modulesKept = try c.decodeIfPresent([String].self, forKey: .modulesKept) ?? []
+        modulesDeclined = try c.decodeIfPresent([String].self, forKey: .modulesDeclined) ?? []
         runtimes = try c.decodeIfPresent([String: GameRuntime].self, forKey: .runtimes) ?? [:]
         seen = try c.decodeIfPresent(Date.self, forKey: .seen) ?? .distantPast
     }
@@ -130,6 +144,52 @@ struct AgentState: Codable {
     var events: [AgentEvent] = []
     var lastUpdateCheck = Date.distantPast
     var lastUpdate = ""
+    /// A newer, verified catalog the user was asked about and has not installed; 0 for none.
+    var available = 0
+    /// The same three for the Wine modules' catalog.
+    var lastModulesCheck = Date.distantPast
+    var lastModulesUpdate = ""
+    var availableModules = 0
+    /// The CrossOver folders the agent has seen, to tell a new NotProton runner
+    /// from one the user simply never chose; and what it last said of each.
+    var engineSeen: [String]?
+    var engineNoted: [String: String] = [:]
+
+    init() {}
+
+    // Fields a later version added are absent from an older file: read what is there.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        games = try c.decodeIfPresent([String: GameMemory].self, forKey: .games) ?? [:]
+        events = try c.decodeIfPresent([AgentEvent].self, forKey: .events) ?? []
+        lastUpdateCheck = try c.decodeIfPresent(Date.self, forKey: .lastUpdateCheck) ?? .distantPast
+        lastUpdate = try c.decodeIfPresent(String.self, forKey: .lastUpdate) ?? ""
+        available = try c.decodeIfPresent(Int.self, forKey: .available) ?? 0
+        lastModulesCheck = try c.decodeIfPresent(Date.self, forKey: .lastModulesCheck) ?? .distantPast
+        lastModulesUpdate = try c.decodeIfPresent(String.self, forKey: .lastModulesUpdate) ?? ""
+        availableModules = try c.decodeIfPresent(Int.self, forKey: .availableModules) ?? 0
+        engineSeen = try c.decodeIfPresent([String].self, forKey: .engineSeen)
+        engineNoted = try c.decodeIfPresent([String: String].self, forKey: .engineNoted) ?? [:]
+    }
+
+    /// The waiting catalog, while it is still newer than the one in use.
+    var waiting: Int? {
+        available > (Catalog.active().manifest?.version ?? 0) ? available : nil
+    }
+    var waitingModules: Int? {
+        availableModules > (Catalog.active(.modules).manifest?.version ?? 0) ? availableModules : nil
+    }
+
+    /// Where each kind's check is remembered.
+    static func checked(_ kind: CatalogKind) -> WritableKeyPath<AgentState, Date> {
+        kind == .fixes ? \.lastUpdateCheck : \.lastModulesCheck
+    }
+    static func line(_ kind: CatalogKind) -> WritableKeyPath<AgentState, String> {
+        kind == .fixes ? \.lastUpdate : \.lastModulesUpdate
+    }
+    static func offered(_ kind: CatalogKind) -> WritableKeyPath<AgentState, Int> {
+        kind == .fixes ? \.available : \.availableModules
+    }
 
     static func load() -> AgentState {
         guard let data = try? Data(contentsOf: Paths.state),
@@ -159,33 +219,72 @@ enum Agent {
     static let recheck: TimeInterval = 6 * 3600
     static let updateEvery: TimeInterval = 24 * 3600
 
+    /// One kind of catalog, when it is time or when asked: asked first, the
+    /// release's catalog is verified and offered once and nothing is installed;
+    /// otherwise it is taken. `force` is the user asking, which installs.
+    private static func updateCatalog(_ kind: CatalogKind, now: Date, force: Bool, on: Bool, ask: Bool,
+                                      state: inout AgentState, events: inout [AgentEvent]) async {
+        guard force || (on && now.timeIntervalSince(state[keyPath: AgentState.checked(kind)]) > updateEvery)
+        else { return }
+        state[keyPath: AgentState.checked(kind)] = now
+        let what = kind == .fixes ? "New fixes" : "New Wine modules"
+        if ask && !force {
+            do {
+                if let version = try await Updater.check(kind) {
+                    if state[keyPath: AgentState.offered(kind)] != version {
+                        events.append(AgentEvent(date: now, game: "",
+                                                 message: "\(what) are ready (catalog \(version)). Install them from the "
+                                                     + "menu bar or MacGameFix's Settings.", failed: false))
+                    }
+                    state[keyPath: AgentState.offered(kind)] = version
+                    state[keyPath: AgentState.line(kind)] = "\(what) are ready: catalog \(version)."
+                } else {
+                    state[keyPath: AgentState.offered(kind)] = 0
+                    state[keyPath: AgentState.line(kind)] =
+                        "The \(kind.noun) are up to date (catalog \(Catalog.active(kind).manifest?.version ?? 0))."
+                }
+            } catch {
+                state[keyPath: AgentState.line(kind)] = "Update check failed: \(error.localizedDescription)"
+            }
+            return
+        }
+        let before = Set(Catalog.games(in: Catalog.active().dir).map(\.name))
+        do {
+            let line = try await Updater.update(kind)
+            state[keyPath: AgentState.offered(kind)] = 0
+            state[keyPath: AgentState.line(kind)] = line
+            let added = kind == .fixes
+                ? Catalog.games(in: Catalog.active().dir).map(\.name).filter { !before.contains($0) } : []
+            if !added.isEmpty {
+                events.append(AgentEvent(date: now, game: "", message: "New fixes: " + added.joined(separator: ", "),
+                                         failed: false))
+            } else if line.hasPrefix(what) {
+                events.append(AgentEvent(date: now, game: "",
+                                         message: kind == .fixes ? "The fixes were updated." : "The Wine modules were updated.",
+                                         failed: false))
+            }
+        } catch {
+            state[keyPath: AgentState.line(kind)] = "Update check failed: \(error.localizedDescription)"
+        }
+    }
+
     /// One look at every marked game, and at the releases when it is time.
     /// `everything` looks at each marked game even when nothing changed it, and
     /// `updateNow` asks the releases at once; the menu's two commands.
     /// Returns what it did, for the log and the tests.
     static func pass(now: Date = Date(), notify: Bool, everything: Bool = false,
-                     updateNow: Bool = false) async -> [AgentEvent] {
+                     updateNow: Bool = false, modulesNow: Bool = false) async -> [AgentEvent] {
         let settings = AutoSettings.load()
         var state = AgentState.load()
         var events: [AgentEvent] = []
 
-        if updateNow || (settings.updates && now.timeIntervalSince(state.lastUpdateCheck) > updateEvery) {
-            state.lastUpdateCheck = now
-            let before = Set(Catalog.games(in: Catalog.active().dir).map(\.name))
-            do {
-                let line = try await Updater.update()
-                state.lastUpdate = line
-                let added = Catalog.games(in: Catalog.active().dir).map(\.name).filter { !before.contains($0) }
-                if !added.isEmpty {
-                    events.append(AgentEvent(date: now, game: "", message: "New fixes: " + added.joined(separator: ", "),
-                                             failed: false))
-                } else if line.hasPrefix("New fixes installed") {
-                    events.append(AgentEvent(date: now, game: "", message: "The fixes were updated.", failed: false))
-                }
-            } catch {
-                state.lastUpdate = "Update check failed: \(error.localizedDescription)"
-            }
-        }
+        await updateCatalog(.fixes, now: now, force: updateNow, on: settings.updates, ask: settings.askFirst,
+                            state: &state, events: &events)
+        await updateCatalog(.modules, now: now, force: modulesNow, on: settings.modulesUpdates,
+                            ask: settings.modulesAskFirst, state: &state, events: &events)
+        var kept = settings
+        events += await Engine.keep(&kept, state: &state, now: now)
+        if kept.modulesKept != settings.modulesKept { kept.save() }
 
         let (catalogDir, manifest) = Catalog.active()
         let games = Catalog.games(in: catalogDir)
@@ -304,12 +403,17 @@ enum Updater {
         }
     }
 
-    /// Takes a newer catalog from the latest release, or from `source`: a folder
-    /// holding catalog.json, catalog.json.sig and catalog.zip, for the tests.
-    /// Returns a line saying what happened.
-    @discardableResult
-    static func update(from source: URL? = nil, publicKey key: String = publicKey) async throws -> String {
-        let (manifestURL, signatureURL, zipURL) = try await assets(source)
+    /// Where the agent looks, and the key it trusts: the latest release and
+    /// Updater.publicKey, unless the tests name a folder and a test key.
+    static var source: URL? {
+        ProcessInfo.processInfo.environment["MACGAMEFIX_CATALOG_SOURCE"].map { URL(fileURLWithPath: $0) }
+    }
+    static var key: String { ProcessInfo.processInfo.environment["MACGAMEFIX_CATALOG_PUBKEY"] ?? publicKey }
+
+    /// The release's manifest of one kind, its signature checked, and where its zip is.
+    private static func signedManifest(_ kind: CatalogKind, _ source: URL?, key: String) async throws
+        -> (manifest: CatalogManifest, data: Data, zip: URL) {
+        let (manifestURL, signatureURL, zipURL) = try await assets(kind, source)
         let manifestData = try await fetch(manifestURL)
         let signature = try await fetch(signatureURL)
         guard let raw = Data(base64Encoded: key),
@@ -317,9 +421,31 @@ enum Updater {
               publicKey.isValidSignature(Data(base64Encoded: String(decoding: signature, as: UTF8.self)
                   .trimmingCharacters(in: .whitespacesAndNewlines)) ?? signature, for: manifestData)
         else { throw Failure.signature }
-        let manifest = try JSONDecoder().decode(CatalogManifest.self, from: manifestData)
-        let active = Catalog.active().manifest?.version ?? 0
-        guard manifest.version > active else { return "The fixes are up to date (catalog \(active))." }
+        return (try JSONDecoder().decode(CatalogManifest.self, from: manifestData), manifestData, zipURL)
+    }
+
+    /// The version of a newer catalog this app can take, its signature checked
+    /// but nothing downloaded or installed; nil when the fixes are up to date.
+    static func check(_ kind: CatalogKind = .fixes, from source: URL? = Updater.source,
+                      publicKey key: String = Updater.key) async throws -> Int? {
+        let (manifest, _, _) = try await signedManifest(kind, source, key: key)
+        guard manifest.version > (Catalog.active(kind).manifest?.version ?? 0) else { return nil }
+        guard !Catalog.versionLess(Catalog.appVersion, manifest.minimumApp) else {
+            throw Failure.app(manifest.minimumApp)
+        }
+        return manifest.version
+    }
+
+    /// Takes a newer catalog of one kind from the latest release, or from
+    /// `source`: a folder holding catalog.json, catalog.json.sig and catalog.zip
+    /// (modules.json and so on for the Wine modules), for the tests. Returns a
+    /// line saying what happened.
+    @discardableResult
+    static func update(_ kind: CatalogKind = .fixes, from source: URL? = Updater.source,
+                       publicKey key: String = Updater.key) async throws -> String {
+        let (manifest, manifestData, zipURL) = try await signedManifest(kind, source, key: key)
+        let active = Catalog.active(kind).manifest?.version ?? 0
+        guard manifest.version > active else { return "The \(kind.noun) are up to date (catalog \(active))." }
         guard !Catalog.versionLess(Catalog.appVersion, manifest.minimumApp) else {
             throw Failure.app(manifest.minimumApp)
         }
@@ -327,8 +453,9 @@ enum Updater {
         guard hex(SHA256.hash(data: zip)) == manifest.zipSHA256 else { throw Failure.hash("catalog.zip") }
 
         let fm = FileManager.default
-        try fm.createDirectory(at: Paths.catalogs, withIntermediateDirectories: true)
-        let staging = Paths.catalogs.appendingPathComponent(".incoming-\(UUID().uuidString)")
+        let store = kind.store
+        try fm.createDirectory(at: store, withIntermediateDirectories: true)
+        let staging = store.appendingPathComponent(".incoming-\(UUID().uuidString)")
         defer { try? fm.removeItem(at: staging) }
         try fm.createDirectory(at: staging, withIntermediateDirectories: true)
         let zipFile = staging.appendingPathComponent("catalog.zip")
@@ -345,38 +472,40 @@ enum Updater {
         let present = Set((try? fm.contentsOfDirectory(atPath: files.path)) ?? [])
         for name in present where manifest.files[name] == nil { throw Failure.unsafe(name) }
         for (name, sum) in manifest.files {
-            guard !name.contains("/"), !name.hasPrefix("."), name != "catalog.json" else { throw Failure.unsafe(name) }
+            guard !name.contains("/"), !name.hasPrefix("."), name != "\(kind.stem).json" else { throw Failure.unsafe(name) }
             guard let data = fm.contents(atPath: files.appendingPathComponent(name).path),
                   hex(SHA256.hash(data: data)) == sum else { throw Failure.hash(name) }
             if name.hasPrefix("install-") && name.hasSuffix(".sh") {
                 try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: files.appendingPathComponent(name).path)
             }
         }
-        try manifestData.write(to: files.appendingPathComponent("catalog.json"))
+        try manifestData.write(to: files.appendingPathComponent("\(kind.stem).json"))
 
         // In place under its version, then the switch, in one rename.
-        let target = Paths.catalogs.appendingPathComponent(String(manifest.version))
+        let target = store.appendingPathComponent(String(manifest.version))
         try? fm.removeItem(at: target)
         try fm.moveItem(at: files, to: target)
-        let link = Paths.catalogs.appendingPathComponent(".current-\(UUID().uuidString)")
+        let link = store.appendingPathComponent(".current-\(UUID().uuidString)")
         try fm.createSymbolicLink(atPath: link.path, withDestinationPath: String(manifest.version))
-        guard rename(link.path, Paths.catalogs.appendingPathComponent("current").path) == 0 else {
+        guard rename(link.path, store.appendingPathComponent("current").path) == 0 else {
             try? fm.removeItem(at: link)
             throw Failure.missing("a place to put the catalog")
         }
         // Keep the one before, for a look back; drop the rest.
-        let versions = ((try? fm.contentsOfDirectory(atPath: Paths.catalogs.path)) ?? [])
+        let versions = ((try? fm.contentsOfDirectory(atPath: store.path)) ?? [])
             .compactMap(Int.init).sorted(by: >)
         for old in versions.dropFirst(2) {
-            try? fm.removeItem(at: Paths.catalogs.appendingPathComponent(String(old)))
+            try? fm.removeItem(at: store.appendingPathComponent(String(old)))
         }
-        return "New fixes installed: catalog \(manifest.version)."
+        return kind == .fixes ? "New fixes installed: catalog \(manifest.version)."
+            : "New Wine modules installed: catalog \(manifest.version)."
     }
 
-    private static func assets(_ source: URL?) async throws -> (URL, URL, URL) {
+    private static func assets(_ kind: CatalogKind, _ source: URL?) async throws -> (URL, URL, URL) {
+        let stem = kind.stem
         if let source {
-            return (source.appendingPathComponent("catalog.json"), source.appendingPathComponent("catalog.json.sig"),
-                    source.appendingPathComponent("catalog.zip"))
+            return (source.appendingPathComponent("\(stem).json"), source.appendingPathComponent("\(stem).json.sig"),
+                    source.appendingPathComponent("\(stem).zip"))
         }
         struct Asset: Decodable { let name: String; let browser_download_url: URL }
         struct Release: Decodable { let assets: [Asset] }
@@ -385,7 +514,7 @@ enum Updater {
             guard let a = release.assets.first(where: { $0.name == n }) else { throw Failure.missing(n) }
             return a.browser_download_url
         }
-        return (try named("catalog.json"), try named("catalog.json.sig"), try named("catalog.zip"))
+        return (try named("\(stem).json"), try named("\(stem).json.sig"), try named("\(stem).zip"))
     }
 
     private static func fetch(_ url: URL) async throws -> Data {
@@ -401,12 +530,14 @@ enum Updater {
 
     /// For the release: a catalog folder (the app's Resources) becomes
     /// catalog.zip, catalog.json naming every file and the zip's hash, and the
-    /// signature of catalog.json with the private key at `keyFile`.
-    static func makeRelease(from resources: URL, to out: URL, keyFile: URL, version: Int,
-                            minimumApp: String, names: [String]) throws {
+    /// signature of catalog.json with the private key at `keyFile`; modules.zip
+    /// and the rest for the Wine modules.
+    static func makeRelease(_ kind: CatalogKind = .fixes, from resources: URL, to out: URL, keyFile: URL,
+                            version: Int, minimumApp: String, names: [String]) throws {
         let fm = FileManager.default
+        let stem = kind.stem
         try fm.createDirectory(at: out, withIntermediateDirectories: true)
-        let flat = out.appendingPathComponent("catalog")
+        let flat = out.appendingPathComponent(stem)
         try? fm.removeItem(at: flat)
         try fm.createDirectory(at: flat, withIntermediateDirectories: true)
         var files: [String: String] = [:]
@@ -415,7 +546,7 @@ enum Updater {
             try data.write(to: flat.appendingPathComponent(name))
             files[name] = hex(SHA256.hash(data: data))
         }
-        let zip = out.appendingPathComponent("catalog.zip")
+        let zip = out.appendingPathComponent("\(stem).zip")
         try? fm.removeItem(at: zip)
         let ditto = Process()
         ditto.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
@@ -428,12 +559,12 @@ enum Updater {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let manifestData = try encoder.encode(manifest)
-        try manifestData.write(to: out.appendingPathComponent("catalog.json"))
+        try manifestData.write(to: out.appendingPathComponent("\(stem).json"))
         let keyText = try String(contentsOf: keyFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
         guard let raw = Data(base64Encoded: keyText) else { throw Failure.signature }
         let key = try Curve25519.Signing.PrivateKey(rawRepresentation: raw)
         try (try key.signature(for: manifestData)).base64EncodedString()
-            .write(to: out.appendingPathComponent("catalog.json.sig"), atomically: true, encoding: .utf8)
+            .write(to: out.appendingPathComponent("\(stem).json.sig"), atomically: true, encoding: .utf8)
     }
 }
 
