@@ -1,7 +1,7 @@
 // MacGameFix in the menu bar: the agent with a face. The LaunchAgent starts
 // this binary with --agent at login; that process keeps the marked fixes
 // applied (Automation.swift) and shows, from a menu bar item, a summary of
-// them: how many are in place, to review or left alone. Which games,
+// them: how many are in place or to review. Which games,
 // and why, is in the window. The window stays its own process of the
 // same app, opened from the menu, so closing it never stops the agent.
 //
@@ -20,19 +20,18 @@ struct KeptLine: Equatable {
     var detail: String?
     var report: String?
 
-    enum Condition: CaseIterable { case inPlace, review, leftAlone, waiting }
+    enum Condition: CaseIterable { case inPlace, review, waiting }
 
     var condition: Condition {
         switch word {
         case "In place": return .inPlace
         case "Failed", "Folder not found": return .review
-        case "Not applied": return .leftAlone
         default: return .waiting
         }
     }
 
     /// The user has something to see or do about this game.
-    var needsUser: Bool { condition == .review || condition == .leftAlone }
+    var needsUser: Bool { condition == .review }
 
     static func all(settings: AutoSettings, state: AgentState) -> [KeptLine] {
         settings.kept.map { kept in
@@ -40,10 +39,7 @@ struct KeptLine: Equatable {
                 KeptLine(key: kept.key, name: kept.name, word: word, detail: detail, report: report)
             }
             guard FileManager.default.fileExists(atPath: kept.folder) else { return line("Folder not found", kept.folder) }
-            guard let memory = state.games[kept.key], !memory.fit.isEmpty || !memory.state.isEmpty else {
-                return line("Not looked at yet")
-            }
-            if !memory.fit.isEmpty && memory.fit != Fit.fits.label { return line("Not applied", memory.fit) }
+            guard let memory = state.games[kept.key], !memory.state.isEmpty else { return line("Not looked at yet") }
             switch memory.state {
             case "installed": return line("In place")
             case "failed":
@@ -69,8 +65,6 @@ struct KeptLine: Equatable {
             switch condition {
             case .inPlace: return Group(condition: condition, text: "\(n) in place", symbol: "checkmark.circle")
             case .review: return Group(condition: condition, text: "\(n) to review", symbol: "eye")
-            case .leftAlone: return Group(condition: condition, text: "\(n) left alone: the fix does not fit",
-                                          symbol: "minus.circle")
             case .waiting: return Group(condition: condition, text: "\(n) not looked at yet", symbol: "clock")
             }
         }
@@ -139,7 +133,7 @@ final class MenuBarAgent: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: The menu, built fresh each time it opens
 
     /// A summary, however many games are marked: how many are in place, to
-    /// review, left alone or waiting for a first look. The games
+    /// review or waiting for a first look. The games
     /// themselves are in the window.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
@@ -152,7 +146,7 @@ final class MenuBarAgent: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             menu.addItem(note(lines.count == 1 ? "Keeping 1 fix applied" : "Keeping \(lines.count) fixes applied"))
             for group in KeptLine.summary(lines) {
-                let row = group.condition == .review || group.condition == .leftAlone
+                let row = group.condition == .review
                     ? action(group.text + "…", #selector(openReview))
                     : note(group.text)
                 row.image = NSImage(systemSymbolName: group.symbol, accessibilityDescription: nil)

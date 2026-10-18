@@ -29,9 +29,31 @@ import UserNotifications
 struct KeptGame: Codable, Hashable {
     var name: String
     var folder: String
-    /// The prefix chosen for a title that writes registry keys.
-    var prefix: String?
+    /// The prefixes chosen for a title that writes registry keys.
+    var prefixes: [String] = []
     var key: String { gameKey(URL(fileURLWithPath: folder), name) }
+
+    init(name: String, folder: String, prefixes: [String] = []) {
+        self.name = name; self.folder = folder; self.prefixes = prefixes
+    }
+
+    private enum CodingKeys: String, CodingKey { case name, folder, prefixes, prefix }
+
+    // Before 1.5.1 a game had one prefix, written as "prefix".
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        folder = try c.decode(String.self, forKey: .folder)
+        prefixes = try c.decodeIfPresent([String].self, forKey: .prefixes)
+            ?? (try c.decodeIfPresent(String.self, forKey: .prefix)).map { [$0] } ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(name, forKey: .name)
+        try c.encode(folder, forKey: .folder)
+        if !prefixes.isEmpty { try c.encode(prefixes, forKey: .prefixes) }
+    }
 }
 
 struct AutoSettings: Codable {
@@ -49,8 +71,6 @@ struct AutoSettings: Codable {
     var modulesDeclined: [String] = []
     /// On automatic, also put them into a runner NotProton adds for a new CrossOver build.
     var modulesNewBuilds = true
-    /// What the user said a game runs on, by KeptGame.key; it wins over detection.
-    var runtimes: [String: GameRuntime] = [:]
     /// When the user last opened the window: what the agent did before it has been seen.
     var seen = Date.distantPast
 
@@ -67,31 +87,7 @@ struct AutoSettings: Codable {
         modulesKept = try c.decodeIfPresent([String].self, forKey: .modulesKept) ?? []
         modulesDeclined = try c.decodeIfPresent([String].self, forKey: .modulesDeclined) ?? []
         modulesNewBuilds = try c.decodeIfPresent(Bool.self, forKey: .modulesNewBuilds) ?? true
-        runtimes = try c.decodeIfPresent([String: GameRuntime].self, forKey: .runtimes) ?? [:]
         seen = try c.decodeIfPresent(Date.self, forKey: .seen) ?? .distantPast
-    }
-
-    /// What a game runs on: the user's choice; else the one place detection
-    /// found; else, of several, the Steam Play tool Steam maps this game to and
-    /// that has run it.
-    func runtime(for key: String, detected: [GameRuntime]) -> GameRuntime? {
-        if let chosen = runtimes[key] { return chosen }
-        if detected.count == 1 { return detected[0] }
-        let setUp = detected.filter(\.setUpHere)
-        guard setUp.count == 1 else { return nil }
-        var r = setUp[0]
-        r.source += ", set for this game in Steam"
-        return r
-    }
-
-    /// The fix against what the game runs on, or why that cannot be told.
-    func fit(_ game: Game, key: String, detected: [GameRuntime]) -> Fit {
-        guard let r = runtime(for: key, detected: detected) else {
-            return .unknown([detected.isEmpty
-                ? "nothing on this Mac says what runs this game; choose it below"
-                : "\(detected.count) places could run this game; choose which one below"])
-        }
-        return game.fit(on: r)
     }
 
     static func load() -> AutoSettings {
@@ -117,9 +113,8 @@ struct AgentEvent: Codable, Identifiable {
     /// GitHub's new-issue page, filled in, for a failure.
     var report: String?
 
-    /// Something the user would want to look at: new fixes, a failure, a fix
-    /// left alone because it does not fit.
-    var asksForALook: Bool { failed || game.isEmpty || message.hasPrefix("Not applied") }
+    /// Something the user would want to look at: new fixes, or a failure.
+    var asksForALook: Bool { failed || game.isEmpty }
 }
 
 struct GameMemory: Codable {
@@ -127,8 +122,6 @@ struct GameMemory: Codable {
     var catalog = 0
     var checked = Date.distantPast
     var state = ""
-    /// The last verdict told to the user, so a fix that does not fit is said once.
-    var fit = ""
 
     init() {}
 
@@ -138,7 +131,6 @@ struct GameMemory: Codable {
         catalog = try c.decodeIfPresent(Int.self, forKey: .catalog) ?? 0
         checked = try c.decodeIfPresent(Date.self, forKey: .checked) ?? .distantPast
         state = try c.decodeIfPresent(String.self, forKey: .state) ?? ""
-        fit = try c.decodeIfPresent(String.self, forKey: .fit) ?? ""
     }
 }
 
@@ -301,29 +293,13 @@ enum Agent {
             let build = steam?.buildid ?? ""
             let catalog = manifest?.version ?? 0
             let changed = memory.build != build || memory.catalog != catalog
-            // Only a fix that fits what the game runs on goes in by itself; the
-            // rest is said once, and the game is left as it is. A change of
-            // launch options or of the user's choice counts as a change.
-            let fit = settings.fit(game, key: kept.key, detected: Runtimes.detect(folder: folder))
-            let fitChanged = memory.fit != fit.label
-            guard changed || fitChanged || everything || now.timeIntervalSince(memory.checked) > recheck else { continue }
+            // The fix goes back into the game's folder whatever runs the game:
+            // where it runs is the user's to check, and the window says what
+            // each fix requires.
+            guard changed || everything || now.timeIntervalSince(memory.checked) > recheck else { continue }
             if isRunning(game) { continue } // Looked at again once it is closed.
 
-            if !fit.allowsAutomatic {
-                if memory.fit != fit.label {
-                    events.append(AgentEvent(date: now, game: game.name, message: "Not applied. " + fit.label,
-                                             failed: false))
-                }
-                memory.fit = fit.label
-                memory.build = build
-                memory.catalog = manifest?.version ?? 0
-                memory.checked = now
-                state.games[kept.key] = memory
-                continue
-            }
-            memory.fit = fit.label
-
-            let word = await Fixer.status(game, folder: folder, prefix: kept.prefix, catalog: catalogDir)
+            let word = await Fixer.status(game, folder: folder, prefixes: kept.prefixes, catalog: catalogDir)
             var event: AgentEvent?
             if word == .installed {
                 if memory.state != "installed" && !memory.state.isEmpty {
@@ -334,10 +310,10 @@ enum Agent {
                                 output: [], catalog: catalog)
             } else {
                 let out = Collected()
-                let code = await Fixer.run(game, folder: folder, prefix: kept.prefix, catalog: catalogDir, []) {
+                let code = await Fixer.run(game, folder: folder, prefixes: kept.prefixes, catalog: catalogDir, []) {
                     out.add($0)
                 }
-                let after = await Fixer.status(game, folder: folder, prefix: kept.prefix, catalog: catalogDir)
+                let after = await Fixer.status(game, folder: folder, prefixes: kept.prefixes, catalog: catalogDir)
                 if code == 0 && after == .installed {
                     let message = word == .outdated
                         ? "The fix is updated to the newer build."

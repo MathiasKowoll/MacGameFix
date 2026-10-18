@@ -22,7 +22,7 @@ archived repository.
 
 | Folder | What it holds |
 | --- | --- |
-| `app/` | The application: `Core.swift` (installers, games, libraries), `Runtime.swift` (what each game runs on), `Automation.swift` (the background agent, signed catalog updates, reports), `MenuBar.swift` (the agent's menu bar item), `MacGameFix.swift` (the window), `AppIcon.icon` (the icon); `build-app.sh` and `test-automation.sh`. |
+| `app/` | The application: `Core.swift` (installers, games, libraries), `Engine.swift` (the Wine modules), `Automation.swift` (the background agent, signed catalog updates, reports), `MenuBar.swift` (the agent's menu bar item), `MacGameFix.swift` (the window), `AppIcon.icon` (the icon); `build-app.sh` and `test-automation.sh`. |
 | `fixes/` | One installer per fix (`install-*.sh`), the DLLs they put in place, the C source of each DLL and the scripts that build them (`build-proxy.sh`, `build-asf-reader.sh`, `check-builds.sh`), and the third-party notices. |
 | `process-features.json` | The table: per game executable, its symptom, backend, toolkit, codec and engine needs. The app is built from it. |
 | `tools/` | The probes and capture scripts the fixes were found with: video and Media Foundation observers, HID traces, a game survey. |
@@ -48,33 +48,28 @@ CrossOver app and NotProton runner and the modules' own updates; and
 **Settings**, with the background agent, the game fixes' updates, the folders
 searched and the log.
 
-## What each game runs on
+## What each fix requires
 
-A fix is made for one graphics backend (D3DMetal or DXMT) and, for some games,
-one CrossOver or toolkit version. From 1.4.0 the app looks at what each game is
-set to run on and compares it with the table:
+A fix always goes into the game's own folder, and the same folder serves every
+place that runs the game: a NotProton runner, a CrossOver bottle, or both.
+Where you run it is yours to check. The app says beside each game what its fix
+requires: the graphics backend it was made for (D3DMetal or DXMT; God of War's
+needs `CX_GRAPHICS_BACKEND=dxmt`), and for some games a CrossOver or D3DMetal
+version.
 
-- **With a Steam Play tool** (NotProton): the tool Steam is told to use for the
-  game, the CrossOver build that tool runs, the D3DMetal version inside it, and
-  `CX_GRAPHICS_BACKEND` in the game's launch options. Without that variable
-  CrossOver runs Direct3D 11 and 12 games on D3DMetal. A tool that runs on FEX
-  has no D3DMetal.
-- **In a CrossOver bottle:** the bottle's CrossOver version, the matching
-  CrossOver app's D3DMetal, and the bottle's own `CX_GRAPHICS_BACKEND`.
+Some fixes are not needed from a D3DMetal version on (CONTROL Resonant,
+Mortal Shell 2, Resonance: A Plague Tale Legacy and both Life is Strange titles
+from 4.0b3). The game says so. It is only a notice: the fix still installs.
 
-Each game then shows one line, *Runs on*, and one of:
+The exception is a fix that also writes registry keys: the Kingdom Hearts
+titles and NieR Replicant. Those keys go into the game's prefix, a Steam Play
+prefix (`compatdata/<appid>/pfx`) or a CrossOver bottle, so the game needs to
+have run there once. The prefix is shown under the game. When there is more
+than one, each has a checkbox, and the keys go into every prefix checked: the
+installer runs once for each. Unchecking a prefix does not take the keys out of
+it; removing the fix with it checked does.
 
-- **Fits** what the game runs on.
-- **Not needed:** the game plays without the fix on what it runs on.
-- **Does not fit,** and what to change. For example, God of War's fix is made
-  for DXMT, so a game set to D3DMetal says `CX_GRAPHICS_BACKEND=dxmt`.
-- **Cannot tell,** when nothing on the Mac says it: a game more than one place
-  could run, or a FEX tool with no backend set.
-
-In the last two cases *Change…* lets you say what the game runs on, and your
-word is kept over what the app finds. The app asks before installing a fix that
-does not fit or is not needed. The background agent installs a fix by itself
-only when it fits, and says once why it left any other alone. `MacGameFix --runtime-report` prints the same lines in a terminal.
+`MacGameFix --games-report` prints the same in a terminal.
 
 ## Keeping fixes applied, and new fixes
 
@@ -88,12 +83,12 @@ until you turn it on, and the fixes stay in the games' own folders as before.
   fix is gone, the agent installs it again. It waits until the game is closed
   and Steam has finished writing it.
 - **The menu bar.** The agent lives there as a raccoon. Its menu is a summary,
-  however many games are marked: how many fixes are in place, to review,
-  left alone because they do not fit, or not looked at yet. A count you can act
+  however many games are marked: how many fixes are in place, to review, or
+  not looked at yet. A count you can act
   on opens the window on those games; the window has the detail. The menu also
   looks at every game or for new fixes on demand.
-  - A dot by the raccoon's ear means something new to look at: new fixes, a fix
-    that failed, or one left alone. It goes away when you open the window.
+  - A dot by the raccoon's ear means something new to look at: new fixes or a
+    fix that failed. It goes away when you open the window.
   - *Quit MacGameFix* stops the agent until you log in again or open the
     window. If it crashes, it starts again by itself.
 - **New fixes and new Wine modules.** The agent looks at the latest release of
@@ -328,8 +323,7 @@ bundle differs from `fixes/` in a single byte.
 throwaway home and a fake game and catalog:
 - refused and accepted catalogs;
 - the agent after a game update;
-- what a game runs on, read from a fake Steam Play setup, and the user's choice
-  over it;
+- what each fix requires, said beside the game;
 - while Steam writes the game and while the game runs;
 - an older build of a fix replaced with the catalog's;
 - a failing installer's report.

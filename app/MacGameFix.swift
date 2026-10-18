@@ -111,22 +111,6 @@ final class Model: ObservableObject {
         refreshEvents()
     }
 
-    // MARK: What a game runs on
-
-    /// The CrossOver builds and D3DMetal versions this Mac carries, to choose from.
-    lazy var choices = Runtimes.installedChoices()
-
-    func runtime(_ hit: Hit) -> GameRuntime? { settings.runtime(for: hit.key, detected: hit.runtimes) }
-    func chosen(_ hit: Hit) -> Bool { settings.runtimes[hit.key] != nil }
-    func fit(_ hit: Hit) -> Fit { settings.fit(hit.game, key: hit.key, detected: hit.runtimes) }
-
-    /// The user's word on what a game runs on; nil goes back to what was found.
-    func choose(_ hit: Hit, _ runtime: GameRuntime?) {
-        settings.runtimes[hit.key] = runtime
-        settings.save()
-        objectWillChange.send()
-    }
-
     // MARK: Automatic
 
     func isKept(_ hit: Hit) -> Bool {
@@ -137,10 +121,30 @@ final class Model: ObservableObject {
         settings.kept.removeAll { $0.key == hit.key }
         if on {
             settings.kept.append(KeptGame(name: hit.game.name, folder: hit.folder.path,
-                                          prefix: hit.game.needsPrefix ? hit.prefix?.path.path : nil))
+                                          prefixes: hit.game.needsPrefix ? hit.chosen.map(\.path.path) : []))
         }
         settings.save()
         refreshEvents()
+    }
+
+    /// Adds a prefix to those a fix writes its registry keys into, or takes one
+    /// out, and asks the installer again about those left. A game kept applied
+    /// keeps the new set. What is already in a prefix taken out stays there
+    /// until the fix is removed with that prefix chosen.
+    func choosePrefix(_ hit: Hit, _ prefix: Prefix, _ on: Bool) {
+        guard let i = hits.firstIndex(where: { $0.id == hit.id }) else { return }
+        hits[i].chosen = hits[i].prefixes.filter { $0 == prefix ? on : hits[i].chosen.contains($0) }
+        if hits[i].blocker != nil { hits[i].selected = false }
+        if let k = settings.kept.firstIndex(where: { $0.key == hit.key }) {
+            settings.kept[k].prefixes = hits[i].chosen.map(\.path.path)
+            settings.save()
+        }
+        let id = hit.id
+        Task {
+            guard let j = hits.firstIndex(where: { $0.id == id }) else { return }
+            let probed = await probe(hits[j])
+            if let j = hits.firstIndex(where: { $0.id == id }) { hits[j].state = probed.state }
+        }
     }
 
     func setAgent(_ on: Bool) {
@@ -269,6 +273,13 @@ final class Model: ObservableObject {
             let (libs, found) = await Task.detached { Libraries.find(games, extra: extra) }.value
             libraries = libs
             hits = found
+            // A game kept applied keeps the prefixes it was marked with, of those still there.
+            for i in hits.indices where hits[i].game.needsPrefix {
+                if let kept = settings.kept.first(where: { $0.key == hits[i].key }) {
+                    let chosen = hits[i].prefixes.filter { kept.prefixes.contains($0.path.path) }
+                    if !chosen.isEmpty { hits[i].chosen = chosen }
+                }
+            }
             for i in hits.indices { hits[i] = await probe(hits[i]) }
             busy = false
             status = found.isEmpty ? "No supported game found in these folders." : "\(found.count) game(s) found."
@@ -281,11 +292,11 @@ final class Model: ObservableObject {
     /// also prints paths, and the installer's own judgement is the only one.
     func probe(_ hit: Hit) async -> Hit {
         var hit = hit
-        if hit.game.needsPrefix && hit.prefix == nil {
+        if hit.game.needsPrefix && hit.chosen.isEmpty {
             hit.state = .unknown
             return hit
         }
-        hit.state = await Fixer.status(hit.game, folder: hit.folder, prefix: hit.prefix?.path.path,
+        hit.state = await Fixer.status(hit.game, folder: hit.folder, prefixes: hit.chosen.map(\.path.path),
                                        catalog: resources)
         if hit.state == .noCarrier { hit.selected = false }
         return hit
@@ -298,22 +309,6 @@ final class Model: ObservableObject {
             status = install ? "Nothing selected needs installing." : "Nothing selected is installed."
             return
         }
-        if install {
-            let doubtful = targets.compactMap { hit -> String? in
-                switch fit(hit) {
-                case .mismatch, .notNeeded: return "\(hit.game.name): \(fit(hit).label)"
-                default: return nil
-                }
-            }
-            if !doubtful.isEmpty {
-                let alert = NSAlert()
-                alert.messageText = "Install fixes that do not fit?"
-                alert.informativeText = doubtful.joined(separator: "\n\n")
-                alert.addButton(withTitle: "Install Anyway")
-                alert.addButton(withTitle: "Cancel")
-                guard alert.runModal() == .alertFirstButtonReturn else { return }
-            }
-        }
         busy = true
         Task {
             var done = 0, failed = 0
@@ -321,8 +316,8 @@ final class Model: ObservableObject {
                 done += 1
                 status = "\(install ? "Installing" : "Removing") \(hit.game.name) (\(done) of \(targets.count))…"
                 note(""); note("▸ \(hit.game.name) — \(hit.folder.path)")
-                if let p = hit.prefix, hit.game.needsPrefix { note("  into \(p.label)") }
-                let code = await Fixer.run(hit.game, folder: hit.folder, prefix: hit.prefix?.path.path,
+                if hit.game.needsPrefix { for p in hit.chosen { note("  into the \(p.label)") } }
+                let code = await Fixer.run(hit.game, folder: hit.folder, prefixes: hit.chosen.map(\.path.path),
                                            catalog: resources, install ? [] : ["--restore"]) { line in
                     Task { @MainActor in self.note("  " + line) }
                 }
@@ -488,20 +483,22 @@ struct HitRow: View {
                 }
                 if hit.game.needsPrefix {
                     if hit.prefixes.count > 1 {
-                        Picker("Registry keys go into", selection: $hit.prefix) {
-                            ForEach(hit.prefixes) { p in Text(p.label).tag(Optional(p)) }
+                        Text("Registry keys go into:").font(.caption).foregroundStyle(.secondary)
+                        ForEach(hit.prefixes) { p in
+                            Toggle(p.label, isOn: Binding(
+                                get: { hit.chosen.contains(p) },
+                                set: { on in model.choosePrefix(hit, p, on) }))
+                                .toggleStyle(.checkbox)
+                                .font(.caption)
+                                .disabled(busy)
                         }
-                        .font(.caption)
-                        .frame(maxWidth: 420)
-                        .disabled(busy)
-                    } else if let p = hit.prefix {
+                    } else if let p = hit.chosen.first {
                         Text("Registry keys go into the \(p.label)").font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 if let b = hit.blocker {
                     Text(b).font(.caption).foregroundStyle(.red)
                 }
-                RuntimeLine(hit: hit, model: model)
                 if let line = model.keptLine(hit), line.word == "Failed" {
                     HStack(alignment: .firstTextBaseline) {
                         Text("In the background: \(line.detail ?? "the fix did not take.")")
@@ -793,84 +790,6 @@ struct SettingsView: View {
     }
 }
 
-/// What the game runs on, whether the fix fits it, and a way to say otherwise.
-struct RuntimeLine: View {
-    let hit: Hit
-    @ObservedObject var model: Model
-    @State private var editing = false
-
-    var body: some View {
-        let fit = model.fit(hit)
-        let runtime = model.runtime(hit)
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(runtime.map { (model.chosen(hit) ? "You said: " : "Runs on: ") + $0.summary }
-                     ?? "Runs on: unknown")
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                Spacer()
-                Button(editing ? "Done" : "Change…") { editing.toggle() }.font(.caption).buttonStyle(.link)
-            }
-            Text(fit.label).font(.caption).foregroundStyle(color(fit))
-            if editing { editor(runtime) }
-        }
-    }
-
-    private func color(_ fit: Fit) -> Color {
-        switch fit {
-        case .fits: return .green
-        case .notNeeded: return .secondary
-        case .mismatch: return .red
-        case .unknown: return .orange
-        }
-    }
-
-    @ViewBuilder private func editor(_ current: GameRuntime?) -> some View {
-        let base = current ?? GameRuntime(source: "your choice")
-        VStack(alignment: .leading, spacing: 4) {
-            if hit.runtimes.count > 1 {
-                Picker("Found", selection: Binding(
-                    get: { model.settings.runtimes[hit.key] },
-                    set: { model.choose(hit, $0) })) {
-                    Text("Not chosen").tag(GameRuntime?.none)
-                    ForEach(hit.runtimes, id: \.self) { r in Text(r.summary).tag(Optional(r)) }
-                }
-            }
-            Picker("CrossOver", selection: Binding(
-                get: { base.build ?? "" },
-                set: { var r = base; r.source = "your choice"; r.build = $0.isEmpty ? nil : $0; model.choose(hit, r) })) {
-                Text("Unknown").tag("")
-                ForEach(model.choices.builds, id: \.self) { b in
-                    Text(GameRuntime(source: "", build: b).crossover.map { "\($0) (\(b))" } ?? b).tag(b)
-                }
-            }
-            Picker("D3DMetal", selection: Binding(
-                get: { base.noD3DMetal ? "none" : (base.d3dmetal ?? "") },
-                set: { var r = base; r.source = "your choice"
-                       r.noD3DMetal = $0 == "none"; r.d3dmetal = ($0.isEmpty || $0 == "none") ? nil : $0
-                       model.choose(hit, r) })) {
-                Text("Unknown").tag("")
-                Text("None (FEX)").tag("none")
-                ForEach(model.choices.d3dmetal, id: \.self) { v in Text(v).tag(v) }
-            }
-            Picker("Backend", selection: Binding(
-                get: { base.backend ?? "" },
-                set: { var r = base; r.source = "your choice"; r.backend = $0.isEmpty ? nil : $0; model.choose(hit, r) })) {
-                Text("Automatic (D3DMetal)").tag("")
-                Text("D3DMetal").tag("d3dmetal")
-                Text("DXMT").tag("dxmt")
-                Text("DXVK").tag("dxvk")
-                Text("WineD3D").tag("wined3d")
-            }
-            if model.chosen(hit) {
-                Button("Use what MacGameFix found") { model.choose(hit, nil) }.font(.caption)
-            }
-        }
-        .font(.caption)
-        .frame(maxWidth: 460)
-        .disabled(model.busy)
-    }
-}
-
 /// The window's process ends with its window: the agent, when it is on, is a
 /// process of its own in the menu bar, and a window process left without a
 /// window only sat in the Dock. One that is installing or removing a fix
@@ -907,7 +826,7 @@ struct MacGameFixApp: App {
 
 /// One binary, several ways to run: the window; --agent, which the LaunchAgent
 /// starts and which lives in the menu bar; and, for the tests and the release,
-/// --agent-once, --menu-report, --runtime-report, --engine-report,
+/// --agent-once, --menu-report, --games-report, --engine-report,
 /// --engine-install, --engine-remove, --update-from, --make-catalog and
 /// --new-signing-key, which do one thing and exit.
 @main
@@ -946,19 +865,17 @@ enum Entry {
                 return 0
             }
         }
-        if args.contains("--runtime-report") {
-            // Every supported game found, what it runs on, and whether its fix fits.
-            let settings = AutoSettings.load()
+        if args.contains("--games-report") {
+            // Every supported game found, what its fix requires, and for a fix
+            // that writes registry keys, where they go.
             let (dir, _) = Catalog.active()
             for hit in Libraries.find(Catalog.games(in: dir), extra: []).hits {
-                let runtime = settings.runtime(for: hit.key, detected: hit.runtimes)
-                print("\(hit.game.name) | \(runtime?.summary ?? "unknown (\(hit.runtimes.count) found)") | "
-                      + settings.fit(hit.game, key: hit.key, detected: hit.runtimes).label)
-                if args.contains("--verbose") {
-                    for r in hit.runtimes {
-                        print("    found: \(r.summary)\(r.setUpHere ? " (set for this game in Steam, and run)" : "")")
-                    }
+                var parts = [hit.game.name, hit.game.requirementNote ?? "no special requirement"]
+                if hit.game.needsPrefix {
+                    parts.append(hit.chosen.isEmpty ? "no prefix"
+                                 : "keys into the " + hit.chosen.map(\.label).joined(separator: " and the "))
                 }
+                print(parts.joined(separator: " | "))
             }
             exit(0)
         }

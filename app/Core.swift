@@ -169,7 +169,7 @@ struct Game: Decodable, Identifiable, Hashable {
             parts.append("its videos need \(codecShippedBy), which ships their codec")
         }
         if !notNeededFrom.isEmpty {
-            parts.append("not needed with Game Porting Toolkit \(notNeededFrom) or later; kept for earlier toolkits")
+            parts.append("not needed on D3DMetal \(notNeededFrom) or later; kept for earlier ones")
         }
         if !engineFreeOn.isEmpty {
             parts.append("needs \(engineFreeOn); stable CrossOver 26.3 needed MacGameVideoFix's engine, now archived")
@@ -225,13 +225,13 @@ struct Hit: Identifiable {
     let game: Game
     let folder: URL
     var prefixes: [Prefix] = []
-    var prefix: Prefix?
+    /// Where a fix that writes registry keys puts them: one or more of
+    /// `prefixes`, each a run of its installer.
+    var chosen: [Prefix] = []
     var state: FixState = .unknown
     var selected = false
     /// What went wrong the last time this game's fix was installed or removed.
     var outcome: String?
-    /// What the game was found to run on: usually one, none when nothing tells.
-    var runtimes: [GameRuntime] = []
     var key: String { gameKey(folder, game.name) }
 
     var id: String { folder.path + "|" + game.name }
@@ -241,8 +241,11 @@ struct Hit: Identifiable {
         if state == .noCarrier {
             return "The installer found nothing in this folder for the fix to ride on."
         }
-        if game.needsPrefix && prefix == nil {
+        if game.needsPrefix && prefixes.isEmpty {
             return "No prefix for this game was found. Run it once with NotProton or CrossOver, then Scan again."
+        }
+        if game.needsPrefix && chosen.isEmpty {
+            return "Choose at least one place for its registry keys."
         }
         return nil
     }
@@ -414,9 +417,8 @@ extension Libraries {
                     var h = Hit(game: g, folder: folder)
                     if g.needsPrefix {
                         h.prefixes = prefixes(for: folder)
-                        h.prefix = h.prefixes.first
+                        h.chosen = Array(h.prefixes.prefix(1))
                     }
-                    h.runtimes = Runtimes.detect(folder: folder)
                     hits.append(h)
                 }
             }
@@ -504,6 +506,27 @@ enum Fixer {
     /// The installer's word for a folder: installed, outdated (an older build of
     /// the fix, which installing again replaces), absent, half, broken;
     /// noCarrier when it found nothing there for the fix to ride on.
+    static func status(_ game: Game, folder: URL, prefixes: [String], catalog: URL) async -> FixState {
+        guard game.needsPrefix, !prefixes.isEmpty else {
+            return await status(game, folder: folder, prefix: nil, catalog: catalog)
+        }
+        var states: [FixState] = []
+        for p in prefixes { states.append(await status(game, folder: folder, prefix: p, catalog: catalog)) }
+        return combined(states)
+    }
+
+    /// One word for several prefixes: theirs when they agree; else a fix the
+    /// installer could not place, a broken one, an older build, or a fix in
+    /// some of them only.
+    static func combined(_ states: [FixState]) -> FixState {
+        guard let first = states.first else { return .unknown }
+        if states.allSatisfy({ $0 == first }) { return first }
+        if states.contains(.noCarrier) { return .noCarrier }
+        if states.contains(.broken) { return .broken }
+        if states.allSatisfy({ $0 == .installed || $0 == .outdated }) { return .outdated }
+        return .half
+    }
+
     static func status(_ game: Game, folder: URL, prefix: String?, catalog: URL) async -> FixState {
         let out = Collected()
         let code = await run(game, folder: folder, prefix: prefix, catalog: catalog, ["--status"]) { out.add($0) }
@@ -521,6 +544,20 @@ enum Fixer {
 
     /// Runs the game's installer on its folder, holding the lock the app and the
     /// agent share, so the two never run an installer at once.
+    /// The installer once for each prefix a fix that writes registry keys was
+    /// given, stopping at the first that fails; once, for any other fix.
+    static func run(_ game: Game, folder: URL, prefixes: [String], catalog: URL, _ extra: [String],
+                    onLine: @escaping @Sendable (String) -> Void) async -> Int32 {
+        guard game.needsPrefix, !prefixes.isEmpty else {
+            return await run(game, folder: folder, prefix: nil, catalog: catalog, extra, onLine: onLine)
+        }
+        for p in prefixes {
+            let code = await run(game, folder: folder, prefix: p, catalog: catalog, extra, onLine: onLine)
+            if code != 0 { return code }
+        }
+        return 0
+    }
+
     static func run(_ game: Game, folder: URL, prefix: String?, catalog: URL, _ extra: [String],
                     onLine: @escaping @Sendable (String) -> Void) async -> Int32 {
         let lock = InstallLock()

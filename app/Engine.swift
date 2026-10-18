@@ -69,6 +69,19 @@ enum Engine {
     static let script = "engine-modules.sh"
     /// CrossOver's own files, kept while the modules are in.
     static var backups: URL { Paths.support.appendingPathComponent("engine-backup") }
+    /// NotProton's folder, which holds its runners.
+    static var notproton: URL { Paths.home.appendingPathComponent("Library/Application Support/notproton") }
+
+    /// A value of a CrossOver .conf file, written as "Key" = "value".
+    static func confValue(_ key: String, in conf: String) -> String? {
+        for line in conf.split(separator: "\n") {
+            let t = line.trimmingCharacters(in: .whitespaces)
+            guard t.hasPrefix("\"\(key)\"") else { continue }
+            let parts = t.split(separator: "\"", omittingEmptySubsequences: false)
+            if parts.count >= 4 { return String(parts[3]) }
+        }
+        return nil
+    }
 
     static func builds(in catalog: URL) -> [EngineBuild] {
         struct Table: Decodable { let builds: [EngineBuild] }
@@ -82,7 +95,7 @@ enum Engine {
     /// etc/CrossOver.conf ("cxpreview-20261006-rc2"); a stable one by its version.
     static func release(of root: URL, build: String) -> String {
         let conf = (try? String(contentsOf: root.appendingPathComponent("etc/CrossOver.conf"), encoding: .utf8)) ?? ""
-        if let tag = Runtimes.confValue("BuildTag", in: conf), tag.hasPrefix("cxpreview-") {
+        if let tag = confValue("BuildTag", in: conf), tag.hasPrefix("cxpreview-") {
             return "Preview " + tag.dropFirst("cxpreview-".count).prefix(8)
         }
         let parts = build.split(separator: ".")
@@ -110,7 +123,7 @@ enum Engine {
                                           fex: fex(root), release: release))
             }
         }
-        let runners = Runtimes.notproton.appendingPathComponent("runners")
+        let runners = notproton.appendingPathComponent("runners")
         for runner in ((try? fm.contentsOfDirectory(at: runners, includingPropertiesForKeys: nil)) ?? [])
             .sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
         where runner.lastPathComponent.hasPrefix("crossover-") {

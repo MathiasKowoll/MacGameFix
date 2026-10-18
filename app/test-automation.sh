@@ -87,20 +87,36 @@ echo "installing into $dir"
 if [ -f "$dir/FAIL" ]; then echo "cannot write $dir/fake.dll"; exit 1; fi
 echo 2 > "$dir/fixed.marker"
 SH
+# A fix that also writes a key into the prefix it is given, as the Kingdom
+# Hearts and NieR installers do.
+cat > "$RES/install-fakekeys.sh" <<'SH'
+#!/bin/bash
+dir="$1"; pfx="${MGVF_BOTTLE:?no prefix given}"
+case "${2:-}" in
+  --status)
+    if [ -f "$dir/keys.marker" ] && [ -f "$pfx/fake.key" ]; then echo installed
+    elif [ -f "$dir/keys.marker" ] || [ -f "$pfx/fake.key" ]; then echo half
+    else echo absent; fi
+    exit 0 ;;
+  --restore) rm -f "$dir/keys.marker" "$pfx/fake.key"; exit 0 ;;
+esac
+echo "installing into $dir and $pfx"
+echo 1 > "$dir/keys.marker"; touch "$pfx/fake.key"
+SH
 # Made for DXMT, with a codec only CrossOver Preview 27 ships; and a second
-# game made for D3DMetal whose fix D3DMetal 4.0b3 makes unnecessary.
+# game whose fix writes registry keys.
 cat > "$RES/games.json" <<'JSON'
 {"games": [{"name": "Fake Game", "exe": "FakeGame.exe", "carrierDir": "", "script": "install-fake.sh",
   "needsPrefix": false, "symptom": "test", "backend": "dxmt", "gptk": "", "gptkAlso": "",
   "codecShippedBy": "CrossOver Preview 27", "engineFreeOn": "", "notNeededFrom": "", "why": ""},
- {"name": "Fake Two", "exe": "FakeTwo.exe", "carrierDir": "", "script": "install-fake.sh",
-  "needsPrefix": false, "symptom": "test", "backend": "d3dmetal", "gptk": "", "gptkAlso": "",
-  "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "4.0b3", "why": ""}]}
+ {"name": "Fake Keys", "exe": "FakeKeys.exe", "carrierDir": "", "script": "install-fakekeys.sh",
+  "needsPrefix": true, "symptom": "test", "backend": "d3dmetal", "gptk": "", "gptkAlso": "",
+  "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "", "why": ""}]}
 JSON
 /usr/bin/python3 - "$RES" <<'PY'
 import hashlib, json, pathlib, sys
 res = pathlib.Path(sys.argv[1])
-files = {n: hashlib.sha256((res / n).read_bytes()).hexdigest() for n in ("install-fake.sh", "games.json")}
+files = {n: hashlib.sha256((res / n).read_bytes()).hexdigest() for n in ("install-fake.sh", "install-fakekeys.sh", "games.json")}
 json.dump({"version": 4000000000, "minimumApp": "1.4.0", "files": files}, open(res / "catalog.json", "w"))
 PY
 PUB="$("$BIN" --new-signing-key "$T/test.key")"
@@ -117,48 +133,10 @@ check 'has "$(update "$T/release" --pubkey "$PUB")" "catalog 4000000000"' "a sig
 check '[ "$(readlink "$SUPPORT/MacGameFix/catalog/current")" = 4000000000 ] && [ -x "$SUPPORT/MacGameFix/catalog/current/install-fake.sh" ]' "and switched to, its installer executable"
 check 'has "$(update "$T/release" --pubkey "$PUB")" "up to date"' "the same catalog again is up to date"
 
-# What the game runs on, as Steam and NotProton would leave it: Steam maps the
-# game to a NotProton tool, the tool names its CrossOver build, the runner
-# carries D3DMetal, NotProton has run the game, and its launch options pick
-# the backend.
-STEAM="$SUPPORT/Steam"
-mkdir -p "$STEAM/config" "$STEAM/compatibilitytools.d/notproton-test" "$STEAM/steamapps/compatdata/4242" \
-  "$STEAM/userdata/1/config"
-printf '"InstallConfigStore"\n{\n "Software"\n {\n  "Valve"\n  {\n   "Steam"\n   {\n    "CompatToolMapping"\n    {\n     "4242"\n     {\n      "name" "notproton-test"\n     }\n     "4343"\n     {\n      "name" "notproton-test"\n     }\n    }\n   }\n  }\n }\n}\n' > "$STEAM/config/config.vdf"
-mkdir -p "$STEAM/steamapps/common/Fake Two" "$STEAM/steamapps/compatdata/4343"
-touch "$STEAM/steamapps/common/Fake Two/FakeTwo.exe" "$STEAM/steamapps/compatdata/4343/notproton-run.log"
-printf '"AppState"\n{\n\t"appid"\t\t"4343"\n\t"StateFlags"\t\t"4"\n\t"installdir"\t\t"Fake Two"\n\t"buildid"\t\t"1"\n}\n' > "$STEAM/steamapps/appmanifest_4343.acf"
-echo 27.0.0.41069-fex > "$STEAM/compatibilitytools.d/notproton-test/build"
-echo rosetta > "$STEAM/compatibilitytools.d/notproton-test/flavor"
-touch "$STEAM/steamapps/compatdata/4242/notproton-run.log"
-GPTK="$SUPPORT/notproton/runners/crossover-27.0.0.41069-fex/CrossOver/lib/apple_gptk/external/D3DMetal.framework/Versions/A/Resources"
-mkdir -p "$GPTK"
-/usr/libexec/PlistBuddy -c 'Add :CFBundleShortVersionString string 4.0b3' "$GPTK/Info.plist" >/dev/null
-options() { # launch options for the game
-  printf '"UserLocalConfigStore"\n{\n "Software"\n {\n  "Valve"\n  {\n   "Steam"\n   {\n    "Apps"\n    {\n    }\n    "apps"\n    {\n     "4242"\n     {\n      "LaunchOptions" "%s"\n     }\n    }\n   }\n  }\n }\n}\n' "$1" > "$STEAM/userdata/1/config/localconfig.vdf"
-}
-report() { "$BIN" --runtime-report 2>&1; }
-line() { report | /usr/bin/grep "^$1 |" || true; }
-
-echo "== what the game runs on"
-options 'CX_GRAPHICS_BACKEND=dxmt %command%'
+echo "== what each fix requires"
 steam 1 4
-R="$(report)"
-check 'has "$R" "Fake Game | CrossOver Preview 27, D3DMetal 4.0b3, DXMT — NotProton, notproton-test" && has "$R" "| Fits what this game runs on"' "a NotProton game: its build, D3DMetal and backend, and the fix fits"
-options 'CX_GRAPHICS_BACKEND=d3dmetal %command%'
-check 'has "$(report)" "Does not fit: made for DXMT, and this game runs on D3DMetal"' "the wrong backend does not fit"
-options '%command%'
-check 'has "$(report)" "Does not fit: made for DXMT, and this game runs on D3DMetal, the automatic backend"' "an automatic backend is D3DMetal"
-echo 26.3.0.39832 > "$STEAM/compatibilitytools.d/notproton-test/build"
-options 'CX_GRAPHICS_BACKEND=dxmt %command%'
-check 'has "$(report)" "Does not fit: needs CrossOver Preview 27; this is CrossOver 26.3"' "an older CrossOver does not fit a codec it lacks"
-echo 27.0.0.41069-fex > "$STEAM/compatibilitytools.d/notproton-test/build"
-check 'has "$(line "Fake Two")" "Not needed: the game plays without it on D3DMetal 4.0b3 and later"' "a fix this D3DMetal makes unnecessary says so"
-/usr/libexec/PlistBuddy -c 'Set :CFBundleShortVersionString 4.0b2' "$GPTK/Info.plist"
-check 'has "$(line "Fake Two")" "Fits what this game runs on"' "and on an older D3DMetal it fits"
-mv "$GPTK/Info.plist" "$GPTK/Info.plist.away"
-check 'has "$(line "Fake Two")" "Cannot tell: not needed from D3DMetal 4.0b3 on, and which D3DMetal this is is not known"' "when the D3DMetal version cannot be read, the user is asked"
-mv "$GPTK/Info.plist.away" "$GPTK/Info.plist"; /usr/libexec/PlistBuddy -c 'Set :CFBundleShortVersionString 4.0b3' "$GPTK/Info.plist"
+games() { "$BIN" --games-report 2>&1; }
+check 'has "$(games)" "Fake Game | runs on DXMT, its videos need CrossOver Preview 27, which ships their codec"' "a fix's requirements are said beside the game, and nothing is asked"
 
 echo "== the agent"
 printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false}' "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
@@ -192,24 +170,35 @@ printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false,"seen":9999
 check 'has "$(menu)" "news | no"' "until the window has been opened"
 printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false}' "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
 
-echo "== the agent and what the game runs on"
-rm -f "$GAME/FAIL" "$GAME/fixed.marker"; options 'CX_GRAPHICS_BACKEND=d3dmetal %command%'; steam 6 4
-OUT="$(agent)"
-check 'has "$OUT" "ok Fake Game: Not applied. Does not fit" && [ ! -f "$GAME/fixed.marker" ]' "a fix that does not fit is not applied, and it is said"
-check '[ -z "$(agent)" ]' "and said once"
-check 'has "$(menu)" "summary | 1 left alone: the fix does not fit"' "the menu bar counts it as left alone"
-printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false,"runtimes":{"%s|Fake Game":{"source":"your choice","build":"27.0.0.41069","backend":"dxmt","noD3DMetal":false,"setUpHere":false}}}' "$GAME" "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
-check 'has "$(report)" "You said" || has "$(report)" "your choice"' "the user's word on what the game runs on wins over detection"
-check 'has "$(agent)" "back in place" && [ -f "$GAME/fixed.marker" ]' "and once the user says it fits, the agent applies it"
+echo "== the agent, whatever runs the game"
+# A settings file an older version wrote, with what the user said the game runs
+# on: nothing of it is read any more, and the rest of the file still is.
+printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false,"runtimes":{"%s|Fake Game":{"source":"your choice","build":"26.3.0.39832","backend":"d3dmetal","noD3DMetal":false,"setUpHere":false}}}' "$GAME" "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
+rm -f "$GAME/FAIL" "$GAME/fixed.marker"; steam 6 4
+check 'has "$(agent)" "back in place" && [ -f "$GAME/fixed.marker" ]' "the fix goes back into the game folder whatever runs the game"
 check 'has "$(menu)" "summary | 1 in place"' "and the menu bar counts it in place"
 printf '{"kept":[{"name":"Fake Game","folder":"%s"},{"name":"Gone Game","folder":"%s"}],"updates":false}' "$GAME" "$T/gone" > "$SUPPORT/MacGameFix/automatic.json"
 OUT="$(menu)"
 check 'has "$OUT" "summary | 1 to review" && has "$OUT" "Gone Game | Folder not found"' "a marked game whose folder is gone is to review"
 
 echo "== an older build of a fix"
-printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false,"runtimes":{"%s|Fake Game":{"source":"your choice","build":"27.0.0.41069","backend":"dxmt","noD3DMetal":false,"setUpHere":false}}}' "$GAME" "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
+printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false}' "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
 echo 1 > "$GAME/fixed.marker"; steam 7 4
 check 'has "$(agent)" "ok Fake Game: The fix is updated to the newer build." && [ "$(cat "$GAME/fixed.marker")" = 2 ]' "an older build in the game folder is replaced with the catalog's"
+
+echo "== a fix that writes registry keys, into more than one prefix"
+KEYS="$SUPPORT/Steam/steamapps/common/Fake Keys"; KEYS2="$T/elsewhere/Fake Keys"
+PA="$T/prefix-a"; PB="$T/prefix-b"; PC="$T/prefix-c"
+mkdir -p "$KEYS" "$KEYS2" "$PA" "$PB" "$PC"; touch "$KEYS/FakeKeys.exe" "$KEYS2/FakeKeys.exe"
+# As a version before 1.5.1 wrote it: one prefix.
+printf '{"kept":[{"name":"Fake Keys","folder":"%s","prefix":"%s"}],"updates":false}' "$KEYS" "$PA" \
+  > "$SUPPORT/MacGameFix/automatic.json"
+check 'has "$(agent)" "ok Fake Keys: The fix was missing" && [ -f "$PA/fake.key" ] && [ ! -f "$PB/fake.key" ]' "a game kept with the one prefix an older version saved still gets it"
+printf '{"kept":[{"name":"Fake Keys","folder":"%s","prefix":"%s"},{"name":"Fake Keys","folder":"%s","prefixes":["%s","%s"]}],"updates":false}' \
+  "$KEYS" "$PA" "$KEYS2" "$PB" "$PC" > "$SUPPORT/MacGameFix/automatic.json"
+check 'has "$(agent)" "ok Fake Keys: The fix was missing" && [ -f "$KEYS2/keys.marker" ] && [ -f "$PB/fake.key" ] && [ -f "$PC/fake.key" ]' "with two prefixes chosen, the keys go into both"
+check 'has "$(menu)" "summary | 2 in place"' "and the menu bar counts both games in place"
+printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false}' "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
 
 echo "== new fixes, asked first"
 # A newer release of the same fake catalog, and the agent pointed at it.

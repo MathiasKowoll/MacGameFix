@@ -32,7 +32,7 @@ APP="$HERE/MacGameFix.app"
 MACOS="$APP/Contents/MacOS"
 RES="$APP/Contents/Resources"
 CACHE="${TMPDIR:-/tmp}/mgf-swift-cache"
-VERSION="1.5.0"
+VERSION="1.5.1"
 # The oldest app that can use the catalog this build writes: the first with a
 # catalog it can take from a release.
 CATALOG_MIN_APP="1.4.0"
@@ -133,7 +133,7 @@ rm -rf "$APP"
 mkdir -p "$MACOS" "$RES" "$CACHE"
 
 echo "==> compiling"
-swiftc "$HERE/Core.swift" "$HERE/Runtime.swift" "$HERE/Engine.swift" "$HERE/Automation.swift" "$HERE/MenuBar.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
+swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/Automation.swift" "$HERE/MenuBar.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
   -o "$MACOS/MacGameFix" \
   -framework SwiftUI -framework AppKit -framework IOKit -framework UserNotifications \
   -target arm64-apple-macos14.0 \
