@@ -43,8 +43,10 @@ Quit a game before installing or removing its fix.
 
 The window has three tabs: **Games**, the fixes above; **Wine Modules**, the one
 part that changes CrossOver itself (three Wine files for a DualSense's haptics on
-a cable, see [`engine/README.md`](engine/README.md)); and **Settings**, with the
-background agent, new fixes, the folders searched and the log.
+a cable, see [`engine/README.md`](engine/README.md)), with a switch for every
+CrossOver app and NotProton runner and the modules' own updates; and
+**Settings**, with the background agent, the game fixes' updates, the folders
+searched and the log.
 
 ## What each game runs on
 
@@ -98,25 +100,26 @@ until you turn it on, and the fixes stay in the games' own folders as before.
   this repository once a day. A release carries two catalogs, each signed and
   versioned on its own: the game fixes (the installers and every file they use)
   and the Wine modules. New modules for a new CrossOver build come without
-  touching the fixes, and the other way round. Settings has one choice for each,
-  *New game fixes* and *New Wine modules*:
+  touching the fixes, and the other way round. Each has its own choice: *Game
+  fixes* in Settings, *New Wine modules* in Wine Modules:
   - *Install them automatically*: the agent takes the catalog without a new app.
   - *Ask before installing them*: the agent checks the catalog's signature and
     tells you, and installs nothing. *Install New Fixes* or *Install New Wine
     Modules*, in the menu bar or in Settings, takes it.
   - *Do not look for them*: the agent does not ask the releases.
 
-  Under *Wine modules go into*, Settings lists every CrossOver app and NotProton
-  runner with a box, and *All*, *None* and *Install into Ticked Now*. Only a
-  CrossOver of a build and Wine the modules were built for can be ticked; the
-  others say so. With the Wine modules on automatic, the agent keeps them in the
-  ticked ones: it puts them back after a CrossOver or NotProton update put
-  CrossOver's own files back, and updates them when newer ones come. With *New
-  CrossOver builds too*, it also installs them into a runner NotProton adds for
-  a new CrossOver build, once a ticked runner has them. It waits until that
-  CrossOver's games are closed. Unticking stops the updates there and removes
-  nothing. A CrossOver app is only ever reported, since changing one asks for
-  App Management and signs the app again.
+  Wine Modules lists every CrossOver app and NotProton runner, by its release
+  ("CrossOver Preview 20261015"), with a switch, and *All* and *None*. The switch
+  is the action: on installs the modules there, off puts CrossOver's own files
+  back. Only a CrossOver of a build and Wine the modules were built for can be
+  turned on; the others say so. Turning on a CrossOver app asks first. With the
+  Wine modules on automatic, the agent keeps them in the CrossOver installs that
+  are on: it puts them back after a CrossOver or NotProton update put CrossOver's
+  own files back, and updates them when newer ones come. With *New CrossOver
+  builds too*, it also installs them into a runner NotProton adds for a new
+  CrossOver build, once a runner that is on has them. It waits until that
+  CrossOver's games are closed. A CrossOver app is only ever reported, since
+  changing one asks for App Management and signs the app again.
   - The catalog is signed. The app takes it only when the signature matches the
     key built into the app, and every file matches its hash. Anything else is
     refused and the catalog in use stays.

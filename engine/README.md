@@ -46,8 +46,9 @@ with PR #203's wrapper taken out:
 - The game process mapped the patched `mmdevapi.dll` and `winecoreaudio.so`.
 
 That round ran on an earlier build of the same patches: its unix half was built
-with llvm-mingw's clang and macOS 27 as the minimum. The `modules/20261006`
-shipped here comes from `build.sh` as it is now, and still has to be played once.
+with llvm-mingw's clang and macOS 27 as the minimum. The `modules/27.0.0.41069`
+shipped here comes from `build.sh` as it is now: CONTROL Resonant played its
+haptics on a cable with it, on the Intel side, installed by the app.
 
 ## Modules
 
@@ -58,7 +59,7 @@ CrossOver 26.3 has only the Intel side.
 
 | CrossOver | Sources | Wine | Intel (x86_64) | FEX (arm64) |
 |---|---|---|---|---|
-| Preview 27.0.0.41069 (20261006) | `crossover-sources-20261006.tar.gz` | 11.17 | built; see "Measured" | built, not played |
+| Preview 27.0.0.41069 (20261006) | `crossover-sources-20261006.tar.gz` | 11.17 | played; see "Measured" | built, not played |
 | Preview (20261015) | `crossover-sources-20261015.tar.gz` | 11.17 | built, not played | built, not played |
 | 26.3.0.39832 | `crossover-sources-26.3.0.tar.gz` | 11.0 | built, not played: our PE imports differ from CodeWeavers' (toolchain), and our `mmdevapi.dll` also lists `winmm.dll` | no FEX side |
 
@@ -128,15 +129,15 @@ modules:
 ## Installing them
 
 The app's **Wine Modules** tab lists every CrossOver app (in `/Applications`
-and `~/Applications`) and every NotProton runner, says what is in each, and
-installs or removes the modules. It runs `engine-modules.sh`, which the catalog
+and `~/Applications`) and every NotProton runner by its release, says what is in
+each, and installs or removes the modules with a switch. It runs `engine-modules.sh`, which the catalog
 carries with the modules (flat, as `engine-<build>-<dir>-<file>`, with
 `engine-modules.json`). They travel in their own signed catalog (`modules.zip`,
 `modules.json`, `modules.json.sig` in a release), apart from the game fixes', so
 modules for a new CrossOver build come without a new app and without touching
-the fixes. Settings decides, on its own, whether they are installed
+the fixes. The same tab decides, on its own, whether they are installed
 automatically, asked about first, or not looked for; on automatic the agent keeps
-them in the runners they were put into (the top-level README says how).
+them in the CrossOver installs that are on (the top-level README says how).
 
 `engine-modules.sh`:
 

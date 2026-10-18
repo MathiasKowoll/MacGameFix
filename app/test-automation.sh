@@ -44,24 +44,27 @@ for side in x86_64 aarch64; do mkdir -p "$RUNNER/lib/wine/$side-unix" "$RUNNER/l
 mkdir -p "$OTHER/lib/wine/x86_64-unix"
 printf 'x wine-11.17-8909 x' > "$RUNNER/lib/wine/x86_64-unix/ntdll.so"
 printf 'x wine-11.17-8909 x' > "$OTHER/lib/wine/x86_64-unix/ntdll.so"
+mkdir -p "$RUNNER/etc" "$OTHER/etc"
+printf '"BuildTag" = "cxpreview-20261006-rc2"\n' > "$RUNNER/etc/CrossOver.conf"
+printf '"BuildTag" = "cxpreview-20261099-rc1"\n' > "$OTHER/etc/CrossOver.conf"
 ENGINE_FILES="x86_64-windows/winebus.sys x86_64-windows/mmdevapi.dll x86_64-unix/winecoreaudio.so
   aarch64-windows/winebus.sys aarch64-windows/mmdevapi.dll aarch64-unix/winecoreaudio.so"
 for f in $ENGINE_FILES; do echo "CodeWeavers' $f" > "$RUNNER/lib/wine/$f"; done
-engine() { "$BIN" --engine-report 2>&1 | grep -F "runner $1 |" || true; }
-check 'has "$(engine crossover-27.0.0.41069-fex)" "| fex | absent"' "a runner of a carried build, both sides, is absent"
-check 'has "$(engine crossover-27.0.0.1-fex)" "noModules"' "a runner of a build with no modules says so"
+engine() { "$BIN" --engine-report 2>&1 | grep -F "runner · CrossOver Preview $1 |" || true; }
+check 'has "$(engine 20261006)" "| fex | absent"' "a runner of a carried build, both sides, is absent, named by its Preview's date"
+check 'has "$(engine 20261099)" "noModules"' "a runner of a build with no modules says so"
 "$BIN" --engine-install "$RUNNER" >/dev/null 2>&1 || true
 same=1
 for f in $ENGINE_FILES; do
   cmp -s "$RUNNER/lib/wine/$f" "$HERE/MacGameFix.app/Contents/Resources/engine-27.0.0.41069-$(printf '%s' "$f" | tr / -)" || same=0
 done
-check '[ "$same" = 1 ] && has "$(engine crossover-27.0.0.41069-fex)" "installed"' "installing puts both sides' modules in"
+check '[ "$same" = 1 ] && has "$(engine 20261006)" "installed"' "installing puts both sides' modules in"
 check '[ "$(cat "$SUPPORT/MacGameFix/engine-backup/crossover-27.0.0.41069-fex/x86_64-windows/winebus.sys")" = "CodeWeavers'"'"' x86_64-windows/winebus.sys" ]' "and keeps CrossOver's own"
 printf 'x wine-11.0-1 x' > "$RUNNER/lib/wine/x86_64-unix/ntdll.so"
-check 'has "$(engine crossover-27.0.0.41069-fex)" "noModules"' "a runner whose Wine is not the build's is refused"
+check 'has "$(engine 20261006)" "noModules"' "a runner whose Wine is not the build's is refused"
 printf 'x wine-11.17-8909 x' > "$RUNNER/lib/wine/x86_64-unix/ntdll.so"
 "$BIN" --engine-remove "$RUNNER" >/dev/null 2>&1 || true
-check '[ "$(cat "$RUNNER/lib/wine/aarch64-unix/winecoreaudio.so")" = "CodeWeavers'"'"' aarch64-unix/winecoreaudio.so" ] && has "$(engine crossover-27.0.0.41069-fex)" "absent"' "removing puts CrossOver's own back"
+check '[ "$(cat "$RUNNER/lib/wine/aarch64-unix/winecoreaudio.so")" = "CodeWeavers'"'"' aarch64-unix/winecoreaudio.so" ] && has "$(engine 20261006)" "absent"' "removing puts CrossOver's own back"
 rm -rf "$SUPPORT/notproton"
 
 # A catalog with one fake fix: a marker in the game folder, or a failure when
@@ -262,9 +265,10 @@ import json, sys
 d = json.load(open(sys.argv[1])); d["lastModulesCheck"] = -1e9; d["lastUpdateCheck"] = 1e10; json.dump(d, open(sys.argv[1], "w"))
 PY
 }
-runner() { # a fake runner with CodeWeavers' files: <folder name>
+runner() { # a fake runner with CodeWeavers' files: <folder name> <Preview date>
   local r="$SUPPORT/notproton/runners/$1/CrossOver"
-  mkdir -p "$r/lib/wine/x86_64-unix" "$r/lib/wine/x86_64-windows"
+  mkdir -p "$r/lib/wine/x86_64-unix" "$r/lib/wine/x86_64-windows" "$r/etc"
+  printf '"BuildTag" = "cxpreview-%s-rc1"\n' "$2" > "$r/etc/CrossOver.conf"
   printf 'x wine-11.17-8909 x' > "$r/lib/wine/x86_64-unix/ntdll.so"
   for f in $MODS; do echo "CodeWeavers' $f" > "$r/lib/wine/$f"; done
   printf '%s' "$r"
@@ -274,18 +278,18 @@ settings() { # modulesAskFirst, kept list, declined list (JSON)
   printf '{"kept":[],"updates":false,"modulesUpdates":true,"modulesAskFirst":%s,"modulesKept":%s,"modulesDeclined":%s}' "$1" "$2" "$3" \
     > "$SUPPORT/MacGameFix/automatic.json"
 }
-R1="$(runner crossover-27.0.0.41069-fex)"
+R1="$(runner crossover-27.0.0.41069-fex 20261006)"
 settings false "[\"$R1\"]" "[]"; mdue
 OUT="$(modagent)"
-check '[ "$(readlink "$SUPPORT/MacGameFix/modules/current")" = 4000000010 ] && has "$OUT" "Wine modules put back in NotProton runner crossover-27.0.0.41069-fex" && ours "$R1"' "automatic: the modules' own catalog is taken, and the modules go back into a runner they were kept in"
+check '[ "$(readlink "$SUPPORT/MacGameFix/modules/current")" = 4000000010 ] && has "$OUT" "Wine modules put back in NotProton runner · CrossOver Preview 20261006" && ours "$R1"' "automatic: the modules' own catalog is taken, and the modules go back into a runner they were kept in"
 check '[ "$(readlink "$SUPPORT/MacGameFix/catalog/current")" = 4000000005 ]' "without touching the fixes' catalog"
 for f in $MODS; do echo "CodeWeavers' updated $f" > "$R1/lib/wine/$f"; done
 check 'has "$(modagent)" "put back in" && ours "$R1"' "after a CrossOver update they are put back"
-R2="$(runner crossover-27.0.0.41069)"
-check 'has "$(modagent)" "installed in the new NotProton runner crossover-27.0.0.41069" && ours "$R2"' "a runner for a new CrossOver build gets them, since a runner has them"
+R2="$(runner crossover-27.0.0.41069 20261007)"
+check 'has "$(modagent)" "installed in the new NotProton runner · CrossOver Preview 20261007" && ours "$R2"' "a runner for a new CrossOver build gets them, since a runner has them"
 printf '{"kept":[],"updates":false,"modulesUpdates":true,"modulesAskFirst":false,"modulesKept":["%s"],"modulesDeclined":[],"modulesNewBuilds":false}' "$R1" \
   > "$SUPPORT/MacGameFix/automatic.json"
-R3="$(runner crossover-27.0.0.41069-other)"
+R3="$(runner crossover-27.0.0.41069-other 20261008)"
 modagent >/dev/null
 check '! ours "$R3"' "unless new CrossOver builds are turned off"
 rm -rf "$SUPPORT/notproton/runners/crossover-27.0.0.41069-other"

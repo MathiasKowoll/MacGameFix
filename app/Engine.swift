@@ -24,6 +24,8 @@ struct EngineTarget: Identifiable, Hashable {
     let app: URL?
     /// Whether it has the FEX (arm64) side as well as the Intel one.
     let fex: Bool
+    /// How people tell the release apart: "Preview 20261006", or "26.3" for a stable one.
+    var release: String = ""
 
     var id: String { root.path }
     /// The folder with symlinks resolved, as the settings keep it: /var and
@@ -76,6 +78,17 @@ enum Engine {
 
     /// Every CrossOver app in /Applications and ~/Applications, and every
     /// NotProton runner.
+    /// The release, from the BuildTag CodeWeavers writes into every CrossOver's
+    /// etc/CrossOver.conf ("cxpreview-20261006-rc2"); a stable one by its version.
+    static func release(of root: URL, build: String) -> String {
+        let conf = (try? String(contentsOf: root.appendingPathComponent("etc/CrossOver.conf"), encoding: .utf8)) ?? ""
+        if let tag = Runtimes.confValue("BuildTag", in: conf), tag.hasPrefix("cxpreview-") {
+            return "Preview " + tag.dropFirst("cxpreview-".count).prefix(8)
+        }
+        let parts = build.split(separator: ".")
+        return parts.count >= 2 ? "\(parts[0]).\(parts[1])" : build
+    }
+
     static func targets() -> [EngineTarget] {
         let fm = FileManager.default
         var found: [EngineTarget] = []
@@ -92,9 +105,9 @@ enum Engine {
                 let root = app.appendingPathComponent("Contents/SharedSupport/CrossOver")
                 let info = NSDictionary(contentsOf: app.appendingPathComponent("Contents/Info.plist"))
                 guard wine(root), let build = info?["CFBundleVersion"] as? String else { continue }
-                let short = info?["CFBundleShortVersionString"] as? String ?? build
-                let name = (info?["CFBundleName"] as? String ?? app.deletingPathExtension().lastPathComponent) + " " + short
-                found.append(EngineTarget(root: root, build: build, name: name, app: app, fex: fex(root)))
+                let release = release(of: root, build: build)
+                found.append(EngineTarget(root: root, build: build, name: "CrossOver \(release)", app: app,
+                                          fex: fex(root), release: release))
             }
         }
         let runners = Runtimes.notproton.appendingPathComponent("runners")
@@ -104,8 +117,17 @@ enum Engine {
             let root = runner.appendingPathComponent("CrossOver")
             guard wine(root) else { continue }
             let build = String(runner.lastPathComponent.dropFirst("crossover-".count).split(separator: "-").first ?? "")
-            found.append(EngineTarget(root: root, build: build, name: "NotProton runner \(runner.lastPathComponent)",
-                                      app: nil, fex: fex(root)))
+            let release = release(of: root, build: build)
+            found.append(EngineTarget(root: root, build: build, name: "NotProton runner · CrossOver \(release)",
+                                      app: nil, fex: fex(root), release: release))
+        }
+        // Several copies of one CrossOver (CrossOver.app and a patched copy, or two runners of one
+        // release) are told apart by their app or runner folder.
+        let names = found.map(\.name)
+        for i in found.indices where names.filter({ $0 == names[i] }).count > 1 {
+            let file = found[i].app?.lastPathComponent ?? found[i].root.deletingLastPathComponent().lastPathComponent
+            found[i] = EngineTarget(root: found[i].root, build: found[i].build, name: "\(found[i].name) (\(file))",
+                                    app: found[i].app, fex: found[i].fex, release: found[i].release)
         }
         return found
     }
