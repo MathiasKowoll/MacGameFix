@@ -47,6 +47,8 @@ struct AutoSettings: Codable {
     /// keeps them in, and those the user took them out of, which it leaves alone.
     var modulesKept: [String] = []
     var modulesDeclined: [String] = []
+    /// On automatic, also put them into a runner NotProton adds for a new CrossOver build.
+    var modulesNewBuilds = true
     /// What the user said a game runs on, by KeptGame.key; it wins over detection.
     var runtimes: [String: GameRuntime] = [:]
     /// When the user last opened the window: what the agent did before it has been seen.
@@ -64,6 +66,7 @@ struct AutoSettings: Codable {
         modulesAskFirst = try c.decodeIfPresent(Bool.self, forKey: .modulesAskFirst) ?? false
         modulesKept = try c.decodeIfPresent([String].self, forKey: .modulesKept) ?? []
         modulesDeclined = try c.decodeIfPresent([String].self, forKey: .modulesDeclined) ?? []
+        modulesNewBuilds = try c.decodeIfPresent(Bool.self, forKey: .modulesNewBuilds) ?? true
         runtimes = try c.decodeIfPresent([String: GameRuntime].self, forKey: .runtimes) ?? [:]
         seen = try c.decodeIfPresent(Date.self, forKey: .seen) ?? .distantPast
     }

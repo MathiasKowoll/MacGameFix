@@ -106,13 +106,17 @@ until you turn it on, and the fixes stay in the games' own folders as before.
     Modules*, in the menu bar or in Settings, takes it.
   - *Do not look for them*: the agent does not ask the releases.
 
-  With the Wine modules on automatic, the agent also keeps them where you put
-  them: it puts them back into a NotProton runner after a CrossOver or NotProton
-  update put CrossOver's own files back, updates them when newer ones come, and
-  installs them into a runner that appears for a new CrossOver build once they
-  are in a runner already. It waits until that CrossOver's games are closed, and
-  leaves alone a runner you took them out of. A CrossOver app is only ever
-  reported, since changing one asks for App Management and signs the app again.
+  Under *Wine modules go into*, Settings lists every CrossOver app and NotProton
+  runner with a box, and *All*, *None* and *Install into Ticked Now*. Only a
+  CrossOver of a build and Wine the modules were built for can be ticked; the
+  others say so. With the Wine modules on automatic, the agent keeps them in the
+  ticked ones: it puts them back after a CrossOver or NotProton update put
+  CrossOver's own files back, and updates them when newer ones come. With *New
+  CrossOver builds too*, it also installs them into a runner NotProton adds for
+  a new CrossOver build, once a ticked runner has them. It waits until that
+  CrossOver's games are closed. Unticking stops the updates there and removes
+  nothing. A CrossOver app is only ever reported, since changing one asks for
+  App Management and signs the app again.
   - The catalog is signed. The app takes it only when the signature matches the
     key built into the app, and every file matches its hash. Anything else is
     refused and the catalog in use stays.

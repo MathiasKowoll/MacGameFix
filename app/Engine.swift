@@ -155,7 +155,8 @@ enum Engine {
     /// NotProton runners the user put them into -- after a CrossOver or NotProton
     /// update put CrossOver's own files back, or when newer modules came -- and
     /// puts them into a runner that appears for a new CrossOver build, once they
-    /// are in a runner already; always after that CrossOver's games close. Asked
+    /// are in a runner already and the user left "new CrossOver builds" on;
+    /// always after that CrossOver's games close. Asked
     /// first, it says so instead, once. A CrossOver app is only ever reported:
     /// changing one needs App Management and signs the app again, which is the
     /// user's to do. Off, it does nothing.
@@ -179,7 +180,7 @@ enum Engine {
             let path = target.key
             guard !declined.contains(path) else { continue }
             let kept = keptPaths.contains(path)
-            let fresh = !firstLook && !seen.contains(path) && target.app == nil && runnerKept
+            let fresh = !firstLook && !seen.contains(path) && target.app == nil && runnerKept && settings.modulesNewBuilds
             guard kept || fresh else { continue }
             let before = await status(target, catalog: catalog)
             let needs: String
