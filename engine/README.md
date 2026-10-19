@@ -1,10 +1,11 @@
 # Engine modules: the DualSense on a cable and over Bluetooth
 
-Unlike the game fixes, these files go into CrossOver itself: four patched Wine
+Unlike the game fixes, these files go into CrossOver itself: patched Wine
 modules that replace CrossOver's own in `lib/wine`, in a CrossOver app or a
 NotProton runner. They give a DualSense or DualSense Edge its haptics on a
-cable, the same pad on Bluetooth as if it were on a cable, and options per game
-that the app's **Game Feel** tab sets.
+cable, the same pad on Bluetooth as if it were on a cable, XInput (its vibration
+on the motors, or the pad as an XInput controller), trigger effects for a game
+that sets none, and options per game that the app's **Game Feel** tab sets.
 
 ## What they fix
 
@@ -42,8 +43,52 @@ show the Bluetooth pad as the same pad on a cable:
 | `0004-winebus-bluetooth.patch` | `winebus.so` | A DualSense or Edge on Bluetooth gets the wired pad's bus type and report descriptor and keeps its location ID, so `0001` gives it the wired container. Input `0x31` becomes USB `0x01`; the game's USB `0x02` becomes Bluetooth `0x31` with its sequence and CRC. One thread per pad is the only writer to it: the game's output merged, at most every 16 ms, and the haptics, which arrive on a socket from `winecoreaudio.so` and go out 64 frames at a time in reports `0x32` (`0x33` first) every 21.3 ms. A Bluetooth link drains about 65 reports a second. |
 | `0005-winecoreaudio-bluetooth.patch` | `winecoreaudio.so` | `dualsense_bt.h`, a CoreAudio facade `coreaudio.c` calls through: for each Bluetooth pad `winebus.so` serves, an output with the UID the wired pad's would have (`0002` gives it the pad's container). A thread pulls Wine's render callback at the device period, filters channels 3 and 4 to the pad's 3 kHz and sends them to the writer. The same file amplifies a wired pad's haptics in its real output's render callback when a gain is set. |
 
-Neither touches a device that is not a DualSense. Without the Game Feel
-options they behave as `0001`-`0003` alone.
+### XInput, and the triggers
+
+A game that reads the pad itself but rumbles through XInput, such as Beast of
+Reincarnation, gets no vibration: Wine's `xinput` drives a pad's motors through a
+HID haptics collection, and no descriptor Sony ships has one. Replacing the
+descriptor, as Wine's SDL bus does, costs the triggers, the haptics and Sony's
+library. Three more patches, from MacGameVideoFix's `mgvf-0010`, `0011`, `0012`,
+`0027`, `0028` and `0030`, add one instead:
+
+| Patch | Module | Change |
+|---|---|---|
+| `0006-winebus-xinput-and-triggers.patch` | `winebus.so` | With `xinput=rumble`, the pad's descriptor is left as it is and one more top-level collection follows it: a multi-axis controller with no axis and no button, and two haptics collections, rumble and buzz (winebus's own template), on report ids the DualSense and the Edge do not use (output `0x03`, feature `0x04`, input `0x06`). What `xinput` writes there becomes the pad's `0x02` with the motors (flag0 `0x01`\|`0x02`), handled as the game's own output: the Edge's length, the motor power, the Bluetooth writer. With `trigger_r2=` or `trigger_l2=`, an effect on that trigger, written when the pad starts and kept when a game writes the trigger off; a game that writes an effect of its own owns that trigger from then on. Stopping releases them, and a marker in `/tmp/macgamefix-<uid>` lets the next start release what a torn-down Wine left set. It also changes `0004`'s Bluetooth writer: the haptics stream stays open through silences while the game sends and has no motor values, the queue is held near 32 ms, and with `rumble=haptics` the motor values play on the actuators. |
+| `0008-xinput-sony-order.patch` | `xinput1_1` to `xinput1_4`, `xinput9_1_0`, `xinputuap` (one source) | A pad with Sony's vendor id and its own descriptor (an unsigned X axis; Wine's SDL descriptor has a signed one) is read in Sony's order: the right stick on Z and Rz, the triggers on Rx and Ry, the buttons as they sit on the face (Square, Cross, Circle, Triangle, ... PS as Guide), the hat counted from its own minimum (0..7, 8 centred), and Y turned over for both sticks, as winexinput turns it over for its own report. |
+| `0007-hidclass-xinput.patch` | `hidclass.sys` | A gamepad, joystick or multi-axis collection with a haptics collection is also offered under the interface `xinput` enumerates. One that carries motors and nothing else is offered to `xinput` only, and to no raw input: it has the pad's vendor and product ids, and Sony's library, which finds its pad by walking the HID interface, would see two. |
+
+The trigger effects are the layouts NotProton's controller bridge wrote: resist
+from zone 3 (strength 4 unless given), weapon from zone 3 giving way at zone 6
+(7), slope from zone 2 rising to the strength (8), vibrate at 25 Hz from zone 2
+(3), and rumble at 40 Hz with the game's motor, R2 with the light one and L2 with
+the heavy one, in eight steps and at most one change every 60 ms. A host test
+compared all 2340 cases with the bridge's `Controls.h`: the same bytes. `recoil`
+follows the motor the same way, the stronger of the two, with a resistance from
+zone 2 instead.
+
+With `xinput=pad`, `0006` puts the two haptics collections inside the pad's own
+top-level collection instead, so `0007` offers the pad itself to `xinput`, which
+reads it with `0008` and drives its motors through the same reports. The pad
+keeps Sony's vendor and product ids, which `XInputGetCapabilitiesEx` hands a game,
+so a game that chooses its button prompts from them can show PlayStation's. Its
+own report lengths do not move: the feature report added is 17 bytes and the
+output 5. A game that also reads the pad itself would get its input twice; that
+is what `xinput=rumble` is for.
+
+With `xinput=rumble` the pad is two HID devices to Wine, so its own gets an
+`&Col01` in its device id; both keep its container.
+
+By default the app chooses for each Steam game from its store page: a game listed
+as supporting the DualSense (category 57) gets `xinput=rumble`, which every game
+gets, and one that is not gets `xinput=pad`. An exception gets a preset once it is
+measured: God of War Ragnarök, for one, lists the DualSense, but under Wine it does
+not load Sony's library and reads XInput. For `xinput=pad` Steam Input must be off for the game,
+or it sees Steam's controller beside the pad; Steam's own default turns Steam
+Input on for a PlayStation pad in exactly the games the store does not list.
+
+None of these patches touch a device that is not a DualSense. Without the Game
+Feel options they behave as `0001`-`0003` alone.
 
 ### The options
 
@@ -62,6 +107,10 @@ only `pad.conf` applies.
 | `edge=dualsense` | An Edge shown to the game as a standard DualSense, on a cable or over Bluetooth: for titles whose Sony library does not know the Edge. |
 | `haptics_gain_cable=<1-4>`, `edge_haptics_gain_cable=<1-4>` | The haptics multiplied on a cable, a DualSense's and an Edge's, with a soft limit: linear to 0.8, then a curve that never passes 1.0. |
 | `haptics_gain_bluetooth=<1-4>`, `edge_haptics_gain_bluetooth=<1-4>` | The same over Bluetooth. A pad does not feel every game alike on both: a standard DualSense felt the same at 1 in Spider-Man 2, and F1 23's light haptics needed 2 over Bluetooth to feel as steady as on a cable. An older file's `haptics_gain` or `edge_haptics_gain` counts for both connections. |
+| `xinput=off\|rumble\|pad` | What XInput gets of the pad (`0006`-`0008`): nothing; its vibration on the motors (every game's default); the pad itself as an XInput controller (the default for a game the store does not list for the DualSense). |
+| `trigger_r2=<effect>[@1-8]`, `trigger_l2=<effect>[@1-8]` | A trigger effect for a game that sets none: `off` (the default), `resist`, `weapon`, `slope`, `vibrate`, `rumble` or `recoil`, with an optional strength. `rumble` vibrates and `recoil` resists with the game's own motor values. |
+| `rumble=haptics` | Over Bluetooth, the game's motor values played on the actuators while it plays no haptics of its own: the heavy motor a 65 Hz tone on the left, the light one 160 Hz on the right, ramped per 64-frame block; NotProton's bridge synthesizer, sample for sample in a host test. On a cable the pad's own rumble plays. Off (`motors`) by default. |
+| `trigger_r2_with_l2=<effect>[@1-8]`, `trigger_l2_with_r2=<effect>[@1-8]` | A second effect for a trigger while the other is pressed (from 40 of 255, released under 20, read from the pad's input): a weapon on R2 while L2 aims. `off`, the default, keeps the first. |
 | `diagnostics=on` | What a game writes to the pad and reads from it, and a level meter of its haptics, in the log. |
 
 The modules log to `/tmp/macgamefix-<uid>/pad.log`, each line naming its game;
@@ -127,7 +176,27 @@ the Intel side, Steam Input off for the game unless said:
 - A pad switched on after the game started got its triggers and not its
   haptics: Wine's `mmdevapi` lists the audio outputs once, when the game starts.
 
-Not played yet: the FEX (arm64) side.
+Measured later on 2026-10-19, `0006`-`0008`, an Edge over Bluetooth, Steam Input off:
+
+- Onimusha: Way of the Sword, 41069 runner, `xinput=pad` by the store's rule: the
+  game was controlled through XInput and rumbled on the motors, and R2's recoil while
+  L2 was pressed worked. R2's slope on its own was left free: a launch starts and
+  stops Wine more than once, and a Wine that stopped released the triggers after the
+  next one had set them. A fixed effect is now written again as its trigger starts to
+  be pressed (not played yet).
+- Uncharted: Legacy of Thieves Collection, 41073 runner, with diagnostics: the game
+  asked 32 ms of buffer on a cable and 30 ms over Bluetooth, and kept 21 ms and
+  10-30 ms waiting there. Over Bluetooth the haptics stream restarted 54 times in two
+  minutes, each restart a mode switch, 30 ms and the pad's audio set up again; kept
+  open, the writer's queue then sat at its 170 ms, the link carrying a little less
+  than the haptics need. A block now takes up to 12 frames more past 32 ms of queue,
+  by interpolation; in a simulation the queue stays at 15-40 ms with the link up to
+  10 % short (not played yet).
+- MacGameFix's thirty-second tries: the haptics test and every trigger effect,
+  with the bytes the modules write, felt over Bluetooth; no macOS permission asked.
+
+Not played yet: the FEX (arm64) side, `xinput=pad` with God of War Ragnarök, `rumble=haptics`,
+and the tries on a cable.
 
 ## Modules
 

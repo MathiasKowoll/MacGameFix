@@ -1,5 +1,5 @@
---- a/dlls/winecoreaudio.drv/coreaudio.c	2026-10-18 22:50:35
-+++ b/dlls/winecoreaudio.drv/coreaudio.c	2026-10-18 22:50:35
+--- a/dlls/winecoreaudio.drv/coreaudio.c
++++ b/dlls/winecoreaudio.drv/coreaudio.c
 @@ -42,6 +42,15 @@
  #include <fcntl.h>
  #include <fenv.h>
@@ -16,18 +16,35 @@
  
  #include <CoreAudio/CoreAudio.h>
  #include <AudioToolbox/AudioFormat.h>
-@@ -75,6 +84,8 @@
+@@ -74,6 +83,8 @@
+ #if !defined(MAC_OS_VERSION_12_0) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_VERSION_12_0
  #define kAudioObjectPropertyElementMain kAudioObjectPropertyElementMaster
  #endif
- 
-+#include "dualsense_bt.h"
 +
++#include "dualsense_bt.h"
+ 
  WINE_DEFAULT_DEBUG_CHANNEL(coreaudio);
  WINE_DECLARE_DEBUG_CHANNEL(winediag);
+@@ -835,6 +846,8 @@
+     stream->bufsize_frames = muldiv(params->duration, stream->fmt->nSamplesPerSec, 10000000);
+     if(params->share == AUDCLNT_SHAREMODE_EXCLUSIVE)
+         stream->bufsize_frames -= stream->bufsize_frames % stream->period_frames;
++    if (stream->flow == eRender) /* MacGameFix: see dualsense_bt.h */
++        mgf_stream_opened(stream->dev_id, stream->bufsize_frames, stream->period_frames, stream->fmt->nSamplesPerSec);
  
+     if(!(stream->unit = get_audiounit(stream->flow, stream->dev_id))){
+         params->result = AUDCLNT_E_DEVICE_INVALIDATED;
+@@ -1467,6 +1480,7 @@
+     os_unfair_lock_lock(&stream->lock);
+     *params->padding = get_current_padding_nolock(stream);
+     os_unfair_lock_unlock(&stream->lock);
++    if (stream->flow == eRender) mgf_stream_padding(stream->dev_id, *params->padding); /* MacGameFix */
+     params->result = S_OK;
+     return STATUS_SUCCESS;
+ }
 --- a/dlls/winecoreaudio.drv/dualsense_bt.h	1969-12-31 21:00:00
-+++ b/dlls/winecoreaudio.drv/dualsense_bt.h	2026-10-19 10:29:54
-@@ -0,0 +1,840 @@
++++ b/dlls/winecoreaudio.drv/dualsense_bt.h	2026-10-19 14:17:52
+@@ -0,0 +1,887 @@
 +/*
 + * MacGameFix: the haptics output of a DualSense on Bluetooth.
 + *
@@ -857,6 +874,53 @@
 +        free(u);
 +    }
 +    return AudioComponentInstanceDispose(unit);
++}
++
++/* diagnostics=on: what a game asks of a DualSense's haptics output when it opens
++ * it, and how much it keeps waiting in Wine's buffer, said every two seconds:
++ * the game's own share of the haptics' latency, the same measure on a cable and
++ * over Bluetooth. coreaudio.c calls these. */
++#define MGF_WATCHED 8
++static struct { AudioDeviceID device; UInt32 rate, low, high; UInt64 since; } mgf_watched[MGF_WATCHED];
++
++static void mgf_stream_opened(AudioDeviceID device, UInt32 buffer, UInt32 period, UInt32 rate)
++{
++    struct mgf_pad *pad = mgf_pad_of(device);
++    unsigned int i, slot = MGF_WATCHED;
++    BOOL edge;
++
++    if (!rate || !mgf_diagnostics() || (!pad && !mgf_wired_pad(device, &edge))) return;
++    pad_log("the game opens the %s haptics output: a buffer of %u ms, a period of %u ms, %u Hz\n",
++            pad ? "Bluetooth" : "wired", buffer * 1000 / rate, period * 1000 / rate, rate);
++    for (i = 0; i < MGF_WATCHED; i++)
++    {
++        if (mgf_watched[i].device == device) { slot = i; break; }
++        if (!mgf_watched[i].device && slot == MGF_WATCHED) slot = i;
++    }
++    if (slot == MGF_WATCHED) return;
++    mgf_watched[slot].device = device;
++    mgf_watched[slot].rate = rate;
++    mgf_watched[slot].low = ~0u;
++    mgf_watched[slot].high = 0;
++    mgf_watched[slot].since = mach_absolute_time();
++}
++
++static void mgf_stream_padding(AudioDeviceID device, UInt32 held)
++{
++    unsigned int i;
++
++    for (i = 0; i < MGF_WATCHED && mgf_watched[i].device != device; i++);
++    if (i == MGF_WATCHED || !device) return;
++    if (held < mgf_watched[i].low) mgf_watched[i].low = held;
++    if (held > mgf_watched[i].high) mgf_watched[i].high = held;
++    if (mach_absolute_time() - mgf_watched[i].since < mgf_ticks(2.0)) return;
++    if (mgf_watched[i].high)
++        pad_log("the game keeps %u to %u ms waiting in the %s haptics output\n",
++                mgf_watched[i].low * 1000 / mgf_watched[i].rate, mgf_watched[i].high * 1000 / mgf_watched[i].rate,
++                mgf_pad_of(device) ? "Bluetooth" : "wired");
++    mgf_watched[i].low = ~0u;
++    mgf_watched[i].high = 0;
++    mgf_watched[i].since = mach_absolute_time();
 +}
 +
 +#define AudioObjectGetPropertyDataSize mgf_AudioObjectGetPropertyDataSize

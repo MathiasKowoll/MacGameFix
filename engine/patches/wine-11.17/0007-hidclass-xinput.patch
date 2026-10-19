@@ -1,0 +1,135 @@
+--- a/dlls/hidclass.sys/hid.h
++++ b/dlls/hidclass.sys/hid.h
+@@ -88,6 +88,11 @@
+     UNICODE_STRING mouse_link_name;
+     BOOL is_keyboard;
+     UNICODE_STRING keyboard_link_name;
++    /* MacGameFix: a collection with motors that xinput drives, and whether it
++     * carries motors and nothing else; see pnp.c. */
++    BOOL is_xinput;
++    BOOL is_motors_only;
++    UNICODE_STRING xinput_link_name;
+ };
+ 
+ static inline struct phys_device *pdo_from_DEVICE_OBJECT( DEVICE_OBJECT *device )
+--- a/dlls/hidclass.sys/pnp.c
++++ b/dlls/hidclass.sys/pnp.c
+@@ -120,6 +120,7 @@
+     TRACE( "pdo %p, lparam %p\n", pdo, (void *)param );
+ 
+     if (!IsEqualGUID( pdo->base.class_guid, &GUID_DEVINTERFACE_HID )) return;
++    if (pdo->is_motors_only) return; /* MacGameFix: not a HID device to anyone but xinput */
+ 
+     input.hi.uMsg = WM_INPUT_DEVICE_CHANGE;
+     input.hi.wParamH = HIWORD(param);
+@@ -189,6 +190,51 @@
+     return STATUS_SUCCESS;
+ }
+ 
++/* MacGameFix: does this collection carry a HID haptics controller? Wine's xinput
++ * drives a pad's motors through one and through nothing else, so this is the
++ * question "can xinput rumble it", asked of the descriptor. */
++static BOOL has_haptics_collection( HIDP_COLLECTION_DESC *desc )
++{
++    HIDP_LINK_COLLECTION_NODE *nodes;
++    ULONG count, i;
++    BOOL found = FALSE;
++    HIDP_CAPS caps;
++
++    if (HidP_GetCaps( desc->PreparsedData, &caps ) != HIDP_STATUS_SUCCESS) return FALSE;
++    if (!(count = caps.NumberLinkCollectionNodes)) return FALSE;
++    if (!(nodes = malloc( count * sizeof(*nodes) ))) return FALSE;
++    if (HidP_GetLinkCollectionNodes( nodes, &count, desc->PreparsedData ) == HIDP_STATUS_SUCCESS)
++        for (i = 0; i < count && !found; i++)
++            found = nodes[i].LinkUsagePage == HID_USAGE_PAGE_HAPTICS &&
++                    nodes[i].LinkUsage == HID_USAGE_HAPTICS_SIMPLE_CONTROLLER;
++    free( nodes );
++    return found;
++}
++
++/* MacGameFix: a collection that exists only to carry motors, as winebus adds to
++ * a DualSense for xinput (patch 0006): a multi-axis controller, with a haptics
++ * collection and no axis on the generic desktop page. A real pad, wheel or
++ * joystick declares a gamepad or a joystick, or has axes, and stays a HID
++ * device whatever else it carries. */
++static BOOL is_motors_only_collection( HIDP_COLLECTION_DESC *desc )
++{
++    HIDP_VALUE_CAPS *values;
++    BOOL axes = FALSE;
++    HIDP_CAPS caps;
++    USHORT count;
++    ULONG i;
++
++    if (desc->UsagePage != HID_USAGE_PAGE_GENERIC || desc->Usage != HID_USAGE_GENERIC_MULTI_AXIS_CONTROLLER) return FALSE;
++    if (!has_haptics_collection( desc )) return FALSE;
++    if (HidP_GetCaps( desc->PreparsedData, &caps ) != HIDP_STATUS_SUCCESS) return FALSE;
++    if (!(count = caps.NumberInputValueCaps)) return TRUE;
++    if (!(values = malloc( count * sizeof(*values) ))) return FALSE;
++    if (HidP_GetValueCaps( HidP_Input, values, &count, desc->PreparsedData ) == HIDP_STATUS_SUCCESS)
++        for (i = 0; i < count && !axes; i++) axes = values[i].UsagePage == HID_USAGE_PAGE_GENERIC;
++    free( values );
++    return !axes;
++}
++
+ static NTSTATUS get_hid_device_desc( minidriver *minidriver, DEVICE_OBJECT *device, HIDP_DEVICE_DESC *desc )
+ {
+     HID_DESCRIPTOR descriptor = {0};
+@@ -545,6 +591,26 @@
+         }
+ 
+         case IRP_MN_START_DEVICE:
++            /* MacGameFix: a gamepad collection with motors is also offered under
++             * the interface xinput enumerates, which until now only winexinput's
++             * &XI_ children carried. xinput only finds devices through it; it
++             * opens what it finds and drives the haptics collection. A collection
++             * that carries motors and nothing else is offered to xinput only:
++             * it has the pad's vendor and product ids, so a client that finds
++             * its controller by walking the HID interface would see the pad
++             * twice, and Sony's library does exactly that. */
++            if (IsEqualGUID( pdo->base.class_guid, &GUID_DEVINTERFACE_HID ) && desc->UsagePage == HID_USAGE_PAGE_GENERIC &&
++                (desc->Usage == HID_USAGE_GENERIC_GAMEPAD || desc->Usage == HID_USAGE_GENERIC_JOYSTICK ||
++                 desc->Usage == HID_USAGE_GENERIC_MULTI_AXIS_CONTROLLER) && has_haptics_collection( desc ))
++            {
++                pdo->is_motors_only = is_motors_only_collection( desc );
++                if (!IoRegisterDeviceInterface( device, &GUID_DEVINTERFACE_WINEXINPUT, NULL, &pdo->xinput_link_name ))
++                    pdo->is_xinput = TRUE;
++                else
++                    ERR( "Failed to register the xinput interface for %s.\n", debugstr_w(pdo->base.device_id) );
++                TRACE( "%s offered to xinput%s.\n", debugstr_w(pdo->base.device_id), pdo->is_motors_only ? " only" : "" );
++            }
++
+             send_wm_input_device_change( pdo, GIDC_ARRIVAL );
+ 
+             if ((status = IoRegisterDeviceInterface( device, pdo->base.class_guid, NULL, &pdo->link_name )))
+@@ -565,9 +631,10 @@
+                     pdo->is_keyboard = TRUE;
+             }
+ 
+-            IoSetDeviceInterfaceState( &pdo->link_name, TRUE );
++            if (!pdo->is_motors_only) IoSetDeviceInterfaceState( &pdo->link_name, TRUE );
+             if (pdo->is_mouse) IoSetDeviceInterfaceState( &pdo->mouse_link_name, TRUE );
+             if (pdo->is_keyboard) IoSetDeviceInterfaceState( &pdo->keyboard_link_name, TRUE );
++            if (pdo->is_xinput) IoSetDeviceInterfaceState( &pdo->xinput_link_name, TRUE );
+ 
+             pdo->removed = FALSE;
+             status = STATUS_SUCCESS;
+@@ -576,9 +643,10 @@
+         case IRP_MN_REMOVE_DEVICE:
+             send_wm_input_device_change( pdo, GIDC_REMOVAL );
+ 
+-            IoSetDeviceInterfaceState( &pdo->link_name, FALSE );
++            if (!pdo->is_motors_only) IoSetDeviceInterfaceState( &pdo->link_name, FALSE );
+             if (pdo->is_mouse) IoSetDeviceInterfaceState( &pdo->mouse_link_name, FALSE );
+             if (pdo->is_keyboard) IoSetDeviceInterfaceState( &pdo->keyboard_link_name, FALSE );
++            if (pdo->is_xinput) IoSetDeviceInterfaceState( &pdo->xinput_link_name, FALSE );
+ 
+             KeAcquireSpinLock( &pdo->lock, &irql );
+             LIST_FOR_EACH_ENTRY_SAFE( queue, next, &pdo->queues, struct hid_queue, entry )
+@@ -586,6 +654,7 @@
+             KeReleaseSpinLock( &pdo->lock, irql );
+ 
+             RtlFreeUnicodeString( &pdo->link_name );
++            if (pdo->is_xinput) RtlFreeUnicodeString( &pdo->xinput_link_name );
+ 
+             irp->IoStatus.Status = STATUS_SUCCESS;
+             IoCompleteRequest(irp, IO_NO_INCREMENT);

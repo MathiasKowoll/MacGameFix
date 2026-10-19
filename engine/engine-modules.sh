@@ -17,7 +17,9 @@
 # (aarch64), where the CrossOver has the side and the build carries it.
 #
 # CrossOver's own files are kept under $MGVF_ENGINE_BACKUP/<runner, or app and build>,
-# with a list of what was put in their place. Nothing is changed while a Wine of that
+# with a list of what was put in their place; a file kept there is never replaced, since
+# the folder is one CrossOver build and its own files do not change. Nothing is changed
+# while a Wine of that
 # CrossOver runs. A CrossOver app is signed again (ad hoc) after a change, since changing
 # files inside it breaks CodeWeavers' signature.
 #
@@ -63,13 +65,18 @@ if [ -z "$WINE" ] || [ "$HAVE" != "wine-$WINE" ]; then
 fi
 
 src() { printf '%s/engine-%s-%s' "$HERE" "$BUILD" "$(printf '%s' "$1" | tr / -)"; }
+XINPUT_DLLS="xinput1_1.dll xinput1_2.dll xinput1_3.dll xinput1_4.dll xinput9_1_0.dll xinputuap.dll"
 FILES=""
 for side in x86_64 aarch64; do
   [ -d "$LIB/$side-unix" ] || continue
   if [ -f "$(src "$side-unix/winecoreaudio.so")" ]; then
     FILES="$FILES $side-windows/winebus.sys $side-windows/mmdevapi.dll $side-unix/winecoreaudio.so"
-    # winebus.so (the Bluetooth DualSense) came later; a build may not carry it.
-    [ -f "$(src "$side-unix/winebus.so")" ] && FILES="$FILES $side-unix/winebus.so"
+    # winebus.so (the Bluetooth DualSense), hidclass.sys and xinput (XInput)
+    # came later; a build may not carry them.
+    for f in $side-unix/winebus.so $side-windows/hidclass.sys $XINPUT_DLLS; do
+      case "$f" in */*) ;; *) f="$side-windows/$f" ;; esac
+      [ -f "$(src "$f")" ] && FILES="$FILES $f"
+    done
   elif [ "$MODE" != --restore ]; then
     say "This CrossOver has a $side side, and there are no modules for it."
   fi
@@ -124,13 +131,18 @@ install)
   : >"$SAVE/installed.list.new"
   for f in $FILES; do
     t="$(sha "$LIB/$f")"; s="$(sha "$(src "$f")")"
-    # A file that is neither ours nor what we last put there is CrossOver's own:
-    # the first time, or after an update put its files back. Keep it. One
-    # CrossOver does not have at all is noted, so that removing takes ours out.
-    if [ -z "$t" ] && [ -z "$(recorded "$f")" ]; then
+    # The first time, a file that is neither ours nor what we last put there is
+    # CrossOver's own: keep it. One CrossOver does not have at all is noted, so
+    # that removing takes ours out. Once kept, CrossOver's own stays as it was:
+    # what stands in its place later (an update putting it back, a development
+    # build) is replaced and not kept over it.
+    if [ -f "$SAVE/$f" ] || [ -f "$SAVE/$f.absent" ]; then
+      [ -n "$t" ] && [ "$t" != "$s" ] && [ "$t" != "$(recorded "$f")" ] && [ "$t" != "$(sha "$SAVE/$f")" ] &&
+        say "  $f was neither CrossOver's nor ours; CrossOver's own stays kept"
+    elif [ -z "$t" ] && [ -z "$(recorded "$f")" ]; then
       mkdir -p "$SAVE/$(dirname "$f")" && : > "$SAVE/$f.absent" || exit 1
     elif [ "$t" != "$s" ] && [ "$t" != "$(recorded "$f")" ]; then
-      mkdir -p "$SAVE/$(dirname "$f")" && cp -p "$LIB/$f" "$SAVE/$f" && rm -f "$SAVE/$f.absent" || exit 1
+      mkdir -p "$SAVE/$(dirname "$f")" && cp -p "$LIB/$f" "$SAVE/$f" || exit 1
     fi
     cp "$(src "$f")" "$LIB/$f" 2>/dev/null || refused "$LIB/$f"
     say "  $f"
@@ -141,9 +153,10 @@ install)
   say "Installed the modules for CrossOver $BUILD into $ROOT." ;;
 --restore)
   [ -d "$SAVE" ] || { say "Nothing of MacGameFix's is in $ROOT."; exit 0; }
-  for f in x86_64-windows/winebus.sys x86_64-windows/mmdevapi.dll x86_64-unix/winecoreaudio.so \
-           x86_64-unix/winebus.so aarch64-windows/winebus.sys aarch64-windows/mmdevapi.dll \
-           aarch64-unix/winecoreaudio.so aarch64-unix/winebus.so; do
+  for f in x86_64-windows/winebus.sys x86_64-windows/mmdevapi.dll x86_64-windows/hidclass.sys \
+           x86_64-unix/winecoreaudio.so x86_64-unix/winebus.so aarch64-windows/winebus.sys \
+           aarch64-windows/mmdevapi.dll aarch64-windows/hidclass.sys aarch64-unix/winecoreaudio.so \
+           aarch64-unix/winebus.so $(for x in $XINPUT_DLLS; do printf 'x86_64-windows/%s aarch64-windows/%s ' "$x" "$x"; done); do
     if [ -f "$SAVE/$f.absent" ]; then
       rm -f "$LIB/$f" 2>/dev/null || refused "$LIB/$f"
       say "  $f (CrossOver had none)"

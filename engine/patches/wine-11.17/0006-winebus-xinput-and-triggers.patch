@@ -1,0 +1,853 @@
+--- a/dlls/winebus.sys/bus_iohid.c
++++ b/dlls/winebus.sys/bus_iohid.c
+@@ -23,6 +23,7 @@
+ 
+ #include "config.h"
+ 
++#include <math.h>
+ #include <stdarg.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+@@ -127,11 +128,17 @@
+     BOOL sony;          /* a DualSense or DualSense Edge, either way */
+     BOOL edge;          /* a DualSense Edge, whatever the game is shown */
+     BOOL as_standard;   /* an Edge the game is shown as the standard pad */
++    int xinput;         /* XINPUT_RUMBLE or XINPUT_PAD: see xinput_endpoint_head */
++    unsigned int location;
++    BYTE trigger_kind[2], trigger_strength[2], trigger_step[2]; /* R2, L2: see pad_triggers */
++    BYTE trigger_kind2[2], trigger_strength2[2];                 /* while the other is pressed */
++    BOOL trigger_game[2], trigger_held[2], trigger_pressed[2];
++    UInt64 trigger_at[2];
+     const char *model;
+     UINT32 powers_told[8], features_told[8];
+     UINT32 shapes_told[64];
+     unsigned int shapes;
+-    BOOL told_motors, told_triggers, told_power;
++    BOOL told_motors, told_triggers, told_power, told_xinput;
+ };
+ 
+ /* MacGameFix: a DualSense or DualSense Edge on Bluetooth, shown to games as the
+@@ -247,6 +254,13 @@
+     signed char fifo[512][2];  /* haptics at 3 kHz, channels 3 and 4 */
+     unsigned int fifo_head, fifo_count;
+     UInt64 input_at, audio_at, nonzero_at;
++    BOOL synth;                /* rumble=haptics: see bt_synth */
++    BOOL diagnostics;          /* the haptics' delay and queue, in pad.log */
++    UInt64 sound_since, queue_since;
++    UInt32 queue_max, queue_sum, queue_count;
++    double synth_phase[2];
++    float synth_level[2];
++    UInt64 synth_at;
+ };
+ 
+ static void pad_game(char *id, size_t size);
+@@ -540,6 +554,9 @@
+             nonzero |= packet.samples[2 * i] || packet.samples[2 * i + 1];
+         }
+         pad->audio_at = mach_absolute_time();
++        /* The first sound after a silence, to say how long the writer takes to play it. */
++        if (nonzero && (!pad->nonzero_at || pad->audio_at - pad->nonzero_at > bt_ticks(0.15)))
++            pad->sound_since = pad->audio_at;
+         if (nonzero) pad->nonzero_at = pad->audio_at;
+         pthread_mutex_unlock(&pad->lock);
+         semaphore_signal(pad->wake);
+@@ -547,10 +564,44 @@
+     return NULL;
+ }
+ 
+-/* The pad's one writer. Haptics stream while the game plays something on
+- * channels 3 and 4, and for 150 ms after; the game's output goes out at most
+- * every 16 ms, or while haptics stream, in the link's remaining ~18 reports a
+- * second. It writes nothing while the pad sends no input: the link is gone. */
++/* rumble=haptics: the game's motor values played on the actuators instead of
++ * the motors, for a game that rumbles and plays no haptics of its own (an XInput
++ * title). The heavy motor becomes a 65 Hz tone on the left actuator and the
++ * light one a 160 Hz tone on the right, 64 frames a block, the amplitude ramped
++ * across the block from the last so a step does not click; as NotProton's
++ * controller bridge did (fork/controllers, PCM.h DSBRumbleSynthBlock). A motor
++ * value under 4 of 255 renders nothing. Real haptics from the game win. */
++static void bt_synth(struct bt_pad *pad, BYTE heavy, BYTE light, signed char out[128])
++{
++    static const double hz[2] = {65.0, 160.0};
++    const float target[2] = {heavy < 4 ? 0 : heavy / 255.f, light < 4 ? 0 : light / 255.f};
++    unsigned int i, ch;
++    float amplitude;
++    double v;
++
++    for (i = 0; i < 64; i++)
++        for (ch = 0; ch < 2; ch++)
++        {
++            amplitude = pad->synth_level[ch] + (target[ch] - pad->synth_level[ch]) * (i + 1) / 64.f;
++            v = sin(pad->synth_phase[ch]) * amplitude * 127;
++            out[2 * i + ch] = (signed char)lrint(fmax(-127, fmin(127, v)));
++            pad->synth_phase[ch] += 2 * M_PI * hz[ch] / 3000;
++            if (pad->synth_phase[ch] >= 2 * M_PI) pad->synth_phase[ch] -= 2 * M_PI;
++        }
++    pad->synth_level[0] = target[0];
++    pad->synth_level[1] = target[1];
++}
++
++/* The pad's one writer. Haptics start when the game plays something on
++ * channels 3 and 4, or, with rumble=haptics, when its motor values say
++ * something. They stop 150 ms after the game stops sending, or after 150 ms of
++ * silence when the game has motor values to rumble with: a game that plays
++ * haptics and no rumble keeps one stream through its quiet stretches, since a
++ * stream that starts again switches the pad's mode, waits 30 ms and sets the
++ * pad's audio up again (report 0x33) before its first sound (Uncharted started
++ * the stream 54 times in two minutes). The game's output goes out at most every
++ * 16 ms, or while haptics stream, in the link's remaining ~18 reports a second.
++ * It writes nothing while the pad sends no input: the link is gone. */
+ static void *bt_writer(void *arg)
+ {
+     struct bt_pad *pad = arg;
+@@ -558,9 +609,10 @@
+     thread_time_constraint_policy_data_t policy;
+     BYTE payload[47];
+     signed char samples[128];
+-    BOOL streaming = FALSE, audio, control;
+-    unsigned int index = 0, i, n;
++    BOOL streaming = FALSE, audio, control, synth, flowing, heard;
++    unsigned int index = 0, i, n, take;
+     UInt64 now, next_pcm = 0, next_control = 0, wake_at;
++    BYTE heavy, light;
+ 
+     policy.period = (uint32_t)bt_ticks(pcm_period);
+     policy.computation = (uint32_t)bt_ticks(0.001);
+@@ -580,9 +632,14 @@
+             bt_wait_until(pad, now + bt_ticks(0.020));
+             continue;
+         }
+-        audio = pad->nonzero_at && now - pad->nonzero_at < bt_ticks(0.15) &&
+-                (pad->fifo_count || now - pad->audio_at < bt_ticks(0.15));
+-        if (!audio && !streaming) pad->fifo_head = pad->fifo_count = 0;
++        flowing = pad->fifo_count || now - pad->audio_at < bt_ticks(0.15);
++        heard = pad->nonzero_at && now - pad->nonzero_at < bt_ticks(0.15);
++        audio = flowing && (heard || (streaming && pad->motors[0] < 4 && pad->motors[1] < 4));
++        if (pad->synth && (pad->motors[0] >= 4 || pad->motors[1] >= 4)) pad->synth_at = now;
++        synth = pad->synth && !audio && pad->synth_at && now - pad->synth_at < bt_ticks(0.15);
++        heavy = pad->motors[1];
++        light = pad->motors[0];
++        if (!audio && !synth && !streaming) pad->fifo_head = pad->fifo_count = 0;
+         if ((control = pad->dirty && now >= next_control))
+         {
+             memcpy(payload, pad->pending, sizeof(payload));
+@@ -595,12 +652,15 @@
+             bt_control(pad, payload, audio || streaming);
+             next_control = mach_absolute_time() + bt_ticks(audio || streaming ? streaming_gap : 0.016);
+         }
+-        if (audio && !streaming)
++        if ((audio || synth) && !streaming)
+         {
+             bt_control(pad, NULL, TRUE);
+             streaming = TRUE;
+             index = 0;
+             next_pcm = mach_absolute_time() + bt_ticks(0.030);
++            if (pad->diagnostics && audio && pad->sound_since)
++                pad_log("Bluetooth haptics start %u ms after the game's sound reached winebus\n",
++                        (unsigned int)((next_pcm - pad->sound_since) * bt_timebase.numer / bt_timebase.denom / 1000000));
+         }
+         if (streaming && mach_absolute_time() >= next_pcm)
+         {
+@@ -608,18 +668,57 @@
+             if (mach_absolute_time() > next_pcm + bt_ticks(0.040)) next_pcm = mach_absolute_time();
+             memset(samples, 0, sizeof(samples));
+             pthread_mutex_lock(&pad->lock);
+-            n = min(pad->fifo_count, 64);
+-            for (i = 0; i < n; i++)
++            if (pad->diagnostics)
+             {
+-                memcpy(samples + 2 * i, pad->fifo[pad->fifo_head], 2);
+-                pad->fifo_head = (pad->fifo_head + 1) % ARRAY_SIZE(pad->fifo);
+-                pad->fifo_count--;
++                if (!pad->queue_since) pad->queue_since = mach_absolute_time();
++                pad->queue_max = max(pad->queue_max, pad->fifo_count);
++                pad->queue_sum += pad->fifo_count;
++                pad->queue_count++;
++                if (mach_absolute_time() - pad->queue_since > bt_ticks(2.0))
++                {
++                    pad_log("the Bluetooth haptics queue holds %u ms on average, %u ms at most\n",
++                            pad->queue_sum / pad->queue_count * 1000 / 3000, pad->queue_max * 1000 / 3000);
++                    pad->queue_max = pad->queue_sum = pad->queue_count = 0;
++                    pad->queue_since = mach_absolute_time();
++                }
++            }
++            /* The link cannot always carry the 46.875 reports a second the haptics
++             * need, and a stream that no longer stops on silence has nothing else
++             * to empty the queue: it filled to its 170 ms in Uncharted. Past 96
++             * frames (32 ms) a block takes up to 12 frames more and spreads them
++             * over its 64 by linear interpolation, a few percent faster, which the
++             * hand does not tell, rather than let the queue grow. */
++            take = pad->fifo_count > 96 ? 64 + min(12, (pad->fifo_count - 96) / 8) : 64;
++            if (take > 64 && pad->fifo_count > take)
++            {
++                for (i = 0; i < 64; i++)
++                {
++                    unsigned int at = i * take / 64, frac = i * take % 64, ch;
++                    const signed char *a = pad->fifo[(pad->fifo_head + at) % ARRAY_SIZE(pad->fifo)];
++                    const signed char *b = pad->fifo[(pad->fifo_head + at + 1) % ARRAY_SIZE(pad->fifo)];
++                    for (ch = 0; ch < 2; ch++) samples[2 * i + ch] = (a[ch] * (64 - (int)frac) + b[ch] * (int)frac) / 64;
++                }
++                pad->fifo_head = (pad->fifo_head + take) % ARRAY_SIZE(pad->fifo);
++                pad->fifo_count -= take;
++                n = 64;
++            }
++            else
++            {
++                n = min(pad->fifo_count, 64);
++                for (i = 0; i < n; i++)
++                {
++                    memcpy(samples + 2 * i, pad->fifo[pad->fifo_head], 2);
++                    pad->fifo_head = (pad->fifo_head + 1) % ARRAY_SIZE(pad->fifo);
++                    pad->fifo_count--;
++                }
+             }
+             pthread_mutex_unlock(&pad->lock);
++            if (!n && synth) bt_synth(pad, heavy, light, samples);
+             bt_pcm(pad, index++, samples);
+             next_pcm += bt_ticks(pcm_period);
+-            if (!audio)
++            if (!audio && !synth)
+             {
++                pad->synth_level[0] = pad->synth_level[1] = 0;
+                 /* Let the silent tail reach the actuators, then rumble again. */
+                 mach_wait_until(mach_absolute_time() + bt_ticks(0.030));
+                 pthread_mutex_lock(&pad->lock);
+@@ -680,6 +779,9 @@
+     pad->device = device;
+     pad->edge = pid == DS_EDGE_PID;
+     pad->physical_edge = physical_edge;
++    pad->diagnostics = pad_option("diagnostics=on");
++    if ((pad->synth = pad_option("rumble=haptics")))
++        pad_log("the game's rumble plays on the actuators over Bluetooth\n");
+     pad->location = location;
+     pad->sock = -1;
+     pthread_mutex_init(&pad->lock, NULL);
+@@ -781,6 +883,9 @@
+     return dwNum;
+ }
+ 
++static void pad_triggers_follow(struct iohid_device *impl, const BYTE *input, UINT length);
++static BOOL trigger_chosen(const struct iohid_device *impl, unsigned int side);
++
+ static void handle_IOHIDDeviceIOHIDReportCallback(void *context,
+         IOReturn result, void *sender, IOHIDReportType type,
+         uint32_t reportID, uint8_t *report, CFIndex report_length)
+@@ -800,13 +905,19 @@
+             impl->bt->input_at = mach_absolute_time();
+             usb[0] = 0x01;
+             memcpy(usb + 1, report + 2, 63);
++            pad_triggers_follow(impl, usb, sizeof(usb));
+             bus_event_queue_input_report(&event_queue, iface, usb, sizeof(usb));
+             return;
+         }
+     }
++    if (impl->sony && result == kIOReturnSuccess) pad_triggers_follow(impl, report, report_length);
+     bus_event_queue_input_report(&event_queue, iface, report, report_length);
+ }
+ 
++static void pad_triggers(struct iohid_device *impl);
++static void pad_write_output(struct iohid_device *impl, BYTE *report);
++static void trigger_marker(const struct iohid_device *impl, char *path, size_t size);
++
+ static void iohid_device_destroy(struct unix_device *iface)
+ {
+ }
+@@ -823,6 +934,7 @@
+ 
+     IOHIDDeviceRegisterInputReportCallback(impl->device, impl->buffer, length, handle_IOHIDDeviceIOHIDReportCallback, iface);
+     if (impl->bt) bt_pad_start(impl->bt);
++    if (impl->sony) pad_triggers(impl);
+     return STATUS_SUCCESS;
+ }
+ 
+@@ -830,40 +942,455 @@
+ {
+     struct iohid_device *impl = impl_from_unix_device(iface);
+ 
++    if (impl->sony && (trigger_chosen(impl, 0) || trigger_chosen(impl, 1)))
++    {
++        BYTE report[64] = {0x02};
++        char path[64];
++
++        report[1] = (trigger_chosen(impl, 0) ? 0x04 : 0) | (trigger_chosen(impl, 1) ? 0x08 : 0);
++        report[11] = report[22] = 0x05;
++        pad_write_output(impl, report);
++        trigger_marker(impl, path, sizeof(path));
++        unlink(path);
++        pad_log("released the %s's triggers\n", impl->model);
++    }
+     IOHIDDeviceRegisterInputReportCallback(impl->device, NULL, 0, NULL, NULL);
+     if (impl->bt) bt_pad_stop(impl->bt);
+ 
+     pthread_mutex_lock(&iohid_cs);
+     list_remove(&impl->unix_device.entry);
+     pthread_mutex_unlock(&iohid_cs);
++}
++
++/* MacGameFix: trigger effects the user chooses for a game that sets none of
++ * its own, an XInput title above all: trigger_r2= and trigger_l2=, each off,
++ * resist, weapon, slope, vibrate or rumble, with a strength from 1 to 8
++ * ("weapon@6"). The effects are the layouts games write through Sony's library,
++ * as NotProton's controller bridge wrote them (fork/controllers, Controls.h):
++ * resist from zone 3 (strength 4 unless given), weapon from zone 3 giving way
++ * at zone 6 (7), slope from zone 2 rising to the strength (8), vibrate at 25 Hz
++ * from zone 2 (3). rumble vibrates the trigger at 40 Hz with the game's motor,
++ * R2 with the light one and L2 with the heavy one, in eight steps and at most
++ * one change every 60 ms. recoil follows the motor the same way but resists
++ * instead (from zone 2, the step as the strength), with whichever motor is the
++ * stronger, so a shot or a hit kicks the trigger back.
++ *
++ * Each trigger may have a second effect, for while the other trigger is pressed:
++ * trigger_r2_with_l2= and trigger_l2_with_r2=, a weapon on R2 while L2 aims, say.
++ * The other trigger counts as pressed from 40 of 255 and as released under 20,
++ * read from the pad's own input reports, and the side's effect is written again
++ * at each change (a rumble starts still and follows the motor from there). A
++ * fixed effect is also written again each time its own trigger starts to be
++ * pressed: a launch starts and stops Wine more than once, and a Wine that
++ * stops releases the triggers, maybe after the next one set them.
++ *
++ * The pad keeps an effect until something else is written, so they are written
++ * when the pad starts, and kept: a game that writes a trigger off (Sony's
++ * library does when it starts) gets the chosen effect in its place, and a game
++ * that writes an effect of its own owns that trigger from then on. Stopping
++ * releases them; and since a Wine that is torn down stops nothing, a marker in
++ * /tmp/macgamefix-<uid> lets the next start release what was left set. */
++enum { TRIGGER_OFF, TRIGGER_RESIST, TRIGGER_WEAPON, TRIGGER_SLOPE, TRIGGER_VIBRATE, TRIGGER_RUMBLE, TRIGGER_RECOIL };
++
++static void trigger_zones(const BYTE strengths[10], BYTE out[11])
++{
++    UINT16 zones = 0;
++    UINT32 forces = 0;
++    unsigned int zone, i;
++
++    memset(out, 0, 11);
++    for (zone = 0; zone < 10; zone++)
++        if (strengths[zone] >= 1 && strengths[zone] <= 8)
++        {
++            zones |= 1u << zone;
++            forces |= (UINT32)(strengths[zone] - 1) << (3 * zone);
++        }
++    if (!zones)
++    {
++        out[0] = 0x05;
++        return;
++    }
++    out[0] = 0x21;
++    out[1] = zones & 0xff;
++    out[2] = zones >> 8;
++    for (i = 0; i < 4; i++) out[3 + i] = forces >> (8 * i);
++}
++
++/* The 11 bytes of a trigger's effect; for rumble, at a step of 0 to 8. */
++static void trigger_effect(BYTE kind, BYTE strength, BYTE step, BYTE out[11])
++{
++    BYTE strengths[10] = {0};
++    unsigned int zone, top;
++
++    switch (kind)
++    {
++    case TRIGGER_RESIST:
++        for (zone = 3; zone < 10; zone++) strengths[zone] = strength ? strength : 4;
++        trigger_zones(strengths, out);
++        return;
++    case TRIGGER_WEAPON:
++        memset(out, 0, 11);
++        out[0] = 0x25;
++        out[1] = ((1u << 3) | (1u << 6)) & 0xff;
++        out[2] = ((1u << 3) | (1u << 6)) >> 8;
++        out[3] = (strength ? strength : 7) - 1;
++        return;
++    case TRIGGER_SLOPE:
++        top = strength ? strength : 8;
++        for (zone = 2; zone < 10; zone++) strengths[zone] = 1 + (top - 1) * (zone - 2) / 7;
++        trigger_zones(strengths, out);
++        return;
++    case TRIGGER_RECOIL:
++        top = (step * (strength ? strength : 8) + 7) / 8;
++        for (zone = 2; zone < 10 && top; zone++) strengths[zone] = top;
++        trigger_zones(strengths, out);
++        return;
++    case TRIGGER_VIBRATE:
++    case TRIGGER_RUMBLE:
++        top = kind == TRIGGER_VIBRATE ? (strength ? strength : 3) : (step * (strength ? strength : 8) + 7) / 8;
++        for (zone = 2; zone < 10 && top; zone++) strengths[zone] = top;
++        trigger_zones(strengths, out);
++        if (out[0] == 0x21)
++        {
++            out[0] = 0x26;
++            out[9] = kind == TRIGGER_VIBRATE ? 25 : 40;
++        }
++        return;
++    default:
++        memset(out, 0, 11);
++        out[0] = 0x05;
++    }
++}
++
++static void pad_trigger_choice(const char *key, BYTE *kind, BYTE *strength)
++{
++    static const char *const names[] = {"off", "resist", "weapon", "slope", "vibrate", "rumble", "recoil"};
++    const char *v = pad_value(key), *at = strchr(v, '@');
++    size_t length = at ? (size_t)(at - v) : strlen(v);
++    unsigned int i;
++
++    *kind = TRIGGER_OFF;
++    *strength = 0;
++    for (i = 0; i < ARRAY_SIZE(names); i++)
++        if (strlen(names[i]) == length && !strncmp(v, names[i], length)) *kind = i;
++    if (at && at[1] >= '1' && at[1] <= '8' && !at[2]) *strength = at[1] - '0';
++}
++
++/* The effect a side has now: its second while the other trigger is held. */
++static void trigger_active(const struct iohid_device *impl, unsigned int side, BYTE *kind, BYTE *strength)
++{
++    BOOL second = impl->trigger_held[side] && impl->trigger_kind2[side] != TRIGGER_OFF;
++
++    *kind = second ? impl->trigger_kind2[side] : impl->trigger_kind[side];
++    *strength = second ? impl->trigger_strength2[side] : impl->trigger_strength[side];
++}
++
++static BOOL trigger_chosen(const struct iohid_device *impl, unsigned int side)
++{
++    return impl->trigger_kind[side] != TRIGGER_OFF || impl->trigger_kind2[side] != TRIGGER_OFF;
++}
++
++static void trigger_marker(const struct iohid_device *impl, char *path, size_t size)
++{
++    snprintf(path, size, "/tmp/macgamefix-%u/triggers-%08x", (unsigned int)getuid(), impl->location);
++}
++
++/* A report of the pad's own, 0x02 with only `flags` valid: to a Bluetooth pad
++ * through its writer, to a wired one as the game's own output goes. */
++static void pad_write_output(struct iohid_device *impl, BYTE *report)
++{
++    if (impl->bt) bt_queue_output(impl->bt, report);
++    else IOHIDDeviceSetReport(impl->device, kIOHIDReportTypeOutput, 0x02, report, impl->edge ? 64 : 48);
++}
++
++/* The chosen effects, written when the pad starts; or, with none chosen, the
++ * release of what an earlier run left set. */
++static void pad_triggers(struct iohid_device *impl)
++{
++    static const char *const keys[2] = {"trigger_r2", "trigger_l2"};
++    static const char *const keys2[2] = {"trigger_r2_with_l2", "trigger_l2_with_r2"};
++    BYTE report[64] = {0x02};
++    char path[64];
++    unsigned int side, set = 0;
++    FILE *f;
++
++    for (side = 0; side < 2; side++)
++    {
++        pad_trigger_choice(keys[side], &impl->trigger_kind[side], &impl->trigger_strength[side]);
++        pad_trigger_choice(keys2[side], &impl->trigger_kind2[side], &impl->trigger_strength2[side]);
++        if (!trigger_chosen(impl, side)) continue;
++        set |= 4 << side;
++        if (impl->trigger_kind[side] == TRIGGER_OFF) continue;
++        report[1] |= 4 << side;
++        trigger_effect(impl->trigger_kind[side], impl->trigger_strength[side], 0, report + 11 + 11 * side);
++    }
++    trigger_marker(impl, path, sizeof(path));
++    if (!set && (f = fopen(path, "r")))
++    {
++        if (fscanf(f, "%u", &set) != 1) set = 0;
++        fclose(f);
++        unlink(path);
++        set &= 0x0c;
++        report[1] = set;
++        if (set & 0x04) report[11] = 0x05;
++        if (set & 0x08) report[22] = 0x05;
++        if (set) pad_write_output(impl, report);
++        return;
++    }
++    if (!set) return;
++    if (report[1]) pad_write_output(impl, report);
++    if ((f = fopen(path, "w")))
++    {
++        fprintf(f, "%u\n", set);
++        fclose(f);
++    }
++    pad_log("trigger effects chosen for the %s: R2 %s (with L2 %s), L2 %s (with R2 %s)\n", impl->model,
++            pad_value("trigger_r2")[0] ? pad_value("trigger_r2") : "off",
++            pad_value("trigger_r2_with_l2")[0] ? pad_value("trigger_r2_with_l2") : "the same",
++            pad_value("trigger_l2")[0] ? pad_value("trigger_l2") : "off",
++            pad_value("trigger_l2_with_r2")[0] ? pad_value("trigger_l2_with_r2") : "the same");
+ }
++
++/* From the pad's input report 0x01 (L2 at byte 5, R2 at byte 6): a side with a
++ * second effect switches as the other trigger is pressed and released, and a
++ * fixed effect is written again as its own trigger starts to be pressed. */
++static void pad_triggers_follow(struct iohid_device *impl, const BYTE *input, UINT length)
++{
++    BYTE report[64] = {0x02}, kind, strength, other, own;
++    unsigned int side;
++    BOOL held, pressed;
++
++    if (length < 7 || input[0] != 0x01) return;
++    for (side = 0; side < 2; side++)
++    {
++        if (!trigger_chosen(impl, side) || impl->trigger_game[side]) continue;
++        own = input[side ? 5 : 6];
++        pressed = impl->trigger_pressed[side] ? own >= 20 : own >= 40;
++        if (pressed != impl->trigger_pressed[side] && (impl->trigger_pressed[side] = pressed))
++        {
++            trigger_active(impl, side, &kind, &strength);
++            if (kind != TRIGGER_OFF && kind != TRIGGER_RUMBLE && kind != TRIGGER_RECOIL)
++            {
++                report[1] |= 4 << side;
++                trigger_effect(kind, strength, 0, report + 11 + 11 * side);
++            }
++        }
++        if (impl->trigger_kind2[side] == TRIGGER_OFF) continue;
++        other = input[side ? 6 : 5];
++        held = impl->trigger_held[side] ? other >= 20 : other >= 40;
++        if (held == impl->trigger_held[side]) continue;
++        impl->trigger_held[side] = held;
++        impl->trigger_step[side] = 0;
++        trigger_active(impl, side, &kind, &strength);
++        report[1] |= 4 << side;
++        trigger_effect(kind, strength, 0, report + 11 + 11 * side);
++    }
++    if (report[1]) pad_write_output(impl, report);
++}
++
++/* What the chosen effects make of a 0x02 on its way to the pad, in `copy`. */
++static BYTE *pad_triggers_merge(struct iohid_device *impl, BYTE *report, UINT length, BYTE copy[64], BOOL from_game)
++{
++    unsigned int side;
++    BYTE *field, mode, motor, step, kind, strength;
++
++    for (side = 0; side < 2; side++)
++    {
++        if (!trigger_chosen(impl, side) || impl->trigger_game[side]) continue;
++        trigger_active(impl, side, &kind, &strength);
++        field = report + 11 + 11 * side;
++        mode = field[0];
++        if (from_game && (report[1] & (4 << side)) && mode && mode != 0x05)
++        {
++            impl->trigger_game[side] = TRUE;
++            pad_log("observed: the game sets its own %s effect on the %s; the chosen one stops\n",
++                    side ? "L2" : "R2", impl->model);
++            continue;
++        }
++        if (kind == TRIGGER_OFF) continue;
++        if (kind == TRIGGER_RUMBLE || kind == TRIGGER_RECOIL)
++        {
++            if (!(report[1] & 0x03)) continue;
++            motor = kind == TRIGGER_RECOIL ? max(report[3], report[4]) : report[side ? 4 : 3];
++            step = motor < 4 ? 0 : 1 + (motor - 4) * 8 / 252;
++            if (step == impl->trigger_step[side] ||
++                mach_absolute_time() - impl->trigger_at[side] < bt_ticks(0.060)) continue;
++            impl->trigger_step[side] = step;
++            impl->trigger_at[side] = mach_absolute_time();
++        }
++        else if (!(from_game && (report[1] & (4 << side)))) continue;
++        if (report != copy) memcpy(copy, report, length);
++        report = copy;
++        report[1] |= 4 << side;
++        trigger_effect(kind, strength, impl->trigger_step[side], report + 11 + 11 * side);
++    }
++    return report;
++}
++
++/* MacGameFix: XInput's vibration on a DualSense (xinput=rumble), and the pad
++ * as an XInput controller (xinput=pad).
++ *
++ * Wine's xinput drives a pad's motors through a HID haptics collection and
++ * through nothing else, and no descriptor Sony ships has one. Replacing the
++ * pad's descriptor, as the SDL bus does, costs the adaptive triggers, the
++ * haptics and Sony's own library. So the pad's descriptor is left as it is and
++ * one more top-level collection is added after it: a multi-axis controller
++ * with no axis and no button, and two haptics collections, rumble and buzz,
++ * winebus's own template (hid_device_add_haptics). hidclass makes it a device
++ * of its own and offers it to xinput only (patch 0007). What xinput writes to it
++ * becomes the pad's output report 0x02 with the motors.
++ *
++ * A multi-axis controller and not a gamepad, so that a game counting pads does
++ * not count it (Beast of Reincarnation lost half its frame rate to that in
++ * MacGameVideoFix's measurements, 2026-09-09); a byte on the vendor page so it
++ * has an input report, which no client reads as an axis; no button, since a
++ * button that is never pressed made Ghost of Tsushima drop a held L3. The ids
++ * are ones neither the DualSense's nor the Edge's descriptor uses.
++ *
++ * For a game that reads nothing but XInput, xinput=pad puts the two haptics
++ * collections inside the pad's own top-level collection instead, so that
++ * hidclass offers the pad itself to xinput, which reads its sticks and buttons
++ * (patch 0008 teaches it Sony's order) and drives its motors through the same
++ * reports. The pad's own report lengths do not move: the feature report added
++ * is 17 bytes and the output 5, under what the pad already declares. */
++#define XINPUT_RUMBLE 1
++#define XINPUT_PAD    2
++#define XINPUT_OUTPUT_ID  0x03
++#define XINPUT_FEATURE_ID 0x04
++#define XINPUT_INPUT_ID   0x06
++#include "psh_hid_macros.h"
++static const BYTE xinput_endpoint_head[] =
++{
++    USAGE_PAGE(1, HID_USAGE_PAGE_GENERIC),
++    USAGE(1, HID_USAGE_GENERIC_MULTI_AXIS_CONTROLLER),
++    COLLECTION(1, Application),
++        REPORT_ID(1, XINPUT_INPUT_ID),
++        USAGE_PAGE(2, HID_USAGE_PAGE_VENDOR_DEFINED_BEGIN),
++        USAGE(1, 0x20),
++        LOGICAL_MINIMUM(1, 0),
++        LOGICAL_MAXIMUM(2, 0x00ff),
++        /* the globals the pad's own descriptor may leave set */
++        PHYSICAL_MINIMUM(1, 0),
++        PHYSICAL_MAXIMUM(1, 0),
++        UNIT(1, 0),
++        UNIT_EXPONENT(1, 0),
++        REPORT_SIZE(1, 8),
++        REPORT_COUNT(1, 1),
++        INPUT(1, Data|Var|Abs),
++        INPUT(1, Cnst|Var|Abs),
++};
++static const BYTE xinput_haptics_collection[] =
++{
++        USAGE_PAGE(2, HID_USAGE_PAGE_HAPTICS),
++        USAGE(1, HID_USAGE_HAPTICS_SIMPLE_CONTROLLER),
++        COLLECTION(1, Logical),
++            REPORT_ID(1, XINPUT_FEATURE_ID),
++
++            USAGE(1, HID_USAGE_HAPTICS_WAVEFORM_LIST),
++            COLLECTION(1, NamedArray),
++                USAGE(4, (HID_USAGE_PAGE_ORDINAL<<16)|3),
++                REPORT_SIZE(1, 16),
++                REPORT_COUNT(1, 1),
++                FEATURE(1, Data|Var|Abs|Null),
++            END_COLLECTION,
++
++            USAGE(1, HID_USAGE_HAPTICS_DURATION_LIST),
++            COLLECTION(1, NamedArray),
++                USAGE(4, (HID_USAGE_PAGE_ORDINAL<<16)|3),
++                REPORT_SIZE(1, 16),
++                REPORT_COUNT(1, 1),
++                FEATURE(1, Data|Var|Abs|Null),
++            END_COLLECTION,
++
++            USAGE(1, HID_USAGE_HAPTICS_WAVEFORM_CUTOFF_TIME),
++            UNIT(2, 0x1001), /* seconds */
++            UNIT_EXPONENT(1, -3), /* 10^-3 */
++            LOGICAL_MINIMUM(4, 0x00000000),
++            LOGICAL_MAXIMUM(4, 0x7fffffff),
++            REPORT_SIZE(1, 32),
++            REPORT_COUNT(1, 1),
++            FEATURE(1, Data|Var|Abs),
++            UNIT(1, 0),
++            UNIT_EXPONENT(1, 0),
+ 
++            REPORT_ID(1, XINPUT_OUTPUT_ID),
++            USAGE(1, HID_USAGE_HAPTICS_INTENSITY),
++            LOGICAL_MINIMUM(4, 0x00000000),
++            LOGICAL_MAXIMUM(4, 0x0000ffff),
++            REPORT_SIZE(1, 16),
++            REPORT_COUNT(1, 1),
++            OUTPUT(1, Data|Var|Abs),
++        END_COLLECTION,
++};
++static const BYTE xinput_endpoint_tail[] =
++{
++    END_COLLECTION,
++};
++#include "pop_hid_macros.h"
++
+ static NTSTATUS iohid_device_get_report_descriptor(struct unix_device *iface, BYTE *buffer,
+                                                    UINT length, UINT *out_length)
+ {
+     struct iohid_device *impl = impl_from_unix_device(iface);
+     CFDataRef data = IOHIDDeviceGetProperty(impl->device, CFSTR(kIOHIDReportDescriptorKey));
+-    int data_length = CFDataGetLength(data);
+-    const UInt8 *ptr;
++    const BYTE *base = CFDataGetBytePtr(data);
++    UINT size = CFDataGetLength(data), extra = 0;
+ 
+     if (impl->bt || impl->as_standard)
+     {
+         BOOL edge = impl->bt ? impl->bt->edge : FALSE;
+-        const BYTE *wired = edge ? ds_edge_usb_descriptor : ds_usb_descriptor;
+-        UINT size = edge ? sizeof(ds_edge_usb_descriptor) : sizeof(ds_usb_descriptor);
+ 
+-        *out_length = size;
+-        if (length < size) return STATUS_BUFFER_TOO_SMALL;
+-        memcpy(buffer, wired, size);
+-        return STATUS_SUCCESS;
++        base = edge ? ds_edge_usb_descriptor : ds_usb_descriptor;
++        size = edge ? sizeof(ds_edge_usb_descriptor) : sizeof(ds_usb_descriptor);
+     }
++    /* Rumble first, then buzz: xinput tells them apart by the waveform the
++     * feature report names for each (iohid_device_get_feature_report). */
++    if (impl->xinput == XINPUT_RUMBLE)
++        extra = sizeof(xinput_endpoint_head) + 2 * sizeof(xinput_haptics_collection) + sizeof(xinput_endpoint_tail);
++    else if (impl->xinput == XINPUT_PAD)
++        extra = 2 * sizeof(xinput_haptics_collection);
+ 
+-    *out_length = data_length;
+-    if (length < data_length)
+-        return STATUS_BUFFER_TOO_SMALL;
++    *out_length = size + extra;
++    if (length < size + extra) return STATUS_BUFFER_TOO_SMALL;
++    if (impl->xinput == XINPUT_PAD)
++    {
++        /* Before the item that closes the last top-level collection. */
++        UINT i = 0, depth = 0, close = size, item;
+ 
+-    ptr = CFDataGetBytePtr(data);
+-    memcpy(buffer, ptr, data_length);
++        while (i < size)
++        {
++            item = 1 + ((base[i] & 3) == 3 ? 4 : (base[i] & 3));
++            if ((base[i] & 0xfc) == 0xa0) depth++;
++            else if ((base[i] & 0xfc) == 0xc0 && depth && !--depth) close = i;
++            i += item;
++        }
++        if (close == size || i != size || depth)
++        {
++            ERR("cannot place the haptics collections in this descriptor\n");
++            *out_length = size;
++            memcpy(buffer, base, size);
++            return STATUS_SUCCESS;
++        }
++        memcpy(buffer, base, close);
++        memcpy(buffer + close, xinput_haptics_collection, sizeof(xinput_haptics_collection));
++        memcpy(buffer + close + sizeof(xinput_haptics_collection), xinput_haptics_collection,
++               sizeof(xinput_haptics_collection));
++        memcpy(buffer + close + extra, base + close, size - close);
++        return STATUS_SUCCESS;
++    }
++    memcpy(buffer, base, size);
++    if (extra)
++    {
++        BYTE *at = buffer + size;
++
++        memcpy(at, xinput_endpoint_head, sizeof(xinput_endpoint_head));
++        at += sizeof(xinput_endpoint_head);
++        memcpy(at, xinput_haptics_collection, sizeof(xinput_haptics_collection));
++        at += sizeof(xinput_haptics_collection);
++        memcpy(at, xinput_haptics_collection, sizeof(xinput_haptics_collection));
++        at += sizeof(xinput_haptics_collection);
++        memcpy(at, xinput_endpoint_tail, sizeof(xinput_endpoint_tail));
++    }
+     return STATUS_SUCCESS;
+ }
+ 
+@@ -872,10 +1399,36 @@
+     IOReturn result;
+     struct iohid_device *impl = impl_from_unix_device(iface);
+ 
+-    BYTE *report = packet->reportBuffer, copy[64];
++    BYTE *report = packet->reportBuffer, copy[64], motors[64];
+     UINT length = packet->reportBufferLen;
+-    BOOL output = impl->sony && packet->reportId == 0x02 && length >= 48 && report[0] == 0x02;
++    BOOL output;
+ 
++    /* What xinput writes to the collection added for it: the rumble and the
++     * buzz intensity, 16 bits each, which become the pad's output report 0x02
++     * with only the motors valid (flag0 0x01|0x02: rumble as a legacy pad, not
++     * haptics). The heavy motor is byte 4, the light one byte 3. From here on
++     * it is handled as any 0x02 the game writes: the Edge's length, the motor
++     * power, and over Bluetooth the writer. */
++    if (impl->xinput && packet->reportId == XINPUT_OUTPUT_ID && length >= 5 && report[0] == XINPUT_OUTPUT_ID)
++    {
++        UINT rumble = report[1] | (report[2] << 8), buzz = report[3] | (report[4] << 8);
++
++        if (!impl->told_xinput && (rumble || buzz))
++        {
++            impl->told_xinput = TRUE;
++            pad_log("observed: the game rumbles the %s through XInput\n", impl->model);
++        }
++        memset(motors, 0, sizeof(motors));
++        motors[0] = 0x02;
++        motors[1] = 0x03;
++        motors[3] = buzz >> 8;
++        motors[4] = rumble >> 8;
++        report = motors;
++        length = impl->edge && !impl->as_standard ? 64 : 48;
++    }
++    output = impl->sony && length >= 48 && report[0] == 0x02 &&
++             (packet->reportId == 0x02 || report == motors);
++
+     /* How the game drives the pad, said once each, for MacGameFix's list of what
+      * each game does: the rumble motors, trigger effects, the motor power. */
+     if (output)
+@@ -943,6 +1496,7 @@
+             copy[37] = 0;
+             report = copy;
+         }
++        report = pad_triggers_merge(impl, report, length, copy, report != motors);
+     }
+     if (impl->bt && output)
+     {
+@@ -951,7 +1505,8 @@
+         io->Status = STATUS_SUCCESS;
+         return;
+     }
+-    result = IOHIDDeviceSetReport(impl->device, kIOHIDReportTypeOutput, packet->reportId, report, length);
++    result = IOHIDDeviceSetReport(impl->device, kIOHIDReportTypeOutput, report == motors ? 0x02 : packet->reportId,
++                                  report, length);
+     if (result == kIOReturnSuccess)
+     {
+         io->Information = packet->reportBufferLen;
+@@ -970,6 +1525,36 @@
+     CFIndex report_length = packet->reportBufferLen;
+     struct iohid_device *impl = impl_from_unix_device(iface);
+ 
++    /* The waveforms of the collection added for xinput, answered here: rumble,
++     * then buzz, each with its duration (0: until changed, as XInputSetState
++     * means it) and a cutoff of a second, as winebus answers for its own pads. */
++    if (impl->xinput && packet->reportId == XINPUT_FEATURE_ID)
++    {
++        static const USHORT waveforms[2] = {HID_USAGE_HAPTICS_WAVEFORM_RUMBLE, HID_USAGE_HAPTICS_WAVEFORM_BUZZ};
++        BYTE *out = packet->reportBuffer;
++        UINT i;
++
++        if (packet->reportBufferLen < 17)
++        {
++            io->Information = 0;
++            io->Status = STATUS_BUFFER_TOO_SMALL;
++            return;
++        }
++        memset(out, 0, 17);
++        out[0] = XINPUT_FEATURE_ID;
++        for (i = 0; i < 2; i++)
++        {
++            BYTE *entry = out + 1 + 8 * i;
++            entry[0] = waveforms[i] & 0xff;
++            entry[1] = waveforms[i] >> 8;
++            entry[4] = 1000 & 0xff;
++            entry[5] = 1000 >> 8;
++        }
++        io->Information = 17;
++        io->Status = STATUS_SUCCESS;
++        return;
++    }
++
+     ret = IOHIDDeviceGetReport(impl->device, kIOHIDReportTypeFeature, packet->reportId,
+                                packet->reportBuffer, &report_length);
+     /* Which of the pad's stored settings a game reads, once per report. */
+@@ -1000,6 +1585,13 @@
+     IOReturn result;
+     struct iohid_device *impl = impl_from_unix_device(iface);
+ 
++    /* The collection added for xinput keeps nothing. */
++    if (impl->xinput && packet->reportId == XINPUT_FEATURE_ID)
++    {
++        io->Information = packet->reportBufferLen;
++        io->Status = STATUS_SUCCESS;
++        return;
++    }
+     /* A wired client turns the pad's radio off once it has the pad on the
+      * cable (feature 0x08, subcommand 2). Here the radio is the cable. */
+     if (impl->bt && packet->reportId == 0x08 && packet->reportBufferLen == 48 &&
+@@ -1126,9 +1718,13 @@
+     impl->sony = desc.vid == SONY_VID && (desc.pid == DUALSENSE_PID || desc.pid == DS_EDGE_PID);
+     impl->edge = impl->sony && (desc.pid == DS_EDGE_PID || as_standard);
+     impl->as_standard = as_standard;
++    impl->location = desc.uid;
+     impl->model = as_standard ? "DualSense Edge (shown as a DualSense)" : desc.pid == DS_EDGE_PID ? "DualSense Edge" : "DualSense";
+     if (impl->bt)
+         pad_log("the Bluetooth %s at location %08x is shown as wired\n", impl->model, (unsigned int)desc.uid);
++    impl->xinput = !impl->sony ? 0 : pad_option("xinput=rumble") ? XINPUT_RUMBLE : pad_option("xinput=pad") ? XINPUT_PAD : 0;
++    if (impl->xinput == XINPUT_RUMBLE) pad_log("XInput's vibration goes to the %s's motors\n", impl->model);
++    if (impl->xinput == XINPUT_PAD) pad_log("the %s is an XInput controller, its vibration on the motors\n", impl->model);
+ 
+     bus_event_queue_device_created(&event_queue, &impl->unix_device, &desc);
+ }

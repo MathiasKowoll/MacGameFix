@@ -1,0 +1,168 @@
+--- a/dlls/xinput1_3/main.c
++++ b/dlls/xinput1_3/main.c
+@@ -70,6 +70,10 @@
+         HIDP_VALUE_CAPS rx_caps;
+         HIDP_VALUE_CAPS ry_caps;
+         HIDP_VALUE_CAPS rt_caps;
++        /* MacGameFix: a Sony pad's own descriptor, read in Sony's order; see
++         * controller_check_caps. */
++        BOOL sony_layout;
++        HIDP_VALUE_CAPS hat_caps;
+ 
+         OVERLAPPED read_ovl;
+ 
+@@ -123,10 +127,23 @@
+ 
+ static void check_value_caps(struct xinput_controller *controller, USHORT usage, HIDP_VALUE_CAPS *caps)
+ {
+-    switch (usage)
++    if (usage == HID_USAGE_GENERIC_HATSWITCH) controller->hid.hat_caps = *caps;
++    /* A Sony pad's own descriptor puts the right stick on Z and Rz and the
++     * triggers on Rx and Ry, where this file's order, winexinput's, has the
++     * triggers on Z and Rz. */
++    if (controller->hid.sony_layout) switch (usage)
+     {
+     case HID_USAGE_GENERIC_X: controller->hid.lx_caps = *caps; break;
+     case HID_USAGE_GENERIC_Y: controller->hid.ly_caps = *caps; break;
++    case HID_USAGE_GENERIC_Z: controller->hid.rx_caps = *caps; break;
++    case HID_USAGE_GENERIC_RZ: controller->hid.ry_caps = *caps; break;
++    case HID_USAGE_GENERIC_RX: controller->hid.lt_caps = *caps; break;
++    case HID_USAGE_GENERIC_RY: controller->hid.rt_caps = *caps; break;
++    }
++    else switch (usage)
++    {
++    case HID_USAGE_GENERIC_X: controller->hid.lx_caps = *caps; break;
++    case HID_USAGE_GENERIC_Y: controller->hid.ly_caps = *caps; break;
+     case HID_USAGE_GENERIC_Z: controller->hid.lt_caps = *caps; break;
+     case HID_USAGE_GENERIC_RX: controller->hid.rx_caps = *caps; break;
+     case HID_USAGE_GENERIC_RY: controller->hid.ry_caps = *caps; break;
+@@ -206,6 +223,27 @@
+ 
+     /* Count buttons */
+     memset(caps, 0, sizeof(XINPUT_CAPABILITIES));
++
++    /* MacGameFix: a Sony pad reaches xinput with its own descriptor when winebus
++     * offers it as an XInput controller (MacGameFix's patches 0006 and 0007).
++     * The vendor alone does not say so: through the SDL bus the same pad has
++     * Wine's own descriptor, in this file's order. The X axis does: an unsigned
++     * byte on a Sony descriptor, signed on Wine's. (MacGameVideoFix's mgvf-0012
++     * and mgvf-0027.) */
++    {
++        HIDD_ATTRIBUTES attrs = {sizeof(attrs)};
++        HIDP_VALUE_CAPS x_caps;
++        USHORT x_count = 1;
++
++        if (HidD_GetAttributes(device, &attrs) && attrs.VendorID == 0x054c &&
++            HidP_GetSpecificValueCaps(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_X, &x_caps,
++                                      &x_count, preparsed) == HIDP_STATUS_SUCCESS && x_count && x_caps.LogicalMin >= 0)
++        {
++            TRACE("%04x:%04x is read in Sony's axis and button order (X is %ld..%ld)\n", attrs.VendorID,
++                  attrs.ProductID, (long)x_caps.LogicalMin, (long)x_caps.LogicalMax);
++            controller->hid.sony_layout = TRUE;
++        }
++    }
+ 
+     if (!(button_caps = malloc(sizeof(*button_caps) * controller->hid.caps.NumberInputButtonCaps))) return FALSE;
+     status = HidP_GetButtonCaps(HidP_Input, button_caps, &controller->hid.caps.NumberInputButtonCaps, preparsed);
+@@ -583,7 +621,7 @@
+     char *report_buf = controller->hid.input_report_buf;
+     XINPUT_STATE state;
+     NTSTATUS status;
+-    USAGE buttons[11];
++    USAGE buttons[15];
+     ULONG i, button_length, value;
+     BOOL ret;
+ 
+@@ -606,7 +644,27 @@
+     get_current_state(controller - controllers, &state);
+ 
+     state.Gamepad.wButtons = 0;
+-    for (i = 0; i < button_length; i++)
++    /* A Sony pad numbers its buttons as they sit on the face: Square, Cross,
++     * Circle, Triangle, L1, R1, L2, R2, Create, Options, L3, R3, PS, touchpad,
++     * mute. L2 and R2 are also axes, read below. */
++    if (controller->hid.sony_layout) for (i = 0; i < button_length; i++)
++    {
++        switch (buttons[i])
++        {
++        case 1: state.Gamepad.wButtons |= XINPUT_GAMEPAD_X; break;
++        case 2: state.Gamepad.wButtons |= XINPUT_GAMEPAD_A; break;
++        case 3: state.Gamepad.wButtons |= XINPUT_GAMEPAD_B; break;
++        case 4: state.Gamepad.wButtons |= XINPUT_GAMEPAD_Y; break;
++        case 5: state.Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_SHOULDER; break;
++        case 6: state.Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_SHOULDER; break;
++        case 9: state.Gamepad.wButtons |= XINPUT_GAMEPAD_BACK; break;
++        case 10: state.Gamepad.wButtons |= XINPUT_GAMEPAD_START; break;
++        case 11: state.Gamepad.wButtons |= XINPUT_GAMEPAD_LEFT_THUMB; break;
++        case 12: state.Gamepad.wButtons |= XINPUT_GAMEPAD_RIGHT_THUMB; break;
++        case 13: state.Gamepad.wButtons |= XINPUT_GAMEPAD_GUIDE; break;
++        }
++    }
++    else for (i = 0; i < button_length; i++)
+     {
+         switch (buttons[i])
+         {
+@@ -626,11 +684,18 @@
+     button_length = ARRAY_SIZE(buttons);
+     status = HidP_GetUsages(HidP_Input, HID_USAGE_PAGE_VENDOR_DEFINED_BEGIN, 0, buttons, &button_length, controller->hid.preparsed, report_buf, report_len);
+     if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsages HID_USAGE_PAGE_VENDOR_DEFINED_BEGIN returned %#lx\n", status);
+-    if (button_length) state.Gamepad.wButtons |= XINPUT_GAMEPAD_GUIDE;
++    /* A Sony pad's vendor bits are not its PS button, which is button 13. */
++    if (button_length && !controller->hid.sony_layout) state.Gamepad.wButtons |= XINPUT_GAMEPAD_GUIDE;
+ 
+     status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_HATSWITCH, &value, controller->hid.preparsed, report_buf, report_len);
+     if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_HATSWITCH returned %#lx\n", status);
+-    else switch (value)
++    /* A Sony pad's hat counts 0..7 and says 8 when nothing is pressed, where
++     * the table below counts 1..8 with 0 for centred: count from its own
++     * minimum, and centre anything outside its range. */
++    else switch (!controller->hid.sony_layout ? value :
++                 controller->hid.hat_caps.LogicalMax > controller->hid.hat_caps.LogicalMin &&
++                 (LONG)value >= controller->hid.hat_caps.LogicalMin && (LONG)value <= controller->hid.hat_caps.LogicalMax
++                 ? value - controller->hid.hat_caps.LogicalMin + 1 : 0)
+     {
+     /* 8 1 2
+      * 7 0 3
+@@ -650,10 +715,34 @@
+     if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_X returned %#lx\n", status);
+     else state.Gamepad.sThumbLX = scale_value(value, &controller->hid.lx_caps, -32768, 32767);
+ 
++    /* A HID Y axis grows downwards and XInput's upwards; winexinput turns it
++     * over when it builds its report, a Sony pad's own descriptor does not. */
+     status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_Y, &value, controller->hid.preparsed, report_buf, report_len);
+     if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_Y returned %#lx\n", status);
++    else if (controller->hid.sony_layout) state.Gamepad.sThumbLY = scale_value(value, &controller->hid.ly_caps, 32767, -32768);
+     else state.Gamepad.sThumbLY = scale_value(value, &controller->hid.ly_caps, -32768, 32767);
++
++    if (controller->hid.sony_layout)
++    {
++        status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_Z, &value, controller->hid.preparsed, report_buf, report_len);
++        if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_Z returned %#lx\n", status);
++        else state.Gamepad.sThumbRX = scale_value(value, &controller->hid.rx_caps, -32768, 32767);
++
++        status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_RZ, &value, controller->hid.preparsed, report_buf, report_len);
++        if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_RZ returned %#lx\n", status);
++        else state.Gamepad.sThumbRY = scale_value(value, &controller->hid.ry_caps, 32767, -32768);
++
++        status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_RX, &value, controller->hid.preparsed, report_buf, report_len);
++        if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_RX returned %#lx\n", status);
++        else state.Gamepad.bLeftTrigger = scale_value(value, &controller->hid.lt_caps, 0, 255);
+ 
++        status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_RY, &value, controller->hid.preparsed, report_buf, report_len);
++        if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_RY returned %#lx\n", status);
++        else state.Gamepad.bRightTrigger = scale_value(value, &controller->hid.rt_caps, 0, 255);
++    }
++    else
++    {
++
+     status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_RX, &value, controller->hid.preparsed, report_buf, report_len);
+     if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_RX returned %#lx\n", status);
+     else state.Gamepad.sThumbRX = scale_value(value, &controller->hid.rx_caps, -32768, 32767);
+@@ -669,6 +758,7 @@
+     status = HidP_GetUsageValue(HidP_Input, HID_USAGE_PAGE_GENERIC, 0, HID_USAGE_GENERIC_Z, &value, controller->hid.preparsed, report_buf, report_len);
+     if (status != HIDP_STATUS_SUCCESS) WARN("HidP_GetUsageValue HID_USAGE_PAGE_GENERIC / HID_USAGE_GENERIC_Z returned %#lx\n", status);
+     else state.Gamepad.bLeftTrigger = scale_value(value, &controller->hid.lt_caps, 0, 255);
++    }
+ 
+     if (controller->enabled)
+     {

@@ -4,13 +4,27 @@
   "wine": "Wine version 11.17",
   "patches": "wine-11.17",
   "files": {
-    "aarch64-unix/winebus.so": "9b7978bf55bccdf6bbe8a32e789c2084dafdb3579c73f90c622be6d5d7825200",
-    "aarch64-unix/winecoreaudio.so": "cb27b5593e7ce135979e07e0369d531cc5b1752014abe9119caa87776e049715",
+    "aarch64-unix/winebus.so": "20f3c8bd6be1b09b79f60b0fdeac632dfe71418052922033c5a17a4cca8386dd",
+    "aarch64-unix/winecoreaudio.so": "22c3e27fea6dcb1bdb03786e76b5c3d6e046956094e816d04890714c2874a178",
+    "aarch64-windows/hidclass.sys": "44830fb591cff33f6d9bfa3e0705c34b1f35cf180299baff139605712e6e2c3d",
     "aarch64-windows/mmdevapi.dll": "8efa718e02365f08f2b44bc45fb3ba0bf4373a6f6485a2b3fb558e091b000e61",
     "aarch64-windows/winebus.sys": "49ae35a245fa863c20384f395a2cc286dc4751114abd5e19d56d13bb112803d3",
-    "x86_64-unix/winebus.so": "e42bf7a84fcd72ad0c5ad4d046682480c388dea26ff2c38cc6de8a2f93da0873",
-    "x86_64-unix/winecoreaudio.so": "f7340ef4114238889f44dbe3d532bf3b0ca219be8ccf53c353086f12c9f03a88",
+    "aarch64-windows/xinput1_1.dll": "f9e4d481a583212c07daa8d416d2170a04221202afcbfcf1eab793aac0990baa",
+    "aarch64-windows/xinput1_2.dll": "2e8872c72d0d23f686422174f05a56970c6141523480f171024b8e1416adc423",
+    "aarch64-windows/xinput1_3.dll": "80aef427b9e042049439168601d1813134622f28af406ff5f08cde98bbf40ff4",
+    "aarch64-windows/xinput1_4.dll": "2e4e078afdb5e907124c132d50b7e866291ea6a70d341f563c10ea951a7a6b8a",
+    "aarch64-windows/xinput9_1_0.dll": "db05eb31f3feece046e487297efcf2110cb5e1bf4fee9e9175f3bbb7831ed297",
+    "aarch64-windows/xinputuap.dll": "ebb8e95ee1452d48b33aa6f8ef785c398bdd00aa8a08cbe30b9ce3be2253ac07",
+    "x86_64-unix/winebus.so": "84ca64f05edbabad6303f6a4d3ae1cc0d4714dc0144b9b2ce57a034f15268e2d",
+    "x86_64-unix/winecoreaudio.so": "c48d657a11a7d17f588f50a8f08094100d16600dbd8645e0da90f26ac1a85950",
+    "x86_64-windows/hidclass.sys": "981e0d2c37316c0efacdc819343bb0e0f518b761ac45d2e62d883cc500b5171a",
     "x86_64-windows/mmdevapi.dll": "ee554881b3d3c9835e28bcd985c91cb408aa119fdd1ce5e53e747a44f3a87a89",
-    "x86_64-windows/winebus.sys": "ef84831834f4397bd119665268eb8ba2dae189274df96fdd0805376a12d0e258"
+    "x86_64-windows/winebus.sys": "ef84831834f4397bd119665268eb8ba2dae189274df96fdd0805376a12d0e258",
+    "x86_64-windows/xinput1_1.dll": "36521e0ad5543224e3cfced6a761495a21def298fc44a510700f2c17f6e96b81",
+    "x86_64-windows/xinput1_2.dll": "e05687ac463f3acd24f15051d048d6cd48cd13b62727a245f08250cccca67b27",
+    "x86_64-windows/xinput1_3.dll": "243e56870e343a5b7d1e0af8cfe4d05316fafc5621aeb2092fd2939d6ac0b6b6",
+    "x86_64-windows/xinput1_4.dll": "7cba3603e7a91af04c8e275ad2c40bf998de146f7651431b338f5abf21c21439",
+    "x86_64-windows/xinput9_1_0.dll": "54a1574527fcc20a9b287ca1eb7c8ff561a49827884ef8a30ebfd481621d58df",
+    "x86_64-windows/xinputuap.dll": "b15ed9f8e525d5747297a4012cd56a4e31000c0d4c404524c9dba599c50991b3"
   }
 }
