@@ -625,11 +625,17 @@ extension Model {
             busy = false
             status = found.isEmpty ? "No CrossOver or NotProton runner found." : "\(found.count) CrossOver install(s) found."
             // Once a launch: App Management for a CrossOver app the modules are kept in,
-            // asked now rather than when an update needs it.
+            // asked now rather than when an update needs it. On the next turn of the
+            // main loop: run in this one, the alert's modal loop caught the tab bar
+            // halfway through adding Game Feel, and it stayed with every segment
+            // shrunk to its label (seen 2026-10-19; a probe measured 662 px for the
+            // bar against 857 px without the alert, and 857 px with it deferred).
             if !appManagementChecked {
                 appManagementChecked = true
                 let apps = rows.filter { $0.target.app != nil && engineKept($0) }
-                if !apps.isEmpty { _ = allowedToChange(apps) }
+                if !apps.isEmpty {
+                    DispatchQueue.main.async { MainActor.assumeIsolated { _ = self.allowedToChange(apps) } }
+                }
             }
             // The first time the modules that read them are in, the options start
             // as they were measured; after that they are written once a launch, so
@@ -709,8 +715,30 @@ struct HitRow: View {
     }
 }
 
+/// The size of the window's content, for the sheets that hang from it.
+private struct WindowSizeEnvironment: EnvironmentKey {
+    static let defaultValue = CGSize.zero
+}
+
+extension EnvironmentValues {
+    var windowSize: CGSize {
+        get { self[WindowSizeEnvironment.self] }
+        set { self[WindowSizeEnvironment.self] = newValue }
+    }
+}
+
+extension View {
+    /// A Game Feel sheet: as large as its options want, and never larger than the
+    /// window, whose edges cut off a sheet that does not fit. The form scrolls.
+    func padSheetSize(in window: CGSize) -> some View {
+        frame(width: window.width > 0 ? min(820, max(520, window.width - 40)) : 820,
+              height: window.height > 0 ? min(860, max(400, window.height - 40)) : 860)
+    }
+}
+
 struct ContentView: View {
     @StateObject private var model = Model()
+    @State private var windowSize = CGSize.zero
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -733,6 +761,8 @@ struct ContentView: View {
         }
         .padding(16)
         .frame(minWidth: 620, minHeight: 460)
+        .onGeometryChange(for: CGSize.self, of: { $0.size }) { windowSize = $0 }
+        .environment(\.windowSize, windowSize)
         .onAppear { model.scan() }
     }
 }
@@ -1294,6 +1324,7 @@ struct PadTryRow: View {
 struct PadGlobalSheet: View {
     @ObservedObject var model: Model
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.windowSize) private var windowSize
 
     private func flag(_ key: WritableKeyPath<PadOptions, Bool?>) -> Binding<Bool> {
         Binding(get: { model.pad.defaults[keyPath: key] ?? false }, set: { on in model.setPad { $0.defaults[keyPath: key] = on } })
@@ -1340,7 +1371,7 @@ struct PadGlobalSheet: View {
             }
             .padding(16)
         }
-        .frame(minWidth: 780, idealWidth: 820, minHeight: 720, idealHeight: 860)
+        .padSheetSize(in: windowSize)
         .onDisappear { model.padTester.stop() }
     }
 }
@@ -1351,6 +1382,7 @@ struct PadGameSheet: View {
     let game: InstalledGame
     @ObservedObject var model: Model
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.windowSize) private var windowSize
 
     private var preset: PadPreset? { model.padPresets[game.appid] }
     private var own: PadOptions { model.pad.games[game.appid]?.options ?? PadOptions() }
@@ -1448,7 +1480,7 @@ struct PadGameSheet: View {
             }
             .padding(16)
         }
-        .frame(minWidth: 780, idealWidth: 820, minHeight: 720, idealHeight: 860)
+        .padSheetSize(in: windowSize)
         .onDisappear { model.padTester.stop() }
     }
 }
