@@ -51,14 +51,17 @@ The modules read their options from MacGameFix's support folder, written by its
 Game Feel tab: `pad.d/<Steam app id>.conf` for the game, then `pad.conf` for
 every game; the first line with a key wins. A game is known by the Steam app id
 Steam and NotProton give it (`SteamAppId`, `SteamGameId`,
-`STEAM_COMPAT_APP_ID`), else by its prefix's path (`compatdata/<id>/pfx`).
+`STEAM_COMPAT_APP_ID`), else by its prefix's path (`compatdata/<id>/pfx`). A
+CrossOver bottle gave neither on 2026-10-19 (`game=-` in the log), so in a bottle
+only `pad.conf` applies.
 
 | Line | Effect |
 |---|---|
 | `bluetooth=wired` | A Bluetooth pad shown as wired (`0004`). |
 | `motor_power=full` | An Edge's motor power claimed at `0x00` in every report. Sony's library claims it so for a standard DualSense and never for an Edge, which then stays at the reduction it stores. |
 | `edge=dualsense` | An Edge shown to the game as a standard DualSense, on a cable or over Bluetooth: for titles whose Sony library does not know the Edge. |
-| `haptics_gain=<1-4>`, `edge_haptics_gain=<1-4>` | The haptics multiplied, a DualSense's and an Edge's, with a soft limit: linear to 0.8, then a curve that never passes 1.0. |
+| `haptics_gain_cable=<1-4>`, `edge_haptics_gain_cable=<1-4>` | The haptics multiplied on a cable, a DualSense's and an Edge's, with a soft limit: linear to 0.8, then a curve that never passes 1.0. |
+| `haptics_gain_bluetooth=<1-4>`, `edge_haptics_gain_bluetooth=<1-4>` | The same over Bluetooth. A pad does not feel every game alike on both: a standard DualSense felt the same at 1 in Spider-Man 2, and F1 23's light haptics needed 2 over Bluetooth to feel as steady as on a cable. An older file's `haptics_gain` or `edge_haptics_gain` counts for both connections. |
 | `diagnostics=on` | What a game writes to the pad and reads from it, and a level meter of its haptics, in the log. |
 
 The modules log to `/tmp/macgamefix-<uid>/pad.log`, each line naming its game;
@@ -103,8 +106,28 @@ the 41069 runner's Intel side, a DualSense Edge, with development builds of
 - It reads feature reports `0x09`, `0x20` and `0x05` only, never the Edge's
   profile reports (`0x70`-`0x7b`).
 
-Not played yet: the options per game (`pad.d/`), `edge=dualsense` on a cable,
-the observations in the log, and the modules as built here.
+Measured on 2026-10-19 with the modules as built here, installed by the app, on
+the Intel side, Steam Input off for the game unless said:
+
+- Marvel's Spider-Man 2, 41069 runner: an Edge and a standard DualSense, on a
+  cable and over Bluetooth: triggers and haptics. Its own gain in `pad.d/` was
+  read before `pad.conf`, and felt.
+- F1 23, 41069 runner: an Edge shown as a DualSense (`edge=dualsense` from its
+  `pad.d/`) and a standard DualSense, on a cable and over Bluetooth, and both pads
+  over Bluetooth at once. A standard DualSense over Bluetooth felt jerky at 1x and
+  steady at 2x, where on a cable 1x was steady. With Steam Input on, its haptics
+  over Bluetooth started and stopped, in two runs; off, they were steady. The
+  level meter showed the same continuous signal leaving the module either way.
+- CONTROL Resonant, 41073 runner: an Edge over Bluetooth and a standard
+  DualSense on a cable: haptics and triggers.
+- In a CrossOver Preview 27.0.0.41073 bottle: F1 23 with an Edge on a cable,
+  seen as an Edge (buttons, haptics, triggers), and Beast of Reincarnation with an
+  Edge over Bluetooth: haptics and triggers, and motor rumble only once Steam
+  Input was on.
+- A pad switched on after the game started got its triggers and not its
+  haptics: Wine's `mmdevapi` lists the audio outputs once, when the game starts.
+
+Not played yet: the FEX (arm64) side.
 
 ## Modules
 
@@ -115,8 +138,8 @@ CrossOver 26.3 has only the Intel side.
 
 | CrossOver | Sources | Wine | Intel (x86_64) | FEX (arm64) |
 |---|---|---|---|---|
-| Preview 27.0.0.41069 (20261006) | `crossover-sources-20261006.tar.gz` | 11.17 | played with earlier builds of these patches; see "Measured" | built, not played |
-| Preview (20261015) | `crossover-sources-20261015.tar.gz` | 11.17 | built, not played | built, not played |
+| Preview 27.0.0.41069 (20261006) | `crossover-sources-20261006.tar.gz` | 11.17 | played; see "Measured" | built, not played |
+| Preview 27.0.0.41073 (20261015) | `crossover-sources-20261015.tar.gz` | 11.17 | played; see "Measured" | built, not played |
 | 26.3.0.39832 | `crossover-sources-26.3.0.tar.gz` | 11.0 | `0001`-`0003` only, built, not played: our PE imports differ from CodeWeavers' (toolchain), and our `mmdevapi.dll` also lists `winmm.dll` | no FEX side |
 
 `modules/<id>/` holds the files laid out as in `lib/wine` (`x86_64-windows`,

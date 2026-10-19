@@ -55,6 +55,8 @@ final class Model: ObservableObject {
     @Published var pad = PadStore.load()
     @Published var padGames: [InstalledGame] = []
     let padPresets = PadPresets.load()
+    /// pad.conf and pad.d written by this launch, so they carry its keys and presets.
+    private var padWritten = false
     @Published var modulesVersion = 0
     var resources = URL(fileURLWithPath: ".")
     /// The Wine modules' catalog in use, apart from the fixes'.
@@ -535,9 +537,12 @@ extension Model {
             busy = false
             status = found.isEmpty ? "No CrossOver or NotProton runner found." : "\(found.count) CrossOver install(s) found."
             // The first time the modules that read them are in, the options start
-            // as they were measured.
-            if padAvailable && !PadStore.exists {
-                setPad { $0 = PadStore() }
+            // as they were measured; after that they are written once a launch, so
+            // the files carry this version's keys and suggested settings.
+            if padAvailable && !padWritten {
+                padWritten = true
+                let fresh = !PadStore.exists
+                setPad { if fresh { $0 = PadStore() } }
             }
         }
     }
@@ -790,8 +795,6 @@ struct ControllersView: View {
                     PadOptionRows(
                         flag: { key in Binding(get: { model.pad.defaults[keyPath: key] ?? false },
                                                set: { on in model.setPad { $0.defaults[keyPath: key] = on } }) },
-                        gain: { key in Binding(get: { model.pad.defaults[keyPath: key] ?? 1 },
-                                               set: { v in model.setPad { $0.defaults[keyPath: key] = v } }) },
                         own: { _ in false })
                     Toggle("Diagnostics in the modules' log", isOn: Binding(
                         get: { model.pad.diagnostics }, set: { on in model.setPad { $0.diagnostics = on } }))
@@ -803,13 +806,18 @@ struct ControllersView: View {
                         Text("The Wine modules read these when a game starts. A game's own settings win.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
-                } footer: {
+                }
+                PadHapticsSection(
+                    gain: { key in Binding(get: { model.pad.defaults[keyPath: key] ?? 1 },
+                                           set: { v in model.setPad { $0.defaults[keyPath: key] = v } }) },
+                    own: { _ in false }
+                ) {
                     Text("Measured with NOTPROTON_RAW_CONTROLLERS=1 in the game's launch options and Steam Input off.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
             .formStyle(.grouped)
-            .frame(minHeight: 200, idealHeight: 430)
+            .frame(minHeight: 200, idealHeight: 560)
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
@@ -871,7 +879,6 @@ private let padGains: [Double] = [1, 1.5, 2, 2.5, 3]
 /// row whose value is the game's own is in the accent colour.
 struct PadOptionRows: View {
     let flag: (WritableKeyPath<PadOptions, Bool?>) -> Binding<Bool>
-    let gain: (WritableKeyPath<PadOptions, Double?>) -> Binding<Double>
     let own: (PartialKeyPath<PadOptions>) -> Bool
 
     private func title(_ text: String, _ key: PartialKeyPath<PadOptions>) -> Text {
@@ -888,13 +895,56 @@ struct PadOptionRows: View {
         Toggle(isOn: flag(\.edgeAsDualSense)) { title("Show the Edge as a standard DualSense", \.edgeAsDualSense) }
             .help("For a title whose Sony library does not know the Edge. The game loses the Edge's back buttons "
                   + "and Fn.")
-        Picker(selection: gain(\.hapticsGain)) {
-            ForEach(padGains, id: \.self) { Text(PadOptions.times($0)).tag($0) }
-        } label: { title("DualSense haptics", \.hapticsGain) }
-        Picker(selection: gain(\.edgeHapticsGain)) {
-            ForEach(padGains, id: \.self) { Text(PadOptions.times($0)).tag($0) }
-        } label: { title("DualSense Edge haptics", \.edgeHapticsGain) }
-            .help("2× made an Edge feel like a standard DualSense in Spider-Man 2.")
+    }
+}
+
+/// The haptics' strength, per connection and per pad, as a table: a pad does not
+/// feel the same stream alike on a cable and over Bluetooth, and some games need
+/// more on one. A dot marks what is the game's own.
+struct PadHapticsSection<Footer: View>: View {
+    let gain: (WritableKeyPath<PadOptions, Double?>) -> Binding<Double>
+    let own: (PartialKeyPath<PadOptions>) -> Bool
+    @ViewBuilder let footer: () -> Footer
+
+    private func cell(_ key: WritableKeyPath<PadOptions, Double?>, _ help: String) -> some View {
+        HStack(spacing: 6) {
+            Picker("", selection: gain(key)) {
+                ForEach(padGains, id: \.self) { Text(PadOptions.times($0)).tag($0) }
+            }
+            .labelsHidden()
+            .fixedSize()
+            Image(systemName: "circle.fill").font(.system(size: 6)).foregroundStyle(Color.accentColor)
+                .opacity(own(key) ? 1 : 0)
+        }
+        .help(help)
+    }
+
+    var body: some View {
+        Section {
+            Grid(alignment: .leading, horizontalSpacing: 28, verticalSpacing: 10) {
+                GridRow {
+                    Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                    Text("DualSense").foregroundStyle(.secondary)
+                    Text("DualSense Edge").foregroundStyle(.secondary)
+                }
+                GridRow {
+                    Text("Cable")
+                    cell(\.hapticsGainCable, "A standard DualSense on a cable.")
+                    cell(\.edgeHapticsGainCable, "2× in Spider-Man 2, as over Bluetooth.")
+                }
+                GridRow {
+                    Text("Bluetooth")
+                    cell(\.hapticsGainBluetooth,
+                         "Spider-Man 2 felt the same at 1× as on a cable; F1 23 needed 2× to feel as steady.")
+                    cell(\.edgeHapticsGainBluetooth,
+                         "2× made an Edge over Bluetooth feel like a standard DualSense in Spider-Man 2.")
+                }
+            }
+        } header: {
+            Text("Haptics strength")
+        } footer: {
+            footer()
+        }
     }
 }
 
@@ -933,15 +983,16 @@ struct PadGameSheet: View {
         VStack(spacing: 0) {
             Form {
                 Section {
-                    PadOptionRows(flag: flag, gain: gain, own: isOwn)
+                    PadOptionRows(flag: flag, own: isOwn)
                 } header: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(game.name)
-                        Text("In blue, what is this game's own; the rest follows "
+                        Text("In blue, or marked with a dot, what is this game's own; the rest follows "
                              + (preset == nil ? "every game's." : "the suggested settings, then every game's."))
                             .font(.caption).foregroundStyle(.secondary)
                     }
-                } footer: {
+                }
+                PadHapticsSection(gain: gain, own: isOwn) {
                     VStack(alignment: .leading, spacing: 4) {
                         if let preset {
                             Text("Suggested: \(preset.options.summary.joined(separator: ", ")). \(preset.measured)")

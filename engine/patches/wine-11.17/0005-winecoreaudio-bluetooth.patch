@@ -26,8 +26,8 @@
  WINE_DECLARE_DEBUG_CHANNEL(winediag);
  
 --- a/dlls/winecoreaudio.drv/dualsense_bt.h	1969-12-31 21:00:00
-+++ b/dlls/winecoreaudio.drv/dualsense_bt.h	2026-10-18 23:01:11
-@@ -0,0 +1,834 @@
++++ b/dlls/winecoreaudio.drv/dualsense_bt.h	2026-10-19 10:29:54
+@@ -0,0 +1,840 @@
 +/*
 + * MacGameFix: the haptics output of a DualSense on Bluetooth.
 + *
@@ -45,9 +45,9 @@
 + * filters them down to the pad's 3 kHz and sends them to the writer in
 + * winebus.so, which carries them to the pad.
 + *
-+ * The same gain reaches a DualSense on a cable (haptics_gain in pad.conf): its
-+ * real output's render callback is wrapped, and channels 3 and 4 are amplified
-+ * in the buffer before CoreAudio plays it.
++ * A gain reaches a DualSense on a cable too (haptics_gain_cable in pad.conf):
++ * its real output's render callback is wrapped, and channels 3 and 4 are
++ * amplified in the buffer before CoreAudio plays it.
 + *
 + * coreaudio.c reaches CoreAudio through the mgf_ functions below (the
 + * #defines at the end); a call about anything other than these outputs goes
@@ -487,9 +487,13 @@
 +    u->phase = 0;
 +}
 +
-+/* The gain on the haptics: haptics_gain=<x> for a DualSense, edge_haptics_gain=<x>
-+ * for a DualSense Edge, 1 to 4 (an Edge left at its own power needed 2 to feel
-+ * like a DualSense in Spider-Man 2). */
++/* The gain on the haptics, per pad and per connection, 1 to 4:
++ * haptics_gain_cable and haptics_gain_bluetooth for a DualSense,
++ * edge_haptics_gain_cable and edge_haptics_gain_bluetooth for a DualSense Edge.
++ * An older file's haptics_gain or edge_haptics_gain counts for both. Measured:
++ * an Edge left at its own power needed 2 to feel like a DualSense in Spider-Man
++ * 2; a DualSense over Bluetooth felt the same as on a cable at 1 in Spider-Man 2,
++ * and needed 2 in F1 23 to feel as steady as at 1 on a cable. */
 +/* A number as MacGameFix writes it, "2.50": read here digit by digit, since
 + * strtof follows the locale and stops at the point where a decimal comma is
 + * expected. */
@@ -504,12 +508,14 @@
 +    return digits ? (float)v : NAN;
 +}
 +
-+static float mgf_gain(BOOL edge)
++static float mgf_gain(BOOL edge, BOOL bluetooth)
 +{
-+    char value[32];
++    char key[32], value[32];
 +    float gain;
 +
-+    mgf_value(edge ? "edge_haptics_gain" : "haptics_gain", value, sizeof(value));
++    snprintf(key, sizeof(key), "%shaptics_gain_%s", edge ? "edge_" : "", bluetooth ? "bluetooth" : "cable");
++    mgf_value(key, value, sizeof(value));
++    if (!value[0]) mgf_value(edge ? "edge_haptics_gain" : "haptics_gain", value, sizeof(value));
 +    gain = value[0] ? mgf_number(value) : 1;
 +    return isfinite(gain) ? fmaxf(1, fminf(4, gain)) : 1;
 +}
@@ -559,7 +565,7 @@
 +    UInt32 i;
 +    /* A level meter: what the game plays on channels 3 and 4 before any gain of
 +     * ours, and what goes to the pad, said every two seconds while there is any. */
-+    float peak[2] = {0, 0}, gain = mgf_gain(pad->physical == 0x0df2);
++    float peak[2] = {0, 0}, gain = mgf_gain(pad->physical == 0x0df2, TRUE);
 +    BOOL diagnostics = mgf_diagnostics();
 +    double square[2] = {0, 0};
 +    unsigned long frames_seen = 0;
@@ -692,7 +698,7 @@
 +     * still plays it, through a render callback of ours. */
 +    if (prop == kAudioOutputUnitProperty_CurrentDevice && size == sizeof(AudioDeviceID) &&
 +        !mgf_pad_of(*(const AudioDeviceID *)data) && mgf_wired_pad(*(const AudioDeviceID *)data, &edge) &&
-+        (gain = mgf_gain(edge)) > 1)
++        (gain = mgf_gain(edge, FALSE)) > 1)
 +    {
 +        if (!(u = mgf_unit_of(unit)) && (u = calloc(1, sizeof(*u))))
 +        {

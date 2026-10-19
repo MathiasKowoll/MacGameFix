@@ -8,13 +8,13 @@
     },
     "2108330": {
       "title": "F1 23",
-      "options": { "edgeAsDualSense": true },
-      "measured": "2026-10-15, NotProton: as an Edge the game assigned no buttons (\"No preset control scheme\"); as a standard DualSense full control, haptics and trigger effects."
+      "options": { "edgeAsDualSense": true, "hapticsGainBluetooth": 2 },
+      "measured": "2026-10-15, NotProton: as an Edge the game assigned no buttons (\"No preset control scheme\"); as a standard DualSense full control, haptics and trigger effects. 2026-10-19, MacGameFix's modules, an Edge over Bluetooth: with Steam Input on for the game the haptics started and stopped; with it off they were as steady as on a cable. A standard DualSense over Bluetooth felt jerky at 1× and almost like the cable at 2×."
     },
     "2651280": {
       "title": "Marvel's Spider-Man 2",
-      "options": { "fullMotorPower": true, "edgeHapticsGain": 2 },
-      "measured": "2026-10-18, MacGameFix's modules: haptics and trigger effects over Bluetooth and on a cable. An Edge at its own motor power felt weaker than a standard DualSense; the power at full and the haptics doubled felt the same."
+      "options": { "fullMotorPower": true, "edgeHapticsGainCable": 2, "edgeHapticsGainBluetooth": 2 },
+      "measured": "2026-10-18, MacGameFix's modules: haptics and trigger effects over Bluetooth and on a cable. An Edge at its own motor power felt weaker than a standard DualSense; the power at full and the haptics doubled felt the same. 2026-10-19: a standard DualSense felt the same over Bluetooth as on a cable at 1×."
     }
   }
 }

@@ -211,16 +211,17 @@ P="$SUPPORT/MacGameFix"
 padwrite() { "$BIN" --pad-write >/dev/null 2>&1; }
 padreport() { "$BIN" --pad-report 2>&1; }
 padwrite
-check '[ -f "$P/pad.json" ] && has "$(cat "$P/pad.conf")" "bluetooth=wired" && has "$(cat "$P/pad.conf")" "motor_power=full" && has "$(cat "$P/pad.conf")" "edge_haptics_gain=2.00"' "every game's options start as measured, in pad.conf"
+check '[ -f "$P/pad.json" ] && has "$(cat "$P/pad.conf")" "bluetooth=wired" && has "$(cat "$P/pad.conf")" "motor_power=full" && has "$(cat "$P/pad.conf")" "edge_haptics_gain_cable=2.00" && has "$(cat "$P/pad.conf")" "edge_haptics_gain_bluetooth=2.00" && has "$(cat "$P/pad.conf")" "haptics_gain_bluetooth=1.00"' "every game's options start as measured, in pad.conf"
 check 'has "$(cat "$P/pad.d/1593500.conf")" "edge=dualsense" && ! has "$(cat "$P/pad.d/1593500.conf")" "bluetooth="' "a game with a preset gets its own file, with only what differs"
 /usr/bin/python3 - "$P/pad.json" <<'PY2'
 import json, sys
-d = json.load(open(sys.argv[1])); d["games"] = {"1593500": {"name": "God of War", "options": {"edgeAsDualSense": False}}, "4242": {"name": "Fake Game", "options": {"hapticsGain": 2.5}}}
+d = json.load(open(sys.argv[1])); d["games"] = {"1593500": {"name": "God of War", "options": {"edgeAsDualSense": False}}, "4242": {"name": "Fake Game", "options": {"hapticsGain": 2.5}}, "4243": {"name": "Other Game", "options": {"hapticsGainBluetooth": 2}}}
 json.dump(d, open(sys.argv[1], "w"))
 PY2
 padwrite
 check '[ ! -f "$P/pad.d/1593500.conf" ]' "the user's own options win over a preset, and a game left as every game loses its file"
-check 'has "$(cat "$P/pad.d/4242.conf")" "haptics_gain=2.50"' "a game's own gain, written with a point whatever the language"
+check 'has "$(cat "$P/pad.d/4242.conf")" "haptics_gain_cable=2.50" && has "$(cat "$P/pad.d/4242.conf")" "haptics_gain_bluetooth=2.50"' "a game's own gain, written with a point whatever the language; one gain from before counts for both connections"
+check 'has "$(cat "$P/pad.d/4243.conf")" "haptics_gain_bluetooth=2.00" && ! has "$(cat "$P/pad.d/4243.conf")" "haptics_gain_cable="' "a gain over Bluetooth alone leaves the cable to every game's"
 printf '10:00:00 [1] game=4242 observed: the game plays haptics on the Bluetooth DualSense Edge%ss output\n10:00:01 [2] game=4242 observed: the game sets trigger effects on the DualSense Edge\n10:00:02 [3] game=- the Bluetooth DualSense Edge at location 32c48ef2 is shown as wired\n10:00:03 [4] game=4242 observ' "'" > "$MACGAMEFIX_PAD_LOG"
 padwrite
 check 'has "$(padreport)" "4242 | Fake Game | " && has "$(padreport)" "seen haptics,triggers"' "what the modules logged is kept per game; a line with no game says nothing"

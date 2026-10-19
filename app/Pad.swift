@@ -22,22 +22,29 @@ struct PadOptions: Codable, Equatable, Hashable {
     var fullMotorPower: Bool?
     /// The Edge shown to the game as a standard DualSense.
     var edgeAsDualSense: Bool?
-    /// The haptics multiplied, with a soft limit: a DualSense's, and an Edge's.
-    var hapticsGain: Double?
-    var edgeHapticsGain: Double?
+    /// The haptics multiplied, with a soft limit, per pad and per connection: a
+    /// pad does not feel the same stream alike on a cable and over Bluetooth.
+    var hapticsGainCable: Double?
+    var edgeHapticsGainCable: Double?
+    var hapticsGainBluetooth: Double?
+    var edgeHapticsGainBluetooth: Double?
 
     /// What the user starts with: everything the modules do turned on, and the
-    /// Edge's haptics doubled, which made it feel like a DualSense in Spider-Man 2.
+    /// Edge's haptics doubled, which made it feel like a DualSense in Spider-Man 2
+    /// on a cable and over Bluetooth.
     static let firstRun = PadOptions(bluetoothAsCable: true, fullMotorPower: true, edgeAsDualSense: false,
-                                     hapticsGain: 1, edgeHapticsGain: 2)
+                                     hapticsGainCable: 1, edgeHapticsGainCable: 2,
+                                     hapticsGainBluetooth: 1, edgeHapticsGainBluetooth: 2)
 
     /// These over `base`: each option this one sets, else base's.
     func over(_ base: PadOptions) -> PadOptions {
         PadOptions(bluetoothAsCable: bluetoothAsCable ?? base.bluetoothAsCable,
                    fullMotorPower: fullMotorPower ?? base.fullMotorPower,
                    edgeAsDualSense: edgeAsDualSense ?? base.edgeAsDualSense,
-                   hapticsGain: hapticsGain ?? base.hapticsGain,
-                   edgeHapticsGain: edgeHapticsGain ?? base.edgeHapticsGain)
+                   hapticsGainCable: hapticsGainCable ?? base.hapticsGainCable,
+                   edgeHapticsGainCable: edgeHapticsGainCable ?? base.edgeHapticsGainCable,
+                   hapticsGainBluetooth: hapticsGainBluetooth ?? base.hapticsGainBluetooth,
+                   edgeHapticsGainBluetooth: edgeHapticsGainBluetooth ?? base.edgeHapticsGainBluetooth)
     }
 
     var isEmpty: Bool { self == PadOptions() }
@@ -47,8 +54,11 @@ struct PadOptions: Codable, Equatable, Hashable {
         PadOptions(bluetoothAsCable: bluetoothAsCable == base.bluetoothAsCable ? nil : bluetoothAsCable,
                    fullMotorPower: fullMotorPower == base.fullMotorPower ? nil : fullMotorPower,
                    edgeAsDualSense: edgeAsDualSense == base.edgeAsDualSense ? nil : edgeAsDualSense,
-                   hapticsGain: hapticsGain == base.hapticsGain ? nil : hapticsGain,
-                   edgeHapticsGain: edgeHapticsGain == base.edgeHapticsGain ? nil : edgeHapticsGain)
+                   hapticsGainCable: hapticsGainCable == base.hapticsGainCable ? nil : hapticsGainCable,
+                   edgeHapticsGainCable: edgeHapticsGainCable == base.edgeHapticsGainCable ? nil : edgeHapticsGainCable,
+                   hapticsGainBluetooth: hapticsGainBluetooth == base.hapticsGainBluetooth ? nil : hapticsGainBluetooth,
+                   edgeHapticsGainBluetooth: edgeHapticsGainBluetooth == base.edgeHapticsGainBluetooth
+                       ? nil : edgeHapticsGainBluetooth)
     }
 
     /// The lines the modules read, as engine/README.md lists them. Numbers with a
@@ -58,8 +68,10 @@ struct PadOptions: Codable, Equatable, Hashable {
         if let v = bluetoothAsCable { out.append("bluetooth=" + (v ? "wired" : "off")) }
         if let v = fullMotorPower { out.append("motor_power=" + (v ? "full" : "game")) }
         if let v = edgeAsDualSense { out.append("edge=" + (v ? "dualsense" : "edge")) }
-        if let v = hapticsGain { out.append("haptics_gain=" + PadOptions.number(v)) }
-        if let v = edgeHapticsGain { out.append("edge_haptics_gain=" + PadOptions.number(v)) }
+        if let v = hapticsGainCable { out.append("haptics_gain_cable=" + PadOptions.number(v)) }
+        if let v = edgeHapticsGainCable { out.append("edge_haptics_gain_cable=" + PadOptions.number(v)) }
+        if let v = hapticsGainBluetooth { out.append("haptics_gain_bluetooth=" + PadOptions.number(v)) }
+        if let v = edgeHapticsGainBluetooth { out.append("edge_haptics_gain_bluetooth=" + PadOptions.number(v)) }
         return out
     }
 
@@ -71,13 +83,49 @@ struct PadOptions: Codable, Equatable, Hashable {
         if let v = bluetoothAsCable { out.append(v ? "Bluetooth as a cable" : "Bluetooth as it is") }
         if let v = fullMotorPower { out.append(v ? "full motor power" : "the game's motor power") }
         if let v = edgeAsDualSense { out.append(v ? "Edge shown as a DualSense" : "Edge shown as an Edge") }
-        if let v = hapticsGain { out.append("DualSense haptics \(PadOptions.times(v))") }
-        if let v = edgeHapticsGain { out.append("Edge haptics \(PadOptions.times(v))") }
+        if let v = hapticsGainCable { out.append("DualSense haptics \(PadOptions.times(v)) on a cable") }
+        if let v = edgeHapticsGainCable { out.append("Edge haptics \(PadOptions.times(v)) on a cable") }
+        if let v = hapticsGainBluetooth { out.append("DualSense haptics \(PadOptions.times(v)) over Bluetooth") }
+        if let v = edgeHapticsGainBluetooth { out.append("Edge haptics \(PadOptions.times(v)) over Bluetooth") }
         return out
     }
 
     static func times(_ v: Double) -> String {
         (v.rounded() == v ? String(Int(v)) : String(format: "%.1f", locale: Locale(identifier: "en_US_POSIX"), v)) + "×"
+    }
+}
+
+extension PadOptions {
+    private enum CodingKeys: String, CodingKey {
+        case bluetoothAsCable, fullMotorPower, edgeAsDualSense
+        case hapticsGainCable, edgeHapticsGainCable, hapticsGainBluetooth, edgeHapticsGainBluetooth
+        /// Before the two connections had their own: one gain per pad, for both.
+        case hapticsGain, edgeHapticsGain
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let gain = try c.decodeIfPresent(Double.self, forKey: .hapticsGain)
+        let edgeGain = try c.decodeIfPresent(Double.self, forKey: .edgeHapticsGain)
+        self.init(bluetoothAsCable: try c.decodeIfPresent(Bool.self, forKey: .bluetoothAsCable),
+                  fullMotorPower: try c.decodeIfPresent(Bool.self, forKey: .fullMotorPower),
+                  edgeAsDualSense: try c.decodeIfPresent(Bool.self, forKey: .edgeAsDualSense),
+                  hapticsGainCable: try c.decodeIfPresent(Double.self, forKey: .hapticsGainCable) ?? gain,
+                  edgeHapticsGainCable: try c.decodeIfPresent(Double.self, forKey: .edgeHapticsGainCable) ?? edgeGain,
+                  hapticsGainBluetooth: try c.decodeIfPresent(Double.self, forKey: .hapticsGainBluetooth) ?? gain,
+                  edgeHapticsGainBluetooth: try c.decodeIfPresent(Double.self, forKey: .edgeHapticsGainBluetooth)
+                      ?? edgeGain)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(bluetoothAsCable, forKey: .bluetoothAsCable)
+        try c.encodeIfPresent(fullMotorPower, forKey: .fullMotorPower)
+        try c.encodeIfPresent(edgeAsDualSense, forKey: .edgeAsDualSense)
+        try c.encodeIfPresent(hapticsGainCable, forKey: .hapticsGainCable)
+        try c.encodeIfPresent(edgeHapticsGainCable, forKey: .edgeHapticsGainCable)
+        try c.encodeIfPresent(hapticsGainBluetooth, forKey: .hapticsGainBluetooth)
+        try c.encodeIfPresent(edgeHapticsGainBluetooth, forKey: .edgeHapticsGainBluetooth)
     }
 }
 
@@ -223,7 +271,7 @@ struct PadStore: Codable, Equatable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        defaults = try c.decodeIfPresent(PadOptions.self, forKey: .defaults) ?? .firstRun
+        defaults = try c.decodeIfPresent(PadOptions.self, forKey: .defaults)?.over(.firstRun) ?? .firstRun
         diagnostics = try c.decodeIfPresent(Bool.self, forKey: .diagnostics) ?? false
         games = try c.decodeIfPresent([String: PadGame].self, forKey: .games) ?? [:]
         logRead = try c.decodeIfPresent(UInt64.self, forKey: .logRead) ?? 0
