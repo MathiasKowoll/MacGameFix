@@ -6,7 +6,8 @@ small macOS application that installs, checks and removes them.
 None of them changes CrossOver. They work with CrossOver as CodeWeavers ships
 it, with CrossOver Preview, and with Steam Play tools for macOS such as
 [NotProton](https://github.com/NotProtonNot/NotProton): a proxy DLL beside the
-game, and for a few titles registry keys in the game's own prefix.
+game, and for a few titles registry keys in the game's own prefix. One,
+NINJA GAIDEN 3: Razor's Edge, puts its DLLs in that prefix instead.
 
 This repository is where the fixes live now. They started in
 [MacGameVideoFix](https://github.com/MathiasKowoll/MacGameVideoFix), which also
@@ -53,7 +54,7 @@ fixes' updates, the folders searched and the log.
 
 ## What each fix requires
 
-A fix always goes into the game's own folder, and the same folder serves every
+A fix goes into the game's own folder, and the same folder serves every
 place that runs the game: a NotProton runner, a CrossOver bottle, or both.
 Where you run it is yours to check. The app says beside each game what its fix
 requires: the graphics backend it was made for (D3DMetal or DXMT; God of War's
@@ -65,12 +66,13 @@ Mortal Shell 2, Resonance: A Plague Tale Legacy and both Life is Strange titles
 from 4.0b3). The game says so. It is only a notice: the fix still installs.
 
 The exception is a fix that also writes registry keys: the Kingdom Hearts
-titles and NieR Replicant. Those keys go into the game's prefix, a Steam Play
-prefix (`compatdata/<appid>/pfx`) or a CrossOver bottle, so the game needs to
-have run there once. The prefix is shown under the game. When there is more
-than one, each has a checkbox, and the keys go into every prefix checked: the
-installer runs once for each. Unchecking a prefix does not take the keys out of
-it; removing the fix with it checked does.
+titles and NieR Replicant, and NINJA GAIDEN 3: Razor's Edge, whose DLLs go
+there too and nothing into its folder. Those keys go into the game's prefix, a
+Steam Play prefix (`compatdata/<appid>/pfx`) or a CrossOver bottle, so the game
+needs to have run there once. The prefix is shown under the game. When there is
+more than one, each has a checkbox, and the fix goes into every prefix checked:
+the installer runs once for each. Unchecking a prefix does not take the fix out
+of it; removing the fix with it checked does.
 
 `MacGameFix --games-report` prints the same in a terminal.
 
@@ -160,6 +162,7 @@ Turning the option off removes the agent. Its settings and what it did are in
 | Mortal Kombat 11 | Dark smeared patches on bare faces once they animate | D3DMetal (DirectX 12) or DXMT (DirectX 11) |
 | Mortal Shell 2 | Crash on the first cutscene | D3DMetal |
 | NieR Replicant ver.1.22474487139 | Crashes when the first video starts | D3DMetal, a prefix |
+| NINJA GAIDEN 3: Razor's Edge | Will not start: "Insufficient VRAM" | DXVK, a prefix |
 | NINJA GAIDEN 4 | Says the VP9 codec is missing, then exits; on D3DMetal 4, nothing is ever drawn | D3DMetal 3 or 4.0b3, CrossOver Preview 27 |
 | Nioh | "Failure to play movie", then a crash | DXMT |
 | Nioh 2 | Cutscene refuses to play, then a crash | DXMT |
@@ -174,13 +177,14 @@ Turning the option off removes the agent. Its settings and what it did are in
 | Wo Long: Fallen Dynasty | Cutscene with sound and a black picture | D3DMetal |
 
 The list is not written by hand. The build takes every installer in `fixes/`
-that declares a game-folder fix, and keeps the games for which the table
+that declares a game-folder or a prefix fix, and keeps the games for which the table
 records no engine requirement, and either no codec or a CrossOver that ships
 that codec as CodeWeavers distributes it.
 
 **Measured, and what was not.** Every fix here was measured on a CrossOver 26.3
 that carried MacGameVideoFix's engine patches, which do not touch these fixes;
-Spider-Man 2, God of War and Mortal Kombat 11 on CrossOver Preview 27 through NotProton.
+Spider-Man 2, God of War and Mortal Kombat 11 on CrossOver Preview 27 through NotProton;
+NINJA GAIDEN 3 in a bottle of a patched CrossOver Preview 27 (27.0.0.40921), on 2026-08-28.
 For Wo Long, Nioh 3 and KINGDOM HEARTS Dream Drop Distance, that the fix needs
 nothing of the engine is read off how it works, not established by a run on an
 untouched CrossOver.
@@ -235,6 +239,29 @@ nothing runs in it, and the installer refuses otherwise. The CrossOver route is
 the one measured with the game. The Steam Play route was tested on a prefix --
 install, check, remove, and Wine reading the key back -- but not yet with
 KINGDOM HEARTS itself running from one.
+
+### NINJA GAIDEN 3: Razor's Edge goes into the prefix
+
+It is the Master Collection's Direct3D 9 title, and under CrossOver's own DXVK
+it does not start: it says "Insufficient VRAM", because that DXVK cannot create
+a Vulkan device for it. Its fix puts four DLLs into the `system32` of the
+game's prefix, d9vk for Direct3D 9 and winevideo's builds of `qasf`, `quartz`
+and `winegstreamer` for its ASF movies, keeps the prefix's own copies aside, and
+tells Wine to load them for this game's executable only. Every other game in
+the same bottle or prefix is left as it was, and nothing goes into the game
+folder.
+
+Measured on 2026-08-28 in a CrossOver bottle: the game starts, runs at 60 fps
+and its cutscenes play. The boot movie stops on its first frame; one click
+skips it. A Steam Play prefix, as a NotProton runner keeps, is edited only while
+nothing runs in it, as for the other prefix fixes. That route was tested on a
+prefix (install, check, repair, remove) but not yet with the game running from
+one.
+
+A CrossOver update that updated the bottle was measured putting back Wine's
+own copies of three of the four DLLs. The game then shows as needing repair,
+and installing again puts them back; with "Keep it applied" on, the agent does
+it.
 
 ### Beast of Reincarnation needs CrossOver Preview
 
@@ -380,6 +407,7 @@ page under `legacy/wiki/`.
 | `install-sm2-fix.sh` | Marvel's Spider-Man 2 | `amd_ags_x64.dll` (from `amd_ags_x64-sm2.dll`), and shaders rewritten from the game's own executable by `sm2-shadertool` | `sm2-tpose-fix.c` with `sm2fix_core.c`; the tool from `sm2-shadertool.c` and `sm2-shaderfix.c` | [Spider-Man 2](legacy/wiki/Spider-Man-2.md) |
 | `install-mk11-fix.sh` | Mortal Kombat 11 | `amd_ags_x64.dll` under `Binaries/Retail` (from `amd_ags_x64-mk11.dll`) | `mk11-face-fix.c` with `sm2fix_core.c` and `mk11-morph-shaders.h` (from `mk11-morph/`) | [Mortal Kombat 11](legacy/wiki/Mortal-Kombat-11.md) |
 | `install-nier-bridge.sh` | NieR Replicant ver.1.22474487139 | `dinput8.dll` (from `dinput8-nier.dll`), the original copied from the bottle or prefix, and the reader | `dwo-video-bridge.c` | [NieR Replicant](legacy/wiki/NieR-Replicant.md) |
+| `install-ng3-fix.sh` | NINJA GAIDEN 3: Razor's Edge | Nothing: `d3d9.dll`, `qasf.dll`, `quartz.dll` and `winegstreamer.dll` (from `ng3-*.dll`) go into the prefix's `system32`, the prefix's own kept aside, with overrides for the game's executable | Not built here: d9vk v1.10.3-20250511 and winevideo 0.5's Wine builds, checked by their hashes in `ng3-THIRD-PARTY-LICENCES.md` | [NINJA GAIDEN 3](legacy/wiki/Ninja-Gaiden-3-Razors-Edge.md) |
 | `install-ng4-fix.sh` | NINJA GAIDEN 4 | `dstorage.dll` (from `dstorage-ng4.dll`); `dstoragecore.dll` renamed aside | `tools/ng4-observe.c`, built with `-DNG4_FIX` | [NINJA GAIDEN 4](legacy/wiki/Ninja-Gaiden-4.md) |
 | `install-nioh-bridge.sh` | Nioh, Nioh 2 | `GfeSDK.dll`, and the reader | `p5s-video-bridge.c` | [Nioh](legacy/wiki/Nioh.md), [Nioh 2](legacy/wiki/Nioh-2.md) |
 | `install-nioh3-bridge.sh` | Nioh 3 | `amd_ags_x64.dll` (from `amd_ags_x64-nioh3.dll`), and the reader | `dwo-video-bridge.c` | [Nioh 3](legacy/wiki/Nioh-3.md) |
@@ -402,13 +430,12 @@ page under `legacy/wiki/`.
 - **Work by others:** Spider-Man 2's diagnosis, raw views and rewritten
   shaders are macprotips', as `sm2-tpose-fix.c` says, and `sm2-shaderfix.c` is
   their rewriter ported to C; The Witcher 3's rule is tholtman1-del's; God of
-  War's depth test was found in a r/macgaming post. See Credits.
+  War's depth test was found in a r/macgaming post; NINJA GAIDEN 3's DirectShow
+  diagnosis and builds are winevideo's, and its d3d9 is d9vk. See Credits.
 - **Sources no shipped fix builds from:** `ue5-runtime-fix.c` and
   `electra-h264-fix.c` (earlier sources of the Unreal fix, whose builds
   `install-runtime-fix.sh` still recognises), `sleep-yield-fix.c`
-  (METAL GEAR SOLID 4) and `hide-wine.c`. NINJA GAIDEN 3: Razor's Edge has an
-  installer here (`install-ng3-fix.sh`, with its `ng3-*` files), but it changes
-  a bottle rather than a game folder, so the app does not offer it.
+  (METAL GEAR SOLID 4) and `hide-wine.c`.
 
 ## Credits
 
@@ -421,6 +448,12 @@ page under `legacy/wiki/`.
 - **The God of War fix** comes from a r/macgaming post, "God Of War 2018 White
   Dot Fix (through Crossover)", whose author found the depth test behind the
   white specks.
+- **[winevideo](https://github.com/Jfishin/winevideo)'s author** found why
+  NINJA GAIDEN 3's movies never start (Wine's ASF Reader blocks its audio
+  behind the video) and built the patched `qasf`, `quartz` and `winegstreamer`
+  its fix installs (LGPL-2.1-or-later).
+- **[d9vk](https://github.com/Sikarugir-App/d9vk) by Sikarugir-App** (zlib):
+  the Direct3D 9 that NINJA GAIDEN 3 runs on.
 - Everything else, and the findings behind every fix, is in `legacy/` here and
   in the archived [MacGameVideoFix](https://github.com/MathiasKowoll/MacGameVideoFix)
   with its full history.
@@ -431,5 +464,6 @@ page under `legacy/wiki/`.
 FFmpeg (LGPL-2.1-or-later) carries its own notice and the LGPL's text
 (`fixes/mgvf-asf-reader-LICENCES.md`, installed beside the games that use it),
 and every release attaches the FFmpeg source tarball it was built from. NINJA
-GAIDEN 3's third-party DLLs, which the app does not carry, say where their
-source is in `fixes/ng3-THIRD-PARTY-LICENCES.md`.
+GAIDEN 3's third-party DLLs, which the app carries for its fix, come with their
+notices and the LGPL's text in `fixes/ng3-THIRD-PARTY-LICENCES.md`, which also
+says where their source is.

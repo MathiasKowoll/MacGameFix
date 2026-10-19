@@ -8,7 +8,8 @@
 # restored to the game's own file, and for the fixes that carry a reader, an
 # older reader (outdated) and a missing one (broken). KINGDOM HEARTS and NieR
 # copy their original out of a bottle, so for them only what --status says is
-# tried; nothing here asks or starts a bottle.
+# tried; nothing here asks or starts a bottle. NINJA GAIDEN 3 goes into a
+# prefix, and its whole life is tried in a fake Steam Play one.
 #
 # No game is needed. The game's "original" is the fix's own DLL with its
 # markers and forwarder names blanked: the same exports, and not recognised as
@@ -142,5 +143,35 @@ cp "$FIX/mgvf-asf-reader.dll" "$g/mgvf-asf-reader.dll"; older "$g/dinput8.dll"
 cp "$FIX/dinput8-nier.dll" "$g/dinput8.dll"
 [ "$(MGVF_BOTTLE="$pfx" st install-nier-bridge.sh "$g")" = installed ] && say ok "nier in a Steam Play prefix: the current bridge is installed" \
   || say FAIL "nier prefix: current bridge ($(MGVF_BOTTLE="$pfx" st install-nier-bridge.sh "$g"))"
+
+# NINJA GAIDEN 3 goes into the prefix, not the game folder. A Steam Play prefix
+# is edited as a file while nothing runs in it, so its whole life is tried here:
+# the prefix's own d3d9 kept aside and put back, the four overrides written and
+# taken out, a Wine build put back over one of ours read as broken and kept as
+# the prefix's own when the fix is repaired, and none of ours kept as an original
+# by installing twice.
+g="$W/ng3"; mkdir -p "$g"; touch "$g/NINJA GAIDEN 3 Razor's Edge.exe"
+pfx="$W/ng3pfx"; sys="$pfx/drive_c/windows/system32"; mkdir -p "$sys"
+printf 'WINE REGISTRY Version 2\n;; All keys relative to \\\\User\\\\S-1-5-21-0-0-0-1000\n\n#arch=win64\n' > "$pfx/user.reg"
+touch "$pfx/system.reg"
+echo "the prefix's own d3d9" > "$sys/d3d9.dll"
+ng3st() { MGVF_BOTTLE="$pfx" st install-ng3-fix.sh "$g"; }
+ng3() { MGVF_BOTTLE="$pfx" /bin/bash "$FIX/install-ng3-fix.sh" "$g" "$@"; }
+keyed() { /usr/bin/grep -c "native,builtin" "$pfx/user.reg"; }
+[ "$(ng3st)" = absent ] && say ok "ng3 in a Steam Play prefix: absent before" || say FAIL "ng3 prefix: absent before ($(ng3st))"
+ng3 > "$W/ng3.install1.log" 2>&1 || say FAIL "ng3 prefix: install failed: $(tail -2 "$W/ng3.install1.log")"
+[ "$(ng3st)" = installed ] && cmp -s "$sys/d3d9.dll" "$FIX/ng3-d3d9.dll" && [ "$(cat "$sys/d3d9.dll.mgvf-stock")" = "the prefix's own d3d9" ] \
+  && say ok "ng3 in a Steam Play prefix: installed, the prefix's own d3d9 kept aside" || say FAIL "ng3 prefix: installed ($(ng3st))"
+[ "$(keyed)" = 4 ] && /usr/bin/grep -qF "[Software\\\\Wine\\\\AppDefaults\\\\NINJA GAIDEN 3 Razor's Edge.exe\\\\DllOverrides]" "$pfx/user.reg" \
+  && say ok "ng3 in a Steam Play prefix: four overrides, for its executable only" || say FAIL "ng3 prefix: overrides ($(keyed))"
+echo "Wine's own qasf" > "$sys/qasf.dll"
+[ "$(ng3st)" = broken ] && say ok "ng3 in a Steam Play prefix: a Wine build put back over one of ours is broken" || say FAIL "ng3 prefix: replaced qasf ($(ng3st))"
+ng3 > "$W/ng3.install2.log" 2>&1 || say FAIL "ng3 prefix: repair failed: $(tail -2 "$W/ng3.install2.log")"
+[ "$(ng3st)" = installed ] && [ "$(keyed)" = 4 ] && say ok "ng3 in a Steam Play prefix: installing again repairs it" || say FAIL "ng3 prefix: repair ($(ng3st), $(keyed))"
+last="$(ng3 --restore 2>/dev/null | tail -1)"
+[ "$last" = restored ] && [ "$(ng3st)" = absent ] && [ "$(cat "$sys/d3d9.dll")" = "the prefix's own d3d9" ] \
+  && [ "$(cat "$sys/qasf.dll")" = "Wine's own qasf" ] && [ ! -e "$sys/quartz.dll" ] && [ -z "$(ls "$sys" | /usr/bin/grep mgvf-stock)" ] \
+  && ! /usr/bin/grep -q "NINJA GAIDEN" "$pfx/user.reg" \
+  && say ok "ng3 in a Steam Play prefix: restored, the overrides gone" || say FAIL "ng3 prefix: restore ($last, $(ng3st))"
 
 if [ "$fails" = 0 ]; then echo "==> every installer: installed, outdated, updated, restored"; else echo "==> $fails failed"; exit 1; fi

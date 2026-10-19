@@ -121,14 +121,18 @@ esac
 echo "installing into $dir and $pfx"
 echo 1 > "$dir/keys.marker"; touch "$pfx/fake.key"
 SH
-# Made for DXMT, with a codec only CrossOver Preview 27 ships; and a second
-# game whose fix writes registry keys.
+# Made for DXMT, with a codec only CrossOver Preview 27 ships; a second game
+# whose fix writes registry keys; and a third whose DLLs go into the prefix, as
+# NINJA GAIDEN 3's do.
 cat > "$RES/games.json" <<'JSON'
 {"games": [{"name": "Fake Game", "exe": "FakeGame.exe", "carrierDir": "", "script": "install-fake.sh",
   "needsPrefix": false, "symptom": "test", "backend": "dxmt", "gptk": "", "gptkAlso": "",
   "codecShippedBy": "CrossOver Preview 27", "engineFreeOn": "", "notNeededFrom": "", "why": ""},
  {"name": "Fake Keys", "exe": "FakeKeys.exe", "carrierDir": "", "script": "install-fakekeys.sh",
   "needsPrefix": true, "symptom": "test", "backend": "d3dmetal", "gptk": "", "gptkAlso": "",
+  "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "", "why": ""},
+ {"name": "Fake Prefix", "exe": "FakePrefix.exe", "carrierDir": "", "script": "install-fakekeys.sh",
+  "needsPrefix": true, "scope": "prefix", "symptom": "test", "backend": "dxvk", "gptk": "", "gptkAlso": "",
   "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "", "why": ""}]}
 JSON
 /usr/bin/python3 - "$RES" <<'PY'
@@ -216,6 +220,15 @@ printf '{"kept":[{"name":"Fake Keys","folder":"%s","prefix":"%s"},{"name":"Fake 
   "$KEYS" "$PA" "$KEYS2" "$PB" "$PC" > "$SUPPORT/MacGameFix/automatic.json"
 check 'has "$(agent)" "ok Fake Keys: The fix was missing" && [ -f "$KEYS2/keys.marker" ] && [ -f "$PB/fake.key" ] && [ -f "$PC/fake.key" ]' "with two prefixes chosen, the keys go into both"
 check 'has "$(menu)" "summary | 2 in place"' "and the menu bar counts both games in place"
+
+echo "== a fix whose DLLs go into the prefix"
+FP="$SUPPORT/Steam/steamapps/common/Fake Prefix"
+mkdir -p "$FP" "$SUPPORT/Steam/steamapps/compatdata/4343/pfx"; touch "$FP/FakePrefix.exe" "$SUPPORT/Steam/steamapps/compatdata/4343/pfx/user.reg"
+printf '"AppState"\n{\n\t"appid"\t\t"4343"\n\t"name"\t\t"Fake Prefix"\n\t"StateFlags"\t\t"4"\n\t"installdir"\t\t"Fake Prefix"\n}\n' \
+  > "$SUPPORT/Steam/steamapps/appmanifest_4343.acf"
+check 'has "$(games)" "Fake Prefix | runs on DXVK | DLLs into the Steam Play prefix (4343)"' "its DLLs are said to go into the game's Steam Play prefix"
+rm -rf "$FP" "$SUPPORT/Steam/steamapps/compatdata/4343" "$SUPPORT/Steam/steamapps/appmanifest_4343.acf"
+check 'has "$(games)" "Fake Game |" && ! has "$(games)" "Fake Prefix"' "and a game that is not on disk is not listed"
 printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false}' "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
 
 echo "== the controllers' options"

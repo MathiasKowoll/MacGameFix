@@ -51,9 +51,9 @@ with winevideo 0.5.0's patches; the `qasf` change is
 build used, are pinned in `build/source-inventory-0.5.0.json` and published in
 `build/patches/` at <https://github.com/Jfishin/winevideo>.
 
-The MacGameFix app does not carry these binaries: NINJA GAIDEN 3's fix changes
-a bottle, not a game folder. They are in this repository with
-`install-ng3-fix.sh`.
+The MacGameFix app carries these binaries, this notice and
+`install-ng3-fix.sh`, which puts them into the game's prefix: a CrossOver
+bottle or a Steam Play prefix.
 
 ## Checksums of the binaries as shipped
 

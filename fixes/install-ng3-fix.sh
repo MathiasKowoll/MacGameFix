@@ -8,6 +8,8 @@
 #
 # <bottle> is the CrossOver bottle the game runs in, e.g.
 #   ~/Library/Application Support/CrossOver/Bottles/Steam
+# or the Steam Play prefix a runner such as NotProton keeps for it,
+#   .../steamapps/compatdata/<appid>/pfx
 #
 # NOTHING IN THE GAME FOLDER IS TOUCHED. Four DLLs are placed in the bottle's
 # system32 and activated for this one executable through AppDefaults, so no
@@ -60,7 +62,7 @@
 # here winegstreamer's PE half sits on this engine's Unix half, and only the PE
 # half can be overridden per application.
 #
-# MGVF-SCOPE: bottle
+# MGVF-SCOPE: prefix
 # MGVF-GAME: NINJA GAIDEN 3: Razor's Edge | NINJA GAIDEN 3 Razor's Edge.exe |
 # MGVF-WHY: Will not start at all: "Insufficient VRAM. Please close all running applications." It is a Direct3D 9 title and CrossOver's DXVK cannot create a Vulkan device for it. Needs d9vk plus winevideo's DirectShow filters, applied to this executable only.
 #
@@ -71,7 +73,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-usage() { sed -n '3,12p' "$0" >&2; exit 1; }
+usage() { sed -n '3,14p' "$0" >&2; exit 1; }
 
 # Two callers, two meanings for the first argument, and structure decides rather
 # than precedence.
@@ -88,16 +90,28 @@ usage() { sed -n '3,12p' "$0" >&2; exit 1; }
 # because guessing which bottle somebody meant is how a fix lands in a bottle
 # they never picked.
 is_bottle() { [ -n "$1" ] && [ -f "$1/cxbottle.conf" ] && [ -d "$1/drive_c" ]; }
+# A Steam Play prefix has the registry files and drive_c, and no cxbottle.conf:
+# bottles.sh's is_plain_prefix, spelled here too because this runs before that
+# file is sourced.
+is_prefix() {
+  [ -n "$1" ] && [ -f "$1/user.reg" ] && [ -f "$1/system.reg" ] && [ ! -f "$1/cxbottle.conf" ] && [ -d "$1/drive_c" ]
+}
 
 BOTTLE=""
+PFX=""
 if is_bottle "${1:-}"; then
   BOTTLE="${1%/}"
+elif is_prefix "${1:-}"; then
+  PFX="${1%/}"
 elif is_bottle "${MGVF_BOTTLE:-}"; then
   BOTTLE="${MGVF_BOTTLE%/}"
+elif is_prefix "${MGVF_BOTTLE:-}"; then
+  PFX="${MGVF_BOTTLE%/}"
 else
-  echo "error: no bottle to work on." >&2
+  echo "error: no bottle or Steam Play prefix to work on." >&2
   echo "       Pass one, e.g. ~/Library/Application Support/CrossOver/Bottles/Steam," >&2
-  echo "       or set MGVF_BOTTLE. A bottle is a folder with cxbottle.conf and drive_c." >&2
+  echo "       or set MGVF_BOTTLE. A bottle is a folder with cxbottle.conf and drive_c;" >&2
+  echo "       a Steam Play prefix, one with user.reg, system.reg and drive_c." >&2
   [ -n "${1:-}" ] && echo "       '$1' is not one." >&2
   [ -n "${MGVF_BOTTLE:-}" ] && echo "       MGVF_BOTTLE='$MGVF_BOTTLE' is not one either." >&2
   exit 1
@@ -115,7 +129,7 @@ ACTION="${2:-install}"
 if [ "${MGVF_STATUS_ONLY:-0}" = 1 ]; then ACTION=--status; fi
 
 EXE="NINJA GAIDEN 3 Razor's Edge.exe"
-SYS="$BOTTLE/drive_c/windows/system32"
+SYS="${BOTTLE:-$PFX}/drive_c/windows/system32"
 # The override's key under HKEY_CURRENT_USER, spelled as reg.exe takes it. One
 # spelling for both readers: reg.exe is handed it behind HKEY_CURRENT_USER below,
 # and user_reg_has_value encodes it the way user.reg writes it.
@@ -220,7 +234,38 @@ override_present() {
 }
 
 
-[ -d "$BOTTLE/drive_c" ] || { echo "error: not a bottle: $BOTTLE" >&2; exit 1; }
+[ -n "$PFX" ] || [ -d "$BOTTLE/drive_c" ] || { echo "error: not a bottle: $BOTTLE" >&2; exit 1; }
+
+# ---------------------------------------------------------------------------
+# A STEAM PLAY PREFIX: compatdata/<appid>/pfx, as a runner such as NotProton
+# keeps one per game. No CrossOver claims it, so reg.exe cannot reach it: its
+# user.reg is edited directly, and only while nothing runs in it, the way the
+# NieR and Kingdom Hearts installers do (bottles.sh says why). The four DLLs and
+# the four overrides are the same as in a bottle.
+#
+# The bottle is the route played with the game; this one is not yet. A bottle
+# update was measured putting back three of the four DLLs -- the three Wine
+# builds, which carry Wine's builtin mark at 0x40 where d9vk does not -- and a
+# runner update has not been measured. --status says what is there either way.
+if [ -n "$PFX" ]; then
+  command -v user_reg_edit >/dev/null 2>&1 || {
+    echo "error: a Steam Play prefix needs bottles.sh beside this script, and it is not there." >&2
+    exit 1
+  }
+fi
+
+prefix_stopped() {  # prefix_stopped <prefix dir>
+  local rc=0
+  bottle_server_alive "$1" || rc=$?
+  case "$rc" in
+  1) return 0 ;;
+  0) echo "error: something is running in this prefix: $1" >&2
+     echo "       Quit the game first. Nothing was changed." >&2 ;;
+  *) echo "error: cannot tell whether anything runs in this prefix: $1" >&2
+     echo "       Nothing was changed." >&2 ;;
+  esac
+  return 1
+}
 
 # Named literally, because make-fixes-bundle.sh works out what an installer
 # needs by collecting its "$HERE/<file>" references. A lookup that builds the
@@ -284,8 +329,15 @@ status() {
   # The honest question is whether OUR file is there, and that is answerable by
   # comparing it with the one we would install. Same fault as generation 4's
   # d3d10: state inferred from displacement is blind to what merely arrived.
+  #
+  # The one we would install is what src_for answers. Building the path here
+  # from the script's folder, "ng3-" and the name made build-app.sh, which
+  # collects the files an installer names beside itself, look for one called
+  # just "ng3-".
+  local ours
   for d in $DLLS; do
-    [ -f "$SYS/$d" ] && [ -f "$HERE/ng3-$d" ] && cmp -s "$SYS/$d" "$HERE/ng3-$d" && n=$((n+1))
+    ours="$(src_for "$d")" || continue
+    [ -f "$SYS/$d" ] && cmp -s "$SYS/$d" "$ours" && n=$((n+1))
   done
 
   # Read the file while no wineserver is alive for the bottle; ask the bottle
@@ -308,7 +360,11 @@ status() {
   # When bottles.sh is not beside this script neither function exists, and the
   # bottle is asked as it always was.
   local alive=2 disk=2
-  if command -v bottle_server_alive >/dev/null 2>&1; then
+  # No reg.exe reaches a Steam Play prefix, so its file is the answer, even
+  # while something runs in it and the file may lag.
+  if [ -n "$PFX" ]; then
+    user_reg_has_value "$PFX" "$REG_KEY" "*d3d9" && disk=0 || disk=1
+  elif command -v bottle_server_alive >/dev/null 2>&1; then
     bottle_server_alive "$BOTTLE" && alive=0 || alive=$?
     if [ "$alive" = 1 ]; then
       user_reg_has_value "$BOTTLE" "$REG_KEY" "*d3d9" && disk=0 || disk=$?
@@ -359,11 +415,16 @@ export MGVF_EXE="$EXE"
 case "$ACTION" in
   --status) status; exit 0 ;;
   --restore)
+      if [ -n "$PFX" ]; then prefix_stopped "$PFX" || exit 1; fi
+      # A copy kept aside that is ours is not the original: installing twice
+      # once kept our own DLL as the original, and putting it back left the fix
+      # in system32. Such a copy goes, with ours.
       for d in $DLLS; do
-        if [ -f "$SYS/$d.mgvf-stock" ]; then
+        s="$(src_for "$d" 2>/dev/null)" || s=""
+        if [ -f "$SYS/$d.mgvf-stock" ] && { [ -z "$s" ] || ! cmp -s "$SYS/$d.mgvf-stock" "$s"; }; then
           mv -f "$SYS/$d.mgvf-stock" "$SYS/$d"
         else
-          rm -f "$SYS/$d"
+          rm -f "$SYS/$d" "$SYS/$d.mgvf-stock"
         fi
       done
       # The last line is what a caller reads, so it must not say "restored"
@@ -371,6 +432,21 @@ case "$ACTION" in
       # explanation went to stderr and stdout ended with the word meaning done.
       # Same fault as --status counting displacements -- a true thing said where
       # nobody looks, and a false one where they do.
+      if [ -n "$PFX" ]; then
+        gone=1
+        for n in d3d9 qasf quartz winegstreamer; do
+          user_reg_edit "$PFX" delete "$REG_KEY" "*$n" || gone=0
+        done
+        if [ "$gone" = 1 ]; then
+          echo "removed the per-application overrides"
+          echo "restored"
+        else
+          echo "warning: the overrides could not be taken out of $PFX/user.reg." >&2
+          echo "         The DLLs have been put back, so nothing of ours is loaded." >&2
+          echo "restored-except-registry"
+        fi
+        exit 0
+      fi
       if cx="$(find_crossover)" && reachable "$BOTTLE" "$cx" \
          && wine_in_bottle "$BOTTLE" "$cx" --cx-app reg.exe delete "$KEY" /f >/dev/null 2>&1; then
         echo "removed the per-application overrides"
@@ -398,14 +474,39 @@ if ! src_for d3d9.dll >/dev/null || ! src_for qasf.dll >/dev/null; then
   exit 1
 fi
 
+if [ -n "$PFX" ]; then
+  prefix_stopped "$PFX" || exit 1
+  [ -d "$SYS" ] || {
+    echo "error: this prefix has no system32 yet -- run the game once first" >&2; exit 1; }
+fi
+
 for d in $DLLS; do
-  s="$(src_for "$d")" || { echo "error: $d not found under $WV" >&2; exit 1; }
-  if [ -f "$SYS/$d" ] && [ ! -f "$SYS/$d.mgvf-stock" ]; then
+  s="$(src_for "$d")" || { echo "error: $d is not beside this script" >&2; exit 1; }
+  # Only the prefix's own file is kept aside: ours, from an earlier install,
+  # is not an original to put back.
+  if [ -f "$SYS/$d" ] && [ ! -f "$SYS/$d.mgvf-stock" ] && ! cmp -s "$SYS/$d" "$s"; then
     mv "$SYS/$d" "$SYS/$d.mgvf-stock"
   fi
   cp "$s" "$SYS/$d"
   echo "  $d  <- ${s#$HOME/}"
 done
+
+if [ -n "$PFX" ]; then
+  for n in d3d9 qasf quartz winegstreamer; do
+    # Written and then read back, as below for a bottle.
+    if ! user_reg_edit "$PFX" set "$REG_KEY" "*$n" "native,builtin" \
+       || ! user_reg_has_value "$PFX" "$REG_KEY" "*$n"; then
+      echo "error: could not write the override for $n into $PFX/user.reg" >&2
+      exit 1
+    fi
+  done
+  echo "  overrides written for this executable only, into the prefix's user.reg"
+  echo "installed"
+  echo
+  echo "The boot movie freezes on its first frame -- one click skips it, and the"
+  echo "game and its cutscenes run. That part is not solved here."
+  exit 0
+fi
 
 cx="$(find_crossover)" || { echo "error: no CrossOver found in /Applications" >&2; exit 1; }
 reachable "$BOTTLE" "$cx" || {

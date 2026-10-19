@@ -1,9 +1,12 @@
 // MacGameFix -- fixes that go into a game's own folder, and Wine modules.
 //
 // Every game fix this app carries lives in a game's own folder: a proxy DLL
-// beside the game, and for one title registry keys in that game's own prefix.
-// None of them changes CrossOver, so they work with CrossOver as CodeWeavers
-// ships it, with CrossOver Preview, and with a Steam Play tool such as NotProton.
+// beside the game, and for a few titles registry keys in that game's own prefix.
+// NINJA GAIDEN 3's is the one that lives in the prefix instead: DLLs in the
+// system32 of its bottle or Steam Play prefix, and overrides for that executable
+// alone. None of them changes CrossOver, so they work with CrossOver as
+// CodeWeavers ships it, with CrossOver Preview, and with a Steam Play tool such
+// as NotProton.
 // The one exception is its own tab: the Wine modules (Engine.swift), which go
 // into a CrossOver app or a NotProton runner.
 //
@@ -671,7 +674,7 @@ struct HitRow: View {
                 }
                 if hit.game.needsPrefix {
                     if hit.prefixes.count > 1 {
-                        Text("Registry keys go into:").font(.caption).foregroundStyle(.secondary)
+                        Text("\(hit.game.prefixWhat):").font(.caption).foregroundStyle(.secondary)
                         ForEach(hit.prefixes) { p in
                             Toggle(p.label, isOn: Binding(
                                 get: { hit.chosen.contains(p) },
@@ -681,7 +684,7 @@ struct HitRow: View {
                                 .disabled(busy)
                         }
                     } else if let p = hit.chosen.first {
-                        Text("Registry keys go into the \(p.label)").font(.caption).foregroundStyle(.secondary)
+                        Text("\(hit.game.prefixWhat) the \(p.label)").font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 if let b = hit.blocker {
@@ -742,7 +745,7 @@ struct GamesView: View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("MacGameFix").font(.title2.bold())
-                Text("Fixes go into each game's own folder and never change CrossOver. Quit a game before changing its fix.")
+                Text("Fixes go into each game's own folder, a few also into its prefix or bottle, and never change CrossOver. Quit a game before changing its fix.")
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .help("They work with CrossOver as it ships, CrossOver Preview, and Steam Play tools such as NotProton.")
@@ -1706,7 +1709,8 @@ enum Entry {
                 var parts = [hit.game.name, hit.game.requirementNote ?? "no special requirement"]
                 if hit.game.needsPrefix {
                     parts.append(hit.chosen.isEmpty ? "no prefix"
-                                 : "keys into the " + hit.chosen.map(\.label).joined(separator: " and the "))
+                                 : (hit.game.inPrefix ? "DLLs into the " : "keys into the ")
+                                   + hit.chosen.map(\.label).joined(separator: " and the "))
                 }
                 print(parts.joined(separator: " | "))
             }

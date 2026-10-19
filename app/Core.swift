@@ -116,6 +116,9 @@ struct Game: Decodable, Identifiable, Hashable {
     let carrierDir: String
     let script: String
     let needsPrefix: Bool
+    /// "prefix" for a fix whose DLLs go into the game's prefix and not its
+    /// folder; "folder", or absent in catalogs older than the field, for the rest.
+    let scope: String?
     let symptom: String
     let backend: String
     let gptk: String
@@ -132,6 +135,13 @@ struct Game: Decodable, Identifiable, Hashable {
     let why: String
 
     var id: String { name }
+
+    /// NINJA GAIDEN 3's: its DLLs and overrides go into the prefix, a CrossOver
+    /// bottle or a Steam Play prefix, and nothing into the game folder.
+    var inPrefix: Bool { scope == "prefix" }
+
+    /// Where the fix's part outside the game folder goes, said before the place.
+    var prefixWhat: String { inPrefix ? "Its DLLs and overrides go into" : "Registry keys go into" }
 
     /// Is this folder this game? Identity is the shipping executable, looked for
     /// where these titles keep it: the folder itself, the carrier's folder (The
@@ -159,6 +169,7 @@ struct Game: Decodable, Identifiable, Hashable {
         switch backend {
         case "dxmt": parts.append("runs on DXMT")
         case "d3dmetal": parts.append("runs on D3DMetal")
+        case "dxvk": parts.append("runs on DXVK")
         default: break
         }
         if !gptk.isEmpty {
@@ -245,7 +256,7 @@ struct Hit: Identifiable {
             return "No prefix for this game was found. Run it once with NotProton or CrossOver, then Scan again."
         }
         if game.needsPrefix && chosen.isEmpty {
-            return "Choose at least one place for its registry keys."
+            return game.inPrefix ? "Choose at least one place for its DLLs." : "Choose at least one place for its registry keys."
         }
         return nil
     }
