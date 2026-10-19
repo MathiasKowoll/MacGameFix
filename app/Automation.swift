@@ -73,6 +73,10 @@ struct AutoSettings: Codable {
     var modulesNewBuilds = true
     /// When the user last opened the window: what the agent did before it has been seen.
     var seen = Date.distantPast
+    /// The menu bar shows a connected controller's battery.
+    var padBattery = true
+    /// What stands beside it: "raccoon" (the raccoon and a gamepad), "gamepad", or "none".
+    var batteryIcon = "raccoon"
 
     init() {}
 
@@ -88,6 +92,8 @@ struct AutoSettings: Codable {
         modulesDeclined = try c.decodeIfPresent([String].self, forKey: .modulesDeclined) ?? []
         modulesNewBuilds = try c.decodeIfPresent(Bool.self, forKey: .modulesNewBuilds) ?? true
         seen = try c.decodeIfPresent(Date.self, forKey: .seen) ?? .distantPast
+        padBattery = try c.decodeIfPresent(Bool.self, forKey: .padBattery) ?? true
+        batteryIcon = try c.decodeIfPresent(String.self, forKey: .batteryIcon) ?? "raccoon"
     }
 
     static func load() -> AutoSettings {
@@ -280,6 +286,12 @@ enum Agent {
         var kept = settings
         events += await Engine.keep(&kept, state: &state, now: now)
         if kept.modulesKept != settings.modulesKept { kept.save() }
+        // What the Wine modules saw each game do, kept before a restart empties /tmp.
+        if PadStore.exists {
+            var pad = PadStore.load()
+            if pad.absorbLog(names: { Dictionary(SteamGames.installed().map { ($0.appid, $0.name) },
+                                                 uniquingKeysWith: { a, _ in a }) }) { pad.save() }
+        }
 
         let (catalogDir, manifest) = Catalog.active()
         let games = Catalog.games(in: catalogDir)

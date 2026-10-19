@@ -4,11 +4,14 @@
 // them: how many are in place or to review. Which games,
 // and why, is in the window. The window stays its own process of the
 // same app, opened from the menu, so closing it never stops the agent.
+// Beside the raccoon it also shows the battery of a connected controller,
+// the lowest of them, and the menu lists each one.
 //
 // Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AppKit
+import GameController
 
 /// What the agent knows of one game marked "Keep it applied". The menu counts
 /// these; the window shows them.
@@ -75,12 +78,13 @@ struct KeptLine: Equatable {
 final class MenuBarAgent: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var item: NSStatusItem?
     private var timer: Timer?
+    private var batteryTimer: Timer?
     private var looking = false
     private var lastLook: Date?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Notifier.start()
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.delegate = self
@@ -92,10 +96,33 @@ final class MenuBarAgent: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                                             queue: .main) { _ in
             MainActor.assumeIsolated { self.refreshIcon() }
         }
+        DistributedNotificationCenter.default().addObserver(forName: Model.settingsNotification, object: nil,
+                                                            queue: .main) { _ in
+            MainActor.assumeIsolated { self.batterySetting() }
+        }
         timer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { _ in
             MainActor.assumeIsolated { self.look() }
         }
+        batterySetting()
         look()
+    }
+
+    /// A pad's battery beside the raccoon, while the setting says so: on
+    /// connecting and leaving, and every minute. Off, the controllers are not
+    /// asked at all.
+    private func batterySetting() {
+        if AutoSettings.load().padBattery {
+            PadBattery.start { MainActor.assumeIsolated { self.refreshIcon() } }
+            if batteryTimer == nil {
+                batteryTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
+                    MainActor.assumeIsolated { self.refreshIcon() }
+                }
+            }
+        } else {
+            batteryTimer?.invalidate()
+            batteryTimer = nil
+        }
+        refreshIcon()
     }
 
     /// Opening the app while the agent runs lands here: the window opens.
@@ -125,9 +152,25 @@ final class MenuBarAgent: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// The raccoon, with a dot while something the agent did asks for a look
     /// and the window has not been opened since.
     private func refreshIcon() {
-        let news = AgentState.load().news(since: AutoSettings.load().seen)
-        item?.button?.image = RaccoonIcon.image(dot: news)
-        item?.button?.setAccessibilityLabel(news ? "MacGameFix: something new to look at" : "MacGameFix")
+        let settings = AutoSettings.load()
+        let news = AgentState.load().news(since: settings.seen)
+        let lowest = batteryTimer == nil ? nil : PadBattery.readings().min { $0.level < $1.level }
+        // The battery's icon as the settings say; with no pad, the gamepad stays
+        // if it was chosen and anything else shows the raccoon, so the item is there.
+        switch (settings.padBattery ? settings.batteryIcon : "raccoon", lowest) {
+        case ("gamepad", let pad):
+            item?.button?.image = RaccoonIcon.gamepad(dot: news)
+            item?.button?.title = pad.map { " \($0.level)%" } ?? ""
+        case ("none", let pad?):
+            item?.button?.image = nil
+            item?.button?.title = (news ? "• " : "") + "\(pad.level)%"
+        case (_, let pad):
+            item?.button?.image = RaccoonIcon.image(dot: news, pad: pad != nil)
+            item?.button?.title = pad.map { " \($0.level)%" } ?? ""
+        }
+        item?.button?.imagePosition = .imageLeading
+        item?.button?.setAccessibilityLabel((news ? "MacGameFix: something new to look at" : "MacGameFix")
+            + (lowest.map { ", \($0.name) battery \($0.level) percent" } ?? ""))
     }
 
     // MARK: The menu, built fresh each time it opens
@@ -153,6 +196,17 @@ final class MenuBarAgent: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 row.indentationLevel = 1
                 menu.addItem(row)
             }
+        }
+        let pads = batteryTimer == nil ? [] : PadBattery.readings()
+        if !pads.isEmpty {
+            menu.addItem(.separator())
+            for pad in pads {
+                let row = note("\(pad.name): \(pad.level)%" + (pad.state.isEmpty ? "" : ", \(pad.state)"))
+                row.image = NSImage(systemSymbolName: pad.symbol, accessibilityDescription: nil)
+                menu.addItem(row)
+            }
+            refreshIcon()
+            menu.addItem(.separator())
         }
         if looking {
             menu.addItem(note("Looking at the games…"))
@@ -204,7 +258,16 @@ final class MenuBarAgent: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func modulesNow() { look(modules: true) }
     @objc private func openWindowItem() { openWindow() }
     @objc private func openReview() { openWindow(review: true) }
-    @objc private func quit() { NSApp.terminate(nil) }
+    /// Quitting from the menu bar quits the app: the window, its own process of
+    /// this bundle, is asked to quit too (one that is installing finishes first).
+    @objc private func quit() {
+        let me = ProcessInfo.processInfo.processIdentifier
+        for app in NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+        where app.processIdentifier != me {
+            app.terminate()
+        }
+        NSApp.terminate(nil)
+    }
 
     /// The window is the app run plainly: a second process of this bundle,
     /// unless one is already open. `review` opens it on the marked games that
@@ -226,9 +289,43 @@ final class MenuBarAgent: NSObject, NSApplicationDelegate, NSMenuDelegate {
 /// RaccoonBot's raccoon, kept from the app MacGameFix grew out of: the same
 /// shapes as its logo, in one colour for the menu bar. The mask is darkest, the
 /// head and ears lighter, the lower face lightest, and the eyes are cut out.
-/// A dot by the ear says there is something new to look at.
+/// A dot by the ear says there is something new to look at, and a gamepad
+/// beside it that the percentage after it is a controller's battery.
 enum RaccoonIcon {
-    static func image(dot: Bool) -> NSImage {
+    static func image(dot: Bool, pad: Bool = false) -> NSImage {
+        let raccoon = image(dot: dot)
+        guard pad, let symbol = NSImage(systemSymbolName: "gamecontroller.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)) else { return raccoon }
+        let gap: CGFloat = 4, size = symbol.size
+        let image = NSImage(size: NSSize(width: 18 + gap + size.width, height: 18), flipped: false) { _ in
+            raccoon.draw(in: NSRect(x: 0, y: 0, width: 18, height: 18))
+            symbol.draw(in: NSRect(x: 18 + gap, y: (18 - size.height) / 2, width: size.width, height: size.height))
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
+    /// The gamepad alone, with the dot by its top corner when something is new.
+    static func gamepad(dot: Bool) -> NSImage {
+        guard let symbol = NSImage(systemSymbolName: "gamecontroller.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)) else {
+            return image(dot: dot)
+        }
+        let size = symbol.size
+        let image = NSImage(size: NSSize(width: size.width + (dot ? 4 : 0), height: 18), flipped: false) { _ in
+            symbol.draw(in: NSRect(x: 0, y: (18 - size.height) / 2, width: size.width, height: size.height))
+            if dot {
+                NSColor.black.setFill()
+                NSBezierPath(ovalIn: NSRect(x: size.width - 1, y: 12, width: 5, height: 5)).fill()
+            }
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
+    private static func image(dot: Bool) -> NSImage {
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { _ in
             guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
             // The logo's shapes span x -78...78 and y -107...66, about its centre.
@@ -315,4 +412,41 @@ enum RaccoonIcon {
 
 private extension NSFont {
     func withBold() -> NSFont { NSFontManager.shared.convert(self, toHaveTrait: .boldFontMask) }
+}
+
+/// The batteries of the connected controllers, as macOS's GameController
+/// reports them for a DualSense, a DualSense Edge or any pad that says.
+@MainActor
+enum PadBattery {
+    struct Reading {
+        let name: String
+        let level: Int
+        /// "charging" or "charged"; empty while it runs on its battery.
+        let state: String
+        let symbol: String
+    }
+
+    private static var started = false
+
+    static func start(onChange: @escaping @Sendable () -> Void) {
+        guard !started else { return }
+        started = true
+        // Without it a process with no window in front sees no controller at all.
+        GCController.shouldMonitorBackgroundEvents = true
+        for name in [Notification.Name.GCControllerDidConnect, .GCControllerDidDisconnect] {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in onChange() }
+        }
+    }
+
+    static func readings() -> [Reading] {
+        GCController.controllers().compactMap { pad in
+            guard let battery = pad.battery, battery.batteryState != .unknown else { return nil }
+            let level = Int((battery.batteryLevel * 100).rounded())
+            let name = (pad.vendorName ?? pad.productCategory).replacingOccurrences(of: " Wireless Controller", with: "")
+            let charging = battery.batteryState == .charging, full = battery.batteryState == .full
+            let step = level >= 88 ? "100" : level >= 63 ? "75" : level >= 38 ? "50" : level >= 13 ? "25" : "0"
+            return Reading(name: name, level: level, state: charging ? "charging" : full ? "charged" : "",
+                           symbol: charging ? "battery.100percent.bolt" : "battery.\(step)percent")
+        }
+    }
 }

@@ -133,9 +133,9 @@ rm -rf "$APP"
 mkdir -p "$MACOS" "$RES" "$CACHE"
 
 echo "==> compiling"
-swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/Automation.swift" "$HERE/MenuBar.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
+swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/Pad.swift" "$HERE/Automation.swift" "$HERE/MenuBar.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
   -o "$MACOS/MacGameFix" \
-  -framework SwiftUI -framework AppKit -framework IOKit -framework UserNotifications \
+  -framework SwiftUI -framework AppKit -framework IOKit -framework UserNotifications -framework GameController \
   -target arm64-apple-macos14.0 \
   -module-cache-path "$CACHE"
 
@@ -183,6 +183,9 @@ for f in "${PAYLOAD[@]}"; do
 done
 for s in "${SCRIPTS[@]}"; do chmod +x "$RES/$s"; done
 cp "$STAGE/games.json" "$RES/games.json"
+# The Controllers tab's presets: options measured per title.
+python3 -I -c 'import json,sys; json.load(open(sys.argv[1]))' "$HERE/pad-presets.json" || { echo "pad-presets.json is not valid JSON"; exit 1; }
+cp "$HERE/pad-presets.json" "$RES/pad-presets.json"
 
 # The Wine modules (engine/): their installer, and every built module with
 # engine-modules.json, as bundle-engine.py lays them out.

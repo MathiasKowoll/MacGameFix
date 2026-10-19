@@ -26,7 +26,7 @@ ok() { echo "  ok    $1"; }
 bad() { echo "  FAIL  $1"; fail=1; }
 check() { if eval "$1"; then ok "$2"; else bad "$2"; fi; }
 steam() { # buildid, StateFlags
-  printf '"AppState"\n{\n\t"appid"\t\t"4242"\n\t"StateFlags"\t\t"%s"\n\t"installdir"\t\t"Fake Game"\n\t"buildid"\t\t"%s"\n}\n' "$2" "$1" > "$MANIFEST"
+  printf '"AppState"\n{\n\t"appid"\t\t"4242"\n\t"name"\t\t"Fake Game"\n\t"StateFlags"\t\t"%s"\n\t"installdir"\t\t"Fake Game"\n\t"buildid"\t\t"%s"\n}\n' "$2" "$1" > "$MANIFEST"
 }
 agent() { "$BIN" --agent-once 2>&1; }
 menu() { "$BIN" --menu-report 2>&1; }
@@ -47,8 +47,8 @@ printf 'x wine-11.17-8909 x' > "$OTHER/lib/wine/x86_64-unix/ntdll.so"
 mkdir -p "$RUNNER/etc" "$OTHER/etc"
 printf '"BuildTag" = "cxpreview-20261006-rc2"\n' > "$RUNNER/etc/CrossOver.conf"
 printf '"BuildTag" = "cxpreview-20261099-rc1"\n' > "$OTHER/etc/CrossOver.conf"
-ENGINE_FILES="x86_64-windows/winebus.sys x86_64-windows/mmdevapi.dll x86_64-unix/winecoreaudio.so
-  aarch64-windows/winebus.sys aarch64-windows/mmdevapi.dll aarch64-unix/winecoreaudio.so"
+ENGINE_FILES="x86_64-windows/winebus.sys x86_64-windows/mmdevapi.dll x86_64-unix/winecoreaudio.so x86_64-unix/winebus.so
+  aarch64-windows/winebus.sys aarch64-windows/mmdevapi.dll aarch64-unix/winecoreaudio.so aarch64-unix/winebus.so"
 for f in $ENGINE_FILES; do echo "CodeWeavers' $f" > "$RUNNER/lib/wine/$f"; done
 engine() { "$BIN" --engine-report 2>&1 | grep -F "runner · CrossOver Preview $1 |" || true; }
 check 'has "$(engine 20261006)" "| fex | absent"' "a runner of a carried build, both sides, is absent, named by its Preview's date"
@@ -64,7 +64,12 @@ printf 'x wine-11.0-1 x' > "$RUNNER/lib/wine/x86_64-unix/ntdll.so"
 check 'has "$(engine 20261006)" "noModules"' "a runner whose Wine is not the build's is refused"
 printf 'x wine-11.17-8909 x' > "$RUNNER/lib/wine/x86_64-unix/ntdll.so"
 "$BIN" --engine-remove "$RUNNER" >/dev/null 2>&1 || true
-check '[ "$(cat "$RUNNER/lib/wine/aarch64-unix/winecoreaudio.so")" = "CodeWeavers'"'"' aarch64-unix/winecoreaudio.so" ] && has "$(engine 20261006)" "absent"' "removing puts CrossOver's own back"
+check '[ "$(cat "$RUNNER/lib/wine/aarch64-unix/winecoreaudio.so")" = "CodeWeavers'"'"' aarch64-unix/winecoreaudio.so" ] && [ "$(cat "$RUNNER/lib/wine/x86_64-unix/winebus.so")" = "CodeWeavers'"'"' x86_64-unix/winebus.so" ] && has "$(engine 20261006)" "absent"' "removing puts CrossOver's own back"
+# A CrossOver without one of the files: removing takes ours out again.
+rm -f "$RUNNER/lib/wine/aarch64-unix/winebus.so"
+"$BIN" --engine-install "$RUNNER" >/dev/null 2>&1 || true
+"$BIN" --engine-remove "$RUNNER" >/dev/null 2>&1 || true
+check '[ ! -e "$RUNNER/lib/wine/aarch64-unix/winebus.so" ] && has "$(engine 20261006)" "absent"' "a file CrossOver did not have is taken out again"
 rm -rf "$SUPPORT/notproton"
 
 # A catalog with one fake fix: a marker in the game folder, or a failure when
@@ -199,6 +204,32 @@ printf '{"kept":[{"name":"Fake Keys","folder":"%s","prefix":"%s"},{"name":"Fake 
 check 'has "$(agent)" "ok Fake Keys: The fix was missing" && [ -f "$KEYS2/keys.marker" ] && [ -f "$PB/fake.key" ] && [ -f "$PC/fake.key" ]' "with two prefixes chosen, the keys go into both"
 check 'has "$(menu)" "summary | 2 in place"' "and the menu bar counts both games in place"
 printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false}' "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
+
+echo "== the controllers' options"
+export MACGAMEFIX_PAD_LOG="$T/pad.log"
+P="$SUPPORT/MacGameFix"
+padwrite() { "$BIN" --pad-write >/dev/null 2>&1; }
+padreport() { "$BIN" --pad-report 2>&1; }
+padwrite
+check '[ -f "$P/pad.json" ] && has "$(cat "$P/pad.conf")" "bluetooth=wired" && has "$(cat "$P/pad.conf")" "motor_power=full" && has "$(cat "$P/pad.conf")" "edge_haptics_gain=2.00"' "every game's options start as measured, in pad.conf"
+check 'has "$(cat "$P/pad.d/1593500.conf")" "edge=dualsense" && ! has "$(cat "$P/pad.d/1593500.conf")" "bluetooth="' "a game with a preset gets its own file, with only what differs"
+/usr/bin/python3 - "$P/pad.json" <<'PY2'
+import json, sys
+d = json.load(open(sys.argv[1])); d["games"] = {"1593500": {"name": "God of War", "options": {"edgeAsDualSense": False}}, "4242": {"name": "Fake Game", "options": {"hapticsGain": 2.5}}}
+json.dump(d, open(sys.argv[1], "w"))
+PY2
+padwrite
+check '[ ! -f "$P/pad.d/1593500.conf" ]' "the user's own options win over a preset, and a game left as every game loses its file"
+check 'has "$(cat "$P/pad.d/4242.conf")" "haptics_gain=2.50"' "a game's own gain, written with a point whatever the language"
+printf '10:00:00 [1] game=4242 observed: the game plays haptics on the Bluetooth DualSense Edge%ss output\n10:00:01 [2] game=4242 observed: the game sets trigger effects on the DualSense Edge\n10:00:02 [3] game=- the Bluetooth DualSense Edge at location 32c48ef2 is shown as wired\n10:00:03 [4] game=4242 observ' "'" > "$MACGAMEFIX_PAD_LOG"
+padwrite
+check 'has "$(padreport)" "4242 | Fake Game | " && has "$(padreport)" "seen haptics,triggers"' "what the modules logged is kept per game; a line with no game says nothing"
+printf 'ed: the game rumbles the DualSense%ss motors\n' "'" >> "$MACGAMEFIX_PAD_LOG"
+padwrite
+check 'has "$(padreport)" "seen haptics,motors,triggers"' "a line the log had only half of is read once it is whole"
+"$BIN" --pad-export "$T/pad-export.json"
+check 'has "$(cat "$T/pad-export.json")" "\"appid\" : \"4242\"" && ! has "$(cat "$T/pad-export.json")" "$MACGAMEFIX_HOME" && ! has "$(cat "$T/pad-export.json")" "/Users/"' "the export has the games and no paths"
+unset MACGAMEFIX_PAD_LOG
 
 echo "== new fixes, asked first"
 # A newer release of the same fake catalog, and the agent pointed at it.

@@ -22,11 +22,11 @@ archived repository.
 
 | Folder | What it holds |
 | --- | --- |
-| `app/` | The application: `Core.swift` (installers, games, libraries), `Engine.swift` (the Wine modules), `Automation.swift` (the background agent, signed catalog updates, reports), `MenuBar.swift` (the agent's menu bar item), `MacGameFix.swift` (the window), `AppIcon.icon` (the icon); `build-app.sh` and `test-automation.sh`. |
+| `app/` | The application: `Core.swift` (installers, games, libraries), `Engine.swift` (the Wine modules), `Pad.swift` (the Game Feel tab's options and what it writes for the modules), `pad-presets.json` (options measured per title), `Automation.swift` (the background agent, signed catalog updates, reports), `MenuBar.swift` (the agent's menu bar item), `MacGameFix.swift` (the window), `AppIcon.icon` (the icon); `build-app.sh` and `test-automation.sh`. |
 | `fixes/` | One installer per fix (`install-*.sh`), the DLLs they put in place, the C source of each DLL and the scripts that build them (`build-proxy.sh`, `build-asf-reader.sh`, `check-builds.sh`), and the third-party notices. |
 | `process-features.json` | The table: per game executable, its symptom, backend, toolkit, codec and engine needs. The app is built from it. |
 | `tools/` | The probes and capture scripts the fixes were found with: video and Media Foundation observers, HID traces, a game survey. |
-| `engine/` | Not a game fix: three patched Wine modules that go into CrossOver itself, so that games find a DualSense's haptic output on a cable. The built modules per CrossOver build, their installer (`engine-modules.sh`), the patches and `build.sh`; see [`engine/README.md`](engine/README.md). The app's Wine Modules tab installs them. |
+| `engine/` | Not a game fix: four patched Wine modules that go into CrossOver itself, so that games find a DualSense's haptic output on a cable, and take the pad on Bluetooth as the same pad on a cable. The built modules per CrossOver build, their installer (`engine-modules.sh`), the patches and `build.sh`; see [`engine/README.md`](engine/README.md). The app's Wine Modules tab installs them. |
 | `legacy/` | What MacGameVideoFix's wiki and notes found, per game and in general (`legacy/wiki/Findings.md`, `legacy/wiki/Diagnosing-a-new-game.md`). Kept as written; some pages describe the engine work that stayed behind. |
 
 ## What it does
@@ -41,12 +41,15 @@ archived repository.
 
 Quit a game before installing or removing its fix.
 
-The window has three tabs: **Games**, the fixes above; **Wine Modules**, the one
-part that changes CrossOver itself (three Wine files for a DualSense's haptics on
-a cable, see [`engine/README.md`](engine/README.md)), with a switch for every
-CrossOver app and NotProton runner and the modules' own updates; and
-**Settings**, with the background agent, the game fixes' updates, the folders
-searched and the log.
+The window has three tabs, and a fourth once the Wine modules are in a CrossOver:
+**Games**, the fixes above; **Wine Modules**, the one part that changes CrossOver
+itself (four Wine files for a DualSense's haptics on a cable and the pad on
+Bluetooth as if on a cable, see [`engine/README.md`](engine/README.md)), with a
+switch and an Update button for every CrossOver app and NotProton runner, and
+the modules' own updates; **Game Feel**, the DualSense's options for every game
+and, in a table of the Steam games on this Mac, for each one, with what the
+modules saw each game do; and **Settings**, with the background agent, the game
+fixes' updates, the folders searched and the log.
 
 ## What each fix requires
 
@@ -89,8 +92,12 @@ until you turn it on, and the fixes stay in the games' own folders as before.
   looks at every game or for new fixes on demand.
   - A dot by the raccoon's ear means something new to look at: new fixes or a
     fix that failed. It goes away when you open the window.
-  - *Quit MacGameFix* stops the agent until you log in again or open the
-    window. If it crashes, it starts again by itself.
+  - With a controller connected, its battery shows beside the raccoon (the
+    lowest of several), and the menu lists each one. Settings chooses what
+    stands beside it: the raccoon and a gamepad, a gamepad, or nothing.
+  - *Quit MacGameFix* stops the agent, and closes the window if it is open,
+    until you log in again or open the app. If it crashes, it starts again by
+    itself.
 - **New fixes and new Wine modules.** The agent looks at the latest release of
   this repository once a day. A release carries two catalogs, each signed and
   versioned on its own: the game fixes (the installers and every file they use)

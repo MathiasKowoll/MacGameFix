@@ -1,0 +1,20 @@
+{
+  "about": "Options for the DualSense Wine modules, per Steam app id, each measured on its title. The Game Feel tab shows them as a game's suggested options; what the user sets for a game wins. Keys as in app/Pad.swift PadOptions.",
+  "games": {
+    "1593500": {
+      "title": "God of War",
+      "options": { "edgeAsDualSense": true },
+      "measured": "2026-10-16, NotProton pr90.23: its Sony library does not know the Edge; shown as a standard DualSense the game drives the pad itself: rumble on the motors and the lightbar. It sets no trigger effects."
+    },
+    "2108330": {
+      "title": "F1 23",
+      "options": { "edgeAsDualSense": true },
+      "measured": "2026-10-15, NotProton: as an Edge the game assigned no buttons (\"No preset control scheme\"); as a standard DualSense full control, haptics and trigger effects."
+    },
+    "2651280": {
+      "title": "Marvel's Spider-Man 2",
+      "options": { "fullMotorPower": true, "edgeHapticsGain": 2 },
+      "measured": "2026-10-18, MacGameFix's modules: haptics and trigger effects over Bluetooth and on a cable. An Edge at its own motor power felt weaker than a standard DualSense; the power at full and the haptics doubled felt the same."
+    }
+  }
+}

@@ -21,6 +21,7 @@
 import SwiftUI
 import AppKit
 import CryptoKit
+import UniformTypeIdentifiers
 
 // MARK: - State
 
@@ -50,6 +51,10 @@ final class Model: ObservableObject {
     @Published var engineRows: [EngineRow] = []
     /// The CrossOver builds the Wine modules' catalog carries modules for.
     @Published var engineBuilds: [EngineBuild] = []
+    /// The Game Feel tab's options, observations and presets.
+    @Published var pad = PadStore.load()
+    @Published var padGames: [InstalledGame] = []
+    let padPresets = PadPresets.load()
     @Published var modulesVersion = 0
     var resources = URL(fileURLWithPath: ".")
     /// The Wine modules' catalog in use, apart from the fixes'.
@@ -59,6 +64,8 @@ final class Model: ObservableObject {
 
     /// Posted when the user has seen what the agent did; the menu bar drops its dot.
     static let seenNotification = Notification.Name("io.github.macgamefix.seen")
+    /// Posted when a setting the menu bar shows changes.
+    static let settingsNotification = Notification.Name("io.github.macgamefix.settings")
 
     init() {
         loadCatalog()
@@ -145,6 +152,22 @@ final class Model: ObservableObject {
             let probed = await probe(hits[j])
             if let j = hits.firstIndex(where: { $0.id == id }) { hits[j].state = probed.state }
         }
+    }
+
+    func setBatteryIcon(_ icon: String) {
+        settings.batteryIcon = icon
+        settings.save()
+        DistributedNotificationCenter.default().postNotificationName(Self.settingsNotification, object: nil,
+                                                                     deliverImmediately: true)
+        objectWillChange.send()
+    }
+
+    func setPadBattery(_ on: Bool) {
+        settings.padBattery = on
+        settings.save()
+        DistributedNotificationCenter.default().postNotificationName(Self.settingsNotification, object: nil,
+                                                                     deliverImmediately: true)
+        objectWillChange.send()
     }
 
     func setAgent(_ on: Bool) {
@@ -436,6 +459,69 @@ extension Model {
         }
     }
 
+    // MARK: The controllers
+
+    /// The Game Feel tab is there while a CrossOver has the Wine modules that
+    /// read its options in: those that carry winebus.so.
+    var padAvailable: Bool {
+        engineRows.contains { row in
+            row.state == .installed && (engineBuilds.first { $0.build == row.target.build }?.files.keys
+                .contains { $0.hasSuffix("unix/winebus.so") } ?? false)
+        }
+    }
+
+    /// The Steam games on this Mac, and what the modules logged since the last look.
+    func scanPad() {
+        let extra = extraFolders
+        Task {
+            let games = await Task.detached { SteamGames.installed(extra: extra) }.value
+            padGames = games
+            var store = PadStore.exists ? PadStore.load() : pad
+            if store.absorbLog(names: { Dictionary(games.map { ($0.appid, $0.name) }, uniquingKeysWith: { a, _ in a }) }) {
+                store.save()
+            }
+            pad = store
+        }
+    }
+
+    /// A change to the options: kept, and written for the modules at once. It
+    /// starts from pad.json as it is, since the agent adds what it reads of the log.
+    func setPad(_ change: (inout PadStore) -> Void) {
+        var store = PadStore.exists ? PadStore.load() : pad
+        change(&store)
+        store.save()
+        store.writeConfig(presets: padPresets)
+        pad = store
+    }
+
+    /// A game's own options; a game left with none and nothing seen is forgotten.
+    func setPadGame(_ game: InstalledGame, _ change: (inout PadOptions) -> Void) {
+        setPad { store in
+            var entry = store.games[game.appid] ?? PadGame(name: game.name)
+            entry.name = game.name
+            change(&entry.options)
+            store.games[game.appid] = entry.options.isEmpty && entry.seen.isEmpty ? nil : entry
+        }
+    }
+
+    func exportPad() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "MacGameFix controllers.json"
+        panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try pad.export(presets: padPresets).write(to: url, options: .atomic)
+            status = "Exported the controller settings of \(pad.games.count) game(s)."
+        } catch {
+            status = "Could not export: \(error.localizedDescription)"
+        }
+    }
+
+    /// On, and behind: newer modules came, or something put CrossOver's own files back.
+    func engineBehind(_ row: EngineRow) -> Bool {
+        engineKept(row) && [.outdated, .absent, .half].contains(row.state)
+    }
+
     /// Finds the CrossOver apps and runners and asks the installer about each.
     func scanEngine() {
         guard !busy else { return }
@@ -448,6 +534,11 @@ extension Model {
             engineRows = rows
             busy = false
             status = found.isEmpty ? "No CrossOver or NotProton runner found." : "\(found.count) CrossOver install(s) found."
+            // The first time the modules that read them are in, the options start
+            // as they were measured.
+            if padAvailable && !PadStore.exists {
+                setPad { $0 = PadStore() }
+            }
         }
     }
 
@@ -528,6 +619,10 @@ struct ContentView: View {
                     .tabItem { Text("Games") }
                 EngineView(model: model).padding(.top, 6)
                     .tabItem { Text("Wine Modules") }
+                if model.padAvailable {
+                    ControllersView(model: model).padding(.top, 6)
+                        .tabItem { Text("Game Feel") }
+                }
                 SettingsView(model: model).padding(.top, 6)
                     .tabItem { Text("Settings") }
             }
@@ -621,6 +716,11 @@ struct EngineView: View {
                     Button("All") { model.setAllEngine(true) }
                     Button("None") { model.setAllEngine(false) }
                     Spacer()
+                    let behind = model.engineRows.filter { model.engineBehind($0) }
+                    if !behind.isEmpty {
+                        Button("Update All") { model.engineBatch(behind, install: true) }
+                            .help("Brings the modules up to date in every CrossOver that is on and behind.")
+                    }
                     Button("Look Again") { model.scanEngine() }
                 }
                 .disabled(model.busy)
@@ -665,13 +765,218 @@ struct EngineView: View {
     }
 }
 
-/// One CrossOver: its name, its build and what is in it, and the switch.
+/// Game Feel: the DualSense options, for every game and for each one. Only while a CrossOver
+/// has the Wine modules that read them. Every game's are on top; below, the
+/// games in pages, each opening the same form for its own.
+struct ControllersView: View {
+    @ObservedObject var model: Model
+    @State private var search = ""
+    @State private var page = 0
+    @State private var selection: InstalledGame.ID?
+    @State private var editing: InstalledGame?
+    private let perPage = 15
+
+    private var filtered: [InstalledGame] {
+        guard !search.isEmpty else { return model.padGames }
+        return model.padGames.filter { $0.name.localizedCaseInsensitiveContains(search) || $0.appid == search }
+    }
+    private var pages: Int { max(1, (filtered.count + perPage - 1) / perPage) }
+    private var shown: [InstalledGame] { Array(filtered.dropFirst(min(page, pages - 1) * perPage).prefix(perPage)) }
+
+    var body: some View {
+        VSplitView {
+            Form {
+                Section {
+                    PadOptionRows(
+                        flag: { key in Binding(get: { model.pad.defaults[keyPath: key] ?? false },
+                                               set: { on in model.setPad { $0.defaults[keyPath: key] = on } }) },
+                        gain: { key in Binding(get: { model.pad.defaults[keyPath: key] ?? 1 },
+                                               set: { v in model.setPad { $0.defaults[keyPath: key] = v } }) },
+                        own: { _ in false })
+                    Toggle("Diagnostics in the modules' log", isOn: Binding(
+                        get: { model.pad.diagnostics }, set: { on in model.setPad { $0.diagnostics = on } }))
+                        .help("What a game writes to the pad and reads from it, and a level meter of its haptics, in "
+                              + "/tmp/macgamefix-\(getuid())/pad.log.")
+                } header: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Every game")
+                        Text("The Wine modules read these when a game starts. A game's own settings win.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                } footer: {
+                    Text("Measured with NOTPROTON_RAW_CONTROLLERS=1 in the game's launch options and Steam Input off.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .formStyle(.grouped)
+            .frame(minHeight: 200, idealHeight: 430)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Per game").font(.headline)
+                    TextField("Search", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 240)
+                    Spacer()
+                    Button("Look Again") { model.scanPad() }
+                    Button("Export…") { model.exportPad() }
+                        .help("The settings and what was seen of each game, to share. No paths or accounts.")
+                }
+                Table(shown, selection: $selection) {
+                    TableColumn("Game") { game in
+                        Text(game.name).foregroundStyle(ownOptions(game).isEmpty ? Color.primary : Color.accentColor)
+                    }
+                    TableColumn("Settings") { game in Text(settings(game)).foregroundStyle(.secondary) }
+                    TableColumn("Seen") { game in Text(seen(game)).foregroundStyle(.secondary) }
+                }
+                .onChange(of: selection) { _, id in
+                    if let id, let game = model.padGames.first(where: { $0.id == id }) { editing = game }
+                }
+                HStack {
+                    Text(model.padGames.isEmpty ? "No Steam game found."
+                         : filtered.isEmpty ? "No game matches." : "\(filtered.count) game(s)")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button { page = max(0, page - 1) } label: { Image(systemName: "chevron.left") }
+                        .disabled(page == 0)
+                    Text("Page \(min(page, pages - 1) + 1) of \(pages)").font(.caption).monospacedDigit()
+                    Button { page = min(pages - 1, page + 1) } label: { Image(systemName: "chevron.right") }
+                        .disabled(page >= pages - 1)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
+            .frame(minHeight: 260)
+        }
+        .sheet(item: $editing, onDismiss: { selection = nil }) { game in PadGameSheet(game: game, model: model) }
+        .onChange(of: search) { _, _ in page = 0 }
+        .onAppear { model.scanPad() }
+    }
+
+    private func ownOptions(_ game: InstalledGame) -> PadOptions { model.pad.games[game.appid]?.options ?? PadOptions() }
+
+    private func settings(_ game: InstalledGame) -> String {
+        let changes = model.pad.effective(game.appid, presets: model.padPresets).differences(from: model.pad.defaults)
+        guard !changes.isEmpty else { return "As every game" }
+        return changes.summary.joined(separator: ", ") + (ownOptions(game).isEmpty ? " (suggested)" : "")
+    }
+
+    private func seen(_ game: InstalledGame) -> String {
+        (model.pad.games[game.appid]?.seen.keys.sorted() ?? []).map(\.label).joined(separator: ", ")
+    }
+}
+
+/// The gains offered: the soft limit keeps the strongest hits under the pad's top.
+private let padGains: [Double] = [1, 1.5, 2, 2.5, 3]
+
+/// The options' rows, for every game and for one: the same form either way. A
+/// row whose value is the game's own is in the accent colour.
+struct PadOptionRows: View {
+    let flag: (WritableKeyPath<PadOptions, Bool?>) -> Binding<Bool>
+    let gain: (WritableKeyPath<PadOptions, Double?>) -> Binding<Double>
+    let own: (PartialKeyPath<PadOptions>) -> Bool
+
+    private func title(_ text: String, _ key: PartialKeyPath<PadOptions>) -> Text {
+        own(key) ? Text(text).foregroundColor(.accentColor) : Text(text)
+    }
+
+    var body: some View {
+        Toggle(isOn: flag(\.bluetoothAsCable)) { title("Bluetooth as a cable", \.bluetoothAsCable) }
+            .help("A DualSense or DualSense Edge on Bluetooth is shown to games as the same pad on a cable: "
+                  + "haptics and adaptive triggers as wired.")
+        Toggle(isOn: flag(\.fullMotorPower)) { title("Full motor power on the Edge", \.fullMotorPower) }
+            .help("Sony's library claims a standard DualSense's motor power at full in every report and never "
+                  + "an Edge's, which then stays at the reduction it stores.")
+        Toggle(isOn: flag(\.edgeAsDualSense)) { title("Show the Edge as a standard DualSense", \.edgeAsDualSense) }
+            .help("For a title whose Sony library does not know the Edge. The game loses the Edge's back buttons "
+                  + "and Fn.")
+        Picker(selection: gain(\.hapticsGain)) {
+            ForEach(padGains, id: \.self) { Text(PadOptions.times($0)).tag($0) }
+        } label: { title("DualSense haptics", \.hapticsGain) }
+        Picker(selection: gain(\.edgeHapticsGain)) {
+            ForEach(padGains, id: \.self) { Text(PadOptions.times($0)).tag($0) }
+        } label: { title("DualSense Edge haptics", \.edgeHapticsGain) }
+            .help("2× made an Edge feel like a standard DualSense in Spider-Man 2.")
+    }
+}
+
+/// One game's own options, in the same form as every game's. A value set back
+/// to what the game would get anyway is no longer its own.
+struct PadGameSheet: View {
+    let game: InstalledGame
+    @ObservedObject var model: Model
+    @Environment(\.dismiss) private var dismiss
+
+    private var preset: PadPreset? { model.padPresets[game.appid] }
+    private var own: PadOptions { model.pad.games[game.appid]?.options ?? PadOptions() }
+    /// What the game gets without options of its own.
+    private var base: PadOptions { (preset?.options ?? PadOptions()).over(model.pad.defaults) }
+    private var effective: PadOptions { own.over(base) }
+
+    private func flag(_ key: WritableKeyPath<PadOptions, Bool?>) -> Binding<Bool> {
+        Binding(get: { effective[keyPath: key] ?? false },
+                set: { v in model.setPadGame(game) { $0[keyPath: key] = v == (base[keyPath: key] ?? false) ? nil : v } })
+    }
+
+    private func gain(_ key: WritableKeyPath<PadOptions, Double?>) -> Binding<Double> {
+        Binding(get: { effective[keyPath: key] ?? 1 },
+                set: { v in model.setPadGame(game) { $0[keyPath: key] = v == (base[keyPath: key] ?? 1) ? nil : v } })
+    }
+
+    private func isOwn(_ key: PartialKeyPath<PadOptions>) -> Bool {
+        switch own[keyPath: key] {
+        case let v as Bool?: return v != nil
+        case let v as Double?: return v != nil
+        default: return false
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Form {
+                Section {
+                    PadOptionRows(flag: flag, gain: gain, own: isOwn)
+                } header: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(game.name)
+                        Text("In blue, what is this game's own; the rest follows "
+                             + (preset == nil ? "every game's." : "the suggested settings, then every game's."))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                } footer: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let preset {
+                            Text("Suggested: \(preset.options.summary.joined(separator: ", ")). \(preset.measured)")
+                        }
+                        let seen = (model.pad.games[game.appid]?.seen.keys.sorted() ?? []).map(\.label)
+                        if !seen.isEmpty { Text("Seen: " + seen.joined(separator: ", ") + ".") }
+                        Text("Steam app \(game.appid)")
+                    }
+                    .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .formStyle(.grouped)
+            HStack {
+                if !own.isEmpty {
+                    Button(preset == nil ? "Use Every Game's" : "Use the Suggested") {
+                        model.setPadGame(game) { $0 = PadOptions() }
+                    }
+                }
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+        }
+        .frame(width: 540, height: 470)
+    }
+}
+
+/// One CrossOver: its name, its build and what is in it, the button that brings
+/// its modules up to date when they are behind, and the switch.
 struct EngineSwitch: View {
     let row: EngineRow
     @ObservedObject var model: Model
 
     var body: some View {
-        Toggle(isOn: Binding(get: { model.engineKept(row) }, set: { model.setEngineOn(row, $0) })) {
+        HStack(alignment: .center, spacing: 10) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(row.target.name).lineLimit(1).truncationMode(.middle)
                 HStack(spacing: 6) {
@@ -679,16 +984,20 @@ struct EngineSwitch: View {
                          : "\(row.target.build) · no modules for this build")
                         .foregroundStyle(model.engineSelectable(row) ? row.state.color : .secondary)
                     if let o = row.outcome { Text(o).foregroundStyle(.orange) }
-                    // On, and something put CrossOver's own files back or newer modules came.
-                    if model.engineKept(row), [.outdated, .absent, .half].contains(row.state) {
-                        Button(row.state == .outdated ? "Update" : "Install Again") { model.engineBatch([row], install: true) }
-                            .buttonStyle(.link).disabled(model.busy)
-                    }
                 }
                 .font(.caption)
             }
+            Spacer()
+            // On, and something put CrossOver's own files back or newer modules came.
+            if model.engineBehind(row) {
+                Button(row.state == .outdated ? "Update" : "Install Again") { model.engineBatch([row], install: true) }
+                    .disabled(model.busy)
+            }
+            Toggle("", isOn: Binding(get: { model.engineKept(row) }, set: { model.setEngineOn(row, $0) }))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .disabled(!model.engineSelectable(row) || model.busy)
         }
-        .disabled(!model.engineSelectable(row) || model.busy)
         .help(row.target.root.path)
     }
 }
@@ -705,6 +1014,19 @@ struct SettingsView: View {
                     .help("MacGameFix starts when you log in and stays in the menu bar. Every two minutes it puts "
                           + "back the fix of a game marked “Keep it applied” after Steam updates or verifies it, "
                           + "once the game is closed.")
+                Toggle("Show the controller's battery", isOn: Binding(get: { model.settings.padBattery },
+                                                                      set: { model.setPadBattery($0) }))
+                    .disabled(!model.agentOn)
+                    .help("Beside the raccoon in the menu bar: a gamepad and the battery left in a connected "
+                          + "controller, the lowest if there are several. The menu lists each one.")
+                Picker("Icon", selection: Binding(get: { model.settings.batteryIcon }, set: { model.setBatteryIcon($0) })) {
+                    Text("Raccoon and gamepad").tag("raccoon")
+                    Text("Gamepad").tag("gamepad")
+                    Text("Battery only").tag("none")
+                }
+                .disabled(!model.agentOn || !model.settings.padBattery)
+                .help("What stands beside the battery in the menu bar. With no controller connected, the gamepad "
+                      + "stays if it is chosen; otherwise the raccoon shows.")
                 ForEach(model.keptLines.filter { $0.word == "Folder not found" }, id: \.key) { line in
                     LabeledContent {
                         Button("Stop Keeping It") { model.forget(line) }
@@ -864,6 +1186,33 @@ enum Entry {
                 }
                 return 0
             }
+        }
+        if args.contains("--pad-write") {
+            // What the Game Feel tab does on a change: the log read, pad.json kept,
+            // pad.conf and pad.d/ written.
+            var store = PadStore.load()
+            store.absorbLog(names: { Dictionary(SteamGames.installed().map { ($0.appid, $0.name) },
+                                                uniquingKeysWith: { a, _ in a }) })
+            store.save()
+            store.writeConfig(presets: PadPresets.load())
+            print("pad.conf and \((try? FileManager.default.contentsOfDirectory(atPath: PadStore.perGame.path).count) ?? 0) per-game file(s) written")
+            exit(0)
+        }
+        if let i = args.firstIndex(of: "--pad-export"), i + 1 < args.count {
+            // The Export button's file, without the panel.
+            try? PadStore.load().export(presets: PadPresets.load()).write(to: URL(fileURLWithPath: args[i + 1]))
+            exit(0)
+        }
+        if args.contains("--pad-report") {
+            // Each game the options or the log know: what it gets and what was seen.
+            let store = PadStore.load(), presets = PadPresets.load()
+            print("every game | " + store.defaults.lines.joined(separator: " "))
+            for appid in Set(store.games.keys).union(presets.keys).sorted() {
+                let seen = (store.games[appid]?.seen.keys.sorted() ?? []).map(\.rawValue).joined(separator: ",")
+                print("\(appid) | \(store.games[appid]?.name ?? presets[appid]?.title ?? "") | "
+                      + store.effective(appid, presets: presets).lines.joined(separator: " ") + " | seen \(seen)")
+            }
+            exit(0)
         }
         if args.contains("--games-report") {
             // Every supported game found, what its fix requires, and for a fix
