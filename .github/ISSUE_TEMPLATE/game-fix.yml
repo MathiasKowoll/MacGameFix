@@ -1,0 +1,54 @@
+name: A game fix does not work
+description: A fix from MacGameFix's Games tab does not install, or the game still fails with it.
+title: "[Fix] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please copy the lines about this game from MacGameFix's **Settings › Log** into the box below.
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      description: Its name, and its Steam app id if you know it.
+    validations:
+      required: true
+  - type: dropdown
+    id: runs
+    attributes:
+      label: Where it runs
+      options:
+        - A NotProton runner
+        - A CrossOver bottle
+        - Both
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Graphics backend
+      options:
+        - D3DMetal
+        - DXMT
+        - DXVK / MoltenVK
+        - I don't know
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: MacGameFix, CrossOver or the NotProton runner, and macOS.
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What the fix said, or what the game does with it (a crash, a black screen, no video, no sound).
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: MacGameFix's log
+      render: text

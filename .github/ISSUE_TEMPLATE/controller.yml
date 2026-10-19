@@ -1,0 +1,75 @@
+name: Controller, haptics or triggers
+description: A DualSense or DualSense Edge with MacGameFix's Wine modules (haptics, adaptive triggers, Bluetooth, XInput).
+title: "[Controller] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before you write**, make a report: in MacGameFix, open **Game Feel**, click the game, turn on
+        **Diagnose this game**, play the moment that goes wrong, close the game, then click **Make a Report…**
+        and attach the file it saves below. The report names this game alone and writes your home folder as `~`.
+        Turn Diagnose off again afterwards.
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      description: Its name, and its Steam app id if you know it.
+    validations:
+      required: true
+  - type: dropdown
+    id: runs
+    attributes:
+      label: Where it runs
+      options:
+        - A NotProton runner
+        - A CrossOver bottle
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: pad
+    attributes:
+      label: Controller
+      options:
+        - DualSense
+        - DualSense Edge
+        - Both
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection
+      options:
+        - Bluetooth
+        - USB cable
+        - Both
+    validations:
+      required: true
+  - type: dropdown
+    id: steam-input
+    attributes:
+      label: Steam Input for this game
+      options:
+        - "Off"
+        - "On"
+        - I don't know
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you felt or saw, and when in the game. A delay, weak or missing haptics, triggers, buttons, glyphs.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: How it feels on a cable, or with another controller, if you tried.
+  - type: textarea
+    id: report
+    attributes:
+      label: The report
+      description: Drag the .md file Make a Report… saved into this box, or paste its contents.
+    validations:
+      required: true

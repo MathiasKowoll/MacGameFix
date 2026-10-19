@@ -43,8 +43,8 @@ Quit a game before installing or removing its fix.
 
 The window has three tabs, and a fourth once the Wine modules are in a CrossOver:
 **Games**, the fixes above; **Wine Modules**, the one part that changes CrossOver
-itself (four Wine files for a DualSense's haptics on a cable and the pad on
-Bluetooth as if on a cable, see [`engine/README.md`](engine/README.md)), with a
+itself (patched Wine modules for a DualSense's haptics on a cable, the pad on
+Bluetooth as if on a cable, and XInput, see [`engine/README.md`](engine/README.md)), with a
 switch and an Update button for every CrossOver app and NotProton runner, and
 the modules' own updates; **Game Feel**, the DualSense's options for every game
 and, in a table of the Steam games on this Mac, for each one, with what the
@@ -299,6 +299,17 @@ with Microsoft's shader tools taken from the release of
 [SpiderMan2Fix](https://github.com/macprotips/SpiderMan2Fix). They are downloaded
 once, cached in `~/Library/Caches/MacGameVideoFix`, and checked against the
 verified result before anything is installed.
+
+## Reporting a problem
+
+[Open an issue](https://github.com/MathiasKowoll/MacGameFix/issues/new/choose) with the form that fits:
+
+- **Controller, haptics or triggers.** In **Game Feel**, click the game, turn on **Diagnose this game**,
+  play the moment that goes wrong, close the game, and click **Make a Report…**. It saves a file and opens
+  the form; attach the file there. The report has MacGameFix's and macOS's versions, the Wine modules in
+  each CrossOver, the game's settings and what the modules logged for it. It names that game alone and
+  writes your home folder as `~`. Turn Diagnose off afterwards.
+- **A game fix does not work.** Copy the lines about the game from **Settings › Log** into the form.
 
 ## Opening it the first time
 
