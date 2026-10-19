@@ -1,6 +1,6 @@
 #!/bin/sh
-# Build the three Wine modules the DualSense ContainerId patches touch, from the
-# CrossOver sources a CrossOver build was made from.
+# Build the Wine modules the DualSense patches touch, from the CrossOver sources a
+# CrossOver build was made from.
 #
 #   ./build.sh <build id> <wine source dir> <patch series> [x86_64|arm64]
 #   CROSSOVER="CrossOver Preview 20261006" \
@@ -10,10 +10,13 @@
 # app and NotProton's runner folders name it.
 #
 # x86_64 (the default) is CrossOver's Intel side, run under Rosetta: it writes
-# modules/<id>/x86_64-windows/{winebus.sys,mmdevapi.dll} and x86_64-unix/winecoreaudio.so.
-# arm64 is the FEX side, where Wine runs natively: aarch64-windows/{winebus.sys,mmdevapi.dll}
-# as ARM64X (arm64 and arm64ec in one file, as CrossOver ships them) and
-# aarch64-unix/winecoreaudio.so. modules/<id>/built-for.json lists every file built so far.
+# modules/<id>/x86_64-windows/{winebus.sys,mmdevapi.dll} and
+# x86_64-unix/{winebus.so,winecoreaudio.so}. arm64 is the FEX side, where Wine runs
+# natively: aarch64-windows/{winebus.sys,mmdevapi.dll} as ARM64X (arm64 and arm64ec
+# in one file, as CrossOver ships them) and aarch64-unix/{winebus.so,winecoreaudio.so}.
+# winebus.so is built with SDL, as CodeWeavers build theirs (it opens libSDL2 when it
+# runs): SDL2's headers must be installed (brew install sdl2).
+# modules/<id>/built-for.json lists every file built so far.
 # The copied tree and the build directories go under .build/, which git ignores.
 # winebus.sys and mmdevapi.dll are PE (llvm-mingw); winecoreaudio.so is the unix half
 # (Wine 11 has no PE winecoreaudio.drv: mmdevapi loads the unix library itself).
@@ -21,7 +24,11 @@
 set -eu
 [ $# -eq 3 ] || [ $# -eq 4 ] || { sed -n '5,10p' "$0"; exit 2; }
 here="$(cd "$(dirname "$0")" && pwd)"
-ID="$1"; SRC="$(cd "$2" && pwd)"; SERIES="$here/patches/$3"; ARCH="${4:-x86_64}"
+ID="$1"; SERIES="$here/patches/$3"; ARCH="${4:-x86_64}"
+# A wrong argument here copies the wrong tree into .build: refuse it first.
+case "$ID" in *[!0-9.]*|"") echo "not a CrossOver build id: '$ID'"; exit 2 ;; esac
+[ -f "$2/configure" ] && [ -f "$2/VERSION" ] || { echo "not a Wine source tree: '$2'"; exit 2; }
+SRC="$(cd "$2" && pwd)"
 [ -d "$SERIES" ] || { echo "no patch series $SERIES"; exit 1; }
 . "$SERIES/build.conf"
 case "$ARCH" in
@@ -38,6 +45,8 @@ TREE="$here/.build/tree-$ID$suffix"   # a patched copy; the extracted sources st
 BUILD="$here/.build/build-$ID$suffix-$ARCH"
 if [ -n "$suffix" ]; then OUT="$here/.build/modules-$ID$suffix"; else OUT="$here/modules/$ID"; fi
 LLVM_MINGW="${LLVM_MINGW:-$HOME/.local/cxge/toolchains/llvm-mingw}"
+SDL2_INCLUDE="${SDL2_INCLUDE:-/opt/homebrew/include/SDL2}"
+[ -f "$SDL2_INCLUDE/SDL.h" ] || { echo "SDL2's headers not found at $SDL2_INCLUDE (brew install sdl2, or set SDL2_INCLUDE)"; exit 1; }
 [ -x "$LLVM_MINGW/bin/x86_64-w64-mingw32-clang" ] || { echo "llvm-mingw not found at $LLVM_MINGW (set LLVM_MINGW)"; exit 1; }
 export PATH="$LLVM_MINGW/bin:/opt/homebrew/opt/bison/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 export SDKROOT="$(xcrun --show-sdk-path)"
@@ -64,11 +73,12 @@ if [ ! -f "$BUILD/Makefile" ]; then
   mkdir -p "$BUILD"
   (cd "$BUILD" && CC="/usr/bin/clang -arch $CPU -isysroot $SDKROOT $MIN" CXX="/usr/bin/clang++ -arch $CPU -isysroot $SDKROOT $MIN" \
     LDFLAGS="-isysroot $SDKROOT $MIN" "$TREE/configure" --host=$HOST --enable-archs=$ARCHS \
-    --without-freetype --without-x --without-sdl --without-gstreamer --without-vulkan --without-opengl \
+    --without-freetype --without-x --without-gstreamer --without-vulkan --without-opengl \
     --without-cups --without-dbus --without-fontconfig --without-gnutls --without-krb5 --without-gssapi \
     --without-opencl --without-pcap --without-usb --without-v4l2 --without-sane --without-capi \
     --without-gphoto --without-netapi --without-pulse --without-alsa --without-oss --without-udev \
     --without-unwind --without-ffmpeg --without-inotify \
+    SDL2_CFLAGS="-I$SDL2_INCLUDE -D_THREAD_SAFE" ac_cv_lib_soname_SDL2=libSDL2-2.0.0.dylib \
     >"$BUILD/configure.log" 2>&1) || { tail -20 "$BUILD/configure.log"; exit 1; }
 fi
 
@@ -82,10 +92,13 @@ rm -rf "${OUT:?}/$PE" "${OUT:?}/$UNIX" && mkdir -p "$OUT/$PE" "$OUT/$UNIX"
 for f in dlls/winebus.sys/$PE/winebus.sys dlls/mmdevapi/$PE/mmdevapi.dll; do
   llvm-strip -o "$OUT/$PE/$(basename "$f")" "$BUILD/$f"
 done
-cp "$BUILD/dlls/winecoreaudio.drv/winecoreaudio.so" "$OUT/$UNIX/"
-strip -x "$OUT/$UNIX/winecoreaudio.so"
-install_name_tool -add_rpath "$RPATH2" "$OUT/$UNIX/winecoreaudio.so" 2>/dev/null
-codesign -f -s - "$OUT/$UNIX/winecoreaudio.so"
+for f in dlls/winebus.sys/winebus.so dlls/winecoreaudio.drv/winecoreaudio.so; do
+  so="$OUT/$UNIX/$(basename "$f")"
+  cp "$BUILD/$f" "$so"
+  strip -x "$so"
+  install_name_tool -add_rpath "$RPATH2" "$so" 2>/dev/null
+  codesign -f -s - "$so"
+done
 
 # CROSSOVER names the release for people ("CrossOver Preview 20261006"); a rebuild keeps
 # the name the folder already has.

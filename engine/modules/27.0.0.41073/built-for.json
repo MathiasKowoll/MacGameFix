@@ -4,11 +4,13 @@
   "wine": "Wine version 11.17",
   "patches": "wine-11.17",
   "files": {
-    "aarch64-unix/winecoreaudio.so": "689473ec543253d665bcd0134cbbd4d9387314d58632bfd8549d582861bec5d1",
-    "aarch64-windows/mmdevapi.dll": "da6d3a6bef4381f82468d9f80c7d2f696025c7b9dd9ab5e0aad836c0c1db4867",
-    "aarch64-windows/winebus.sys": "970a2677e3c5b5b696826c1368dea81cb62e38c9d29ba7fda96f8f133a08d544",
-    "x86_64-unix/winecoreaudio.so": "3adfe9103b3c5a03f6f4b41024a08b3df38b230f3ca429d4b82472fd0a7b68c6",
-    "x86_64-windows/mmdevapi.dll": "33630c41e915185b660c76be4bfc1a25df433937529f65c2066d4c539c505c78",
-    "x86_64-windows/winebus.sys": "91474f0095019b1a5ae81655088b416bfd69cd49f9e71ea9d28cf9df3c2bd4ba"
+    "aarch64-unix/winebus.so": "9b7978bf55bccdf6bbe8a32e789c2084dafdb3579c73f90c622be6d5d7825200",
+    "aarch64-unix/winecoreaudio.so": "50d3c86ab22e8c28f952493559bb8cb2d48113eb8d32aa5504bac1daa68b0b82",
+    "aarch64-windows/mmdevapi.dll": "8efa718e02365f08f2b44bc45fb3ba0bf4373a6f6485a2b3fb558e091b000e61",
+    "aarch64-windows/winebus.sys": "49ae35a245fa863c20384f395a2cc286dc4751114abd5e19d56d13bb112803d3",
+    "x86_64-unix/winebus.so": "e42bf7a84fcd72ad0c5ad4d046682480c388dea26ff2c38cc6de8a2f93da0873",
+    "x86_64-unix/winecoreaudio.so": "069cc666f4637a225a8d0360f5d4ff5d103afa6f011cd3ec3daf474eac6f8ddd",
+    "x86_64-windows/mmdevapi.dll": "ee554881b3d3c9835e28bcd985c91cb408aa119fdd1ce5e53e747a44f3a87a89",
+    "x86_64-windows/winebus.sys": "ef84831834f4397bd119665268eb8ba2dae189274df96fdd0805376a12d0e258"
   }
 }

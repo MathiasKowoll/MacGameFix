@@ -1,8 +1,10 @@
-# Engine modules: DualSense haptics on a cable
+# Engine modules: the DualSense on a cable and over Bluetooth
 
-Unlike the game fixes, these files go into CrossOver itself: three patched Wine
+Unlike the game fixes, these files go into CrossOver itself: four patched Wine
 modules that replace CrossOver's own in `lib/wine`, in a CrossOver app or a
-NotProton runner.
+NotProton runner. They give a DualSense or DualSense Edge its haptics on a
+cable, the same pad on Bluetooth as if it were on a cable, and options per game
+that the app's **Game Feel** tab sets.
 
 ## What they fix
 
@@ -27,6 +29,42 @@ they share. With a DualSense Edge on a cable, the HID device reports
 Both derivations use one namespace, `{<location>-27F2-4948-9654-152804AF6378}`.
 Keep them in sync.
 
+### Over Bluetooth
+
+On Bluetooth a game gets less from the pad, or nothing: Sony's PC library plays
+the haptics only on a cable, where it finds the 4-channel output by its
+container. macOS gives a Bluetooth pad a location ID too, the low four bytes of
+its address (an Edge at `50:EE:32:C4:8E:F2` is `0x32C48EF2`), so two more patches
+show the Bluetooth pad as the same pad on a cable:
+
+| Patch | Module | Change |
+|---|---|---|
+| `0004-winebus-bluetooth.patch` | `winebus.so` | A DualSense or Edge on Bluetooth gets the wired pad's bus type and report descriptor and keeps its location ID, so `0001` gives it the wired container. Input `0x31` becomes USB `0x01`; the game's USB `0x02` becomes Bluetooth `0x31` with its sequence and CRC. One thread per pad is the only writer to it: the game's output merged, at most every 16 ms, and the haptics, which arrive on a socket from `winecoreaudio.so` and go out 64 frames at a time in reports `0x32` (`0x33` first) every 21.3 ms. A Bluetooth link drains about 65 reports a second. |
+| `0005-winecoreaudio-bluetooth.patch` | `winecoreaudio.so` | `dualsense_bt.h`, a CoreAudio facade `coreaudio.c` calls through: for each Bluetooth pad `winebus.so` serves, an output with the UID the wired pad's would have (`0002` gives it the pad's container). A thread pulls Wine's render callback at the device period, filters channels 3 and 4 to the pad's 3 kHz and sends them to the writer. The same file amplifies a wired pad's haptics in its real output's render callback when a gain is set. |
+
+Neither touches a device that is not a DualSense. Without the Game Feel
+options they behave as `0001`-`0003` alone.
+
+### The options
+
+The modules read their options from MacGameFix's support folder, written by its
+Game Feel tab: `pad.d/<Steam app id>.conf` for the game, then `pad.conf` for
+every game; the first line with a key wins. A game is known by the Steam app id
+Steam and NotProton give it (`SteamAppId`, `SteamGameId`,
+`STEAM_COMPAT_APP_ID`), else by its prefix's path (`compatdata/<id>/pfx`).
+
+| Line | Effect |
+|---|---|
+| `bluetooth=wired` | A Bluetooth pad shown as wired (`0004`). |
+| `motor_power=full` | An Edge's motor power claimed at `0x00` in every report. Sony's library claims it so for a standard DualSense and never for an Edge, which then stays at the reduction it stores. |
+| `edge=dualsense` | An Edge shown to the game as a standard DualSense, on a cable or over Bluetooth: for titles whose Sony library does not know the Edge. |
+| `haptics_gain=<1-4>`, `edge_haptics_gain=<1-4>` | The haptics multiplied, a DualSense's and an Edge's, with a soft limit: linear to 0.8, then a curve that never passes 1.0. |
+| `diagnostics=on` | What a game writes to the pad and reads from it, and a level meter of its haptics, in the log. |
+
+The modules log to `/tmp/macgamefix-<uid>/pad.log`, each line naming its game;
+what a game was seen to do (haptics, motors, trigger effects, motor power,
+Bluetooth) the app reads back into its table.
+
 Upstream, Wine MR !360 does the same for PulseAudio on Linux. It has been a
 draft since July 2022, and its author notes it needs MR !359 (mmdevapi) and a
 winebus counterpart.
@@ -47,8 +85,26 @@ with PR #203's wrapper taken out:
 
 That round ran on an earlier build of the same patches: its unix half was built
 with llvm-mingw's clang and macOS 27 as the minimum. The `modules/27.0.0.41069`
-shipped here comes from `build.sh` as it is now: CONTROL Resonant played its
-haptics on a cable with it, on the Intel side, installed by the app.
+of MacGameFix 1.5.0 came from `build.sh` as it was then: CONTROL Resonant played
+its haptics on a cable with it, on the Intel side, installed by the app.
+
+Bluetooth and the options, measured on 2026-10-18 with Marvel's Spider-Man 2 on
+the 41069 runner's Intel side, a DualSense Edge, with development builds of
+`0004` and `0005`:
+
+- Over Bluetooth the Edge was the wired pad: `Enum\USB\VID_054C&PID_0DF2` with
+  `ContainerId = {32C48EF2-27F2-4948-9654-152804AF6378}`; the adaptive triggers
+  worked, and the haptics, "the same as on a cable".
+- The game claims the motor power at `0x00` in every report when it sees a
+  standard DualSense, and never when it sees an Edge. It sends the same haptic
+  signal to both (a level meter: same peaks and RMS for the same moments, peaks to
+  1.1). With the power claimed and the Edge's haptics at 2x, the Edge felt like a
+  standard DualSense, over Bluetooth and on a cable.
+- It reads feature reports `0x09`, `0x20` and `0x05` only, never the Edge's
+  profile reports (`0x70`-`0x7b`).
+
+Not played yet: the options per game (`pad.d/`), `edge=dualsense` on a cable,
+the observations in the log, and the modules as built here.
 
 ## Modules
 
@@ -59,9 +115,9 @@ CrossOver 26.3 has only the Intel side.
 
 | CrossOver | Sources | Wine | Intel (x86_64) | FEX (arm64) |
 |---|---|---|---|---|
-| Preview 27.0.0.41069 (20261006) | `crossover-sources-20261006.tar.gz` | 11.17 | played; see "Measured" | built, not played |
+| Preview 27.0.0.41069 (20261006) | `crossover-sources-20261006.tar.gz` | 11.17 | played with earlier builds of these patches; see "Measured" | built, not played |
 | Preview (20261015) | `crossover-sources-20261015.tar.gz` | 11.17 | built, not played | built, not played |
-| 26.3.0.39832 | `crossover-sources-26.3.0.tar.gz` | 11.0 | built, not played: our PE imports differ from CodeWeavers' (toolchain), and our `mmdevapi.dll` also lists `winmm.dll` | no FEX side |
+| 26.3.0.39832 | `crossover-sources-26.3.0.tar.gz` | 11.0 | `0001`-`0003` only, built, not played: our PE imports differ from CodeWeavers' (toolchain), and our `mmdevapi.dll` also lists `winmm.dll` | no FEX side |
 
 `modules/<id>/` holds the files laid out as in `lib/wine` (`x86_64-windows`,
 `x86_64-unix`, `aarch64-windows`, `aarch64-unix`), plus `built-for.json` with the
@@ -91,7 +147,8 @@ do it.
      half;
    - [llvm-mingw](https://github.com/mstorsjo/llvm-mingw), for the PE halves. Set
      `LLVM_MINGW` to the folder that holds its `bin/`;
-   - Homebrew's `bison`.
+   - Homebrew's `bison`, and `sdl2` for its headers: CodeWeavers build
+     `winebus.so` with SDL, which it opens when it runs, and so does `build.sh`.
 3. **Build:**
 
    ```sh
@@ -105,8 +162,10 @@ do it.
    without a FEX side (`wine-11.0`) refuses `arm64`.
 
    Use `wine-11.17` for Wine 11.17 (CrossOver 27 Preview) and `wine-11.0` for
-   Wine 11.0 (CrossOver 26.3). The two differ only in `0002`: Wine 11.0's
-   `winecoreaudio` answers no property yet. `build.conf` in each series sets the
+   Wine 11.0 (CrossOver 26.3). They differ in `0002` (Wine 11.0's
+   `winecoreaudio` answers no property yet), and `wine-11.0` has no `0004` or
+   `0005` yet. A rebuild gives different bytes even with no source change, so
+   compare builds by what they import and export, not by hash. `build.conf` in each series sets the
    minimum macOS version and the second rpath that CodeWeavers' own
    `winecoreaudio.so` has.
 
@@ -143,15 +202,17 @@ them in the CrossOver installs that are on (the top-level README says how).
 
 - installs a build's modules only into a CrossOver of that exact build
   (`CFBundleVersion`, or the runner folder's name) running that Wine;
-- installs both sides where the CrossOver has the side and the build carries it;
+- installs both sides where the CrossOver has the side and the build carries it,
+  `winebus.so` too where the build has it;
 - keeps CrossOver's own files under `~/Library/Application Support/MacGameFix/engine-backup/`,
-  and takes them again if an update has put new ones in;
+  and takes them again if an update has put new ones in; a file CrossOver does not
+  have is noted, and removing the modules takes ours out again;
 - refuses while a game or program of that CrossOver runs.
 
 What else each kind of CrossOver needs:
 
 - **NotProton runner:** nothing else. The PE files carry no macOS signature,
-  and `winecoreaudio.so` is signed by `build.sh`.
+  and `winebus.so` and `winecoreaudio.so` are signed by `build.sh`.
 - **CrossOver app:** macOS asks to allow MacGameFix under App Management.
   Changing files inside the app breaks CodeWeavers' signature, so the app is
   signed again ad hoc and its quarantine attribute cleared; this has not been

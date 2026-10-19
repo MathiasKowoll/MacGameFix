@@ -1,5 +1,5 @@
 #!/bin/bash
-# Puts the DualSense ContainerId Wine modules into one CrossOver, or takes them out.
+# Puts the DualSense Wine modules into one CrossOver, or takes them out.
 #
 #   engine-modules.sh <CrossOver folder> --status    installed, outdated, half, absent or nomodules
 #   engine-modules.sh <CrossOver folder>             install
@@ -68,6 +68,8 @@ for side in x86_64 aarch64; do
   [ -d "$LIB/$side-unix" ] || continue
   if [ -f "$(src "$side-unix/winecoreaudio.so")" ]; then
     FILES="$FILES $side-windows/winebus.sys $side-windows/mmdevapi.dll $side-unix/winecoreaudio.so"
+    # winebus.so (the Bluetooth DualSense) came later; a build may not carry it.
+    [ -f "$(src "$side-unix/winebus.so")" ] && FILES="$FILES $side-unix/winebus.so"
   elif [ "$MODE" != --restore ]; then
     say "This CrossOver has a $side side, and there are no modules for it."
   fi
@@ -80,7 +82,9 @@ state() {
   for f in $FILES; do
     n=$((n + 1)); t="$(sha "$LIB/$f")"
     if [ "$t" = "$(sha "$(src "$f")")" ]; then ours=$((ours + 1))
-    elif [ -n "$t" ] && [ "$t" = "$(recorded "$f")" ]; then old=$((old + 1)); fi
+    elif [ -n "$t" ] && [ "$t" = "$(recorded "$f")" ]; then old=$((old + 1))
+    # A file newer modules add, beside an install that did not have it: an update.
+    elif [ -n "$t" ] && [ -f "$SAVE/installed.list" ] && [ -z "$(recorded "$f")" ]; then old=$((old + 1)); fi
   done
   if [ "$n" -gt 0 ] && [ "$ours" -eq "$n" ]; then echo installed
   elif [ "$old" -gt 0 ] && [ $((ours + old)) -eq "$n" ]; then echo outdated
@@ -121,9 +125,12 @@ install)
   for f in $FILES; do
     t="$(sha "$LIB/$f")"; s="$(sha "$(src "$f")")"
     # A file that is neither ours nor what we last put there is CrossOver's own:
-    # the first time, or after an update put its files back. Keep it.
-    if [ "$t" != "$s" ] && [ "$t" != "$(recorded "$f")" ]; then
-      mkdir -p "$SAVE/$(dirname "$f")" && cp -p "$LIB/$f" "$SAVE/$f" || exit 1
+    # the first time, or after an update put its files back. Keep it. One
+    # CrossOver does not have at all is noted, so that removing takes ours out.
+    if [ -z "$t" ] && [ -z "$(recorded "$f")" ]; then
+      mkdir -p "$SAVE/$(dirname "$f")" && : > "$SAVE/$f.absent" || exit 1
+    elif [ "$t" != "$s" ] && [ "$t" != "$(recorded "$f")" ]; then
+      mkdir -p "$SAVE/$(dirname "$f")" && cp -p "$LIB/$f" "$SAVE/$f" && rm -f "$SAVE/$f.absent" || exit 1
     fi
     cp "$(src "$f")" "$LIB/$f" 2>/dev/null || refused "$LIB/$f"
     say "  $f"
@@ -135,7 +142,13 @@ install)
 --restore)
   [ -d "$SAVE" ] || { say "Nothing of MacGameFix's is in $ROOT."; exit 0; }
   for f in x86_64-windows/winebus.sys x86_64-windows/mmdevapi.dll x86_64-unix/winecoreaudio.so \
-           aarch64-windows/winebus.sys aarch64-windows/mmdevapi.dll aarch64-unix/winecoreaudio.so; do
+           x86_64-unix/winebus.so aarch64-windows/winebus.sys aarch64-windows/mmdevapi.dll \
+           aarch64-unix/winecoreaudio.so aarch64-unix/winebus.so; do
+    if [ -f "$SAVE/$f.absent" ]; then
+      rm -f "$LIB/$f" 2>/dev/null || refused "$LIB/$f"
+      say "  $f (CrossOver had none)"
+      continue
+    fi
     [ -f "$SAVE/$f" ] || continue
     cp -p "$SAVE/$f" "$LIB/$f" 2>/dev/null || refused "$LIB/$f"
     say "  $f"

@@ -1,0 +1,903 @@
+--- a/dlls/winebus.sys/bus_iohid.c	2026-10-06 06:59:46
++++ b/dlls/winebus.sys/bus_iohid.c	2026-10-18 23:18:23
+@@ -24,6 +24,11 @@
+ #include "config.h"
+ 
+ #include <stdarg.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <time.h>
++#include <unistd.h>
+ #include <sys/types.h>
+ 
+ #ifdef __APPLE__
+@@ -55,6 +60,12 @@
+ #define PAGE_SHIFT __carbon_PAGE_SHIFT
+ #include <IOKit/IOKitLib.h>
+ #include <IOKit/hid/IOHIDLib.h>
++#include <mach/mach.h>
++#include <mach/mach_time.h>
++#include <mach/thread_policy.h>
++#include <sys/socket.h>
++#include <sys/stat.h>
++#include <sys/un.h>
+ #undef ULONG
+ #undef E_INVALIDARG
+ #undef E_OUTOFMEMORY
+@@ -112,8 +123,634 @@
+     struct unix_device unix_device;
+     IOHIDDeviceRef device;
+     uint8_t *buffer;
++    struct bt_pad *bt;  /* a Bluetooth DualSense shown as wired */
++    BOOL sony;          /* a DualSense or DualSense Edge, either way */
++    BOOL edge;          /* a DualSense Edge, whatever the game is shown */
++    BOOL as_standard;   /* an Edge the game is shown as the standard pad */
++    const char *model;
++    UINT32 powers_told[8], features_told[8];
++    UINT32 shapes_told[64];
++    unsigned int shapes;
++    BOOL told_motors, told_triggers, told_power;
++};
++
++/* MacGameFix: a DualSense or DualSense Edge on Bluetooth, shown to games as the
++ * same pad on a USB cable.
++ *
++ * Games that drive the pad themselves (Sony's PC library) speak the wired
++ * protocol, and give a Bluetooth pad less, or nothing: on a cable they find
++ * the haptics output by its container, which patch 0001 builds from the USB
++ * location. So the Bluetooth pad gets the wired pad's report descriptor and
++ * bus type, keeps its own location ID (macOS gives a Bluetooth pad one, the
++ * low four bytes of its address), and its reports are translated: input 0x31
++ * becomes USB 0x01, and the game's USB output 0x02 becomes Bluetooth 0x31 with
++ * its sequence and CRC.
++ *
++ * One thread per pad is the only writer to it, as a Bluetooth link drains
++ * only about 65 reports a second: the game's output, merged, at most every
++ * 16 ms; and the haptics. Those arrive on a socket from winecoreaudio.so, which
++ * shows the wired pad's 4-channel output for this pad and sends its channels 3
++ * and 4 at the pad's 3 kHz (see dualsense_bt.h there). While they play, the
++ * writer sends them 64 frames at a time in reports 0x32 (0x33 first), every
++ * 21.3 ms, and the game's output takes what is left of the link.
++ *
++ * The approach is NotProton PR #90's controller bridge, moved from interposed
++ * calls into this file. On only while ~/Library/Application Support/MacGameFix/
++ * pad.conf has the line "bluetooth=wired". */
++
++#define SONY_VID       0x054c
++#define DUALSENSE_PID  0x0ce6
++#define DS_EDGE_PID    0x0df2
++
++/* The standard pad's, as published at github.com/nondebug/dualsense. */
++static const BYTE ds_usb_descriptor[] =
++{
++    0x05, 0x01, 0x09, 0x05, 0xa1, 0x01, 0x85, 0x01, 0x09, 0x30, 0x09, 0x31,
++    0x09, 0x32, 0x09, 0x35, 0x09, 0x33, 0x09, 0x34, 0x15, 0x00, 0x26, 0xff,
++    0x00, 0x75, 0x08, 0x95, 0x06, 0x81, 0x02, 0x06, 0x00, 0xff, 0x09, 0x20,
++    0x95, 0x01, 0x81, 0x02, 0x05, 0x01, 0x09, 0x39, 0x15, 0x00, 0x25, 0x07,
++    0x35, 0x00, 0x46, 0x3b, 0x01, 0x65, 0x14, 0x75, 0x04, 0x95, 0x01, 0x81,
++    0x42, 0x65, 0x00, 0x05, 0x09, 0x19, 0x01, 0x29, 0x0f, 0x15, 0x00, 0x25,
++    0x01, 0x75, 0x01, 0x95, 0x0f, 0x81, 0x02, 0x06, 0x00, 0xff, 0x09, 0x21,
++    0x95, 0x0d, 0x81, 0x02, 0x06, 0x00, 0xff, 0x09, 0x22, 0x15, 0x00, 0x26,
++    0xff, 0x00, 0x75, 0x08, 0x95, 0x34, 0x81, 0x02, 0x85, 0x02, 0x09, 0x23,
++    0x95, 0x2f, 0x91, 0x02, 0x85, 0x05, 0x09, 0x33, 0x95, 0x28, 0xb1, 0x02,
++    0x85, 0x08, 0x09, 0x34, 0x95, 0x2f, 0xb1, 0x02, 0x85, 0x09, 0x09, 0x24,
++    0x95, 0x13, 0xb1, 0x02, 0x85, 0x0a, 0x09, 0x25, 0x95, 0x1a, 0xb1, 0x02,
++    0x85, 0x20, 0x09, 0x26, 0x95, 0x3f, 0xb1, 0x02, 0x85, 0x21, 0x09, 0x27,
++    0x95, 0x04, 0xb1, 0x02, 0x85, 0x22, 0x09, 0x40, 0x95, 0x3f, 0xb1, 0x02,
++    0x85, 0x80, 0x09, 0x28, 0x95, 0x3f, 0xb1, 0x02, 0x85, 0x81, 0x09, 0x29,
++    0x95, 0x3f, 0xb1, 0x02, 0x85, 0x82, 0x09, 0x2a, 0x95, 0x09, 0xb1, 0x02,
++    0x85, 0x83, 0x09, 0x2b, 0x95, 0x3f, 0xb1, 0x02, 0x85, 0x84, 0x09, 0x2c,
++    0x95, 0x3f, 0xb1, 0x02, 0x85, 0x85, 0x09, 0x2d, 0x95, 0x02, 0xb1, 0x02,
++    0x85, 0xa0, 0x09, 0x2e, 0x95, 0x01, 0xb1, 0x02, 0x85, 0xe0, 0x09, 0x2f,
++    0x95, 0x3f, 0xb1, 0x02, 0x85, 0xf0, 0x09, 0x30, 0x95, 0x3f, 0xb1, 0x02,
++    0x85, 0xf1, 0x09, 0x31, 0x95, 0x3f, 0xb1, 0x02, 0x85, 0xf2, 0x09, 0x32,
++    0x95, 0x0f, 0xb1, 0x02, 0x85, 0xf4, 0x09, 0x35, 0x95, 0x3f, 0xb1, 0x02,
++    0x85, 0xf5, 0x09, 0x36, 0x95, 0x03, 0xb1, 0x02, 0xc0,
++};
++
++/* The Edge's, read from a pad on a cable. */
++static const BYTE ds_edge_usb_descriptor[] =
++{
++    0x05, 0x01, 0x09, 0x05, 0xa1, 0x01, 0x85, 0x01, 0x09, 0x30, 0x09, 0x31,
++    0x09, 0x32, 0x09, 0x35, 0x09, 0x33, 0x09, 0x34, 0x15, 0x00, 0x26, 0xff,
++    0x00, 0x75, 0x08, 0x95, 0x06, 0x81, 0x02, 0x06, 0x00, 0xff, 0x09, 0x20,
++    0x95, 0x01, 0x81, 0x02, 0x05, 0x01, 0x09, 0x39, 0x15, 0x00, 0x25, 0x07,
++    0x35, 0x00, 0x46, 0x3b, 0x01, 0x65, 0x14, 0x75, 0x04, 0x95, 0x01, 0x81,
++    0x42, 0x65, 0x00, 0x05, 0x09, 0x19, 0x01, 0x29, 0x0f, 0x15, 0x00, 0x25,
++    0x01, 0x75, 0x01, 0x95, 0x0f, 0x81, 0x02, 0x06, 0x00, 0xff, 0x09, 0x21,
++    0x95, 0x0d, 0x81, 0x02, 0x06, 0x00, 0xff, 0x09, 0x22, 0x15, 0x00, 0x26,
++    0xff, 0x00, 0x75, 0x08, 0x95, 0x34, 0x81, 0x02, 0x85, 0x02, 0x09, 0x23,
++    0x95, 0x3f, 0x91, 0x02, 0x85, 0x05, 0x09, 0x33, 0x95, 0x28, 0xb1, 0x02,
++    0x85, 0x08, 0x09, 0x34, 0x95, 0x2f, 0xb1, 0x02, 0x85, 0x09, 0x09, 0x24,
++    0x95, 0x13, 0xb1, 0x02, 0x85, 0x0a, 0x09, 0x25, 0x95, 0x1a, 0xb1, 0x02,
++    0x85, 0x0b, 0x09, 0x41, 0x95, 0x29, 0xb1, 0x02, 0x85, 0x0c, 0x09, 0x42,
++    0x95, 0x29, 0xb1, 0x02, 0x85, 0x20, 0x09, 0x26, 0x95, 0x3f, 0xb1, 0x02,
++    0x85, 0x21, 0x09, 0x27, 0x95, 0x04, 0xb1, 0x02, 0x85, 0x22, 0x09, 0x40,
++    0x95, 0x3f, 0xb1, 0x02, 0x85, 0x80, 0x09, 0x28, 0x95, 0x3f, 0xb1, 0x02,
++    0x85, 0x81, 0x09, 0x29, 0x95, 0x3f, 0xb1, 0x02, 0x85, 0x82, 0x09, 0x2a,
++    0x95, 0x09, 0xb1, 0x02, 0x85, 0x83, 0x09, 0x2b, 0x95, 0x3f, 0xb1, 0x02,
++    0x85, 0x84, 0x09, 0x2c, 0x95, 0x3f, 0xb1, 0x02, 0x85, 0x85, 0x09, 0x2d,
++    0x95, 0x02, 0xb1, 0x02, 0x85, 0xa0, 0x09, 0x2e, 0x95, 0x01, 0xb1, 0x02,
++    0x85, 0xe0, 0x09, 0x2f, 0x95, 0x3f, 0xb1, 0x02, 0x85, 0xf0, 0x09, 0x30,
++    0x95, 0x3f, 0xb1, 0x02, 0x85, 0xf1, 0x09, 0x31, 0x95, 0x3f, 0xb1, 0x02,
++    0x85, 0xf2, 0x09, 0x32, 0x95, 0x34, 0xb1, 0x02, 0x85, 0xf4, 0x09, 0x35,
++    0x95, 0x3f, 0xb1, 0x02, 0x85, 0xf5, 0x09, 0x36, 0x95, 0x03, 0xb1, 0x02,
++    0x85, 0x60, 0x09, 0x41, 0x95, 0x3f, 0xb1, 0x02, 0x85, 0x61, 0x09, 0x42,
++    0xb1, 0x02, 0x85, 0x62, 0x09, 0x43, 0xb1, 0x02, 0x85, 0x63, 0x09, 0x44,
++    0xb1, 0x02, 0x85, 0x64, 0x09, 0x45, 0xb1, 0x02, 0x85, 0x65, 0x09, 0x46,
++    0xb1, 0x02, 0x85, 0x68, 0x09, 0x47, 0xb1, 0x02, 0x85, 0x70, 0x09, 0x48,
++    0xb1, 0x02, 0x85, 0x71, 0x09, 0x49, 0xb1, 0x02, 0x85, 0x72, 0x09, 0x4a,
++    0xb1, 0x02, 0x85, 0x73, 0x09, 0x4b, 0xb1, 0x02, 0x85, 0x74, 0x09, 0x4c,
++    0xb1, 0x02, 0x85, 0x75, 0x09, 0x4d, 0xb1, 0x02, 0x85, 0x76, 0x09, 0x4e,
++    0xb1, 0x02, 0x85, 0x77, 0x09, 0x4f, 0xb1, 0x02, 0x85, 0x78, 0x09, 0x50,
++    0xb1, 0x02, 0x85, 0x79, 0x09, 0x51, 0xb1, 0x02, 0x85, 0x7a, 0x09, 0x52,
++    0xb1, 0x02, 0x85, 0x7b, 0x09, 0x53, 0xb1, 0x02, 0xc0,
++};
++
++struct bt_pad
++{
++    IOHIDDeviceRef device;
++    BOOL edge;           /* shown to the game as an Edge */
++    BOOL physical_edge;  /* an Edge, however it is shown */
++    DWORD location;
++    pthread_t writer, receiver;
++    pthread_mutex_t lock;
++    semaphore_t wake;
++    BOOL running, quit, dirty;
++    BYTE pending[47];  /* bytes 1-47 of the game's USB output report 0x02, merged */
++    BYTE motors[2];    /* the game's last rumble values, right and left */
++    BYTE seq;
++    int sock;
++    char path[104];
++    signed char fifo[512][2];  /* haptics at 3 kHz, channels 3 and 4 */
++    unsigned int fifo_head, fifo_count;
++    UInt64 input_at, audio_at, nonzero_at;
++};
++
++static void pad_game(char *id, size_t size);
++
++/* What this file has to say goes to /tmp/macgamefix-<uid>/pad.log, beside the
++ * pads' sockets: a game's own stderr often reaches no log at all. Each line
++ * names the game, which MacGameFix reads back for what it learns of each one. */
++static void pad_log(const char *format, ...) __attribute__((format(printf, 1, 2)));
++static void pad_log(const char *format, ...)
++{
++    char path[64], stamp[32], game[24];
++    struct tm tm;
++    time_t now = time(NULL);
++    va_list args;
++    FILE *f;
++
++    snprintf(path, sizeof(path), "/tmp/macgamefix-%u", (unsigned int)getuid());
++    mkdir(path, 0700);
++    snprintf(path + strlen(path), sizeof(path) - strlen(path), "/pad.log");
++    if (!(f = fopen(path, "a"))) return;
++    localtime_r(&now, &tm);
++    strftime(stamp, sizeof(stamp), "%H:%M:%S", &tm);
++    pad_game(game, sizeof(game));
++    fprintf(f, "%s [%d] game=%s ", stamp, (int)getpid(), game[0] ? game : "-");
++    va_start(args, format);
++    vfprintf(f, format, args);
++    va_end(args);
++    fclose(f);
++}
++
++/* The game this process runs for: the Steam app id Steam and NotProton give a
++ * game (SteamAppId, SteamGameId, STEAM_COMPAT_APP_ID), else the one in a Steam
++ * Play prefix's path, compatdata/<id>/pfx. Empty in a CrossOver bottle. */
++static void pad_game(char *id, size_t size)
++{
++    static const char *const names[] = {"SteamAppId", "SteamGameId", "STEAM_COMPAT_APP_ID"};
++    const char *v;
++    size_t n;
++    unsigned int i;
++
++    id[0] = 0;
++    for (i = 0; i < ARRAY_SIZE(names); i++)
++    {
++        if (!(v = getenv(names[i])) || !*v || strspn(v, "0123456789") != strlen(v) || !strcmp(v, "0")) continue;
++        snprintf(id, size, "%s", v);
++        return;
++    }
++    if ((v = getenv("WINEPREFIX")) && (v = strstr(v, "/compatdata/")))
++    {
++        v += strlen("/compatdata/");
++        n = strspn(v, "0123456789");
++        if (n && n < size && !strncmp(v + n, "/pfx", 4)) snprintf(id, size, "%.*s", (int)n, v);
++    }
++}
++
++/* MacGameFix's settings for the pad, which its Game Feel tab writes, read
++ * once: ~/Library/Application Support/MacGameFix/pad.d/<app id>.conf for this
++ * game, then pad.conf for every game; the first line with a key wins. A line
++ * is key=value: "bluetooth=wired"; "motor_power=full", the motor power claimed
++ * at 0x00 for an Edge as Sony's library claims it for a standard pad (see
++ * iohid_device_set_output_report); "edge=dualsense", a Bluetooth Edge shown to
++ * games as the standard pad; "diagnostics=on", which adds what a game writes
++ * to the pad and reads from it to pad.log. */
++static const char *pad_value(const char *key)
++{
++    static char lines[32][96];
++    static int count = -1;
++    char path[1024], line[128], game[24];
++    const char *home;
++    size_t n, length = strlen(key);
++    BOOL from_game = FALSE;
++    FILE *f;
++    int i, pass;
++
++    if (count < 0)
++    {
++        count = 0;
++        pad_game(game, sizeof(game));
++        if ((home = getenv("HOME")))
++        {
++            for (pass = 0; pass < 2; pass++)
++            {
++                if (pass == 0 && !game[0]) continue;
++                if (pass == 0)
++                    snprintf(path, sizeof(path), "%s/Library/Application Support/MacGameFix/pad.d/%s.conf", home, game);
++                else
++                    snprintf(path, sizeof(path), "%s/Library/Application Support/MacGameFix/pad.conf", home);
++                if (!(f = fopen(path, "r"))) continue;
++                if (pass == 0) from_game = TRUE;
++                while (count < 32 && fgets(line, sizeof(line), f))
++                {
++                    n = strcspn(line, "\r\n");
++                    line[n] = 0;
++                    if (n) snprintf(lines[count++], sizeof(lines[0]), "%s", line);
++                }
++                fclose(f);
++            }
++        }
++        pad_log("settings: %s%s\n", game[0] ? "game " : "no game id, ", game[0] ? game : "every game's");
++        if (from_game) pad_log("settings: pad.d/%s.conf read before pad.conf\n", game);
++    }
++    for (i = 0; i < count; i++)
++        if (!strncmp(lines[i], key, length) && lines[i][length] == '=') return lines[i] + length + 1;
++    return "";
++}
++
++/* Whether a setting is "key=value". */
++static BOOL pad_option(const char *option)
++{
++    const char *eq = strchr(option, '=');
++    char key[32];
++
++    if (!eq || eq - option >= (int)sizeof(key)) return FALSE;
++    snprintf(key, sizeof(key), "%.*s", (int)(eq - option), option);
++    return !strcmp(pad_value(key), eq + 1);
++}
++
++static BOOL bluetooth_as_wired(void)
++{
++    return pad_option("bluetooth=wired");
++}
++
++/* Says a value once per device: bit i of the set is value i. */
++static BOOL first_time(UINT32 set[8], BYTE value)
++{
++    UINT32 bit = 1u << (value & 31);
++    if (set[value >> 5] & bit) return FALSE;
++    set[value >> 5] |= bit;
++    return TRUE;
++}
++
++static BOOL is_bluetooth_dualsense(IOHIDDeviceRef device, DWORD vid, DWORD pid)
++{
++    CFStringRef str = IOHIDDeviceGetProperty(device, CFSTR(kIOHIDTransportKey));
++
++    if (vid != SONY_VID || (pid != DUALSENSE_PID && pid != DS_EDGE_PID)) return FALSE;
++    if (!str || CFGetTypeID(str) != CFStringGetTypeID()) return FALSE;
++    if (CFStringCompare(str, CFSTR(kIOHIDTransportBluetoothValue), 0) &&
++        CFStringCompare(str, CFSTR(kIOHIDTransportBluetoothLowEnergyValue), 0)) return FALSE;
++    return bluetooth_as_wired();
++}
++
++static UINT32 bt_crc32(BYTE seed, const BYTE *data, size_t length)
++{
++    UINT32 crc = ~0u;
++    size_t i;
++    int bit;
++
++    crc ^= seed;
++    for (bit = 0; bit < 8; bit++) crc = (crc >> 1) ^ (0xedb88320u & -(crc & 1));
++    for (i = 0; i < length; i++)
++    {
++        crc ^= data[i];
++        for (bit = 0; bit < 8; bit++) crc = (crc >> 1) ^ (0xedb88320u & -(crc & 1));
++    }
++    return ~crc;
++}
++
++/* Fields a game sets with a valid flag: one report merged over another keeps
++ * an earlier field the later one did not set. Anything else is the later
++ * report's. Offsets count from the byte after the report ID. */
++static const struct { BYTE flag, mask, offset, length; } bt_fields[] =
++{
++    {0, 0x03,  2,  2},  /* rumble motors */
++    {0, 0x04, 10, 11},  /* right trigger effect */
++    {0, 0x08, 21, 11},  /* left trigger effect */
++    {1, 0x01,  8,  1},  /* microphone LED */
++    {1, 0x04, 44,  3},  /* lightbar colour */
++    {1, 0x10, 43,  1},  /* player LEDs */
++    {1, 0x40, 36,  1},  /* motor power */
+ };
+ 
++static mach_timebase_info_data_t bt_timebase;
++
++static UInt64 bt_ticks(double seconds)
++{
++    if (!bt_timebase.denom) mach_timebase_info(&bt_timebase);
++    return (UInt64)(seconds * 1e9 * bt_timebase.denom / bt_timebase.numer);
++}
++
++/* Waits for new output or haptics, or until the deadline. */
++static void bt_wait_until(struct bt_pad *pad, UInt64 deadline)
++{
++    UInt64 now = mach_absolute_time(), nanos;
++
++    if (deadline <= now) return;
++    if (!bt_timebase.denom) mach_timebase_info(&bt_timebase);
++    nanos = (deadline - now) * bt_timebase.numer / bt_timebase.denom;
++    semaphore_timedwait(pad->wake, (mach_timespec_t){(unsigned int)(nanos / 1000000000), (clock_res_t)(nanos % 1000000000)});
++}
++
++static BOOL bt_write(struct bt_pad *pad, BYTE *report, UINT size)
++{
++    UINT32 crc = bt_crc32(0xa2, report, size - 4);
++    int i;
++
++    for (i = 0; i < 4; i++) report[size - 4 + i] = crc >> (8 * i);
++    if (!IOHIDDeviceSetReport(pad->device, kIOHIDReportTypeOutput, report[0], report, size)) return TRUE;
++    WARN("Bluetooth output 0x%02x to the DualSense failed\n", report[0]);
++    return FALSE;
++}
++
++/* Report 0x31. In audio mode the rumble bits are the writer's to clear, so that
++ * a game's rumble or reset command cannot stop the haptics; out of it the pad
++ * rumbles with the game's last motor values. */
++static void bt_control(struct bt_pad *pad, const BYTE *payload, BOOL audio)
++{
++    BYTE report[78] = {0x31};
++
++    report[1] = (pad->seq++ & 15) << 4;
++    report[2] = 0x10;
++    if (payload) memcpy(report + 3, payload, 47);
++    if (pad_option("motor_power=full"))
++    {
++        report[4] |= 0x40;
++        report[39] = 0;
++    }
++    if (audio)
++    {
++        report[3] &= ~3;
++        report[5] = report[6] = 0;
++    }
++    else
++    {
++        report[3] |= 3;
++        report[5] = pad->motors[0];
++        report[6] = pad->motors[1];
++    }
++    report[41] &= ~4;
++    bt_write(pad, report, sizeof(report));
++}
++
++/* Reports 0x33 (the first, which sets the pad's audio up) and 0x32: 64 frames
++ * of 3 kHz signed 8-bit stereo. */
++static void bt_pcm(struct bt_pad *pad, unsigned int index, const signed char samples[128])
++{
++    BYTE report[206] = {0};
++    UINT size, offset;
++
++    report[0] = index ? 0x32 : 0x33;
++    report[1] = (pad->seq++ & 15) << 4;
++    report[2] = 0x91;
++    if (!index)
++    {
++        report[3] = 7;
++        report[4] = 0xfe;
++        memset(report + 5, 48, 5);
++        report[10] = index * 2;
++        report[11] = 0xd2;
++        report[12] = 64;
++        offset = 13;
++        size = 206;
++    }
++    else
++    {
++        report[3] = 3;
++        report[4] = 0x62;
++        report[5] = 48;
++        report[6] = (BYTE)(index * 2);
++        report[7] = 0xd2;
++        report[8] = 64;
++        offset = 9;
++        size = 142;
++    }
++    memcpy(report + offset, samples, 128);
++    bt_write(pad, report, size);
++}
++
++static void *bt_receiver(void *arg)
++{
++    struct bt_pad *pad = arg;
++    struct { char magic[4]; signed char samples[2 * 256]; } packet;
++    ssize_t got;
++    unsigned int i, n;
++    BOOL nonzero;
++
++    while (!pad->quit)
++    {
++        if ((got = recv(pad->sock, &packet, sizeof(packet), 0)) < 6 || memcmp(packet.magic, "MGFH", 4)) continue;
++        n = (got - 4) / 2;
++        nonzero = FALSE;
++        pthread_mutex_lock(&pad->lock);
++        for (i = 0; i < n; i++)
++        {
++            if (pad->fifo_count == ARRAY_SIZE(pad->fifo))
++            {
++                pad->fifo_head = (pad->fifo_head + 1) % ARRAY_SIZE(pad->fifo);
++                pad->fifo_count--;
++            }
++            memcpy(pad->fifo[(pad->fifo_head + pad->fifo_count++) % ARRAY_SIZE(pad->fifo)], packet.samples + 2 * i, 2);
++            nonzero |= packet.samples[2 * i] || packet.samples[2 * i + 1];
++        }
++        pad->audio_at = mach_absolute_time();
++        if (nonzero) pad->nonzero_at = pad->audio_at;
++        pthread_mutex_unlock(&pad->lock);
++        semaphore_signal(pad->wake);
++    }
++    return NULL;
++}
++
++/* The pad's one writer. Haptics stream while the game plays something on
++ * channels 3 and 4, and for 150 ms after; the game's output goes out at most
++ * every 16 ms, or while haptics stream, in the link's remaining ~18 reports a
++ * second. It writes nothing while the pad sends no input: the link is gone. */
++static void *bt_writer(void *arg)
++{
++    struct bt_pad *pad = arg;
++    const double pcm_period = 64.0 / 3000, streaming_gap = 1.0 / (65 - 3000.0 / 64);
++    thread_time_constraint_policy_data_t policy;
++    BYTE payload[47];
++    signed char samples[128];
++    BOOL streaming = FALSE, audio, control;
++    unsigned int index = 0, i, n;
++    UInt64 now, next_pcm = 0, next_control = 0, wake_at;
++
++    policy.period = (uint32_t)bt_ticks(pcm_period);
++    policy.computation = (uint32_t)bt_ticks(0.001);
++    policy.constraint = (uint32_t)bt_ticks(0.005);
++    policy.preemptible = TRUE;
++    thread_policy_set(pthread_mach_thread_np(pthread_self()), THREAD_TIME_CONSTRAINT_POLICY,
++                      (thread_policy_t)&policy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
++
++    while (!pad->quit)
++    {
++        now = mach_absolute_time();
++        pthread_mutex_lock(&pad->lock);
++        if (now - pad->input_at > bt_ticks(0.5))
++        {
++            pthread_mutex_unlock(&pad->lock);
++            streaming = FALSE;
++            bt_wait_until(pad, now + bt_ticks(0.020));
++            continue;
++        }
++        audio = pad->nonzero_at && now - pad->nonzero_at < bt_ticks(0.15) &&
++                (pad->fifo_count || now - pad->audio_at < bt_ticks(0.15));
++        if (!audio && !streaming) pad->fifo_head = pad->fifo_count = 0;
++        if ((control = pad->dirty && now >= next_control))
++        {
++            memcpy(payload, pad->pending, sizeof(payload));
++            pad->dirty = FALSE;
++        }
++        pthread_mutex_unlock(&pad->lock);
++
++        if (control)
++        {
++            bt_control(pad, payload, audio || streaming);
++            next_control = mach_absolute_time() + bt_ticks(audio || streaming ? streaming_gap : 0.016);
++        }
++        if (audio && !streaming)
++        {
++            bt_control(pad, NULL, TRUE);
++            streaming = TRUE;
++            index = 0;
++            next_pcm = mach_absolute_time() + bt_ticks(0.030);
++        }
++        if (streaming && mach_absolute_time() >= next_pcm)
++        {
++            /* After a stall, start the clock again rather than send a burst. */
++            if (mach_absolute_time() > next_pcm + bt_ticks(0.040)) next_pcm = mach_absolute_time();
++            memset(samples, 0, sizeof(samples));
++            pthread_mutex_lock(&pad->lock);
++            n = min(pad->fifo_count, 64);
++            for (i = 0; i < n; i++)
++            {
++                memcpy(samples + 2 * i, pad->fifo[pad->fifo_head], 2);
++                pad->fifo_head = (pad->fifo_head + 1) % ARRAY_SIZE(pad->fifo);
++                pad->fifo_count--;
++            }
++            pthread_mutex_unlock(&pad->lock);
++            bt_pcm(pad, index++, samples);
++            next_pcm += bt_ticks(pcm_period);
++            if (!audio)
++            {
++                /* Let the silent tail reach the actuators, then rumble again. */
++                mach_wait_until(mach_absolute_time() + bt_ticks(0.030));
++                pthread_mutex_lock(&pad->lock);
++                memcpy(payload, pad->pending, sizeof(payload));
++                pthread_mutex_unlock(&pad->lock);
++                bt_control(pad, payload, FALSE);
++                streaming = FALSE;
++            }
++        }
++
++        now = mach_absolute_time();
++        wake_at = now + bt_ticks(0.050);
++        if (streaming && next_pcm < wake_at) wake_at = next_pcm;
++        pthread_mutex_lock(&pad->lock);
++        if (pad->dirty && next_control < wake_at) wake_at = next_control;
++        pthread_mutex_unlock(&pad->lock);
++        /* The haptics' deadline is kept to the tick; anything else may wake it early. */
++        if (streaming && wake_at == next_pcm) mach_wait_until(wake_at);
++        else bt_wait_until(pad, wake_at);
++    }
++    return NULL;
++}
++
++static void bt_queue_output(struct bt_pad *pad, const BYTE *usb)
++{
++    const BYTE *update = usb + 1;
++    BYTE merged[47];
++    unsigned int i;
++
++    pthread_mutex_lock(&pad->lock);
++    memcpy(merged, update, sizeof(merged));
++    if (pad->dirty)
++    {
++        for (i = 0; i < ARRAY_SIZE(bt_fields); i++)
++        {
++            BYTE flag = bt_fields[i].flag, mask = bt_fields[i].mask & pad->pending[flag] & ~update[flag];
++            if (!mask) continue;
++            merged[flag] |= mask;
++            memcpy(merged + bt_fields[i].offset, pad->pending + bt_fields[i].offset, bt_fields[i].length);
++        }
++    }
++    if (update[0] & 3)
++    {
++        pad->motors[0] = update[2];
++        pad->motors[1] = update[3];
++    }
++    memcpy(pad->pending, merged, sizeof(merged));
++    pad->dirty = TRUE;
++    pthread_mutex_unlock(&pad->lock);
++    semaphore_signal(pad->wake);
++}
++
++static struct bt_pad *bt_pad_create(IOHIDDeviceRef device, DWORD pid, DWORD location, BOOL physical_edge)
++{
++    struct bt_pad *pad;
++
++    if (!(pad = calloc(1, sizeof(*pad)))) return NULL;
++    pad->device = device;
++    pad->edge = pid == DS_EDGE_PID;
++    pad->physical_edge = physical_edge;
++    pad->location = location;
++    pad->sock = -1;
++    pthread_mutex_init(&pad->lock, NULL);
++    if (semaphore_create(mach_task_self(), &pad->wake, SYNC_POLICY_FIFO, 0))
++    {
++        free(pad);
++        return NULL;
++    }
++    return pad;
++}
++
++/* The socket winecoreaudio.so finds the pad by: /tmp/macgamefix-<uid>/
++ * pad-<location>-<product shown>-<product it is>.sock. */
++static void bt_pad_listen(struct bt_pad *pad)
++{
++    struct sockaddr_un addr = {.sun_family = AF_UNIX};
++    struct timeval timeout = {0, 200000};
++    char dir[64];
++
++    snprintf(dir, sizeof(dir), "/tmp/macgamefix-%u", (unsigned int)getuid());
++    mkdir(dir, 0700);
++    snprintf(pad->path, sizeof(pad->path), "%s/pad-%08x-%04x-%04x.sock", dir, (unsigned int)pad->location,
++             pad->edge ? DS_EDGE_PID : DUALSENSE_PID, pad->physical_edge ? DS_EDGE_PID : DUALSENSE_PID);
++    if ((pad->sock = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0) return;
++    unlink(pad->path);
++    snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", pad->path);
++    if (bind(pad->sock, (struct sockaddr *)&addr, sizeof(addr)))
++    {
++        WARN("cannot listen for the DualSense's haptics at %s\n", pad->path);
++        close(pad->sock);
++        pad->sock = -1;
++        return;
++    }
++    setsockopt(pad->sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
++}
++
++static void bt_pad_start(struct bt_pad *pad)
++{
++    BYTE calibration[64] = {0x05};
++    CFIndex length = 41;
++
++    /* Reading the calibration switches the pad from its short Bluetooth
++     * report to the full 0x31 one, as Linux's driver does. */
++    IOHIDDeviceGetReport(pad->device, kIOHIDReportTypeFeature, 0x05, calibration, &length);
++    pad->input_at = mach_absolute_time();
++    pad->quit = FALSE;
++    bt_pad_listen(pad);
++    pad->running = !pthread_create(&pad->writer, NULL, bt_writer, pad);
++    if (pad->running && pad->sock >= 0 && pthread_create(&pad->receiver, NULL, bt_receiver, pad))
++    {
++        close(pad->sock);
++        pad->sock = -1;
++    }
++}
++
++static void bt_pad_stop(struct bt_pad *pad)
++{
++    if (!pad->running) return;
++    pad->quit = TRUE;
++    semaphore_signal(pad->wake);
++    pthread_join(pad->writer, NULL);
++    if (pad->sock >= 0)
++    {
++        pthread_join(pad->receiver, NULL);
++        close(pad->sock);
++        unlink(pad->path);
++        pad->sock = -1;
++    }
++    pad->running = FALSE;
++}
++
+ static inline struct iohid_device *impl_from_unix_device(struct unix_device *iface)
+ {
+     return CONTAINING_RECORD(iface, struct iohid_device, unix_device);
+@@ -149,6 +786,24 @@
+         uint32_t reportID, uint8_t *report, CFIndex report_length)
+ {
+     struct unix_device *iface = (struct unix_device *)context;
++    struct iohid_device *impl = impl_from_unix_device(iface);
++
++    if (impl->bt && result == kIOReturnSuccess)
++    {
++        BYTE usb[64];
++
++        /* The short report a pad sends before its calibration is read has
++         * no wired counterpart. */
++        if (reportID == 0x01) return;
++        if (reportID == 0x31 && report_length >= 66)
++        {
++            impl->bt->input_at = mach_absolute_time();
++            usb[0] = 0x01;
++            memcpy(usb + 1, report + 2, 63);
++            bus_event_queue_input_report(&event_queue, iface, usb, sizeof(usb));
++            return;
++        }
++    }
+     bus_event_queue_input_report(&event_queue, iface, report, report_length);
+ }
+ 
+@@ -167,6 +822,7 @@
+     impl->buffer = malloc(length);
+ 
+     IOHIDDeviceRegisterInputReportCallback(impl->device, impl->buffer, length, handle_IOHIDDeviceIOHIDReportCallback, iface);
++    if (impl->bt) bt_pad_start(impl->bt);
+     return STATUS_SUCCESS;
+ }
+ 
+@@ -175,6 +831,7 @@
+     struct iohid_device *impl = impl_from_unix_device(iface);
+ 
+     IOHIDDeviceRegisterInputReportCallback(impl->device, NULL, 0, NULL, NULL);
++    if (impl->bt) bt_pad_stop(impl->bt);
+ 
+     pthread_mutex_lock(&iohid_cs);
+     list_remove(&impl->unix_device.entry);
+@@ -189,6 +846,18 @@
+     int data_length = CFDataGetLength(data);
+     const UInt8 *ptr;
+ 
++    if (impl->bt || impl->as_standard)
++    {
++        BOOL edge = impl->bt ? impl->bt->edge : FALSE;
++        const BYTE *wired = edge ? ds_edge_usb_descriptor : ds_usb_descriptor;
++        UINT size = edge ? sizeof(ds_edge_usb_descriptor) : sizeof(ds_usb_descriptor);
++
++        *out_length = size;
++        if (length < size) return STATUS_BUFFER_TOO_SMALL;
++        memcpy(buffer, wired, size);
++        return STATUS_SUCCESS;
++    }
++
+     *out_length = data_length;
+     if (length < data_length)
+         return STATUS_BUFFER_TOO_SMALL;
+@@ -202,8 +871,87 @@
+ {
+     IOReturn result;
+     struct iohid_device *impl = impl_from_unix_device(iface);
+-    result = IOHIDDeviceSetReport(impl->device, kIOHIDReportTypeOutput, packet->reportId,
+-                                  packet->reportBuffer, packet->reportBufferLen);
++
++    BYTE *report = packet->reportBuffer, copy[64];
++    UINT length = packet->reportBufferLen;
++    BOOL output = impl->sony && packet->reportId == 0x02 && length >= 48 && report[0] == 0x02;
++
++    /* How the game drives the pad, said once each, for MacGameFix's list of what
++     * each game does: the rumble motors, trigger effects, the motor power. */
++    if (output)
++    {
++        if (!impl->told_motors && (report[1] & 0x03) && (report[3] || report[4]))
++        {
++            impl->told_motors = TRUE;
++            pad_log("observed: the game rumbles the %s's motors\n", impl->model);
++        }
++        if (!impl->told_triggers && (((report[1] & 0x04) && report[11] && report[11] != 0x05) ||
++                                     ((report[1] & 0x08) && report[22] && report[22] != 0x05)))
++        {
++            impl->told_triggers = TRUE;
++            pad_log("observed: the game sets trigger effects on the %s\n", impl->model);
++        }
++        if (!impl->told_power && (report[2] & 0x40))
++        {
++            impl->told_power = TRUE;
++            pad_log("observed: the game claims the %s's motor power (0x%02x)\n", impl->model, report[37]);
++        }
++    }
++    /* Each shape of what a game writes, once: the flag bytes, the motors, the
++     * audio fields and the power, but not the trigger effects or the LEDs. */
++    if (output && pad_option("diagnostics=on"))
++    {
++        static const BYTE at[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 37, 38, 39};
++        UINT32 shape = 2166136261u;
++        unsigned int i;
++
++        for (i = 0; i < ARRAY_SIZE(at); i++) shape = (shape ^ report[at[i]]) * 16777619u;
++        for (i = 0; i < impl->shapes && impl->shapes_told[i] != shape; i++);
++        if (i == impl->shapes && impl->shapes < ARRAY_SIZE(impl->shapes_told))
++        {
++            char hex[3 * 48 + 1] = "";
++
++            impl->shapes_told[impl->shapes++] = shape;
++            for (i = 0; i < 48; i++) snprintf(hex + 3 * i, 4, " %02x", report[i]);
++            pad_log("the game writes the %s:%s\n", impl->model, hex);
++        }
++    }
++    if (output && length <= sizeof(copy))
++    {
++        /* An Edge shown as the standard pad on a cable: the game writes the
++         * standard pad's 48 bytes, the Edge takes 64. */
++        if (impl->as_standard && !impl->bt && length < sizeof(copy))
++        {
++            memset(copy, 0, sizeof(copy));
++            memcpy(copy, report, length);
++            report = copy;
++            length = sizeof(copy);
++        }
++        /* The motor power (bit 0x40 of the second flag byte, byte 37) lowers the
++         * haptics and the rumble, and the pad keeps it until something else is
++         * written. Sony's library claims it at 0x00 in every report for a
++         * standard DualSense and never for an Edge, which then stays at its own
++         * stored reduction. With motor_power=full an Edge gets the standard
++         * pad's 0x00 in every report (over Bluetooth, the writer claims it in
++         * every report it sends), and a lower value a game writes is replaced. */
++        if (pad_option("motor_power=full") && (impl->edge || (report[2] & 0x40)))
++        {
++            if (pad_option("diagnostics=on") && (report[2] & 0x40) && first_time(impl->powers_told, report[37]))
++                pad_log("the game sets the %s's motor power to 0x%02x, written as 0x00\n", impl->model, report[37]);
++            if (report != copy) memcpy(copy, report, length);
++            if (impl->edge && !impl->bt) copy[2] |= 0x40;
++            copy[37] = 0;
++            report = copy;
++        }
++    }
++    if (impl->bt && output)
++    {
++        bt_queue_output(impl->bt, report);
++        io->Information = packet->reportBufferLen;
++        io->Status = STATUS_SUCCESS;
++        return;
++    }
++    result = IOHIDDeviceSetReport(impl->device, kIOHIDReportTypeOutput, packet->reportId, report, length);
+     if (result == kIOReturnSuccess)
+     {
+         io->Information = packet->reportBufferLen;
+@@ -224,6 +972,17 @@
+ 
+     ret = IOHIDDeviceGetReport(impl->device, kIOHIDReportTypeFeature, packet->reportId,
+                                packet->reportBuffer, &report_length);
++    /* Which of the pad's stored settings a game reads, once per report. */
++    if (impl->sony && pad_option("diagnostics=on") && first_time(impl->features_told, packet->reportId))
++    {
++        char hex[3 * 24 + 1] = "";
++        CFIndex i;
++
++        for (i = 0; ret == kIOReturnSuccess && i < report_length && i < 24; i++)
++            snprintf(hex + 3 * i, 4, " %02x", packet->reportBuffer[i]);
++        pad_log("the game read the %s's feature report 0x%02x: %s%s\n", impl->model,
++                packet->reportId, ret == kIOReturnSuccess ? "" : "refused", hex);
++    }
+     if (ret == kIOReturnSuccess)
+     {
+         io->Information = report_length;
+@@ -241,6 +1000,20 @@
+     IOReturn result;
+     struct iohid_device *impl = impl_from_unix_device(iface);
+ 
++    /* A wired client turns the pad's radio off once it has the pad on the
++     * cable (feature 0x08, subcommand 2). Here the radio is the cable. */
++    if (impl->bt && packet->reportId == 0x08 && packet->reportBufferLen == 48 &&
++        packet->reportBuffer[0] == 0x08 && packet->reportBuffer[1] == 0x02)
++    {
++        UINT i;
++        for (i = 2; i < 48 && !packet->reportBuffer[i]; i++);
++        if (i == 48)
++        {
++            io->Information = packet->reportBufferLen;
++            io->Status = STATUS_SUCCESS;
++            return;
++        }
++    }
+     result = IOHIDDeviceSetReport(impl->device, kIOHIDReportTypeFeature, packet->reportId,
+                                   packet->reportBuffer, packet->reportBufferLen);
+     if (result == kIOReturnSuccess)
+@@ -276,6 +1049,7 @@
+     struct iohid_device *impl;
+     USAGE_AND_PAGE usages;
+     CFStringRef str;
++    BOOL bt_wired, as_standard = FALSE;
+ 
+     usages.UsagePage = CFNumberToDWORD(IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDPrimaryUsagePageKey)));
+     usages.Usage = CFNumberToDWORD(IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDPrimaryUsageKey)));
+@@ -293,6 +1067,8 @@
+         else if (!CFStringCompare(str, CFSTR(kIOHIDTransportUSBValue), 0))
+             desc.bus_type = BUS_TYPE_USB;
+     }
++    if ((bt_wired = is_bluetooth_dualsense(IOHIDDevice, desc.vid, desc.pid)))
++        desc.bus_type = BUS_TYPE_USB;
+ 
+     if (usages.UsagePage != HID_USAGE_PAGE_GENERIC ||
+         !(usages.Usage == HID_USAGE_GENERIC_JOYSTICK || usages.Usage == HID_USAGE_GENERIC_GAMEPAD))
+@@ -319,6 +1095,20 @@
+     str = IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDSerialNumberKey));
+     if (str) CFStringToWSTR(str, desc.serialnumber, ARRAY_SIZE(desc.serialnumber));
+ 
++    /* With edge=dualsense an Edge is the standard pad to the game, on a cable or
++     * over Bluetooth shown as wired: its product ID, name, descriptor and output
++     * size, as PR #90's bridge offered (NOTPROTON_PAD_AS=dualsense) for titles
++     * whose Sony library does not know the Edge. */
++    if (desc.vid == SONY_VID && desc.pid == DS_EDGE_PID && (bt_wired || desc.bus_type == BUS_TYPE_USB) &&
++        pad_option("edge=dualsense"))
++    {
++        static const WCHAR standard[] = {'D','u','a','l','S','e','n','s','e',' ','W','i','r','e','l','e','s','s',' ',
++                                         'C','o','n','t','r','o','l','l','e','r',0};
++        desc.pid = DUALSENSE_PID;
++        memcpy(desc.product, standard, sizeof(standard));
++        as_standard = TRUE;
++    }
++
+     if (IOHIDDeviceConformsTo(IOHIDDevice, kHIDPage_GenericDesktop, kHIDUsage_GD_GamePad) ||
+        IOHIDDeviceConformsTo(IOHIDDevice, kHIDPage_GenericDesktop, kHIDUsage_GD_Joystick))
+     {
+@@ -332,6 +1122,13 @@
+     list_add_tail(&device_list, &impl->unix_device.entry);
+     impl->device = IOHIDDevice;
+     impl->buffer = NULL;
++    impl->bt = bt_wired ? bt_pad_create(IOHIDDevice, desc.pid, desc.uid, desc.pid == DS_EDGE_PID || as_standard) : NULL;
++    impl->sony = desc.vid == SONY_VID && (desc.pid == DUALSENSE_PID || desc.pid == DS_EDGE_PID);
++    impl->edge = impl->sony && (desc.pid == DS_EDGE_PID || as_standard);
++    impl->as_standard = as_standard;
++    impl->model = as_standard ? "DualSense Edge (shown as a DualSense)" : desc.pid == DS_EDGE_PID ? "DualSense Edge" : "DualSense";
++    if (impl->bt)
++        pad_log("the Bluetooth %s at location %08x is shown as wired\n", impl->model, (unsigned int)desc.uid);
+ 
+     bus_event_queue_device_created(&event_queue, &impl->unix_device, &desc);
+ }
