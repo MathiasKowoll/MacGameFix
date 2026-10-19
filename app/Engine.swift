@@ -222,7 +222,7 @@ enum Engine {
             if before == .outdated {
                 needs = "newer Wine modules"
             } else if before == .absent || before == .half {
-                needs = kept ? "the Wine modules again: an update put CrossOver's own files back"
+                needs = kept ? "the Wine modules again: something replaced them, such as a CrossOver or NotProton update"
                     : "the Wine modules: it is a new CrossOver build"
             } else {
                 state.engineNoted[path] = nil

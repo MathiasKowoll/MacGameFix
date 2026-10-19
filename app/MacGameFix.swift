@@ -55,8 +55,12 @@ final class Model: ObservableObject {
     @Published var pad = PadStore.load()
     @Published var padGames: [InstalledGame] = []
     let padPresets = PadPresets.load()
+    /// Trying the haptics and the triggers on the pad, from the Game Feel sheets.
+    let padTester = PadTester()
     /// pad.conf and pad.d written by this launch, so they carry its keys and presets.
     private var padWritten = false
+    /// App Management looked at by this launch.
+    private var appManagementChecked = false
     @Published var modulesVersion = 0
     var resources = URL(fileURLWithPath: ".")
     /// The Wine modules' catalog in use, apart from the fixes'.
@@ -383,8 +387,8 @@ extension Model {
         settings.modulesKept.contains { Engine.resolved($0) == row.target.key }
     }
 
-    /// Ticking a box keeps the modules there; unticking leaves that CrossOver
-    /// alone from then on, and removes nothing (Remove, in Wine Modules, does).
+    /// Whether the agent keeps the modules there from now on. The switch in Wine
+    /// Modules sets this and also installs or removes them (setEngineOn).
     func setEngineKept(_ row: EngineRow, _ on: Bool) {
         let key = row.target.key
         settings.modulesKept.removeAll { Engine.resolved($0) == key }
@@ -425,7 +429,7 @@ extension Model {
     private func confirmApp(_ rows: [EngineRow]) -> Bool {
         let alert = NSAlert()
         alert.messageText = "Change CrossOver itself?"
-        alert.informativeText = "MacGameFix puts three Wine files into " + rows.map(\.target.name).joined(separator: ", ")
+        alert.informativeText = "MacGameFix puts its Wine modules into " + rows.map(\.target.name).joined(separator: ", ")
             + ". macOS asks you to allow MacGameFix under App Management, and the app is signed again ad hoc, "
             + "so CodeWeavers' signature no longer covers it. Turning it off puts CrossOver's own files back."
         alert.addButton(withTitle: "Install")
@@ -433,9 +437,43 @@ extension Model {
         return alert.runModal() == .alertFirstButtonReturn
     }
 
+    /// Whether macOS lets MacGameFix change this CrossOver's files: App
+    /// Management, for a CrossOver app; a runner is not an app and needs none.
+    /// The asking is a write, an empty file made and removed beside the modules,
+    /// which also puts MacGameFix in System Settings' list when it is refused.
+    nonisolated static func mayChange(_ target: EngineTarget) -> Bool {
+        guard target.app != nil else { return true }
+        let probe = target.root.appendingPathComponent("lib/wine/.macgamefix-access")
+        guard FileManager.default.createFile(atPath: probe.path, contents: Data()) else { return false }
+        try? FileManager.default.removeItem(at: probe)
+        return true
+    }
+
+    /// Asks for App Management at once when one of these CrossOver apps needs
+    /// it, rather than halfway through an update. Returns the rows that may go on.
+    func allowedToChange(_ rows: [EngineRow]) -> [EngineRow] {
+        let blocked = rows.filter { !Model.mayChange($0.target) }
+        guard !blocked.isEmpty else { return rows }
+        let alert = NSAlert()
+        alert.messageText = "MacGameFix needs App Management"
+        alert.informativeText = "To change the Wine modules in " + blocked.map(\.target.name).joined(separator: ", ")
+            + ", macOS has to let MacGameFix change apps. Turn MacGameFix on in System Settings › Privacy & "
+            + "Security › App Management, then try again. A new build of MacGameFix may need it turned on again."
+            + (rows.count > blocked.count ? " The NotProton runners need no permission and go ahead." : "")
+        alert.addButton(withTitle: "Open App Management…")
+        alert.addButton(withTitle: "Later")
+        if alert.runModal() == .alertFirstButtonReturn,
+           let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles") {
+            NSWorkspace.shared.open(url)
+        }
+        return rows.filter { row in !blocked.contains { $0.id == row.id } }
+    }
+
     /// Installs into, or removes from, each of these CrossOver installs in turn.
     func engineBatch(_ rows: [EngineRow], install: Bool) {
         guard !busy, !rows.isEmpty else { return }
+        let rows = allowedToChange(rows)
+        guard !rows.isEmpty else { return }
         busy = true
         Task {
             var failed = 0
@@ -483,6 +521,19 @@ extension Model {
                 store.save()
             }
             pad = store
+            // What the store says of each game decides its XInput by default.
+            if padAvailable, await store.learnStore(games) {
+                var fresh = PadStore.load()
+                for (appid, game) in store.games where game.dualSense != nil || game.storeUnknown {
+                    var entry = fresh.games[appid] ?? PadGame(name: game.name)
+                    entry.dualSense = game.dualSense
+                    entry.storeUnknown = game.storeUnknown
+                    fresh.games[appid] = entry
+                }
+                fresh.save()
+                fresh.writeConfig(presets: padPresets)
+                pad = fresh
+            }
         }
     }
 
@@ -496,13 +547,47 @@ extension Model {
         pad = store
     }
 
+    /// The modules' diagnostics for one game, for a report.
+    func setPadDiagnose(_ game: InstalledGame, _ on: Bool) {
+        setPad { store in
+            var entry = store.games[game.appid] ?? PadGame(name: game.name)
+            entry.name = game.name
+            entry.diagnose = on
+            store.games[game.appid] = entry.isEmpty ? nil : entry
+        }
+    }
+
+    /// One game's report, saved where the user chooses, and a new issue opened
+    /// with the template it belongs to, for the user to attach it.
+    func padReport(_ game: InstalledGame) {
+        let store = PadStore.exists ? PadStore.load() : pad
+        let text = store.report(appid: game.appid, name: game.name, presets: padPresets,
+                                engines: engineRows.map { ($0.target.name, $0.target.build, $0.state.label) })
+        let day = ISO8601DateFormatter.string(from: Date(), timeZone: .current, formatOptions: [.withFullDate])
+        let safe = game.name.components(separatedBy: CharacterSet(charactersIn: "/:\\")).joined(separator: " ")
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "MacGameFix report - \(safe) - \(day).md"
+        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try text.write(to: url, atomically: true, encoding: .utf8) } catch {
+            note("The report could not be saved: \(error.localizedDescription)")
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+        var issue = URLComponents(string: "https://github.com/MathiasKowoll/MacGameFix/issues/new")!
+        issue.queryItems = [URLQueryItem(name: "template", value: "controller.yml"),
+                            URLQueryItem(name: "title", value: "[Controller] \(game.name)"),
+                            URLQueryItem(name: "game", value: "\(game.name) (Steam app \(game.appid))")]
+        if let link = issue.url { NSWorkspace.shared.open(link) }
+    }
+
     /// A game's own options; a game left with none and nothing seen is forgotten.
     func setPadGame(_ game: InstalledGame, _ change: (inout PadOptions) -> Void) {
         setPad { store in
             var entry = store.games[game.appid] ?? PadGame(name: game.name)
             entry.name = game.name
             change(&entry.options)
-            store.games[game.appid] = entry.options.isEmpty && entry.seen.isEmpty ? nil : entry
+            store.games[game.appid] = entry.isEmpty ? nil : entry
         }
     }
 
@@ -536,6 +621,13 @@ extension Model {
             engineRows = rows
             busy = false
             status = found.isEmpty ? "No CrossOver or NotProton runner found." : "\(found.count) CrossOver install(s) found."
+            // Once a launch: App Management for a CrossOver app the modules are kept in,
+            // asked now rather than when an update needs it.
+            if !appManagementChecked {
+                appManagementChecked = true
+                let apps = rows.filter { $0.target.app != nil && engineKept($0) }
+                if !apps.isEmpty { _ = allowedToChange(apps) }
+            }
             // The first time the modules that read them are in, the options start
             // as they were measured; after that they are written once a launch, so
             // the files carry this version's keys and suggested settings.
@@ -731,8 +823,8 @@ struct EngineView: View {
                 .disabled(model.busy)
             } header: {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("DualSense haptics on a USB cable")
-                    Text("On installs three Wine files into that CrossOver; off puts CrossOver's own back.")
+                    Text("The DualSense's haptics and triggers, on a cable and over Bluetooth")
+                    Text("On installs the Wine modules into that CrossOver; off puts CrossOver's own back.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .help("Unlike the game fixes, these go into CrossOver itself. Quit that CrossOver's games first. "
@@ -779,7 +871,8 @@ struct ControllersView: View {
     @State private var page = 0
     @State private var selection: InstalledGame.ID?
     @State private var editing: InstalledGame?
-    private let perPage = 15
+    @State private var global = false
+    @AppStorage("gameFeelPerPage") private var perPage = 15
 
     private var filtered: [InstalledGame] {
         guard !search.isEmpty else { return model.padGames }
@@ -789,35 +882,21 @@ struct ControllersView: View {
     private var shown: [InstalledGame] { Array(filtered.dropFirst(min(page, pages - 1) * perPage).prefix(perPage)) }
 
     var body: some View {
-        VSplitView {
-            Form {
-                Section {
-                    PadOptionRows(
-                        flag: { key in Binding(get: { model.pad.defaults[keyPath: key] ?? false },
-                                               set: { on in model.setPad { $0.defaults[keyPath: key] = on } }) },
-                        own: { _ in false })
-                    Toggle("Diagnostics in the modules' log", isOn: Binding(
-                        get: { model.pad.diagnostics }, set: { on in model.setPad { $0.diagnostics = on } }))
-                        .help("What a game writes to the pad and reads from it, and a level meter of its haptics, in "
-                              + "/tmp/macgamefix-\(getuid())/pad.log.")
-                } header: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Every game")
-                        Text("The Wine modules read these when a game starts. A game's own settings win.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Every game").font(.headline)
+                    Text(model.pad.defaults.summary.joined(separator: " · "))
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 }
-                PadHapticsSection(
-                    gain: { key in Binding(get: { model.pad.defaults[keyPath: key] ?? 1 },
-                                           set: { v in model.setPad { $0.defaults[keyPath: key] = v } }) },
-                    own: { _ in false }
-                ) {
-                    Text("Measured with NOTPROTON_RAW_CONTROLLERS=1 in the game's launch options and Steam Input off.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+                Spacer()
+                Button("Every Game's Settings…") { global = true }
+                    .help("What every game gets unless it has settings of its own: the connection, XInput, the "
+                          + "haptics' strength and the trigger effects, each with a thirty-second try.")
             }
-            .formStyle(.grouped)
-            .frame(minHeight: 200, idealHeight: 560)
+            .padding(.horizontal, 20)
+            .padding(.top, 14)
+            Divider()
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
@@ -830,7 +909,11 @@ struct ControllersView: View {
                 }
                 Table(shown, selection: $selection) {
                     TableColumn("Game") { game in
-                        Text(game.name).foregroundStyle(ownOptions(game).isEmpty ? Color.primary : Color.accentColor)
+                        HStack(spacing: 10) {
+                            PadCover(appid: game.appid, height: 42)
+                            Text(game.name).foregroundStyle(ownOptions(game).isEmpty ? Color.primary : Color.accentColor)
+                        }
+                        .padding(.vertical, 2)
                     }
                     TableColumn("Settings") { game in Text(settings(game)).foregroundStyle(.secondary) }
                     TableColumn("Seen") { game in Text(seen(game)).foregroundStyle(.secondary) }
@@ -843,6 +926,11 @@ struct ControllersView: View {
                          : filtered.isEmpty ? "No game matches." : "\(filtered.count) game(s)")
                         .font(.caption).foregroundStyle(.secondary)
                     Spacer()
+                    Picker("Show", selection: $perPage) {
+                        ForEach([15, 25, 50, 100], id: \.self) { Text("\($0)").tag($0) }
+                    }
+                    .fixedSize()
+                    .help("How many games a page shows.")
                     Button { page = max(0, page - 1) } label: { Image(systemName: "chevron.left") }
                         .disabled(page == 0)
                     Text("Page \(min(page, pages - 1) + 1) of \(pages)").font(.caption).monospacedDigit()
@@ -851,11 +939,12 @@ struct ControllersView: View {
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 8)
-            .frame(minHeight: 260)
+            .padding(.bottom, 8)
         }
         .sheet(item: $editing, onDismiss: { selection = nil }) { game in PadGameSheet(game: game, model: model) }
+        .sheet(isPresented: $global) { PadGlobalSheet(model: model) }
         .onChange(of: search) { _, _ in page = 0 }
+        .onChange(of: perPage) { _, _ in page = 0 }
         .onAppear { model.scanPad() }
     }
 
@@ -879,22 +968,201 @@ private let padGains: [Double] = [1, 1.5, 2, 2.5, 3]
 /// row whose value is the game's own is in the accent colour.
 struct PadOptionRows: View {
     let flag: (WritableKeyPath<PadOptions, Bool?>) -> Binding<Bool>
+    let choice: (WritableKeyPath<PadOptions, String?>) -> Binding<String>
     let own: (PartialKeyPath<PadOptions>) -> Bool
 
     private func title(_ text: String, _ key: PartialKeyPath<PadOptions>) -> Text {
         own(key) ? Text(text).foregroundColor(.accentColor) : Text(text)
     }
 
+    /// A title with what it does under it, always in view.
+    private func label(_ text: String, _ key: PartialKeyPath<PadOptions>, _ about: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            title(text, key)
+            Text(about).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var xinputAbout: String {
+        switch choice(\.xinput).wrappedValue {
+        case "rumble": return "The pad stays itself, and a game that rumbles through XInput, such as Beast of "
+            + "Reincarnation, gets its rumble on the motors. For a game the Steam store lists for the DualSense."
+        case "pad": return "The pad itself is the game's XInput controller, with Sony's ids so the game can show "
+            + "PlayStation buttons; its rumble goes to the motors and the trigger effects below apply. For a game "
+            + "that reads nothing else. Steam Input must be off for the game."
+        default: return "XInput gets nothing of the pad."
+        }
+    }
+
     var body: some View {
-        Toggle(isOn: flag(\.bluetoothAsCable)) { title("Bluetooth as a cable", \.bluetoothAsCable) }
-            .help("A DualSense or DualSense Edge on Bluetooth is shown to games as the same pad on a cable: "
-                  + "haptics and adaptive triggers as wired.")
-        Toggle(isOn: flag(\.fullMotorPower)) { title("Full motor power on the Edge", \.fullMotorPower) }
-            .help("Sony's library claims a standard DualSense's motor power at full in every report and never "
-                  + "an Edge's, which then stays at the reduction it stores.")
-        Toggle(isOn: flag(\.edgeAsDualSense)) { title("Show the Edge as a standard DualSense", \.edgeAsDualSense) }
-            .help("For a title whose Sony library does not know the Edge. The game loses the Edge's back buttons "
-                  + "and Fn.")
+        Toggle(isOn: flag(\.bluetoothAsCable)) {
+            label("Bluetooth as a cable", \.bluetoothAsCable,
+                  "A DualSense or DualSense Edge on Bluetooth is shown to games as the same pad on a cable, so they "
+                  + "give it haptics and adaptive triggers as wired.")
+        }
+        Toggle(isOn: flag(\.fullMotorPower)) {
+            label("Full motor power on the Edge", \.fullMotorPower,
+                  "Sony's library claims a standard DualSense's motor power at full and never an Edge's, which then "
+                  + "keeps the reduction it stores; this claims it for the Edge too.")
+        }
+        Toggle(isOn: flag(\.edgeAsDualSense)) {
+            label("Show the Edge as a standard DualSense", \.edgeAsDualSense,
+                  "For a game whose Sony library does not know the Edge. The game loses the Edge's back buttons and Fn.")
+        }
+        Picker(selection: choice(\.xinput)) {
+            Text("Off").tag("off")
+            Text("Its rumble on the motors").tag("rumble")
+            Text("The pad as an XInput controller").tag("pad")
+        } label: { label("XInput", \.xinput, xinputAbout) }
+        Toggle(isOn: flag(\.rumbleHaptics)) {
+            label("Rumble on the haptic actuators", \.rumbleHaptics,
+                  "Over Bluetooth, a game's motor rumble played on the haptic actuators, as PlayStation games play theirs: the heavy "
+                  + "motor a deep 65 Hz on the left, the light one a finer 160 Hz on the right. Only while the game "
+                  + "plays no haptics of its own; on a cable the pad's own rumble plays. For an XInput game.")
+        }
+    }
+}
+
+private let padTriggerNames = ["off": "Off", "resist": "Resist", "weapon": "Weapon", "slope": "Slope",
+                                "vibrate": "Vibrate", "rumble": "Rumble with the motor", "recoil": "Recoil with the motor"]
+
+/// What each trigger effect does, what it suits, and its default strength. The
+/// layouts are those of NotProton's controller bridge (engine/README.md, "XInput,
+/// and the triggers").
+private let padTriggerAbout: [String: (feel: String, suits: String, strength: String)] = [
+    "off": ("Free, as the game leaves it.", "", ""),
+    "resist": ("Even resistance from about a third of the way down to the end, like a stiff spring.",
+               "A brake, or anything held down.", "4"),
+    "weapon": ("Builds up from a third of the way and gives way with a click past the middle, like a gun's trigger.",
+               "Shooting on R2, aiming on L2.", "7"),
+    "slope": ("Light at first and firmer the further it goes.", "An accelerator, drawing a bow.", "8, at the end"),
+    "vibrate": ("Buzzes at 25 Hz once pressed past the first fifth, whatever the game does.",
+                "An engine, a tool.", "3"),
+    "rumble": ("Vibrates at 40 Hz with the game's own rumble, and is still when the game is: R2 with the light "
+               + "motor, L2 with the heavy one.", "An XInput game, to feel hits in the fingers.", "8, a cap"),
+    "recoil": ("Stiffens with the game's own rumble and frees when it stops, so each shot or hit kicks back; "
+               + "with whichever motor is the stronger.", "Shooting in an XInput game.", "8, a cap"),
+]
+
+/// The effects side by side, in a popover from the triggers' section.
+private struct PadTriggerGuide: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("What each effect does").font(.headline)
+            Grid(alignment: .topLeading, horizontalSpacing: 16, verticalSpacing: 8) {
+                GridRow {
+                    Text("Effect"); Text("How it feels"); Text("Suits"); Text("Default strength")
+                }
+                .font(.caption).foregroundStyle(.secondary)
+                Divider().gridCellUnsizedAxes(.horizontal)
+                ForEach(PadTrigger.effects, id: \.self) { e in
+                    GridRow {
+                        Text(padTriggerNames[e] ?? e).fontWeight(.medium)
+                        Text(padTriggerAbout[e]?.feel ?? "").frame(width: 300, alignment: .leading)
+                        Text(padTriggerAbout[e]?.suits ?? "").frame(width: 200, alignment: .leading)
+                        Text(padTriggerAbout[e]?.strength ?? "")
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Text("While the other is pressed: a second effect that replaces a trigger's own while the other "
+                 + "trigger is held, a weapon on R2 while L2 aims, say. The other counts as pressed from about a sixth "
+                 + "of its travel.")
+                .font(.caption).foregroundStyle(.secondary).frame(width: 640, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Strength runs from 1, light, to 8, the pad's strongest; Default is each effect's own. The pad "
+                 + "keeps an effect until something else is written: the Wine modules release the triggers when the "
+                 + "game's Wine stops, or when the next game starts.")
+                .font(.caption).foregroundStyle(.secondary).frame(width: 640, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+    }
+}
+
+/// Trigger effects for a game that sets none of its own, an XInput title above
+/// all: an effect and a strength per trigger. A game that sets an effect of its
+/// own takes that trigger over.
+struct PadTriggersSection<Footer: View>: View {
+    let spec: (WritableKeyPath<PadOptions, String?>) -> Binding<String>
+    let own: (PartialKeyPath<PadOptions>) -> Bool
+    @ViewBuilder let footer: () -> Footer
+    @State private var guide = false
+
+
+    private func effect(_ key: WritableKeyPath<PadOptions, String?>) -> Binding<String> {
+        let b = spec(key)
+        return Binding(get: { PadTrigger(b.wrappedValue)?.effect ?? "off" },
+                       set: { e in b.wrappedValue = PadTrigger(effect: e, strength: PadTrigger(b.wrappedValue)?.strength ?? 0).spec })
+    }
+
+    private func strength(_ key: WritableKeyPath<PadOptions, String?>) -> Binding<Int> {
+        let b = spec(key)
+        return Binding(get: { PadTrigger(b.wrappedValue)?.strength ?? 0 },
+                       set: { n in b.wrappedValue = PadTrigger(effect: PadTrigger(b.wrappedValue)?.effect ?? "off", strength: n).spec })
+    }
+
+    /// One trigger's effect; a second one, for while the other is pressed, says
+    /// "the same" where the first says off.
+    private func row(_ label: String, _ key: WritableKeyPath<PadOptions, String?>, second: String? = nil) -> some View {
+        GridRow {
+            Text(label).foregroundStyle(second == nil ? .primary : .secondary)
+            HStack(spacing: 6) {
+                Picker("", selection: effect(key)) {
+                    ForEach(PadTrigger.effects, id: \.self) { e in
+                        Text(e == "off" && second != nil ? "The same as \(second!)" : padTriggerNames[e] ?? e).tag(e)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+                Image(systemName: "circle.fill").font(.system(size: 6)).foregroundStyle(Color.accentColor)
+                    .opacity(own(key) ? 1 : 0)
+            }
+            Picker("", selection: strength(key)) {
+                Text("Default").tag(0)
+                ForEach(1...8, id: \.self) { Text("\($0)").tag($0) }
+            }
+            .labelsHidden()
+            .fixedSize()
+            .disabled(effect(key).wrappedValue == "off")
+        }
+    }
+
+    var body: some View {
+        Section {
+            Grid(alignment: .leading, horizontalSpacing: 28, verticalSpacing: 10) {
+                GridRow {
+                    Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                    Text("Effect").foregroundStyle(.secondary)
+                    Text("Strength").foregroundStyle(.secondary)
+                }
+                row("R2", \.triggerR2)
+                row("  while L2 is pressed", \.triggerR2WithL2, second: "R2")
+                row("L2", \.triggerL2)
+                row("  while R2 is pressed", \.triggerL2WithR2, second: "L2")
+            }
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach([("R2", \PadOptions.triggerR2), ("L2", \PadOptions.triggerL2)], id: \.0) { label, key in
+                        let chosen = effect(key).wrappedValue
+                        Text("\(label), \((padTriggerNames[chosen] ?? chosen).lowercased()): \(padTriggerAbout[chosen]?.feel ?? "")")
+                    }
+                }
+                .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button("What Each Effect Does…") { guide = true }
+                    .popover(isPresented: $guide, arrowEdge: .trailing) { PadTriggerGuide() }
+            }
+        } header: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Trigger effects")
+                Text("For a game that sets none of its own, such as an XInput title. A game that sets one takes "
+                     + "that trigger over.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        } footer: {
+            footer()
+        }
     }
 }
 
@@ -948,6 +1216,132 @@ struct PadHapticsSection<Footer: View>: View {
     }
 }
 
+/// A game's cover, from Steam's own cache on this Mac (appcache/librarycache:
+/// library_600x900.jpg, else header.jpg), made small once and kept.
+@MainActor
+final class PadCovers {
+    static let shared = PadCovers()
+    private var images: [String: NSImage] = [:]
+    private var none: Set<String> = []
+
+    func image(_ appid: String) -> NSImage? {
+        if let image = images[appid] { return image }
+        if none.contains(appid) { return nil }
+        let dir = Paths.home.appendingPathComponent("Library/Application Support/Steam/appcache/librarycache/\(appid)")
+        let names = ["library_600x900.jpg", "header.jpg"]
+        guard let url = names.map({ dir.appendingPathComponent($0) }).first(where: { FileManager.default.fileExists(atPath: $0.path) }),
+              let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let thumb = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                  kCGImageSourceCreateThumbnailFromImageAlways: true,
+                  kCGImageSourceThumbnailMaxPixelSize: 300,
+              ] as CFDictionary)
+        else { none.insert(appid); return nil }
+        let image = NSImage(cgImage: thumb, size: NSSize(width: thumb.width, height: thumb.height))
+        images[appid] = image
+        return image
+    }
+}
+
+/// A game's cover at a height, or a gamepad where Steam keeps none.
+struct PadCover: View {
+    let appid: String
+    let height: CGFloat
+
+    var body: some View {
+        Group {
+            if let image = PadCovers.shared.image(appid) {
+                Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+            } else {
+                ZStack {
+                    Rectangle().fill(.quaternary)
+                    Image(systemName: "gamecontroller").foregroundStyle(.secondary)
+                }
+            }
+        }
+        .frame(width: height * 2 / 3, height: height)
+        .clipShape(RoundedRectangle(cornerRadius: height / 15))
+    }
+}
+
+/// A thirty-second try of the haptics or the triggers on the pad connected now,
+/// with the settings shown.
+struct PadTryRow: View {
+    @ObservedObject var tester: PadTester
+    let kind: PadTester.Kind
+    let options: PadOptions
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(tester.running == kind || (tester.running == nil && !tester.status.isEmpty) ? tester.status
+                 : kind == .haptics ? "Plays a rumble soft, medium and strong, then hits left and right, at the strength above for the pad connected and how it is connected."
+                 : "Sets the effects above on the pad connected; rumble and recoil follow a stand-in for a game's rumble.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button(tester.running == kind ? "Stop" : "Try for \(PadTester.seconds) Seconds") {
+                if tester.running == kind { tester.stop() } else { tester.start(kind, with: options) }
+            }
+            .help("Close any game first: the try writes to the pad as the Wine modules do.")
+        }
+        .padding(.top, 2)
+    }
+}
+
+/// Every game's options, in a sheet of their own.
+struct PadGlobalSheet: View {
+    @ObservedObject var model: Model
+    @Environment(\.dismiss) private var dismiss
+
+    private func flag(_ key: WritableKeyPath<PadOptions, Bool?>) -> Binding<Bool> {
+        Binding(get: { model.pad.defaults[keyPath: key] ?? false }, set: { on in model.setPad { $0.defaults[keyPath: key] = on } })
+    }
+    private func text(_ key: WritableKeyPath<PadOptions, String?>) -> Binding<String> {
+        Binding(get: { model.pad.defaults[keyPath: key] ?? "off" }, set: { v in model.setPad { $0.defaults[keyPath: key] = v } })
+    }
+    private func gain(_ key: WritableKeyPath<PadOptions, Double?>) -> Binding<Double> {
+        Binding(get: { model.pad.defaults[keyPath: key] ?? 1 }, set: { v in model.setPad { $0.defaults[keyPath: key] = v } })
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Form {
+                Section {
+                    PadOptionRows(flag: flag, choice: text, own: { _ in false })
+                    Toggle("Diagnostics in the modules' log", isOn: Binding(
+                        get: { model.pad.diagnostics }, set: { on in model.setPad { $0.diagnostics = on } }))
+                        .help("What a game writes to the pad and reads from it, and a level meter of its haptics, in "
+                              + "/tmp/macgamefix-\(getuid())/pad.log.")
+                } header: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Every game")
+                        Text("The Wine modules read these when a game starts. A game's own settings win, and so do "
+                             + "its suggested ones.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                PadHapticsSection(gain: gain, own: { _ in false }) {
+                    PadTryRow(tester: model.padTester, kind: .haptics, options: model.pad.defaults)
+                }
+                PadTriggersSection(spec: text, own: { _ in false }) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        PadTryRow(tester: model.padTester, kind: .triggers, options: model.pad.defaults)
+                        Text("Measured with NOTPROTON_RAW_CONTROLLERS=1 in the game's launch options and Steam Input off.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+        }
+        .frame(minWidth: 780, idealWidth: 820, minHeight: 720, idealHeight: 860)
+        .onDisappear { model.padTester.stop() }
+    }
+}
+
 /// One game's own options, in the same form as every game's. A value set back
 /// to what the game would get anyway is no longer its own.
 struct PadGameSheet: View {
@@ -958,7 +1352,7 @@ struct PadGameSheet: View {
     private var preset: PadPreset? { model.padPresets[game.appid] }
     private var own: PadOptions { model.pad.games[game.appid]?.options ?? PadOptions() }
     /// What the game gets without options of its own.
-    private var base: PadOptions { (preset?.options ?? PadOptions()).over(model.pad.defaults) }
+    private var base: PadOptions { model.pad.base(game.appid, presets: model.padPresets) }
     private var effective: PadOptions { own.over(base) }
 
     private func flag(_ key: WritableKeyPath<PadOptions, Bool?>) -> Binding<Bool> {
@@ -971,10 +1365,16 @@ struct PadGameSheet: View {
                 set: { v in model.setPadGame(game) { $0[keyPath: key] = v == (base[keyPath: key] ?? 1) ? nil : v } })
     }
 
+    private func trigger(_ key: WritableKeyPath<PadOptions, String?>) -> Binding<String> {
+        Binding(get: { effective[keyPath: key] ?? "off" },
+                set: { v in model.setPadGame(game) { $0[keyPath: key] = v == (base[keyPath: key] ?? "off") ? nil : v } })
+    }
+
     private func isOwn(_ key: PartialKeyPath<PadOptions>) -> Bool {
         switch own[keyPath: key] {
         case let v as Bool?: return v != nil
         case let v as Double?: return v != nil
+        case let v as String?: return v != nil
         default: return false
         }
     }
@@ -983,25 +1383,54 @@ struct PadGameSheet: View {
         VStack(spacing: 0) {
             Form {
                 Section {
-                    PadOptionRows(flag: flag, own: isOwn)
+                    PadOptionRows(flag: flag, choice: trigger, own: isOwn)
                 } header: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(game.name)
-                        Text("In blue, or marked with a dot, what is this game's own; the rest follows "
-                             + (preset == nil ? "every game's." : "the suggested settings, then every game's."))
-                            .font(.caption).foregroundStyle(.secondary)
+                    HStack(alignment: .center, spacing: 14) {
+                        PadCover(appid: game.appid, height: 96)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(game.name).font(.title3)
+                            Text("In blue, or marked with a dot, what is this game's own; the rest follows "
+                                 + (preset == nil ? "every game's." : "the suggested settings, then every game's."))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
+                    .padding(.bottom, 4)
                 }
                 PadHapticsSection(gain: gain, own: isOwn) {
+                    PadTryRow(tester: model.padTester, kind: .haptics, options: effective)
+                }
+                PadTriggersSection(spec: trigger, own: isOwn) {
+                    PadTryRow(tester: model.padTester, kind: .triggers, options: effective)
+                }
+                Section("About this game") {
+                    HStack {
+                        Toggle("Diagnose this game", isOn: Binding(get: { model.pad.games[game.appid]?.diagnose == true },
+                                                                   set: { model.setPadDiagnose(game, $0) }))
+                            .help("The Wine modules log what this game writes to the pad, the haptics' levels and delays, "
+                                  + "for this game alone, from its next start.")
+                        Spacer()
+                        Button("Make a Report…") { model.padReport(game) }
+                            .help("Saves this game's report and opens a new issue on GitHub to attach it to.")
+                    }
+                    Text("To report a problem: turn on Diagnose, play the moment that goes wrong, close the game, then "
+                         + "make a report and attach it to the issue that opens. The report names this game alone, and "
+                         + "your home folder is written ~.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     VStack(alignment: .leading, spacing: 4) {
                         if let preset {
                             Text("Suggested: \(preset.options.summary.joined(separator: ", ")). \(preset.measured)")
+                        }
+                        switch model.pad.games[game.appid]?.dualSense {
+                        case true?: Text("The Steam store lists it as supporting the DualSense.")
+                        case false?: Text("The Steam store does not list it as supporting the DualSense, so it gets the pad as an XInput controller.")
+                        case nil: Text("Not asked of the Steam store yet.")
                         }
                         let seen = (model.pad.games[game.appid]?.seen.keys.sorted() ?? []).map(\.label)
                         if !seen.isEmpty { Text("Seen: " + seen.joined(separator: ", ") + ".") }
                         Text("Steam app \(game.appid)")
                     }
                     .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .formStyle(.grouped)
@@ -1016,7 +1445,8 @@ struct PadGameSheet: View {
             }
             .padding(16)
         }
-        .frame(width: 540, height: 470)
+        .frame(minWidth: 780, idealWidth: 820, minHeight: 720, idealHeight: 860)
+        .onDisappear { model.padTester.stop() }
     }
 }
 
@@ -1239,15 +1669,18 @@ enum Entry {
             }
         }
         if args.contains("--pad-write") {
-            // What the Game Feel tab does on a change: the log read, pad.json kept,
-            // pad.conf and pad.d/ written.
-            var store = PadStore.load()
-            store.absorbLog(names: { Dictionary(SteamGames.installed().map { ($0.appid, $0.name) },
-                                                uniquingKeysWith: { a, _ in a }) })
-            store.save()
-            store.writeConfig(presets: PadPresets.load())
-            print("pad.conf and \((try? FileManager.default.contentsOfDirectory(atPath: PadStore.perGame.path).count) ?? 0) per-game file(s) written")
-            exit(0)
+            // What the Game Feel tab does on a change: the log read, the store
+            // asked about each game, pad.json kept, pad.conf and pad.d/ written.
+            wait {
+                var store = PadStore.load()
+                let installed = SteamGames.installed()
+                store.absorbLog(names: { Dictionary(installed.map { ($0.appid, $0.name) }, uniquingKeysWith: { a, _ in a }) })
+                _ = await store.learnStore(installed)
+                store.save()
+                store.writeConfig(presets: PadPresets.load())
+                print("pad.conf and \((try? FileManager.default.contentsOfDirectory(atPath: PadStore.perGame.path).count) ?? 0) per-game file(s) written")
+                return 0
+            }
         }
         if let i = args.firstIndex(of: "--pad-export"), i + 1 < args.count {
             // The Export button's file, without the panel.
@@ -1286,6 +1719,20 @@ enum Entry {
                 for t in Engine.targets() {
                     print("\(t.name) | \(t.build)\(t.fex ? " | fex" : "") | \(await Engine.status(t, catalog: dir))")
                 }
+                return 0
+            }
+        }
+        if let i = args.firstIndex(of: "--pad-game-report"), i + 2 < args.count {
+            // A game's report, as Make a Report writes it, for the tests.
+            let (dir, _) = Catalog.active(.modules)
+            let appid = args[i + 1], path = args[i + 2]
+            wait {
+                var engines: [(name: String, build: String, state: String)] = []
+                for t in Engine.targets() { engines.append((t.name, t.build, await Engine.status(t, catalog: dir).label)) }
+                let store = PadStore.load()
+                let name = store.games[appid]?.name ?? SteamGames.installed().first { $0.appid == appid }?.name ?? appid
+                try? store.report(appid: appid, name: name, presets: PadPresets.load(), engines: engines)
+                    .write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
                 return 0
             }
         }

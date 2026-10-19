@@ -289,8 +289,14 @@ enum Agent {
         // What the Wine modules saw each game do, kept before a restart empties /tmp.
         if PadStore.exists {
             var pad = PadStore.load()
-            if pad.absorbLog(names: { Dictionary(SteamGames.installed().map { ($0.appid, $0.name) },
+            let installed = SteamGames.installed()
+            if pad.absorbLog(names: { Dictionary(installed.map { ($0.appid, $0.name) },
                                                  uniquingKeysWith: { a, _ in a }) }) { pad.save() }
+            // What the store says of a newly installed game decides its XInput by default.
+            if await pad.learnStore(installed) {
+                pad.save()
+                pad.writeConfig(presets: PadPresets.load())
+            }
         }
 
         let (catalogDir, manifest) = Catalog.active()
