@@ -71,6 +71,41 @@ static const GUID guid_null_;
 
 static LONG log_lines;
 
+/* THE VIDEO TRACE. mgvf-video-trace.txt beside this DLL turns it on: every
+ * line carries the time since the DLL loaded, the line cap rises from 400 to
+ * 100000, and each reader says when it opened, sought, ended, decoded slowly,
+ * met a decoder error and was released. Written to find where a cutscene that
+ * freezes on one machine stops: in the decoder, in the game's reads, or after
+ * both. Off, nothing changes. */
+static LONG trace_state;        /* 0 unknown, 1 off, 2 on */
+static LARGE_INTEGER trace_t0, trace_freq;
+
+static BOOL trace_on_(void)
+{
+    WCHAR path[MAX_PATH], *slash;
+    HMODULE self = NULL;
+    if (trace_state) return trace_state == 2;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCWSTR)(void *)trace_on_, &self) ||
+        !GetModuleFileNameW(self, path, MAX_PATH) ||
+        !(slash = wcsrchr(path, L'\\')) || (slash - path) + 32 >= MAX_PATH)
+    {
+        trace_state = 1;
+        return FALSE;
+    }
+    lstrcpyW(slash + 1, L"mgvf-video-trace.txt");
+    trace_state = GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES ? 2 : 1;
+    return trace_state == 2;
+}
+
+static double trace_now_(void)
+{
+    LARGE_INTEGER t;
+    QueryPerformanceCounter(&t);
+    return trace_freq.QuadPart ? (double)(t.QuadPart - trace_t0.QuadPart) / trace_freq.QuadPart : 0.0;
+}
+
 static void logf_(const char *fmt, ...)
 {
     char buf[1024];
@@ -79,8 +114,9 @@ static void logf_(const char *fmt, ...)
     HANDLE h;
     DWORD w;
 
-    if (InterlockedIncrement(&log_lines) > LOG_MAX) return;
-    n = snprintf(buf, sizeof(buf), "[asf-reader] ");
+    if (InterlockedIncrement(&log_lines) > (trace_state == 2 ? 100000 : LOG_MAX)) return;
+    if (trace_state == 2) n = snprintf(buf, sizeof(buf), "[asf-reader %9.3f] ", trace_now_());
+    else n = snprintf(buf, sizeof(buf), "[asf-reader] ");
     va_start(ap, fmt);
     n += vsnprintf(buf + n, sizeof(buf) - n - 2, fmt, ap);
     va_end(ap);
@@ -151,6 +187,9 @@ struct reader
     BOOL demux_eof;
     LONGLONG duration;          /* 100 ns */
     LONG samples_out;
+    LONG id;                    /* trace: which reader of this process */
+    LONGLONG last_ts;           /* trace: the last sample handed out, 100 ns */
+    double opened_at, last_read_at;
     IDirect3DDeviceManager9 *dm9;   /* the caller's, when it passed one */
     HANDLE dev_handle;
 };
@@ -596,16 +635,27 @@ static BOOL pump(struct reader *r)
  * packets are decoded; the other stream's wait, compressed, for their turn. */
 static void fill(struct reader *r, struct strm *s)
 {
+    double started = trace_state == 2 ? trace_now_() : 0.0;
+    int sent = 0;
     while (!s->head && !s->eos)
     {
         AVPacket *pkt = p_pop(s);
         if (pkt)
         {
-            if (avcodec_send_packet(s->dec, pkt) == AVERROR(EAGAIN))
+            int e = avcodec_send_packet(s->dec, pkt);
+            if (e == AVERROR(EAGAIN))
             {
                 receive_all(r, s);
-                avcodec_send_packet(s->dec, pkt);
+                e = avcodec_send_packet(s->dec, pkt);
             }
+            if (e < 0 && e != AVERROR(EAGAIN) && trace_state == 2)
+            {
+                char msg[128];
+                av_strerror(e, msg, sizeof(msg));
+                logf_("reader #%ld %s: the decoder refused a packet (%d, %s), pts %lld",
+                      r->id, s->video ? "video" : "audio", e, msg, (long long)pkt->pts);
+            }
+            ++sent;
             av_packet_free(&pkt);
             receive_all(r, s);
         }
@@ -619,6 +669,13 @@ static void fill(struct reader *r, struct strm *s)
         }
         else
             s->eos = TRUE;
+    }
+    if (trace_state == 2)
+    {
+        double took = trace_now_() - started;
+        if (took > 0.050)
+            logf_("reader #%ld %s: one sample took %.1f ms to decode (%d packets sent, %d queued)",
+                  r->id, s->video ? "video" : "audio", took * 1000.0, sent, s->pcount);
     }
 }
 
@@ -657,6 +714,13 @@ static ULONG WINAPI rd_AddRef(IMFSourceReader *iface)
 static void destroy(struct reader *r)
 {
     int i, k;
+    if (trace_state == 2 && r->id)
+    {
+        double now = trace_now_();
+        logf_("reader #%ld released: %ld samples, the last at %.2f s of %.2f s; open %.1f s, last read %.1f s ago",
+              r->id, r->samples_out, r->last_ts / 1e7, r->duration / 1e7, now - r->opened_at,
+              r->last_read_at ? now - r->last_read_at : -1.0);
+    }
     for (i = 0; i < r->n; i++)
     {
         q_clear(&r->s[i]);
@@ -848,7 +912,10 @@ static HRESULT WINAPI rd_SetCurrentPosition(IMFSourceReader *iface, REFGUID form
     LeaveCriticalSection(&r->cs);
     {
         static LONG said;
-        if (InterlockedIncrement(&said) <= 8)
+        if (trace_state == 2)
+            logf_("reader #%ld SetCurrentPosition(%lld ms) -> seek %d, after %ld samples (last at %.2f s)",
+                  r->id, hns / 10000, e, r->samples_out, r->last_ts / 1e7);
+        else if (InterlockedIncrement(&said) <= 8)
             logf_("SetCurrentPosition(%lld ms) -> seek %d", hns / 10000, e);
     }
     return e < 0 ? E_FAIL : S_OK;
@@ -901,18 +968,23 @@ static HRESULT WINAPI rd_ReadSample(IMFSourceReader *iface, DWORD index, DWORD f
     if (sflags) *sflags = out_flags;
     if (timestamp) *timestamp = got ? ts : 0;
     *sample = got;
+    if (trace_state == 2) r->last_read_at = trace_now_();
     if (got)
     {
         LONG n = InterlockedIncrement(&r->samples_out);
+        r->last_ts = ts;
         if (n == 1 || n == 100 || n == 1000)
             logf_("ReadSample: sample %ld out (stream %lu, %lld ms)", n, out_index, ts / 10000);
     }
     else if (out_flags & MF_SOURCE_READERF_ENDOFSTREAM)
     {
         static LONG said;
-        if (InterlockedIncrement(&said) <= 8)
-            logf_("ReadSample: end of stream %lu after %ld samples", out_index, r->samples_out);
+        if (trace_state == 2 || InterlockedIncrement(&said) <= 8)
+            logf_("ReadSample: end of stream %lu after %ld samples%s", out_index, r->samples_out,
+                  trace_state == 2 ? " (reader traced)" : "");
     }
+    else if (FAILED(hr) && trace_state == 2)
+        logf_("reader #%ld ReadSample(stream %lu) -> 0x%08lx", r->id, (unsigned long)index, (unsigned long)hr);
     (void)flags;
     return hr;
 }
@@ -1127,7 +1199,16 @@ __declspec(dllexport) HRESULT WINAPI MGVF_CreateAsfReader(IMFByteStream *bs, IMF
         goto fail;
     }
     r->duration = r->fmt->duration > 0 ? r->fmt->duration * 10 : 0;
-    logf_("opened: %d stream(s), %lld ms", r->n, r->duration / 10000);
+    if (trace_state == 2)
+    {
+        static LONG readers;
+        r->id = InterlockedIncrement(&readers);
+        r->opened_at = trace_now_();
+        logf_("reader #%ld opened: %d stream(s), %lld ms, %llu bytes", r->id, r->n,
+              r->duration / 10000, (unsigned long long)r->len);
+    }
+    else
+        logf_("opened: %d stream(s), %lld ms", r->n, r->duration / 10000);
     *out = &r->iface;
     return S_OK;
 
@@ -1138,6 +1219,12 @@ fail:
 
 BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
 {
-    if (reason == DLL_PROCESS_ATTACH) DisableThreadLibraryCalls(inst);
+    if (reason == DLL_PROCESS_ATTACH)
+    {
+        DisableThreadLibraryCalls(inst);
+        QueryPerformanceFrequency(&trace_freq);
+        QueryPerformanceCounter(&trace_t0);
+        if (trace_on_()) logf_("video trace on (mgvf-video-trace.txt)");
+    }
     return TRUE;
 }

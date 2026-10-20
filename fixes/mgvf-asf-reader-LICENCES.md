@@ -34,7 +34,7 @@ four files above and the build script, is in `fixes/` of
 
 ## The binary, as shipped here
 
-- `mgvf-asf-reader.dll` — `18334f0e8392e230b1c6f4d7df9ef38ce42558a1e11c8427453ef8d7803ddbd6`
+- `mgvf-asf-reader.dll` — `17c08f55f701009813e91d6ea9bc0d3f02dbdce0fa169e831e96e29ae07d7f3b`
 
 ## GNU Lesser General Public License, version 2.1
 

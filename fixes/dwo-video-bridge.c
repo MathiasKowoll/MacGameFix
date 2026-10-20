@@ -244,6 +244,9 @@ static ID3D11DeviceContext *video_context;
 static ID3D11Texture2D *frame_texture;
 static UINT frame_width, frame_height, frame_stride;
 static UINT texture_width, texture_height;
+/* The D3D11 texture handed out through IMFDXGIBuffer, sized on its own: it
+ * follows the clip, while the D3D12 bridge follows what the game opened. */
+static UINT frame_texture_width, frame_texture_height;
 
 static void *vd_vtbl[], *vc_vtbl[], *vpe_vtbl[], *vp_vtbl[], *vpiv_vtbl[], *vpov_vtbl[];
 static void *dxgibuf_vtbl[];
@@ -255,6 +258,88 @@ static size_t pending_size;
 static UINT pending_w, pending_h;
 static LONGLONG convert_ticks, upload_ticks;
 static LONG converted, uploaded;
+
+/*
+ * THE VIDEO TRACE. mgvf-video-trace.txt beside this DLL turns it on. A thread
+ * writes one line a second while a clip is open: how many frames the game
+ * asked for and got, the longest ReadSample and the longest wait between two,
+ * where the clip is, and how many frames reached the D3D12 texture or were
+ * dropped because their size did not match the size the bridge holds. A
+ * cutscene that freezes leaves one of three shapes -- the game stops asking,
+ * the reader stops answering, or frames arrive and go nowhere -- and the
+ * per-second lines tell them apart. Off, nothing changes.
+ */
+static LONG trace_state;        /* 0 unknown, 1 off, 2 on */
+static CRITICAL_SECTION trace_lock;
+static LARGE_INTEGER trace_t0, trace_freq;
+static LONG tr_reads, tr_delivered, tr_empty, tr_uploads, tr_mismatch, tr_clips;
+static double tr_max_call, tr_max_gap, tr_last_read_start, tr_last_read_end, tr_last_ts;
+static UINT tr_seen_w, tr_seen_h;
+static DWORD tr_seen_len;
+
+static double trace_now_(void)
+{
+    LARGE_INTEGER t;
+    QueryPerformanceCounter(&t);
+    return trace_freq.QuadPart ? (double)(t.QuadPart - trace_t0.QuadPart) / trace_freq.QuadPart : 0.0;
+}
+
+static DWORD WINAPI trace_thread_(void *unused)
+{
+    LONG idle = 0;
+    (void)unused;
+    for (;;)
+    {
+        LONG reads, delivered, empty, uploads, mismatch;
+        double max_call, max_gap, last_end, last_ts, now;
+        UINT w, h, seen_w, seen_h;
+        DWORD seen_len;
+        Sleep(1000);
+        EnterCriticalSection(&trace_lock);
+        reads = tr_reads; delivered = tr_delivered; empty = tr_empty;
+        uploads = tr_uploads; mismatch = tr_mismatch;
+        max_call = tr_max_call; max_gap = tr_max_gap;
+        last_end = tr_last_read_end; last_ts = tr_last_ts;
+        seen_w = tr_seen_w; seen_h = tr_seen_h; seen_len = tr_seen_len;
+        tr_reads = tr_delivered = tr_empty = tr_uploads = tr_mismatch = 0;
+        tr_max_call = tr_max_gap = 0.0;
+        LeaveCriticalSection(&trace_lock);
+        w = frame_width; h = frame_height;
+        now = trace_now_();
+        if (reads || uploads || mismatch) idle = 0;
+        else if (++idle > 5 && idle % 30) continue;   /* five quiet lines, then one each 30 s */
+        logf_("trace %9.3f: reads %ld (got %ld, empty %ld), clip at %.2f s, call max %.1f ms, "
+              "gap max %.1f ms, uploaded %ld, size-dropped %ld, last read %.1f s ago, "
+              "bridge size %ux%u, last buffer %ux%u %lu bytes",
+              now, reads, delivered, empty, last_ts, max_call * 1000.0, max_gap * 1000.0,
+              uploads, mismatch, last_end ? now - last_end : -1.0, w, h, seen_w, seen_h,
+              (unsigned long)seen_len);
+    }
+    return 0;
+}
+
+static BOOL trace_on_(void)
+{
+    WCHAR path[MAX_PATH], *slash;
+    HMODULE self = NULL;
+    if (trace_state) return trace_state == 2;
+    trace_state = 1;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCWSTR)(void *)trace_on_, &self) ||
+        !GetModuleFileNameW(self, path, MAX_PATH) ||
+        !(slash = wcsrchr(path, L'\\')) || (slash - path) + 32 >= MAX_PATH)
+        return FALSE;
+    lstrcpyW(slash + 1, L"mgvf-video-trace.txt");
+    if (GetFileAttributesW(path) == INVALID_FILE_ATTRIBUTES) return FALSE;
+    trace_state = 2;
+    {
+        HANDLE t = CreateThread(NULL, 0, trace_thread_, NULL, 0, NULL);
+        if (t) CloseHandle(t);
+    }
+    logf_("trace %9.3f: video trace on (mgvf-video-trace.txt)", trace_now_());
+    return TRUE;
+}
 static D3D11_VIDEO_PROCESSOR_CONTENT_DESC vp_content_desc;
 
 /* The generated vtables report which method was reached; a shipping build has
@@ -1168,15 +1253,38 @@ static void upload_frame(IMFSample *sample)
                   (unsigned long)((DWORD)stride * frame_height * 3 / 2),
                   (long)length - (long)((DWORD)stride * frame_height * 3 / 2));
     }
+    if (trace_state == 2)
+    {
+        BOOL fits = frame_width && frame_height && length >= (DWORD)stride * frame_height * 3 / 2;
+        EnterCriticalSection(&trace_lock);
+        if (fits) ++tr_uploads; else ++tr_mismatch;
+        tr_seen_len = length;
+        LeaveCriticalSection(&trace_lock);
+        if (!fits)
+        {
+            static LONG told;
+            if (InterlockedIncrement(&told) <= 20)
+                logf_("trace %9.3f: frame DROPPED -- buffer %lu bytes, bridge expects %ux%u stride %u (%lu bytes)",
+                      trace_now_(), (unsigned long)length, frame_width, frame_height, stride,
+                      (unsigned long)((DWORD)stride * frame_height * 3 / 2));
+        }
+    }
     if (frame_width && frame_height && length >= (DWORD)stride * frame_height * 3 / 2)
     {
         /* A clip of a different size needs its own texture: this game ships
-         * 2560x1440 cutscenes and 960x540 interface clips side by side. */
-        if (frame_texture && (texture_width != frame_width || texture_height != frame_height))
+         * 2560x1440 cutscenes and 960x540 interface clips side by side.
+         *
+         * Only this texture. The D3D12 bridge used to be destroyed here too,
+         * and nothing ever rebuilt it: the game opens its shared texture once,
+         * when it creates it for the new clip, and that open had already been
+         * answered with the old bridge. Every frame after was dropped and the
+         * picture stood still with the sound going on -- Nioh 3's first 2560x1440
+         * cutscene after the tutorial's 960x540 clips (measured 2026-10-20). The
+         * bridge is resized where the game takes it, in OpenSharedHandle. */
+        if (frame_texture && (frame_texture_width != frame_width || frame_texture_height != frame_height))
         {
             ID3D11Texture2D_Release(frame_texture);
             frame_texture = NULL;
-            bridge_destroy();
         }
         if (!frame_texture)
         {
@@ -1192,6 +1300,8 @@ static void upload_frame(IMFSample *sample)
             desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
             if (FAILED(ID3D11Device_CreateTexture2D(video_device, &desc, NULL, &frame_texture)))
                 frame_texture = NULL;
+            frame_texture_width = frame_texture ? frame_width : 0;
+            frame_texture_height = frame_texture ? frame_height : 0;
         }
         /*
          * Is there a picture in here at all?
@@ -1297,7 +1407,10 @@ static HRESULT WINAPI reader_set_media_type(void *self, DWORD stream, DWORD *res
          * stream, and from outside that looks the same as a broken upload. */
         GUID sub; static LONG told;
         HRESULT hr = real_set_media_type(self, stream, reserved, type);
-        if (InterlockedIncrement(&told) <= 8)
+        if (trace_state == 2)
+            logf_("trace %9.3f: SetCurrentMediaType(stream %lu) asks %ux%u -> 0x%08lx", trace_now_(),
+                  (unsigned long)stream, frame_width, frame_height, (unsigned long)hr);
+        else if (InterlockedIncrement(&told) <= 8)
         {
             if (type && SUCCEEDED(IMFAttributes_GetGUID((IMFAttributes *)type,
                                                         &MF_MT_SUBTYPE, &sub)))
@@ -1329,6 +1442,14 @@ static HRESULT WINAPI reader_get_current_type(void *self, DWORD stream, IMFMedia
         if (SUCCEEDED(IMFAttributes_GetUINT32((IMFAttributes *)*type,
                                               &MF_MT_DEFAULT_STRIDE, &stride)))
             frame_stride = stride > 0x7fffffff ? (UINT)(-(INT32)stride) : stride;
+        if (trace_state == 2)
+        {
+            EnterCriticalSection(&trace_lock);
+            tr_seen_w = (UINT)(size >> 32); tr_seen_h = (UINT)(size & 0xffffffff);
+            LeaveCriticalSection(&trace_lock);
+            logf_("trace %9.3f: GetCurrentMediaType(stream %lu) says %ux%u stride %u", trace_now_(),
+                  (unsigned long)stream, (UINT)(size >> 32), (UINT)(size & 0xffffffff), stride);
+        }
     }
     return hr;
 }
@@ -1337,8 +1458,27 @@ static HRESULT WINAPI reader_read_sample(void *self, DWORD stream, DWORD flags,
                                          DWORD *actual, DWORD *sample_flags,
                                          LONGLONG *timestamp, IMFSample **sample)
 {
+    double started = trace_state == 2 ? trace_now_() : 0.0;
     HRESULT hr = real_read_sample(self, stream, flags, actual, sample_flags,
                                   timestamp, sample);
+    if (trace_state == 2)
+    {
+        double ended = trace_now_();
+        BOOL got = SUCCEEDED(hr) && sample && *sample;
+        EnterCriticalSection(&trace_lock);
+        ++tr_reads;
+        if (got) ++tr_delivered; else ++tr_empty;
+        if (ended - started > tr_max_call) tr_max_call = ended - started;
+        if (tr_last_read_start && started - tr_last_read_start > tr_max_gap)
+            tr_max_gap = started - tr_last_read_start;
+        tr_last_read_start = started;
+        tr_last_read_end = ended;
+        if (got && timestamp) tr_last_ts = *timestamp / 1e7;
+        LeaveCriticalSection(&trace_lock);
+        if (FAILED(hr) || (sample_flags && (*sample_flags & ~MF_SOURCE_READERF_STREAMTICK)))
+            logf_("trace %9.3f: ReadSample -> 0x%08lx, flags 0x%lx, %s", ended, (unsigned long)hr,
+                  sample_flags ? (unsigned long)*sample_flags : 0ul, got ? "sample" : "no sample");
+    }
     {
         static LONG reads, empty;
         LONG n = InterlockedIncrement(&reads);
@@ -1485,6 +1625,13 @@ static HRESULT WINAPI my_MFCreateSourceReaderFromByteStream(IMFByteStream *strea
     IMFAttributes *plain = strip_d3d_attributes(attrs);
     HRESULT hr = E_FAIL;
 
+    if (trace_on_())
+    {
+        QWORD len = 0;
+        if (stream) IMFByteStream_GetLength(stream, &len);
+        logf_("trace %9.3f: clip #%ld opened, %llu bytes", trace_now_(),
+              InterlockedIncrement(&tr_clips), (unsigned long long)len);
+    }
     if (stream && reader && own_decoder_first_() && load_asf_reader_())
     {
         static LONG said;
@@ -2030,6 +2177,17 @@ static HRESULT WINAPI d3d12_open_shared_handle(void *self, HANDLE handle,
         if (!IsEqualGUID(iid, &IID_ID3D12Resource)) return E_NOINTERFACE;
 
         EnterCriticalSection(&frame_lock);
+        /* A new clip of another size: the game has made a new texture and is
+         * opening it now, so this is the one moment the bridge can change size.
+         * Handing back the old one leaves the game drawing from a texture no
+         * frame of this clip can be written into. */
+        if (bridge_texture && frame_width && frame_height &&
+            (texture_width != frame_width || texture_height != frame_height))
+        {
+            logf_("bridge: the game opens a %ux%u clip on a %ux%u bridge; rebuilding",
+                  frame_width, frame_height, texture_width, texture_height);
+            bridge_destroy();
+        }
         if (!bridge_texture && frame_width && frame_height)
         {
             /*
@@ -2275,6 +2433,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
     {
         InitializeCriticalSection(&log_lock);
         InitializeCriticalSection(&frame_lock);
+        InitializeCriticalSection(&trace_lock);
+        QueryPerformanceFrequency(&trace_freq);
+        QueryPerformanceCounter(&trace_t0);
         DisableThreadLibraryCalls(inst);
 
         /*
