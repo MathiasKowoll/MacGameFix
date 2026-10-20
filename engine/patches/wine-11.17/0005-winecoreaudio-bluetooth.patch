@@ -43,8 +43,8 @@
      return STATUS_SUCCESS;
  }
 --- a/dlls/winecoreaudio.drv/dualsense_bt.h	1969-12-31 21:00:00
-+++ b/dlls/winecoreaudio.drv/dualsense_bt.h	2026-10-19 14:17:52
-@@ -0,0 +1,887 @@
++++ b/dlls/winecoreaudio.drv/dualsense_bt.h	2026-10-20 10:38:27
+@@ -0,0 +1,939 @@
 +/*
 + * MacGameFix: the haptics output of a DualSense on Bluetooth.
 + *
@@ -113,10 +113,61 @@
 +static struct mgf_pad mgf_pads[MGF_MAX_PADS];
 +static struct mgf_unit *mgf_units;
 +
++int _NSGetExecutablePath(char *buf, uint32_t *bufsize);
++
++/* In a CrossOver bottle nothing gives a game's process its Steam app id: Wine
++ * passes a process the Unix environment of its parent, and Steam's variables
++ * stay in the Windows one. But CrossOver runs each process as a link named
++ * after its exe (winetemp-.../<exe>), and MacGameFix writes pad-exes.conf,
++ * "<exe in lower case>=<app id>" for each exe in a Steam library's game folders
++ * that one game alone has. An answer is kept; until there is one, the file is
++ * looked at again at most every 30 s. */
++static void pad_game_by_exe(char *id, size_t size)
++{
++    static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
++    static char found[24];
++    static time_t looked;
++    char exe[1024], path[1024], line[512], *name, *p;
++    const char *home = getenv("HOME");
++    uint32_t length = sizeof(exe);
++    time_t now = time(NULL);
++    size_t n;
++    FILE *f;
++
++    pthread_mutex_lock(&lock);
++    if (!found[0] && (!looked || now - looked >= 30))
++    {
++        looked = now;
++        if (home && !_NSGetExecutablePath(exe, &length))
++        {
++            name = (p = strrchr(exe, '/')) ? p + 1 : exe;
++            for (p = name; *p; p++) if (*p >= 'A' && *p <= 'Z') *p += 'a' - 'A';
++            n = strlen(name);
++            snprintf(path, sizeof(path), "%s/Library/Application Support/MacGameFix/pad-exes.conf", home);
++            if (n && (f = fopen(path, "r")))
++            {
++                while (fgets(line, sizeof(line), f))
++                {
++                    line[strcspn(line, "\r\n")] = 0;
++                    if (strncmp(line, name, n) || line[n] != '=') continue;
++                    p = line + n + 1;
++                    if (*p && strspn(p, "0123456789") == strlen(p) && strlen(p) < sizeof(found))
++                        snprintf(found, sizeof(found), "%s", p);
++                    break;
++                }
++                fclose(f);
++            }
++        }
++    }
++    snprintf(id, size, "%s", found);
++    pthread_mutex_unlock(&lock);
++}
++
 +/* The game this process runs for: the Steam app id Steam and NotProton give a
 + * game (SteamAppId, SteamGameId, STEAM_COMPAT_APP_ID), else the one in a Steam
-+ * Play prefix's path, compatdata/<id>/pfx. Empty in a CrossOver bottle. The
-+ * same as winebus.so's. */
++ * Play prefix's path, compatdata/<id>/pfx, else in a CrossOver bottle the one
++ * of its exe. winebus.so's has the first two; it runs in winedevice.exe, which
++ * is no game. */
 +static void pad_game(char *id, size_t size)
 +{
 +    static const char *const names[] = {"SteamAppId", "SteamGameId", "STEAM_COMPAT_APP_ID"};
@@ -137,6 +188,7 @@
 +        n = strspn(v, "0123456789");
 +        if (n && n < size && !strncmp(v + n, "/pfx", 4)) snprintf(id, size, "%.*s", (int)n, v);
 +    }
++    if (!id[0]) pad_game_by_exe(id, size);
 +}
 +
 +/* What this file has to say goes to /tmp/macgamefix-<uid>/pad.log, beside the

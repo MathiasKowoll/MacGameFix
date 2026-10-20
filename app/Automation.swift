@@ -293,6 +293,8 @@ enum Agent {
         if settings.gameMode { GameMode.keep().forEach { print($0) } }
         // What the Wine modules saw each game do, kept before a restart empties /tmp.
         if PadStore.exists {
+            // Which game each exe is, for the modules in a CrossOver bottle.
+            PadExes.keep()
             var pad = PadStore.load()
             let installed = SteamGames.installed()
             if pad.absorbLog(names: { Dictionary(installed.map { ($0.appid, $0.name) },

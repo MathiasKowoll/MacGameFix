@@ -534,7 +534,11 @@ extension Model {
     func scanPad() {
         let extra = extraFolders
         Task {
-            let games = await Task.detached { SteamGames.installed(extra: extra) }.value
+            let games = await Task.detached { () -> [InstalledGame] in
+                // Which game each exe is, for the modules in a CrossOver bottle.
+                PadExes.keep()
+                return SteamGames.installed(extra: extra)
+            }.value
             padGames = games
             var store = PadStore.exists ? PadStore.load() : pad
             if store.absorbLog(names: { Dictionary(games.map { ($0.appid, $0.name) }, uniquingKeysWith: { a, _ in a }) }) {
@@ -1785,6 +1789,7 @@ enum Entry {
                 _ = await store.learnStore(installed)
                 store.save()
                 store.writeConfig(presets: PadPresets.load())
+                PadExes.keep()
                 print("pad.conf and \((try? FileManager.default.contentsOfDirectory(atPath: PadStore.perGame.path).count) ?? 0) per-game file(s) written")
                 return 0
             }

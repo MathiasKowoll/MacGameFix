@@ -268,6 +268,24 @@ printf '10:00:05 [5] game=999 observed: the game rumbles the DualSense%ss motors
 check 'has "$(cat "$T/report.md")" "Steam app 4242" && has "$(cat "$T/report.md")" "game=4242 observed: the game sets trigger effects" && has "$(cat "$T/report.md")" "xinput=pad" && ! has "$(cat "$T/report.md")" "game=999" && ! has "$(cat "$T/report.md")" "$MACGAMEFIX_HOME"' "a game's report has its log and settings, no other game, and no home folder"
 "$BIN" --pad-export "$T/pad-export.json"
 check 'has "$(cat "$T/pad-export.json")" "\"appid\" : \"4242\"" && ! has "$(cat "$T/pad-export.json")" "$MACGAMEFIX_HOME" && ! has "$(cat "$T/pad-export.json")" "/Users/"' "the export has the games and no paths"
+# Which game an exe is, for the modules in a CrossOver bottle.
+OX="$SUPPORT/Steam/steamapps/common/Other Exe"
+mkdir -p "$OX/a/b/c/d"
+printf '"AppState"\n{\n\t"appid"\t\t"4646"\n\t"name"\t\t"Other Exe"\n\t"installdir"\t\t"Other Exe"\n}\n' \
+  > "$SUPPORT/Steam/steamapps/appmanifest_4646.acf"
+touch "$OX/Other.EXE" "$OX/Shared.exe" "$GAME/Shared.exe" "$OX/a/b/c/Four.exe" "$OX/a/b/c/d/Deep.exe"
+padwrite
+check '[ "$(/usr/bin/grep -v "^#" "$P/pad-exes.conf" | sort | tr "\n" " ")" = "fakegame.exe=4242 four.exe=4646 other.exe=4646 " ]' "each exe one game alone has is named for it, in lower case, four folders deep; one two games share is not"
+echo "# kept" >> "$P/pad-exes.conf"
+padwrite
+check 'has "$(cat "$P/pad-exes.conf")" "# kept"' "the same games are not looked through again"
+printf '"AppState"\n{\n\t"appid"\t\t"4747"\n\t"name"\t\t"New Exe"\n\t"installdir"\t\t"New Exe"\n}\n' \
+  > "$SUPPORT/Steam/steamapps/appmanifest_4747.acf"
+mkdir -p "$SUPPORT/Steam/steamapps/common/New Exe" && touch "$SUPPORT/Steam/steamapps/common/New Exe/New.exe"
+padwrite
+check 'has "$(cat "$P/pad-exes.conf")" "new.exe=4747" && ! has "$(cat "$P/pad-exes.conf")" "# kept"' "a new game is"
+rm -rf "$OX" "$SUPPORT/Steam/steamapps/common/New Exe" "$GAME/Shared.exe" \
+  "$SUPPORT/Steam/steamapps/appmanifest_4646.acf" "$SUPPORT/Steam/steamapps/appmanifest_4747.acf"
 # The settings form's link, its fields read as GitHub reads them: a bare + is a space.
 shareform() {
     /usr/bin/python3 - "$("$BIN" --pad-share-url "$1")" <<'PY3'

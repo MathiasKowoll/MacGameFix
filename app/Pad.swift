@@ -360,7 +360,7 @@ struct InstalledGame: Hashable, Identifiable {
 
 enum SteamGames {
     /// Steamworks' redistributables and such, which are not games.
-    private static let notGames: Set<String> = ["228980"]
+    static let notGames: Set<String> = ["228980"]
 
     /// Every app the Steam libraries hold, by its appmanifest, by name.
     static func installed(extra: [URL] = []) -> [InstalledGame] {
@@ -640,5 +640,83 @@ extension PadStore {
                   ["title": "[Settings] \(name)",
                    "game": "\(name) (Steam app \(appid))",
                    "settings": effective(appid, presets: presets).lines.joined(separator: "\n")])
+    }
+}
+
+// MARK: - Which game an exe is, in a CrossOver bottle
+
+/// In a CrossOver bottle nothing tells a game's process its Steam app id: Wine
+/// gives a process the Unix environment of its parent, and Steam's variables
+/// stay in the Windows one. CrossOver runs each process as a link named after
+/// its exe, though, so the modules look that name up here: "<exe in lower
+/// case>=<app id>" for each exe in a Steam library's game folder, four folders
+/// deep, that one game alone has. An exe two games share (a crash reporter, an
+/// engine's launcher) is left out, and so is a folder no appmanifest names.
+enum PadExes {
+    static var file: URL { Paths.support.appendingPathComponent("pad-exes.conf") }
+    private static let header = "# Written by MacGameFix; read by its Wine modules in a CrossOver bottle.\n"
+
+    /// Each game of these libraries, by its appmanifest: its app id and its folder.
+    static func games(in libraries: [URL]) -> [(appid: String, folder: URL)] {
+        let fm = FileManager.default
+        var out: [(appid: String, folder: URL)] = []
+        for common in libraries {
+            let steamapps = common.deletingLastPathComponent()
+            for file in (try? fm.contentsOfDirectory(at: steamapps, includingPropertiesForKeys: nil)) ?? []
+            where file.lastPathComponent.hasPrefix("appmanifest_") && file.pathExtension == "acf" {
+                guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+                let fields = SteamGames.manifest(text)
+                guard let appid = fields["appid"], let dir = fields["installdir"], !dir.isEmpty,
+                      !SteamGames.notGames.contains(appid) else { continue }
+                let folder = common.appendingPathComponent(dir)
+                if fm.fileExists(atPath: folder.path) { out.append((appid, folder)) }
+            }
+        }
+        return out.sorted { ($0.appid, $0.folder.path) < ($1.appid, $1.folder.path) }
+    }
+
+    static func map(_ games: [(appid: String, folder: URL)]) -> [String: String] {
+        let fm = FileManager.default
+        var owner: [String: String] = [:]
+        var shared = Set<String>()
+        for game in games {
+            guard let walk = fm.enumerator(at: game.folder, includingPropertiesForKeys: nil,
+                                           options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { continue }
+            for case let url as URL in walk {
+                if walk.level > 4 { walk.skipDescendants(); continue }
+                let key = url.lastPathComponent.lowercased()
+                guard key.hasSuffix(".exe") else { continue }
+                if let other = owner[key], other != game.appid { shared.insert(key) } else { owner[key] = game.appid }
+            }
+        }
+        for key in shared { owner[key] = nil }
+        return owner
+    }
+
+    /// Writes the file when the games are not the ones it was written for, or
+    /// after half an hour, since an update can bring a new exe; whether it changed.
+    @discardableResult
+    static func keep(libraries: [URL] = Libraries.all(extra: []), now: Date = Date()) -> Bool {
+        let fm = FileManager.default
+        let games = games(in: libraries)
+        // FNV-1a, which is the same in every launch (Swift's Hasher is not).
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in games.map({ "\($0.appid)\t\($0.folder.path)\n" }).joined().utf8 {
+            hash = (hash ^ UInt64(byte)) &* 0x100_0000_01b3
+        }
+        let stamp = "# games: \(games.count), \(String(hash, radix: 16))\n"
+        let current = try? String(contentsOf: file, encoding: .utf8)
+        let written = (try? fm.attributesOfItem(atPath: file.path))?[.modificationDate] as? Date
+        if let current, current.hasPrefix(header + stamp), let written, now.timeIntervalSince(written) < 1800 {
+            return false
+        }
+        let text = header + stamp + map(games).sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)\n" }.joined()
+        if text == current {
+            try? fm.setAttributes([.modificationDate: now], ofItemAtPath: file.path)
+            return false
+        }
+        try? fm.createDirectory(at: Paths.support, withIntermediateDirectories: true)
+        try? text.write(to: file, atomically: true, encoding: .utf8)
+        return true
     }
 }
