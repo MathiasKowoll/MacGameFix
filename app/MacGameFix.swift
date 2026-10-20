@@ -749,69 +749,6 @@ extension Model {
 
 // MARK: - Interface
 
-struct HitRow: View {
-    @Binding var hit: Hit
-    let busy: Bool
-    let kept: Bool
-    let onKeep: (Bool) -> Void
-    @ObservedObject var model: Model
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Toggle("", isOn: $hit.selected)
-                .labelsHidden()
-                .disabled(hit.blocker != nil || busy)
-            VStack(alignment: .leading, spacing: 3) {
-                HStack {
-                    Text(hit.game.name).font(.headline)
-                    Spacer()
-                    if let o = hit.outcome {
-                        Text(o).font(.caption).foregroundStyle(.orange)
-                    }
-                    Text(hit.state.label).font(.callout).foregroundStyle(hit.state.color)
-                }
-                Text(hit.folder.path).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                Text(hit.game.symptom).font(.caption)
-                if let r = hit.game.requirementNote {
-                    Text(r).font(.caption).foregroundStyle(.secondary)
-                }
-                if hit.game.needsPrefix {
-                    if hit.prefixes.count > 1 {
-                        Text("\(hit.game.prefixWhat):").font(.caption).foregroundStyle(.secondary)
-                        ForEach(hit.prefixes) { p in
-                            Toggle(p.label, isOn: Binding(
-                                get: { hit.chosen.contains(p) },
-                                set: { on in model.choosePrefix(hit, p, on) }))
-                                .toggleStyle(.checkbox)
-                                .font(.caption)
-                                .disabled(busy)
-                        }
-                    } else if let p = hit.chosen.first {
-                        Text("\(hit.game.prefixWhat) the \(p.label)").font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                if let b = hit.blocker {
-                    Text(b).font(.caption).foregroundStyle(.red)
-                }
-                if let line = model.keptLine(hit), line.word == "Failed" {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text("In the background: \(line.detail ?? "the fix did not take.")")
-                            .font(.caption).foregroundStyle(.orange)
-                        if let r = line.report, let url = URL(string: r) {
-                            Button("Report on GitHub…") { NSWorkspace.shared.open(url) }.font(.caption).buttonStyle(.link)
-                        }
-                    }
-                }
-                Toggle("Keep it applied: put it back after a game update", isOn: Binding(get: { kept }, set: onKeep))
-                    .font(.caption)
-                    .disabled(hit.blocker != nil || busy)
-            }
-        }
-        .padding(.vertical, 4)
-        .help(hit.game.why)
-    }
-}
-
 /// The size of the window's content, for the sheets that hang from it.
 private struct WindowSizeEnvironment: EnvironmentKey {
     static let defaultValue = CGSize.zero
@@ -871,6 +808,53 @@ struct ContentView: View {
 /// The games and their fixes, which go into each game's own folder.
 struct GamesView: View {
     @ObservedObject var model: Model
+    /// Every supported game on this Mac first, whatever was chosen last time.
+    @State private var filter = GamesFilter.all
+
+    /// Fixed: the game has its fix in place. All fixes adds the fixes for games not on this Mac.
+    enum GamesFilter: String, CaseIterable, Identifiable {
+        case all = "All", fixed = "Fixed", notFixed = "Not fixed", allFixes = "All fixes"
+        var id: String { rawValue }
+    }
+
+    /// A row: a game found on this Mac, or, under All fixes, one the catalog has a fix for that is not here.
+    struct GameRow: Identifiable {
+        let game: Game
+        let hit: Hit?
+        var id: String { hit?.id ?? "fix|" + game.name }
+    }
+
+    /// Fixed counts a fix of an older build, a half one and one that needs repair: each is on disk.
+    private func shows(_ hit: Hit) -> Bool {
+        if model.onlyReview && model.keptLine(hit)?.needsUser != true { return false }
+        switch filter {
+        case .all, .allFixes: return true
+        case .fixed: return [.installed, .outdated, .half, .broken].contains(hit.state)
+        case .notFixed: return [.absent, .noCarrier].contains(hit.state)
+        }
+    }
+
+    private var shownHits: [Hit] { model.hits.filter(shows) }
+
+    private var rows: [GameRow] {
+        var rows = shownHits.map { GameRow(game: $0.game, hit: $0) }
+        if filter == .allFixes && !model.onlyReview {
+            let found = Set(model.hits.map(\.game.name))
+            rows += model.games.filter { !found.contains($0.name) }.map { GameRow(game: $0, hit: nil) }
+            rows.sort { $0.game.name.localizedCaseInsensitiveCompare($1.game.name) == .orderedAscending }
+        }
+        return rows
+    }
+
+    /// The table's selection is the hits' own, so Install and Remove Selected act on it.
+    private var selection: Binding<Set<Hit.ID>> {
+        Binding(get: { Set(model.hits.filter(\.selected).map(\.id)) },
+                set: { ids in
+                    for i in model.hits.indices {
+                        model.hits[i].selected = ids.contains(model.hits[i].id) && model.hits[i].blocker == nil
+                    }
+                })
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -886,9 +870,8 @@ struct GamesView: View {
                 Button("Scan") { model.scan() }.disabled(model.busy)
                 Button("Add Folder…") { model.addFolder() }.disabled(model.busy)
                 Spacer()
-                Button("Select All") {
-                    for i in model.hits.indices where model.hits[i].blocker == nil { model.hits[i].selected = true }
-                }.disabled(model.busy || model.hits.isEmpty)
+                Button("Select All") { selection.wrappedValue = Set(shownHits.map(\.id)) }
+                    .disabled(model.busy || shownHits.isEmpty)
                 Button("Install Selected") { model.apply(install: true) }
                     .keyboardShortcut(.defaultAction)
                     .disabled(model.busy || model.selected.isEmpty)
@@ -896,10 +879,33 @@ struct GamesView: View {
                     .disabled(model.busy || model.selected.isEmpty)
             }
 
-            if model.hits.isEmpty {
+            HStack {
+                Picker("Show", selection: $filter) {
+                    ForEach(GamesFilter.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                if !model.toReview.isEmpty {
+                    Toggle("Only the marked games to review (\(model.toReview.count))", isOn: $model.onlyReview)
+                        .font(.callout)
+                }
+                Spacer()
+                if filter == .allFixes {
+                    Text("\(model.games.count) fix(es), \(Set(model.hits.map(\.game.name)).count) of their games on this Mac")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else if !model.hits.isEmpty {
+                    Text("\(shownHits.count) of \(model.hits.count) game(s)").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if rows.isEmpty {
                 VStack(spacing: 8) {
                     Spacer()
-                    Text(model.busy ? "Looking…" : "No supported game found yet.").foregroundStyle(.secondary)
+                    Text(model.busy ? "Looking…"
+                         : model.hits.isEmpty ? "No supported game found yet."
+                         : filter == .fixed ? "No game is fixed yet. Not fixed shows the supported games found."
+                         : "No game here.")
+                        .foregroundStyle(.secondary)
                     Text("Supported: " + model.games.map(\.name).joined(separator: ", "))
                         .font(.caption).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -907,20 +913,107 @@ struct GamesView: View {
                 }
                 .frame(maxWidth: .infinity, minHeight: 180)
             } else {
-                if !model.toReview.isEmpty {
-                    Toggle("Only the marked games to review (\(model.toReview.count))", isOn: $model.onlyReview)
-                        .font(.callout)
-                }
-                List {
-                    ForEach($model.hits) { $hit in
-                        if !model.onlyReview || model.keptLine(hit)?.needsUser == true {
-                            HitRow(hit: $hit, busy: model.busy, kept: model.isKept(hit),
-                                   onKeep: { model.setKept(hit, $0) }, model: model)
+                Table(rows, selection: selection) {
+                    TableColumn("Game") { row in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(row.game.name).fontWeight(.semibold)
+                            Text(row.game.symptom).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        }
+                        .padding(.vertical, 3)
+                        .help((row.hit.map { $0.folder.path + "\n\n" } ?? "") + row.game.why)
+                    }
+                    .width(min: 150, ideal: 200)
+                    TableColumn("Requires") { row in
+                        Text(row.game.requirementNote ?? "—").font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                            .help(row.game.requirementNote ?? "")
+                    }
+                    .width(min: 100, ideal: 140)
+                    TableColumn("Status") { row in
+                        if let hit = row.hit { GameStatusCell(hit: hit, model: model) }
+                        else { Text("Not on this Mac").foregroundStyle(.secondary) }
+                    }
+                    .width(min: 100, ideal: 120)
+                    TableColumn("Keep") { row in
+                        if let hit = row.hit {
+                            Toggle("", isOn: Binding(get: { model.isKept(hit) }, set: { model.setKept(hit, $0) }))
+                                .labelsHidden()
+                                .toggleStyle(.checkbox)
+                                .disabled(hit.blocker != nil || model.busy)
+                                .help("Keep it applied: put it back after a game update.")
                         }
                     }
+                    .width(44)
+                    TableColumn("Goes into") { row in
+                        if let hit = row.hit { GamePrefixCell(hit: hit, model: model) }
+                        else { Text("—").font(.caption).foregroundStyle(.secondary) }
+                    }
+                    .width(min: 110, ideal: 140)
                 }
                 .frame(minHeight: 260)
             }
+        }
+    }
+}
+
+/// A game's state, and below it what went wrong: the last install, what stops the
+/// buttons, or the agent's background attempt with its report.
+struct GameStatusCell: View {
+    let hit: Hit
+    @ObservedObject var model: Model
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(hit.state.label).foregroundStyle(hit.state.color)
+            if let o = hit.outcome {
+                Text(o).font(.caption).foregroundStyle(.orange).lineLimit(2).help(o)
+            }
+            if let b = hit.blocker {
+                Text(b).font(.caption).foregroundStyle(.red).lineLimit(2).help(b)
+            }
+            if let line = model.keptLine(hit), line.word == "Failed" {
+                let detail = "In the background: \(line.detail ?? "the fix did not take.")"
+                Text(detail).font(.caption).foregroundStyle(.orange).lineLimit(2).help(detail)
+                if let r = line.report, let url = URL(string: r) {
+                    Button("Report on GitHub…") { NSWorkspace.shared.open(url) }.font(.caption).buttonStyle(.link)
+                }
+            }
+        }
+        .padding(.vertical, 3)
+    }
+}
+
+/// Where a fix that writes registry keys, or puts DLLs into a prefix, goes: a menu
+/// of every prefix and bottle found, any number of them checked. Two bottles of the
+/// same name (CrossOver's and another root's) are told apart by their folder.
+struct GamePrefixCell: View {
+    let hit: Hit
+    @ObservedObject var model: Model
+
+    private func name(_ p: Prefix) -> String {
+        guard hit.prefixes.filter({ $0.label == p.label }).count > 1 else { return p.label }
+        let root = p.path.deletingLastPathComponent()
+        return p.label + " (" + root.deletingLastPathComponent().lastPathComponent + "/" + root.lastPathComponent + ")"
+    }
+
+    var body: some View {
+        if !hit.game.needsPrefix {
+            Text(hit.game.inPrefix ? "Its prefix" : "Its folder").font(.caption).foregroundStyle(.secondary)
+        } else if hit.prefixes.count <= 1 {
+            Text(hit.chosen.first.map(name) ?? "—").font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                .help(hit.game.prefixWhat + " " + (hit.chosen.first.map(name) ?? "no prefix found") + ".")
+        } else {
+            Menu {
+                ForEach(hit.prefixes) { p in
+                    Toggle(name(p), isOn: Binding(get: { hit.chosen.contains(p) },
+                                                  set: { on in model.choosePrefix(hit, p, on) }))
+                }
+            } label: {
+                Text(hit.chosen.isEmpty ? "Choose…"
+                     : hit.chosen.count == 1 ? name(hit.chosen[0]) : "\(hit.chosen.count) places")
+                    .font(.caption)
+            }
+            .disabled(model.busy)
+            .help(hit.game.prefixWhat + ": " + (hit.chosen.isEmpty ? "none chosen" : hit.chosen.map(name).joined(separator: ", ")) + ".")
         }
     }
 }
@@ -1992,6 +2085,8 @@ struct MacGameFixApp: App {
 
     var body: some Scene {
         WindowGroup("MacGameFix") { ContentView() }
+            // Room for the Games table's five columns; a window the user sized keeps its size.
+            .defaultSize(width: 1080, height: 760)
             .windowResizability(.contentMinSize)
     }
 }

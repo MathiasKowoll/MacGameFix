@@ -42,14 +42,18 @@ archived repository.
 
 Quit a game before installing or removing its fix.
 
-The window has three tabs, and a fourth once the Wine modules are in a CrossOver:
-**Games**, the fixes above; **Wine Modules**, the one part that changes CrossOver
+The window has four tabs, and a fifth once the Wine modules are in a CrossOver:
+**Games**, the fixes above, in a table: each game's symptom, what its fix requires, its state, *Keep*
+and where a fix that writes registry keys goes, shown *All* (every supported game on this Mac),
+*Fixed*, *Not fixed*, or *All fixes*, which adds the fixes for games that are not on this Mac;
+**Wine Modules**, the one part that changes CrossOver
 itself (patched Wine modules for a DualSense's haptics on a cable, the pad on
 Bluetooth as if on a cable, and XInput, see [`engine/README.md`](engine/README.md)), with a
 switch and an Update button for every CrossOver app and NotProton runner, and
 the modules' own updates; **Game Feel**, the DualSense's options for every game
 and, in a table of the Steam games on this Mac, for each one, with what the
-modules saw each game do; and **Settings**, with the background agent, the game
+modules saw each game do; **Report**, for a game that does not work (see
+[Reporting a problem](#reporting-a-problem)); and **Settings**, with the background agent, the game
 fixes' updates, the folders searched and the log.
 
 ## What each fix requires
@@ -69,9 +73,10 @@ The exception is a fix that also writes registry keys: the Kingdom Hearts
 titles and NieR Replicant, and NINJA GAIDEN 3: Razor's Edge, whose DLLs go
 there too and nothing into its folder. Those keys go into the game's prefix, a
 Steam Play prefix (`compatdata/<appid>/pfx`) or a CrossOver bottle, so the game
-needs to have run there once. The prefix is shown under the game. When there is
-more than one, each has a checkbox, and the fix goes into every prefix checked:
-the installer runs once for each. Unchecking a prefix does not take the fix out
+needs to have run there once. The prefix is shown in the game's *Goes into* column. When there is
+more than one, that column is a menu where any number of them can be checked, and the fix goes into
+every prefix checked: the installer runs once for each. Two bottles of the same name are told apart by
+their folder. Unchecking a prefix does not take the fix out
 of it; removing the fix with it checked does.
 
 `MacGameFix --games-report` prints the same in a terminal.
