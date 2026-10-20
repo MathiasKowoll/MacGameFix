@@ -39,6 +39,8 @@ final class Model: ObservableObject {
     @Published var games: [Game] = []
     @Published var catalogVersion = 0
     @Published var settings = AutoSettings.load()
+    /// Which CrossOvers Game Mode covers, or why none (GameMode.swift).
+    @Published var gameModeLine = ""
     @Published var agentOn = LaunchAgent.enabled
     @Published var events: [AgentEvent] = []
     @Published var updateLine = ""
@@ -169,6 +171,21 @@ final class Model: ObservableObject {
         DistributedNotificationCenter.default().postNotificationName(Self.settingsNotification, object: nil,
                                                                      deliverImmediately: true)
         objectWillChange.send()
+    }
+
+    /// Game Mode for CrossOver's games: the bundles and links put in place, or taken away.
+    func setGameMode(_ on: Bool) {
+        settings.gameMode = on
+        settings.save()
+        objectWillChange.send()
+        Task {
+            let line = await Task.detached { () -> String in
+                if !on { GameMode.remove(); return "" }
+                GameMode.keep()
+                return GameMode.coverage()
+            }.value
+            gameModeLine = line
+        }
     }
 
     func setPadBattery(_ on: Bool) {
@@ -624,6 +641,13 @@ extension Model {
             engineRows = rows
             busy = false
             status = found.isEmpty ? "No CrossOver or NotProton runner found." : "\(found.count) CrossOver install(s) found."
+            // Game Mode's links, put back here too for anyone who keeps the agent off.
+            if settings.gameMode {
+                gameModeLine = await Task.detached { () -> String in
+                    GameMode.keep()
+                    return GameMode.coverage()
+                }.value
+            }
             // Once a launch: App Management for a CrossOver app the modules are kept in,
             // asked now rather than when an update needs it. On the next turn of the
             // main loop: run in this one, the alert's modal loop caught the tab bar
@@ -1560,6 +1584,24 @@ struct SettingsView: View {
             }
 
             Section {
+                Toggle("Game Mode for CrossOver's games", isOn: Binding(get: { model.settings.gameMode },
+                                                                        set: { model.setGameMode($0) }))
+                    .help("macOS turns Game Mode on for a game in full screen whose app says it is a game. A game in "
+                          + "CrossOver runs from a copy of Wine that does not say so; with this on, it runs from one "
+                          + "that does, kept in MacGameFix's folder. CrossOver itself is not changed, and turning "
+                          + "this off takes it all away.")
+                if model.settings.gameMode && !model.gameModeLine.isEmpty {
+                    Text(model.gameModeLine).font(.caption).foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Game Mode")
+            } footer: {
+                Text("Play in full screen: the green button, or Control-Command-F. Game Mode also doubles what a "
+                     + "wireless controller's Bluetooth link carries, which a DualSense's haptics need.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
                 Picker("Game fixes", selection: Binding(get: { model.updateMode }, set: { model.setUpdateMode($0) })) {
                     ForEach(Model.UpdateMode.allCases) { Text($0.label).tag($0) }
                 }
@@ -1752,6 +1794,20 @@ enum Entry {
                                    + hit.chosen.map(\.label).joined(separator: " and the "))
                 }
                 print(parts.joined(separator: " | "))
+            }
+            exit(0)
+        }
+        if args.contains("--game-mode-keep") || args.contains("--game-mode-remove") || args.contains("--game-mode-report") {
+            // Game Mode for CrossOver's games (GameMode.swift): put in place, taken away, or reported.
+            if args.contains("--game-mode-remove") { GameMode.remove(); exit(0) }
+            if args.contains("--game-mode-keep") { GameMode.keep().forEach { print($0) } }
+            for loader in GameMode.loaders() {
+                let dir = GameMode.winetemp(for: loader.path)
+                let macos = GameMode.bundle(for: loader).appendingPathComponent("Contents/MacOS").path + "/"
+                let links = ((try? FileManager.default.contentsOfDirectory(atPath: dir?.path ?? "")) ?? [])
+                    .filter { (try? FileManager.default.destinationOfSymbolicLink(atPath: dir!.appendingPathComponent($0).path))?
+                        .hasPrefix(macos) == true }
+                print("\(loader.target.name) | \(loader.arch) | \(dir?.lastPathComponent ?? "no folder") | \(links.count) linked")
             }
             exit(0)
         }

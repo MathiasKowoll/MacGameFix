@@ -373,4 +373,53 @@ printf '{"kept":[],"updates":false,"modulesUpdates":false}' > "$SUPPORT/MacGameF
 modagent >/dev/null
 check '! ours "$R1"' "with the Wine modules off, nothing is done"
 
+echo "== Game Mode for CrossOver's games"
+GM="$MACGAMEFIX_HOME/Applications/CrossOver GM.app"
+GW="$GM/Contents/SharedSupport/CrossOver/lib/wine"
+mkdir -p "$GW/x86_64-unix" "$GW/x86_64-windows" "$GW/aarch64-unix/wine.app/Contents/MacOS" "$GW/aarch64-windows"
+/usr/libexec/PlistBuddy -c 'Add :CFBundleVersion string 27.0.0.41073' "$GM/Contents/Info.plist" >/dev/null
+printf 'intel ntdll' > "$GW/x86_64-unix/ntdll.so"; printf 'arm ntdll' > "$GW/aarch64-unix/ntdll.so"
+printf '#!/bin/sh\n# intel loader\n' > "$GW/x86_64-unix/wine"; printf '#!/bin/sh\n# arm loader\n' > "$GW/aarch64-unix/wine.app/Contents/MacOS/wine"
+chmod +x "$GW/x86_64-unix/wine" "$GW/aarch64-unix/wine.app/Contents/MacOS/wine"
+: > "$GW/x86_64-windows/explorer.exe"; : > "$GW/aarch64-windows/explorer.exe"
+touch -d 2026-01-02T03:04:05.012345678 "$GW/x86_64-unix/wine"
+OLD="$MACGAMEFIX_HOME/Applications/CrossOver Old.app"
+mkdir -p "$OLD/Contents/SharedSupport/CrossOver/lib/wine/x86_64-unix"
+/usr/libexec/PlistBuddy -c 'Add :CFBundleVersion string 25.0.0.1' "$OLD/Contents/Info.plist" >/dev/null
+: > "$OLD/Contents/SharedSupport/CrossOver/lib/wine/x86_64-unix/ntdll.so"
+cp "$GW/x86_64-unix/wine" "$OLD/Contents/SharedSupport/CrossOver/lib/wine/x86_64-unix/wine"
+MG="$SUPPORT/Steam/steamapps/common/Mode Game"
+mkdir -p "$MG/Binaries/Win64" "$T/tmp"
+: > "$MG/ModeGame.exe"; : > "$MG/Binaries/Win64/ModeGame-Win64-Shipping.exe"; : > "$MG/Other.exe"; : > "$MG/explorer.exe"
+export MACGAMEFIX_TEMP_DIR="$T/tmp"
+WT="$T/tmp/winetemp-$(stat -f '%i-%z-%m' "$GW/x86_64-unix/wine")-12345678"
+mkdir -p "$WT"
+ln "$GW/x86_64-unix/wine" "$WT/ModeGame.exe"
+ln -s "$T/elsewhere/wine" "$WT/Other.exe"
+COPY="$SUPPORT/MacGameFix/GameMode/CrossOver GM 27.0.0.41073 x86_64/CrossOver Game.app"
+ARMCOPY="$SUPPORT/MacGameFix/GameMode/CrossOver GM 27.0.0.41073 arm64/CrossOver Game.app"
+OUT="$("$BIN" --game-mode-keep 2>&1)"
+check '[ "$(readlink "$WT/ModeGame.exe")" = "$COPY/Contents/MacOS/ModeGame.exe" ] && [ "$(readlink "$WT/ModeGame-Win64-Shipping.exe")" = "$COPY/Contents/MacOS/ModeGame-Win64-Shipping.exe" ]' "each exe of a game gets a link in ntdll's folder for the loader, into the bundle"
+check '[ "$COPY/Contents/MacOS/ModeGame.exe" -ef "$COPY/Contents/MacOS/wine" ]' "under the exe's name, the bundle's copy of the loader, so the Dock names the game"
+check '[ -L "$WT/ModeGame.exe" ]' "ntdll's own link, in no bundle, is replaced"
+check '[ "$(readlink "$WT/Other.exe")" = "$T/elsewhere/wine" ]' "a link of somebody else's is left alone"
+check '[ ! -e "$WT/explorer.exe" ]' "Wine's own programs get none"
+check '[ "$(plutil -extract CFBundleExecutable raw "$COPY/Contents/Info.plist")" = launcher ] && [ -x "$COPY/Contents/MacOS/launcher" ]' "the bundle's executable is a script, so the loader's own signature is not checked against the bundle"
+check '[ "$(plutil -extract LSApplicationCategoryType raw "$COPY/Contents/Info.plist")" = public.app-category.games ] && cmp -s "$COPY/Contents/MacOS/wine" "$GW/x86_64-unix/wine" && [ "$COPY/Contents/MacOS/ntdll.so" -ef "$GW/x86_64-unix/ntdll.so" ]' "the bundle says it is a game and holds a copy of the loader beside a link to its ntdll.so"
+WA="$T/tmp/winetemp-$(stat -f '%i-%z-%m' "$GW/aarch64-unix/wine.app/Contents/MacOS/wine")-$(stat -f '%.9Fm' "$GW/aarch64-unix/wine.app/Contents/MacOS/wine" | sed 's/.*\.//; s/^0*//; s/^$/0/')"
+check '[ "$(readlink "$WA/ModeGame.exe")" = "$ARMCOPY/Contents/MacOS/ModeGame.exe" ] && cmp -s "$ARMCOPY/Contents/MacOS/wine" "$GW/aarch64-unix/wine.app/Contents/MacOS/wine"' "the FEX side's loader, in its wine.app, gets its own"
+check '[ ! -d "$SUPPORT/MacGameFix/GameMode/CrossOver Old 25.0.0.1 x86_64" ] && ! has "$("$BIN" --game-mode-report 2>&1)" "25.0.0.1"' "a CrossOver of a release not checked gets nothing"
+LINKED=$(for f in "$WT"/*; do to=$(readlink "$f" || true); if [ "${to#"$COPY/Contents/MacOS/"}" != "$to" ]; then echo; fi; done | wc -l | tr -d ' ')
+check '[ "$LINKED" -ge 2 ] && has "$("$BIN" --game-mode-report 2>&1)" "| x86_64 | ${WT##*/} | $LINKED linked"' "the report counts the links on disk"
+"$BIN" --game-mode-remove >/dev/null 2>&1
+check '[ ! -e "$WT/ModeGame.exe" ] && [ ! -e "$WA/ModeGame.exe" ] && [ -L "$WT/Other.exe" ] && [ ! -d "$SUPPORT/MacGameFix/GameMode" ]' "turning it off takes every link of ours and the bundles away, and nothing else"
+printf '{"kept":[],"updates":false,"modulesUpdates":false,"gameMode":true}' > "$SUPPORT/MacGameFix/automatic.json"
+"$BIN" --agent-once >/dev/null 2>&1
+check '[ "$(readlink "$WT/ModeGame.exe")" = "$COPY/Contents/MacOS/ModeGame.exe" ]' "with it on, the agent puts the links back"
+"$BIN" --game-mode-remove >/dev/null 2>&1
+printf '{"kept":[],"updates":false,"modulesUpdates":false}' > "$SUPPORT/MacGameFix/automatic.json"
+"$BIN" --agent-once >/dev/null 2>&1
+check '[ ! -e "$WT/ModeGame.exe" ]' "with it off, the agent does nothing"
+unset MACGAMEFIX_TEMP_DIR
+
 [ "$fail" = 0 ] && echo "==> MacGameFix automation: the Wine modules and their own updates, signed catalogs taken automatically or asked first, what each game runs on, the agent's updates, waits and reports, the menu bar's summary" || exit 1

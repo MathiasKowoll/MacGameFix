@@ -77,6 +77,8 @@ struct AutoSettings: Codable {
     var padBattery = true
     /// What stands beside it: "raccoon" (the raccoon and a gamepad), "gamepad", or "none".
     var batteryIcon = "raccoon"
+    /// CrossOver's games run from a bundle that says it is a game (GameMode.swift).
+    var gameMode = false
 
     init() {}
 
@@ -94,6 +96,7 @@ struct AutoSettings: Codable {
         seen = try c.decodeIfPresent(Date.self, forKey: .seen) ?? .distantPast
         padBattery = try c.decodeIfPresent(Bool.self, forKey: .padBattery) ?? true
         batteryIcon = try c.decodeIfPresent(String.self, forKey: .batteryIcon) ?? "raccoon"
+        gameMode = try c.decodeIfPresent(Bool.self, forKey: .gameMode) ?? false
     }
 
     static func load() -> AutoSettings {
@@ -286,6 +289,8 @@ enum Agent {
         var kept = settings
         events += await Engine.keep(&kept, state: &state, now: now)
         if kept.modulesKept != settings.modulesKept { kept.save() }
+        // A game installed since, a CrossOver updated, or a temporary folder macOS emptied.
+        if settings.gameMode { GameMode.keep().forEach { print($0) } }
         // What the Wine modules saw each game do, kept before a restart empties /tmp.
         if PadStore.exists {
             var pad = PadStore.load()

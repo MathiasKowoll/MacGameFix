@@ -145,6 +145,32 @@ Turning the option off removes the agent. Its settings and what it did are in
 `~/Library/Application Support/MacGameFix`, and its log is in
 `~/Library/Logs/MacGameFix-agent.log`.
 
+## Game Mode for CrossOver's games
+
+macOS turns Game Mode on for a game in front, in full screen, whose app says it
+is a game. A game in CrossOver never is one: CrossOver's Wine starts each game
+again from a link named after its exe, in a temporary folder and in no app. With
+**Settings › Game Mode for CrossOver's games** on, MacGameFix keeps a small app
+that says it is a game for each CrossOver it was checked with (26.1, 26.3,
+Preview 20261006 and Preview 20261015, read in their sources), holding a copy of
+that CrossOver's Wine loader, and points each game's link at it. CrossOver
+itself is not changed, and turning the switch off takes it all away. NotProton
+runners are left to NotProton.
+
+Play in full screen: the green button, or Control-Command-F. Measured on
+2026-10-19 and 20 with a DualSense Edge over Bluetooth:
+
+- Game Mode doubles what the pad's Bluetooth link carries: 4.9 KB/s without it,
+  9.5 KB/s with it, written back to back from a bench tool. The haptics need
+  6.7 KB/s, and without Game Mode Spider-Man 2 (under NotProton) lost 27 % of them.
+- In CrossOver Preview's Steam bottle, Spider-Man 2 and F1 23 in full screen
+  turned Game Mode on by themselves, and their haptics lost none.
+
+The links are made for the exes MacGameFix finds in the Steam libraries and in
+each bottle's Program Files; a game elsewhere is not covered. Game Feel's
+options are read when the bottle starts, so in CrossOver change them before you
+open Steam there (engine/README.md, "The options").
+
 ## The games
 
 | Game | What the fix is for | Needs |
