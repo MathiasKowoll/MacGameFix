@@ -362,6 +362,11 @@ verified result before anything is installed.
   the form; attach the file there. The report has MacGameFix's and macOS's versions, the Wine modules in
   each CrossOver, the game's settings and what the modules logged for it. It names that game alone and
   writes your home folder as `~`. Turn Diagnose off afterwards.
+- **Settings that felt right.** In **Game Feel**, click the game, set it up and play it; with **Diagnose
+  this game** on, the report also holds the haptics' levels and delays. Then click **Share These
+  Settings…**: it saves the same report and opens the form with the game and every option it gets filled
+  in; attach the file there and say how it felt. Shared settings that a report backs become the game's
+  suggested settings in Game Feel.
 - **A game fix does not work.** Copy the lines about the game from **Settings › Log** into the form.
 
 ## Opening it the first time

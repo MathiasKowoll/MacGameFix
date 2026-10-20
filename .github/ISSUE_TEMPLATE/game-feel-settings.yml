@@ -1,0 +1,156 @@
+name: Settings that felt right
+description: Game Feel settings that made a game's haptics, rumble or triggers feel right, for the suggested settings.
+title: "[Settings] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Settings shared here become a game's suggested settings in **Game Feel** once a report backs them.
+        A game can have more than one: one for an Edge over Bluetooth, another for a cable, and so on.
+
+        **To share them**: in MacGameFix, open **Game Feel**, click the game and set it up. Turn on
+        **Diagnose this game** if you can, play long enough to feel the haptics, the rumble and the triggers,
+        close the game, then click **Share These Settings…**. It saves the game's report and opens this form
+        with the game and its settings filled in; attach the report below. The report names this game alone
+        and writes your home folder as `~`. Turn Diagnose off again afterwards.
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      description: Its name and Steam app id.
+    validations:
+      required: true
+  - type: input
+    id: name
+    attributes:
+      label: A name for these settings
+      description: What sets them apart, for a list of a game's settings. "Edge over Bluetooth", "Stronger haptics".
+    validations:
+      required: true
+  - type: textarea
+    id: settings
+    attributes:
+      label: The settings
+      description: Filled in by Share These Settings…, as the Wine modules read them. Leave them as they are.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: pad
+    attributes:
+      label: Controller
+      options:
+        - DualSense
+        - DualSense Edge
+        - Both
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection
+      options:
+        - Bluetooth
+        - USB cable
+        - Both
+    validations:
+      required: true
+  - type: dropdown
+    id: runs
+    attributes:
+      label: Where it runs
+      options:
+        - A NotProton runner
+        - A CrossOver bottle
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Its version
+      description: NotProton's or CrossOver's, from its About window.
+  - type: dropdown
+    id: steam-input
+    attributes:
+      label: Steam Input for this game
+      options:
+        - "Off"
+        - "On"
+        - I don't know
+    validations:
+      required: true
+  - type: dropdown
+    id: game-mode
+    attributes:
+      label: Game Mode
+      description: The menu bar shows a game controller while it is on, with the game in full screen.
+      options:
+        - "On"
+        - "Off"
+        - I don't know
+  - type: dropdown
+    id: haptics
+    attributes:
+      label: Haptics
+      options:
+        - Felt right
+        - Too weak
+        - Too strong
+        - Late or choppy
+        - Missing
+        - The game has none
+        - Did not notice
+    validations:
+      required: true
+  - type: dropdown
+    id: rumble
+    attributes:
+      label: Rumble
+      options:
+        - Felt right
+        - Too weak
+        - Too strong
+        - Late or choppy
+        - Missing
+        - The game has none
+        - Did not notice
+    validations:
+      required: true
+  - type: dropdown
+    id: triggers
+    attributes:
+      label: Trigger effects
+      options:
+        - Felt right
+        - Too weak
+        - Too strong
+        - Late or choppy
+        - Missing
+        - The game has none
+        - Did not notice
+    validations:
+      required: true
+  - type: dropdown
+    id: compared
+    attributes:
+      label: Compared with
+      multiple: true
+      options:
+        - A PS5
+        - A Windows PC
+        - The same controller on a cable
+        - Every game's settings
+        - Nothing
+  - type: textarea
+    id: notes
+    attributes:
+      label: How it felt
+      description: The moments you played, and what these settings changed. What still feels off, if anything.
+  - type: textarea
+    id: report
+    attributes:
+      label: The report
+      description: Drag the .md file Share These Settings… saved into this box, or paste its contents.
+    validations:
+      required: true

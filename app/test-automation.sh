@@ -268,6 +268,21 @@ printf '10:00:05 [5] game=999 observed: the game rumbles the DualSense%ss motors
 check 'has "$(cat "$T/report.md")" "Steam app 4242" && has "$(cat "$T/report.md")" "game=4242 observed: the game sets trigger effects" && has "$(cat "$T/report.md")" "xinput=pad" && ! has "$(cat "$T/report.md")" "game=999" && ! has "$(cat "$T/report.md")" "$MACGAMEFIX_HOME"' "a game's report has its log and settings, no other game, and no home folder"
 "$BIN" --pad-export "$T/pad-export.json"
 check 'has "$(cat "$T/pad-export.json")" "\"appid\" : \"4242\"" && ! has "$(cat "$T/pad-export.json")" "$MACGAMEFIX_HOME" && ! has "$(cat "$T/pad-export.json")" "/Users/"' "the export has the games and no paths"
+# The settings form's link, its fields read as GitHub reads them: a bare + is a space.
+shareform() {
+    /usr/bin/python3 - "$("$BIN" --pad-share-url "$1")" <<'PY3'
+import sys, urllib.parse
+for k, v in urllib.parse.parse_qsl(urllib.parse.urlsplit(sys.argv[1]).query):
+    print(k + ": " + v.replace("\n", " | "))
+PY3
+}
+check 'has "$(shareform 4242)" "template: game-feel-settings.yml" && has "$(shareform 4242)" "game: Fake Game (Steam app 4242)" && has "$(shareform 4242)" "settings: bluetooth=" && has "$(shareform 4242)" " | xinput=pad | " && has "$(shareform 4242)" " | trigger_l2_with_r2="' "sharing a game's settings opens the settings form with the game and every option it gets"
+/usr/bin/python3 - "$P/pad.json" <<'PY3'
+import json, sys
+d = json.load(open(sys.argv[1])); d["games"]["4343"] = {"name": "Plus 1.5+2.5"}
+json.dump(d, open(sys.argv[1], "w"))
+PY3
+check 'has "$(shareform 4343)" "title: [Settings] Plus 1.5+2.5"' "a plus in a game's name stays a plus"
 unset MACGAMEFIX_PAD_LOG
 
 echo "== new fixes, asked first"

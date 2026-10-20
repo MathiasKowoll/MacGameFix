@@ -616,3 +616,29 @@ extension PadStore {
         return out
     }
 }
+
+// MARK: - A new issue, filled in
+
+enum Issue {
+    /// A new issue on GitHub with one of the repository's forms, the given fields
+    /// filled in by their ids.
+    static func new(template: String, _ fields: KeyValuePairs<String, String>) -> URL? {
+        var issue = URLComponents(string: "https://github.com/MathiasKowoll/MacGameFix/issues/new")!
+        issue.queryItems = [URLQueryItem(name: "template", value: template)]
+            + fields.map { URLQueryItem(name: $0.key, value: $0.value) }
+        // URLComponents leaves a plus as it is, and GitHub reads it as a space ("1.5+2.5").
+        issue.percentEncodedQuery = issue.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        return issue.url
+    }
+}
+
+extension PadStore {
+    /// The settings form for a game, with the game and every option it gets, as
+    /// the modules read them.
+    func shareIssue(appid: String, name: String, presets: [String: PadPreset]) -> URL? {
+        Issue.new(template: "game-feel-settings.yml",
+                  ["title": "[Settings] \(name)",
+                   "game": "\(name) (Steam app \(appid))",
+                   "settings": effective(appid, presets: presets).lines.joined(separator: "\n")])
+    }
+}

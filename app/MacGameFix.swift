@@ -580,25 +580,42 @@ extension Model {
     /// One game's report, saved where the user chooses, and a new issue opened
     /// with the template it belongs to, for the user to attach it.
     func padReport(_ game: InstalledGame) {
+        guard savePadReport(game, as: "MacGameFix report") else { return }
+        if let link = Issue.new(template: "controller.yml",
+                                ["title": "[Controller] \(game.name)",
+                                 "game": "\(game.name) (Steam app \(game.appid))"]) {
+            NSWorkspace.shared.open(link)
+        }
+    }
+
+    /// The same report, and the settings form opened with the game's settings in
+    /// it, for settings that felt right to become a game's suggested ones.
+    func padShare(_ game: InstalledGame) {
+        guard savePadReport(game, as: "MacGameFix settings") else { return }
+        let store = PadStore.exists ? PadStore.load() : pad
+        if let link = store.shareIssue(appid: game.appid, name: game.name, presets: padPresets) {
+            NSWorkspace.shared.open(link)
+        }
+    }
+
+    /// Saves a game's report where the user chooses and shows it in the Finder;
+    /// false if the user cancels or it could not be written.
+    private func savePadReport(_ game: InstalledGame, as kind: String) -> Bool {
         let store = PadStore.exists ? PadStore.load() : pad
         let text = store.report(appid: game.appid, name: game.name, presets: padPresets,
                                 engines: engineRows.map { ($0.target.name, $0.target.build, $0.state.label) })
         let day = ISO8601DateFormatter.string(from: Date(), timeZone: .current, formatOptions: [.withFullDate])
         let safe = game.name.components(separatedBy: CharacterSet(charactersIn: "/:\\")).joined(separator: " ")
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "MacGameFix report - \(safe) - \(day).md"
+        panel.nameFieldStringValue = "\(kind) - \(safe) - \(day).md"
         panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
         do { try text.write(to: url, atomically: true, encoding: .utf8) } catch {
             note("The report could not be saved: \(error.localizedDescription)")
-            return
+            return false
         }
         NSWorkspace.shared.activateFileViewerSelecting([url])
-        var issue = URLComponents(string: "https://github.com/MathiasKowoll/MacGameFix/issues/new")!
-        issue.queryItems = [URLQueryItem(name: "template", value: "controller.yml"),
-                            URLQueryItem(name: "title", value: "[Controller] \(game.name)"),
-                            URLQueryItem(name: "game", value: "\(game.name) (Steam app \(game.appid))")]
-        if let link = issue.url { NSWorkspace.shared.open(link) }
+        return true
     }
 
     /// A game's own options; a game left with none and nothing seen is forgotten.
@@ -1475,12 +1492,18 @@ struct PadGameSheet: View {
                             .help("The Wine modules log what this game writes to the pad, the haptics' levels and delays, "
                                   + "for this game alone, from its next start.")
                         Spacer()
+                        Button("Share These Settings…") { model.padShare(game) }
+                            .help("Saves this game's report and opens a new issue on GitHub with these settings in it, "
+                                  + "to attach it to.")
                         Button("Make a Report…") { model.padReport(game) }
                             .help("Saves this game's report and opens a new issue on GitHub to attach it to.")
                     }
                     Text("To report a problem: turn on Diagnose, play the moment that goes wrong, close the game, then "
                          + "make a report and attach it to the issue that opens. The report names this game alone, and "
                          + "your home folder is written ~.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text("If these settings feel right, share them the same way: shared settings that a report backs "
+                         + "become this game's suggested ones for everyone.")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     VStack(alignment: .leading, spacing: 4) {
                         if let preset {
@@ -1834,6 +1857,13 @@ enum Entry {
                     .write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
                 return 0
             }
+        }
+        if let appid = value("--pad-share-url") {
+            // The settings form Share These Settings opens for a game, for the tests.
+            let store = PadStore.load()
+            let name = store.games[appid]?.name ?? SteamGames.installed().first { $0.appid == appid }?.name ?? appid
+            print(store.shareIssue(appid: appid, name: name, presets: PadPresets.load())?.absoluteString ?? "")
+            exit(0)
         }
         if let root = value("--engine-install") ?? value("--engine-remove") {
             // One CrossOver, by the folder that holds lib/wine, for the tests.
