@@ -237,7 +237,7 @@ P="$SUPPORT/MacGameFix"
 padwrite() { "$BIN" --pad-write >/dev/null 2>&1; }
 padreport() { "$BIN" --pad-report 2>&1; }
 padwrite
-check '[ -f "$P/pad.json" ] && has "$(cat "$P/pad.conf")" "bluetooth=wired" && has "$(cat "$P/pad.conf")" "motor_power=full" && has "$(cat "$P/pad.conf")" "edge_haptics_gain_cable=2.00" && has "$(cat "$P/pad.conf")" "edge_haptics_gain_bluetooth=2.00" && has "$(cat "$P/pad.conf")" "haptics_gain_bluetooth=1.00"' "every game's options start as measured, in pad.conf"
+check '[ -f "$P/pad.json" ] && has "$(cat "$P/pad.conf")" "bluetooth=wired" && has "$(cat "$P/pad.conf")" "motor_power=full" && has "$(cat "$P/pad.conf")" "edge_haptics_gain_cable=1.00" && has "$(cat "$P/pad.conf")" "edge_haptics_gain_bluetooth=1.00" && has "$(cat "$P/pad.conf")" "haptics_gain_bluetooth=1.00"' "every game's options start as measured, in pad.conf"
 check 'has "$(cat "$P/pad.d/1593500.conf")" "edge=dualsense" && ! has "$(cat "$P/pad.d/1593500.conf")" "bluetooth="' "a game with a preset gets its own file, with only what differs"
 /usr/bin/python3 - "$P/pad.json" <<'PY2'
 import json, sys

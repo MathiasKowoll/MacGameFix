@@ -44,11 +44,11 @@ struct PadOptions: Codable, Equatable, Hashable {
     var triggerL2WithR2: String?
 
     /// What the user starts with: everything the modules do turned on, and the
-    /// Edge's haptics doubled, which made it feel like a DualSense in Spider-Man 2
-    /// on a cable and over Bluetooth.
+    /// haptics at the game's own strength on both pads. A game that wants more gets
+    /// it from its suggested settings (Spider-Man 2 doubles the Edge's).
     static let firstRun = PadOptions(bluetoothAsCable: true, fullMotorPower: true, edgeAsDualSense: false,
-                                     hapticsGainCable: 1, edgeHapticsGainCable: 2,
-                                     hapticsGainBluetooth: 1, edgeHapticsGainBluetooth: 2,
+                                     hapticsGainCable: 1, edgeHapticsGainCable: 1,
+                                     hapticsGainBluetooth: 1, edgeHapticsGainBluetooth: 1,
                                      xinput: "rumble", rumbleHaptics: false, triggerR2: "off", triggerL2: "off",
                                      triggerR2WithL2: "off", triggerL2WithR2: "off")
 
