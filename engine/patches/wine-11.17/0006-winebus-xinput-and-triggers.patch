@@ -8,7 +8,7 @@
  #include <stdarg.h>
  #include <stdio.h>
  #include <stdlib.h>
-@@ -127,11 +128,25 @@
+@@ -127,11 +128,27 @@
      BOOL sony;          /* a DualSense or DualSense Edge, either way */
      BOOL edge;          /* a DualSense Edge, whatever the game is shown */
      BOOL as_standard;   /* an Edge the game is shown as the standard pad */
@@ -28,6 +28,8 @@
 +    BOOL input_diagnostics;
 +    /* diagnostics=on: when the game's motor values rise to 4 or more and fall back; see pad_motors_told */
 +    BOOL motors_on;
++    BOOL rumble_improved;  /* the pad takes the improved rumble emulation; see pad_rumble_improved */
++    BOOL told_rumble_improved;
 +    UInt64 motors_since;
 +    BYTE motors_peak[2], motors_last[2];
 +    UInt64 input_since, input_last, input_gap;
@@ -35,11 +37,12 @@
  };
  
  /* MacGameFix: a DualSense or DualSense Edge on Bluetooth, shown to games as the
-@@ -247,8 +262,24 @@
+@@ -247,8 +264,25 @@
      signed char fifo[512][2];  /* haptics at 3 kHz, channels 3 and 4 */
      unsigned int fifo_head, fifo_count;
      UInt64 input_at, audio_at, nonzero_at;
 +    BOOL synth;                /* rumble=haptics: see bt_synth */
++    BOOL rumble_improved;      /* the rumble with the improved emulation: see pad_rumble_improved */
 +    float synth_gain;          /* its strength: the haptics' over Bluetooth for this pad */
 +    BOOL diagnostics;          /* the haptics' delay and queue, in pad.log */
 +    UInt64 sound_since, queue_since;
@@ -60,10 +63,27 @@
  static void pad_game(char *id, size_t size);
  
  /* What this file has to say goes to /tmp/macgamefix-<uid>/pad.log, beside the
-@@ -476,6 +507,19 @@
+@@ -469,13 +503,35 @@
+         report[3] &= ~3;
+         report[5] = report[6] = 0;
+     }
++    else if (pad->rumble_improved)
++    {
++        report[3] = (report[3] & ~1) | 2;
++        report[5] = pad->motors[0];
++        report[6] = pad->motors[1];
++    }
+     else
+     {
+         report[3] |= 3;
+         report[5] = pad->motors[0];
          report[6] = pad->motors[1];
      }
-     report[41] &= ~4;
+-    report[41] &= ~4;
++    /* Byte 41 (the game's byte 39) bit 0x04: the improved rumble emulation, only
++     * out of audio mode and only on a pad that takes it. */
++    if (!audio && pad->rumble_improved) report[41] |= 4;
++    else report[41] &= ~4;
 +    /* While haptics stream, the same report again is not written. The game's
 +     * motor values are cleared from it there, and Uncharted sends them all the
 +     * time: its copies took up to 18 of the link's ~65 reports a second, and the
@@ -80,7 +100,7 @@
      bt_write(pad, report, sizeof(report));
  }
  
-@@ -531,15 +575,19 @@
+@@ -531,15 +587,19 @@
          pthread_mutex_lock(&pad->lock);
          for (i = 0; i < n; i++)
          {
@@ -101,7 +121,7 @@
          if (nonzero) pad->nonzero_at = pad->audio_at;
          pthread_mutex_unlock(&pad->lock);
          semaphore_signal(pad->wake);
-@@ -547,10 +595,46 @@
+@@ -547,10 +607,46 @@
      return NULL;
  }
  
@@ -152,7 +172,7 @@
  static void *bt_writer(void *arg)
  {
      struct bt_pad *pad = arg;
-@@ -558,9 +642,10 @@
+@@ -558,9 +654,10 @@
      thread_time_constraint_policy_data_t policy;
      BYTE payload[47];
      signed char samples[128];
@@ -165,7 +185,7 @@
  
      policy.period = (uint32_t)bt_ticks(pcm_period);
      policy.computation = (uint32_t)bt_ticks(0.001);
-@@ -580,9 +665,14 @@
+@@ -580,9 +677,14 @@
              bt_wait_until(pad, now + bt_ticks(0.020));
              continue;
          }
@@ -183,7 +203,7 @@
          if ((control = pad->dirty && now >= next_control))
          {
              memcpy(payload, pad->pending, sizeof(payload));
-@@ -595,12 +685,15 @@
+@@ -595,12 +697,15 @@
              bt_control(pad, payload, audio || streaming);
              next_control = mach_absolute_time() + bt_ticks(audio || streaming ? streaming_gap : 0.016);
          }
@@ -200,7 +220,7 @@
          }
          if (streaming && mach_absolute_time() >= next_pcm)
          {
-@@ -608,18 +701,61 @@
+@@ -608,18 +713,61 @@
              if (mach_absolute_time() > next_pcm + bt_ticks(0.040)) next_pcm = mach_absolute_time();
              memset(samples, 0, sizeof(samples));
              pthread_mutex_lock(&pad->lock);
@@ -268,7 +288,7 @@
                  /* Let the silent tail reach the actuators, then rumble again. */
                  mach_wait_until(mach_absolute_time() + bt_ticks(0.030));
                  pthread_mutex_lock(&pad->lock);
-@@ -672,6 +808,23 @@
+@@ -672,6 +820,23 @@
      semaphore_signal(pad->wake);
  }
  
@@ -292,7 +312,7 @@
  static struct bt_pad *bt_pad_create(IOHIDDeviceRef device, DWORD pid, DWORD location, BOOL physical_edge)
  {
      struct bt_pad *pad;
-@@ -680,6 +833,10 @@
+@@ -680,6 +845,10 @@
      pad->device = device;
      pad->edge = pid == DS_EDGE_PID;
      pad->physical_edge = physical_edge;
@@ -303,7 +323,7 @@
      pad->location = location;
      pad->sock = -1;
      pthread_mutex_init(&pad->lock, NULL);
-@@ -781,6 +938,72 @@
+@@ -781,6 +950,72 @@
      return dwNum;
  }
  
@@ -376,7 +396,7 @@
  static void handle_IOHIDDeviceIOHIDReportCallback(void *context,
          IOReturn result, void *sender, IOHIDReportType type,
          uint32_t reportID, uint8_t *report, CFIndex report_length)
-@@ -798,15 +1021,26 @@
+@@ -798,15 +1033,27 @@
          if (reportID == 0x31 && report_length >= 66)
          {
              impl->bt->input_at = mach_absolute_time();
@@ -397,24 +417,37 @@
  }
  
 +static void pad_triggers(struct iohid_device *impl);
++static UINT pad_firmware(IOHIDDeviceRef device);
 +static void pad_write_output(struct iohid_device *impl, BYTE *report);
 +static void trigger_marker(const struct iohid_device *impl, char *path, size_t size);
 +
  static void iohid_device_destroy(struct unix_device *iface)
  {
  }
-@@ -821,8 +1055,10 @@
+@@ -821,8 +1068,22 @@
      length = CFNumberToDWORD(num);
      impl->buffer = malloc(length);
  
-+    if (impl->sony) impl->input_diagnostics = pad_option("diagnostics=on");
++    if (impl->sony)
++    {
++        UINT firmware = impl->edge ? 0 : pad_firmware(impl->device);
++
++        impl->input_diagnostics = pad_option("diagnostics=on");
++        impl->rumble_improved = impl->edge || firmware >= 0x0224;
++        if (impl->bt) impl->bt->rumble_improved = impl->rumble_improved;
++        if (impl->input_diagnostics)
++            pad_log("the %s's rumble: %s\n", impl->model,
++                    impl->edge ? "the improved emulation, as every Edge's"
++                    : impl->rumble_improved ? "the improved emulation, firmware 2.24 or newer"
++                    : "the old emulation, firmware older than 2.24 or not read");
++    }
      IOHIDDeviceRegisterInputReportCallback(impl->device, impl->buffer, length, handle_IOHIDDeviceIOHIDReportCallback, iface);
      if (impl->bt) bt_pad_start(impl->bt);
 +    if (impl->sony) pad_triggers(impl);
      return STATUS_SUCCESS;
  }
  
-@@ -830,6 +1066,18 @@
+@@ -830,51 +1091,541 @@
  {
      struct iohid_device *impl = impl_from_unix_device(iface);
  
@@ -433,10 +466,11 @@
      IOHIDDeviceRegisterInputReportCallback(impl->device, NULL, 0, NULL, NULL);
      if (impl->bt) bt_pad_stop(impl->bt);
  
-@@ -838,32 +1086,435 @@
+     pthread_mutex_lock(&iohid_cs);
+     list_remove(&impl->unix_device.entry);
      pthread_mutex_unlock(&iohid_cs);
- }
- 
++}
++
 +/* MacGameFix: trigger effects the user chooses for a game that sets none of
 + * its own, an XInput title above all: trigger_r2= and trigger_l2=, each off,
 + * resist, weapon, slope, vibrate or rumble, with a strength from 1 to 8
@@ -563,7 +597,7 @@
 +static BOOL trigger_chosen(const struct iohid_device *impl, unsigned int side)
 +{
 +    return impl->trigger_kind[side] != TRIGGER_OFF || impl->trigger_kind2[side] != TRIGGER_OFF;
-+}
+ }
 +
 +static void trigger_marker(const struct iohid_device *impl, char *path, size_t size)
 +{
@@ -787,7 +821,7 @@
 +            FEATURE(1, Data|Var|Abs),
 +            UNIT(1, 0),
 +            UNIT_EXPONENT(1, 0),
-+
+ 
 +            REPORT_ID(1, XINPUT_OUTPUT_ID),
 +            USAGE(1, HID_USAGE_HAPTICS_INTENSITY),
 +            LOGICAL_MINIMUM(4, 0x00000000),
@@ -882,7 +916,52 @@
      return STATUS_SUCCESS;
  }
  
-@@ -872,9 +1523,38 @@
++/* The pad's firmware version, bytes 44 and 45 of feature report 0x20, as SDL
++ * reads it; 0 when it cannot be read. */
++static UINT pad_firmware(IOHIDDeviceRef device)
++{
++    BYTE data[80] = {0x20};
++    CFIndex length = sizeof(data);
++
++    if (IOHIDDeviceGetReport(device, kIOHIDReportTypeFeature, 0x20, data, &length) || length < 46) return 0;
++    return data[44] | (data[45] << 8);
++}
++
++/* The rumble emulation, the improved kind. A pad emulates a rumble motor on its
++ * actuators either the old way (bit 0x01 of the first flag byte, byte 1) or the
++ * improved way of firmware 2.24 (bit 0x04 of the third, byte 39), the one a PS4
++ * game's rumble gets on a PS5 and SDL 3 asks for. A DualSense takes the improved
++ * way from 2.24 on, and every Edge does, though the Edge numbers its own firmware
++ * (0x0217 on one here). SDL 2, 2.32 included, compares that number with 0x0224
++ * and asks an Edge for the old way at half strength: Mortal Kombat 1, SDL 2.32,
++ * never wrote above 0x7f. A write in the old way is given the improved one, on a
++ * cable and over Bluetooth (where the writer sets the bits, see bt_control); to
++ * an Edge the game is shown as an Edge, at the strength asked for, twice what
++ * SDL 2 wrote, up to 0xff. Sony's library writes the old way at full strength,
++ * and writes to an Edge only when it is shown as the standard pad, which keeps
++ * its strength; so does winebus's own XInput rumble (from_game FALSE). */
++static BYTE *pad_rumble_improved(struct iohid_device *impl, BYTE *report, UINT length, BYTE *copy, BOOL from_game)
++{
++    UINT i;
++
++    if (!impl->rumble_improved || length < 40 || !(report[1] & 0x01) || (report[39] & 0x04)) return report;
++    if (report != copy) memcpy(copy, report, length);
++    copy[1] = (copy[1] & ~0x01) | 0x02;
++    copy[39] |= 0x04;
++    if (from_game && impl->edge && !impl->as_standard)
++        for (i = 3; i <= 4; i++) copy[i] = copy[i] >= 0x80 ? 0xff : copy[i] * 2;
++    if (!impl->told_rumble_improved && pad_option("diagnostics=on"))
++    {
++        impl->told_rumble_improved = TRUE;
++        pad_log("observed: %s asks the %s for the old rumble emulation; it gets the improved one%s\n",
++                from_game ? "the game" : "XInput", impl->model,
++                from_game && impl->edge && !impl->as_standard ? ", at twice what it wrote" : "");
++    }
++    return copy;
++}
++
+ static void iohid_device_set_output_report(struct unix_device *iface, HID_XFER_PACKET *packet, IO_STATUS_BLOCK *io)
+ {
      IOReturn result;
      struct iohid_device *impl = impl_from_unix_device(iface);
  
@@ -890,7 +969,7 @@
 +    BYTE *report = packet->reportBuffer, copy[64], motors[64];
      UINT length = packet->reportBufferLen;
 -    BOOL output = impl->sony && packet->reportId == 0x02 && length >= 48 && report[0] == 0x02;
-+    BOOL output;
++    BOOL output, from_game;
 +
 +    /* What xinput writes to the collection added for it: the rumble and the
 +     * buzz intensity, 16 bits each, which become the pad's output report 0x02
@@ -917,35 +996,47 @@
 +    }
 +    output = impl->sony && length >= 48 && report[0] == 0x02 &&
 +             (packet->reportId == 0x02 || report == motors);
++    /* Said before any copy is made: whether the game wrote it, or XInput did. */
++    from_game = report != motors;
 +
 +    /* The motors' values, whenever the game sets them (flag0 0x01 or 0x02). */
 +    if (output && (report[1] & 0x03)) pad_motors_told(impl, report[4], report[3]);
  
      /* How the game drives the pad, said once each, for MacGameFix's list of what
       * each game does: the rumble motors, trigger effects, the motor power. */
-@@ -943,6 +1623,7 @@
+@@ -927,6 +1678,7 @@
+             report = copy;
+             length = sizeof(copy);
+         }
++        report = pad_rumble_improved(impl, report, length, copy, from_game);
+         /* The motor power (bit 0x40 of the second flag byte, byte 37) lowers the
+          * haptics and the rumble, and the pad keeps it until something else is
+          * written. Sony's library claims it at 0x00 in every report for a
+@@ -943,6 +1695,7 @@
              copy[37] = 0;
              report = copy;
          }
-+        report = pad_triggers_merge(impl, report, length, copy, report != motors);
++        report = pad_triggers_merge(impl, report, length, copy, from_game);
      }
      if (impl->bt && output)
      {
-@@ -951,7 +1632,8 @@
+@@ -951,7 +1704,11 @@
          io->Status = STATUS_SUCCESS;
          return;
      }
 -    result = IOHIDDeviceSetReport(impl->device, kIOHIDReportTypeOutput, packet->reportId, report, length);
-+    result = IOHIDDeviceSetReport(impl->device, kIOHIDReportTypeOutput, report == motors ? 0x02 : packet->reportId,
++    /* The pad's output is report 0x02 whoever wrote it: once a copy was made
++     * (the Edge's length, the motor power, the rumble emulation) report no longer
++     * says that XInput's 0x03 was the source. */
++    result = IOHIDDeviceSetReport(impl->device, kIOHIDReportTypeOutput, output ? 0x02 : packet->reportId,
 +                                  report, length);
      if (result == kIOReturnSuccess)
      {
          io->Information = packet->reportBufferLen;
-@@ -969,6 +1651,36 @@
-     IOReturn ret;
+@@ -970,6 +1727,36 @@
      CFIndex report_length = packet->reportBufferLen;
      struct iohid_device *impl = impl_from_unix_device(iface);
-+
+ 
 +    /* The waveforms of the collection added for xinput, answered here: rumble,
 +     * then buzz, each with its duration (0: until changed, as XInputSetState
 +     * means it) and a cutoff of a second, as winebus answers for its own pads. */
@@ -975,10 +1066,11 @@
 +        io->Status = STATUS_SUCCESS;
 +        return;
 +    }
- 
++
      ret = IOHIDDeviceGetReport(impl->device, kIOHIDReportTypeFeature, packet->reportId,
                                 packet->reportBuffer, &report_length);
-@@ -1000,6 +1712,13 @@
+     /* Which of the pad's stored settings a game reads, once per report. */
+@@ -1000,6 +1787,13 @@
      IOReturn result;
      struct iohid_device *impl = impl_from_unix_device(iface);
  
@@ -992,7 +1084,7 @@
      /* A wired client turns the pad's radio off once it has the pad on the
       * cable (feature 0x08, subcommand 2). Here the radio is the cable. */
      if (impl->bt && packet->reportId == 0x08 && packet->reportBufferLen == 48 &&
-@@ -1126,9 +1845,13 @@
+@@ -1126,9 +1920,13 @@
      impl->sony = desc.vid == SONY_VID && (desc.pid == DUALSENSE_PID || desc.pid == DS_EDGE_PID);
      impl->edge = impl->sony && (desc.pid == DS_EDGE_PID || as_standard);
      impl->as_standard = as_standard;
