@@ -1095,8 +1095,9 @@ struct PadOptionRows: View {
         Toggle(isOn: flag(\.rumbleHaptics)) {
             label("Rumble on the haptic actuators", \.rumbleHaptics,
                   "Over Bluetooth, a game's motor rumble played on the haptic actuators, as PlayStation games play theirs: the heavy "
-                  + "motor a deep 65 Hz on the left, the light one a finer 160 Hz on the right. Only while the game "
-                  + "plays no haptics of its own; on a cable the pad's own rumble plays. For an XInput game.")
+                  + "motor a deep 65 Hz on the left, the light one a finer 160 Hz on the right, at the haptics' "
+                  + "strength over Bluetooth below. Only while the game plays no haptics of its own; on a cable the "
+                  + "pad's own rumble plays. For an XInput game.")
         }
     }
 }

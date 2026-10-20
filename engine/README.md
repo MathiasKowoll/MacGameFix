@@ -117,7 +117,7 @@ starts its haptics.
 | `haptics_gain_bluetooth=<1-4>`, `edge_haptics_gain_bluetooth=<1-4>` | The same over Bluetooth. A pad does not feel every game alike on both: a standard DualSense felt the same at 1 in Spider-Man 2, and F1 23's light haptics needed 2 over Bluetooth to feel as steady as on a cable. An older file's `haptics_gain` or `edge_haptics_gain` counts for both connections. |
 | `xinput=off\|rumble\|pad` | What XInput gets of the pad (`0006`-`0008`): nothing; its vibration on the motors (every game's default); the pad itself as an XInput controller (the default for a game the store does not list for the DualSense). |
 | `trigger_r2=<effect>[@1-8]`, `trigger_l2=<effect>[@1-8]` | A trigger effect for a game that sets none: `off` (the default), `resist`, `weapon`, `slope`, `vibrate`, `rumble` or `recoil`, with an optional strength. `rumble` vibrates and `recoil` resists with the game's own motor values. |
-| `rumble=haptics` | Over Bluetooth, the game's motor values played on the actuators while it plays no haptics of its own: the heavy motor a 65 Hz tone on the left, the light one 160 Hz on the right, ramped per 64-frame block; NotProton's bridge synthesizer, sample for sample in a host test. On a cable the pad's own rumble plays. Off (`motors`) by default. |
+| `rumble=haptics` | Over Bluetooth, the game's motor values played on the actuators while it plays no haptics of its own: the heavy motor a 65 Hz tone on the left, the light one 160 Hz on the right, ramped per 64-frame block, at the haptics' strength over Bluetooth (`haptics_gain_bluetooth`, `edge_haptics_gain_bluetooth`) up to full scale; at 1× NotProton's bridge synthesizer, sample for sample in a host test. On a cable the pad's own rumble plays. Off (`motors`) by default. |
 | `trigger_r2_with_l2=<effect>[@1-8]`, `trigger_l2_with_r2=<effect>[@1-8]` | A second effect for a trigger while the other is pressed (from 40 of 255, released under 20, read from the pad's input): a weapon on R2 while L2 aims. `off`, the default, keeps the first. |
 | `diagnostics=on` | What a game writes to the pad and reads from it, and a level meter of its haptics, in the log. |
 
@@ -207,9 +207,13 @@ Measured later on 2026-10-19, `0006`-`0008`, an Edge over Bluetooth, Steam Input
   dropped, and the haptics came with the action.
 - MacGameFix's thirty-second tries: the haptics test and every trigger effect,
   with the bytes the modules write, felt over Bluetooth; no macOS permission asked.
+- `rumble=haptics`, a DualSense Edge over Bluetooth with Game Mode, NotProton (2026-10-20). Onimusha:
+  Way of the Sword rumbles through XInput and sets the motors back to 0 between hits: the stream ran in
+  bursts, 16 to 64 reports in a 2 s window, with nothing queued and nothing dropped, and it felt right.
+  Mortal Kombat 1 writes the pad's motors itself and never set them back to 0 in a fight: the stream ran
+  without a break for 90 s, so the tone played the whole fight.
 
-Not played yet: the FEX (arm64) side, `xinput=pad` with God of War Ragnarök, `rumble=haptics`,
-and the tries on a cable.
+Not played yet: the FEX (arm64) side, `xinput=pad` with God of War Ragnarök, and the tries on a cable.
 
 ## Modules
 
