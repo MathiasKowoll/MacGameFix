@@ -138,7 +138,7 @@ rm -rf "$APP"
 mkdir -p "$MACOS" "$RES" "$CACHE"
 
 echo "==> compiling"
-swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Automation.swift" "$HERE/MenuBar.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
+swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Probe.swift" "$HERE/Automation.swift" "$HERE/MenuBar.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
   -o "$MACOS/MacGameFix" \
   -framework SwiftUI -framework AppKit -framework IOKit -framework UserNotifications -framework GameController \
   -framework AVFoundation -framework CoreAudio -framework AudioToolbox \

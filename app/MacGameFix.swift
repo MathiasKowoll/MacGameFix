@@ -62,6 +62,10 @@ final class Model: ObservableObject {
     /// The Game Feel tab's options, observations and presets.
     @Published var pad = PadStore.load()
     @Published var padGames: [InstalledGame] = []
+    /// Every Steam game's folder, for the Report tab, and the fix the catalog has
+    /// for each one that has one, by ProbeGame.id.
+    @Published var probeGames: [ProbeGame] = []
+    @Published var probeFixes: [String: String] = [:]
     let padPresets = PadPresets.load()
     /// Trying the haptics and the triggers on the pad, from the Game Feel sheets.
     let padTester = PadTester()
@@ -619,8 +623,12 @@ extension Model {
         let store = PadStore.exists ? PadStore.load() : pad
         let text = store.report(appid: game.appid, name: game.name, presets: padPresets,
                                 engines: engineRows.map { ($0.target.name, $0.target.build, $0.state.label) })
+        return saveReport(text, as: kind, for: game.name)
+    }
+
+    private func saveReport(_ text: String, as kind: String, for name: String) -> Bool {
         let day = ISO8601DateFormatter.string(from: Date(), timeZone: .current, formatOptions: [.withFullDate])
-        let safe = game.name.components(separatedBy: CharacterSet(charactersIn: "/:\\")).joined(separator: " ")
+        let safe = name.components(separatedBy: CharacterSet(charactersIn: "/:\\")).joined(separator: " ")
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "\(kind) - \(safe) - \(day).md"
         panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
@@ -631,6 +639,43 @@ extension Model {
         }
         NSWorkspace.shared.activateFileViewerSelecting([url])
         return true
+    }
+
+    // MARK: The Report tab
+
+    /// Every Steam game's folder, looked for again, with the fix the catalog has for it.
+    func scanProbe() {
+        let extra = extraFolders
+        Task {
+            let (games, fixes) = await Task.detached { () -> ([ProbeGame], [String: String]) in
+                let games = ProbeGames.all(extra: extra)
+                let catalog = Catalog.games(in: Catalog.active().dir)
+                var fixes: [String: String] = [:]
+                for game in games {
+                    if let fix = catalog.first(where: { $0.isRooted(at: game.folder) }) { fixes[game.id] = fix.name }
+                }
+                return (games, fixes)
+            }.value
+            probeGames = games
+            probeFixes = fixes
+        }
+    }
+
+    /// A game's report, saved where the user chooses, and the issue form for a game
+    /// that does not work opened with the game and what goes wrong in it.
+    func probeReport(_ game: ProbeGame, symptom: ProbeSymptom, findings: ProbeFindings) {
+        let engines = engineRows.map { ($0.target.name, $0.target.build, $0.state.label) }
+        let log = (try? String(contentsOf: PadStore.log, encoding: .utf8)) ?? ""
+        let padLines = log.split(separator: "\n").map(String.init).filter { $0.contains(" game=\(game.appid) ") }
+        let text = Probe.report(game, symptom: symptom.rawValue, findings: findings, fix: probeFixes[game.id],
+                                engines: engines, padLines: padLines)
+        guard saveReport(text, as: "MacGameFix game report", for: game.name) else { return }
+        if let link = Issue.new(template: "game-report.yml",
+                                ["title": "[Game] \(game.name)",
+                                 "game": "\(game.name) (Steam app \(game.appid))",
+                                 "what": symptom.rawValue + ". "]) {
+            NSWorkspace.shared.open(link)
+        }
     }
 
     /// A game's own options; a game left with none and nothing seen is forgotten.
@@ -803,6 +848,8 @@ struct ContentView: View {
                     ControllersView(model: model).padding(.top, 6)
                         .tabItem { Text("Game Feel") }
                 }
+                ReportView(model: model).padding(.top, 6)
+                    .tabItem { Text("Report") }
                 SettingsView(model: model).padding(.top, 6)
                     .tabItem { Text("Settings") }
             }
@@ -812,7 +859,9 @@ struct ContentView: View {
             }
         }
         .padding(16)
-        .frame(minWidth: 620, minHeight: 460)
+        // Five tabs of 107 pt each (the width "Wine Modules" sets), centred clear of the window's buttons:
+        // at 620 pt they went behind the toolbar's overflow menu (seen 2026-10-20).
+        .frame(minWidth: 720, minHeight: 460)
         .onGeometryChange(for: CGSize.self, of: { $0.size }) { windowSize = $0 }
         .environment(\.windowSize, windowSize)
         .onAppear { model.scan() }
@@ -962,6 +1011,189 @@ struct EngineView: View {
         }
         .formStyle(.grouped)
         .onAppear { if model.engineRows.isEmpty { model.scanEngine() } }
+    }
+}
+
+/// Report: every Steam game on this Mac. For one that does not work, what MacGameFix
+/// finds in it, the steps before a report, and the report an issue starts from.
+struct ReportView: View {
+    @ObservedObject var model: Model
+    @State private var search = ""
+    @State private var page = 0
+    @State private var selection: ProbeGame.ID?
+    @State private var reporting: ProbeGame?
+    @AppStorage("reportPerPage") private var perPage = 15
+
+    private var filtered: [ProbeGame] {
+        guard !search.isEmpty else { return model.probeGames }
+        return model.probeGames.filter { $0.name.localizedCaseInsensitiveContains(search) || $0.appid == search }
+    }
+    private var pages: Int { max(1, (filtered.count + perPage - 1) / perPage) }
+    private var shown: [ProbeGame] { Array(filtered.dropFirst(min(page, pages - 1) * perPage).prefix(perPage)) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("A game that does not work").font(.headline)
+                Text("Click it. MacGameFix looks at what the game is made of, without changing anything in it, and walks "
+                     + "you through a report for an issue on GitHub, which is where it gets fixed. The report names that game alone.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 14)
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    TextField("Search", text: $search).textFieldStyle(.roundedBorder).frame(maxWidth: 240)
+                    Spacer()
+                    Button("Look Again") { model.scanProbe() }
+                }
+                Table(shown, selection: $selection) {
+                    TableColumn("Game") { game in
+                        HStack(spacing: 10) {
+                            PadCover(appid: game.appid, height: 42)
+                            Text(game.name)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                    TableColumn("Runs in") { game in
+                        Text(game.places.isEmpty ? "—" : game.places.joined(separator: ", ")).foregroundStyle(.secondary)
+                    }
+                    TableColumn("MacGameFix") { game in
+                        Text(model.probeFixes[game.id] == nil ? "—" : "Has a fix").foregroundStyle(.secondary)
+                    }
+                }
+                .onChange(of: selection) { _, id in
+                    if let id, let game = model.probeGames.first(where: { $0.id == id }) { reporting = game }
+                }
+                HStack {
+                    Text(model.probeGames.isEmpty ? "No Steam game found."
+                         : filtered.isEmpty ? "No game matches." : "\(filtered.count) game(s)")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Picker("Show", selection: $perPage) {
+                        ForEach([15, 25, 50, 100], id: \.self) { Text("\($0)").tag($0) }
+                    }
+                    .fixedSize()
+                    Button { page = max(0, page - 1) } label: { Image(systemName: "chevron.left") }
+                        .disabled(page == 0)
+                    Text("Page \(min(page, pages - 1) + 1) of \(pages)").font(.caption).monospacedDigit()
+                    Button { page = min(pages - 1, page + 1) } label: { Image(systemName: "chevron.right") }
+                        .disabled(page >= pages - 1)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 8)
+        }
+        .sheet(item: $reporting, onDismiss: { selection = nil }) { game in ReportSheet(game: game, model: model) }
+        .onChange(of: search) { _, _ in page = 0 }
+        .onChange(of: perPage) { _, _ in page = 0 }
+        .onAppear { if model.probeGames.isEmpty { model.scanProbe() } }
+    }
+}
+
+/// One game's report, step by step: what goes wrong, what MacGameFix found in the
+/// game, what to do before the report, and the report.
+struct ReportSheet: View {
+    let game: ProbeGame
+    @ObservedObject var model: Model
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.windowSize) private var windowSize
+    @State private var symptom = ProbeSymptom.start
+    @State private var findings: ProbeFindings?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Form {
+                Section {
+                    Picker("What goes wrong", selection: $symptom) {
+                        ForEach(ProbeSymptom.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                } header: {
+                    HStack(alignment: .center, spacing: 14) {
+                        PadCover(appid: game.appid, height: 96)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(game.name).font(.title3)
+                            Text("Steam app \(game.appid). "
+                                 + (game.places.isEmpty ? "No prefix or bottle found beside its library."
+                                    : "Runs in: " + game.places.joined(separator: ", ") + "."))
+                                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            Text(model.probeFixes[game.id].map { "MacGameFix has a fix for it in Games: \($0)." }
+                                 ?? "MacGameFix has no fix for it yet.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.bottom, 4)
+                }
+                Section {
+                    if let findings {
+                        ForEach(Array(findings.summary.enumerated()), id: \.offset) { _, row in
+                            LabeledContent(row.0) { Text(row.1).multilineTextAlignment(.trailing) }
+                        }
+                    } else {
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text("Looking through the game's folder…").foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("1. What MacGameFix found in the game")
+                } footer: {
+                    Text("Read from the game's folder alone; nothing in it was changed.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Section("2. Before you make the report") {
+                    ForEach(Array(symptom.steps.enumerated()), id: \.offset) { n, step in
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text("\(n + 1).").monospacedDigit().foregroundStyle(.secondary)
+                            Text(step).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    if symptom == .controller {
+                        if model.padAvailable {
+                            Toggle("Diagnose this game", isOn: Binding(
+                                get: { model.pad.games[game.appid]?.diagnose == true },
+                                set: { model.setPadDiagnose(InstalledGame(appid: game.appid, name: game.name), $0) }))
+                                .help("The Wine modules log what this game writes to the pad, from its next start. "
+                                      + "Turn it off again afterwards.")
+                        } else {
+                            Text("The Wine modules are in no CrossOver yet: turn them on in Wine Modules first.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                Section {
+                    HStack {
+                        Text("Saves the report and opens a new issue on GitHub. Attach the report there, with any "
+                             + "screenshot, and say what happens in your own words.")
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        Button("Save the Report and Open an Issue…") {
+                            if let findings { model.probeReport(game, symptom: symptom, findings: findings) }
+                        }
+                        .disabled(findings == nil)
+                    }
+                } header: {
+                    Text("3. The report")
+                } footer: {
+                    Text("The report names this game alone, writes your home folder as ~ and leaves your Mac's name out. "
+                         + "It adds the game's own log when the game writes one.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .formStyle(.grouped)
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+        }
+        .padSheetSize(in: windowSize)
+        .task {
+            let game = game
+            findings = await Task.detached { Probe.look(game) }.value
+        }
     }
 }
 
@@ -1888,6 +2120,23 @@ enum Entry {
                     .write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
                 return 0
             }
+        }
+        if let i = args.firstIndex(of: "--probe-report"), i + 2 < args.count {
+            // The Report tab's report for a game, for the tests: --probe-report <app id> <path> [symptom].
+            let appid = args[i + 1], path = args[i + 2]
+            guard let game = ProbeGames.all().first(where: { $0.appid == appid }) else { print("no such game: \(appid)"); exit(1) }
+            let symptom = i + 3 < args.count ? ProbeSymptom.allCases.first { "\($0)" == args[i + 3] } ?? .other : .other
+            let fix = Catalog.games(in: Catalog.active().dir).first { $0.isRooted(at: game.folder) }?.name
+            let log = (try? String(contentsOf: PadStore.log, encoding: .utf8)) ?? ""
+            let text = Probe.report(game, symptom: symptom.rawValue, findings: Probe.look(game), fix: fix, engines: [],
+                                    padLines: log.split(separator: "\n").map(String.init).filter { $0.contains(" game=\(appid) ") })
+            try? text.write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
+            exit(0)
+        }
+        if args.contains("--probe-games") {
+            // The Report tab's games, for the tests.
+            for game in ProbeGames.all() { print("\(game.appid) | \(game.name) | \(game.places.joined(separator: ", "))") }
+            exit(0)
         }
         if let appid = value("--pad-share-url") {
             // The settings form Share These Settings opens for a game, for the tests.

@@ -23,7 +23,7 @@ archived repository.
 
 | Folder | What it holds |
 | --- | --- |
-| `app/` | The application: `Core.swift` (installers, games, libraries), `Engine.swift` (the Wine modules), `Pad.swift` (the Game Feel tab's options and what it writes for the modules), `pad-presets.json` (options measured per title), `Automation.swift` (the background agent, signed catalog updates, reports), `MenuBar.swift` (the agent's menu bar item), `MacGameFix.swift` (the window), `AppIcon.icon` (the icon); `build-app.sh` and `test-automation.sh`. |
+| `app/` | The application: `Core.swift` (installers, games, libraries), `Engine.swift` (the Wine modules), `Pad.swift` (the Game Feel tab's options and what it writes for the modules), `Probe.swift` (the Report tab: what a game is made of, and its report), `pad-presets.json` (options measured per title), `Automation.swift` (the background agent, signed catalog updates, reports), `MenuBar.swift` (the agent's menu bar item), `MacGameFix.swift` (the window), `AppIcon.icon` (the icon); `build-app.sh` and `test-automation.sh`. |
 | `fixes/` | One installer per fix (`install-*.sh`), the DLLs they put in place, the C source of each DLL and the scripts that build them (`build-proxy.sh`, `build-asf-reader.sh`, `check-builds.sh`), and the third-party notices. |
 | `process-features.json` | The table: per game executable, its symptom, backend, toolkit, codec and engine needs. The app is built from it. |
 | `tools/` | The probes and capture scripts the fixes were found with: video and Media Foundation observers, HID traces, a game survey. |
@@ -357,6 +357,14 @@ verified result before anything is installed.
 
 [Open an issue](https://github.com/MathiasKowoll/MacGameFix/issues/new/choose) with the form that fits:
 
+- **A game that does not work**, with a fix of ours or without one. In the **Report** tab, click the game and
+  choose what goes wrong. MacGameFix reads the game's folder, without changing anything in it, and says what
+  it is made of: its executable and the DLLs it imports, the graphics API, the engine, how it reads a
+  controller, its videos by container and codec, its middleware and any anti-cheat. Follow the steps it gives
+  for what goes wrong, then click **Save the Report and Open an Issue…** and attach the file to the form
+  that opens. The report adds the game's own log when it writes one (Unreal's `Saved/Logs`, Unity's
+  `Player.log`) and what the Wine modules saw of it. It names that game alone, writes your home folder as
+  `~` and leaves your Mac's name out.
 - **Controller, haptics or triggers.** In **Game Feel**, click the game, turn on **Diagnose this game**,
   play the moment that goes wrong, close the game, and click **Make a Report…**. It saves a file and opens
   the form; attach the file there. The report has MacGameFix's and macOS's versions, the Wine modules in

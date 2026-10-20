@@ -1,0 +1,62 @@
+name: A game that does not work
+description: A game that fails on a Mac, with or without a MacGameFix fix, for a fix to be found.
+title: "[Game] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before you write**, make a report: in MacGameFix, open the **Report** tab, click the game, choose what
+        goes wrong and follow the steps it gives, then click **Save the Report and Open an Issue…** and attach
+        the file it saves below. MacGameFix reads the game's folder without changing anything in it; the report
+        names this game alone, writes your home folder as `~` and leaves your Mac's name out.
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      description: Its name, and its Steam app id if you know it.
+    validations:
+      required: true
+  - type: dropdown
+    id: runs
+    attributes:
+      label: Where it runs
+      options:
+        - A NotProton runner
+        - A CrossOver bottle
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: CrossOver's or NotProton's, from its About window, and the graphics backend if you chose one (D3DMetal, DXMT, DXVK).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: In your own words. What you see or hear, and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: where
+    attributes:
+      label: Where in the game
+      description: The moment it happens, so it can be reached again. The menu, the chapter or mission, how long into the game.
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you tried
+      description: Settings you changed, another backend, a cable instead of Bluetooth, and what each did.
+  - type: textarea
+    id: report
+    attributes:
+      label: The report
+      description: Drag the .md file the Report tab saved into this box, or paste its contents.
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or a recording
+      description: Drag them here. With the Metal HUD on if the game runs slowly.

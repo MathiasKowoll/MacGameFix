@@ -303,6 +303,53 @@ PY3
 check 'has "$(shareform 4343)" "title: [Settings] Plus 1.5+2.5"' "a plus in a game's name stays a plus"
 unset MACGAMEFIX_PAD_LOG
 
+echo "== the Report tab's probe"
+PG="$SUPPORT/Steam/steamapps/common/Probe Game"
+PFX="$SUPPORT/Steam/steamapps/compatdata/4949/pfx"
+mkdir -p "$PG/ProbeGame/Binaries/Win64" "$PG/Content/Movies" "$PFX/drive_c/users/steamuser/AppData/Local/ProbeGame/Saved/Logs"
+printf '"AppState"\n{\n\t"appid"\t\t"4949"\n\t"name"\t\t"Probe Game"\n\t"installdir"\t\t"Probe Game"\n}\n' \
+  > "$SUPPORT/Steam/steamapps/appmanifest_4949.acf"
+touch "$PFX/user.reg" "$PG/ProbeGame/Binaries/Win64/sl.interposer.dll" "$PG/ProbeGame/Binaries/Win64/libxess.dll" \
+  "$PG/ProbeGame/Binaries/Win64/libScePad.dll" "$PG/ProbeGame/Binaries/Win64/CrashReportClient.exe"
+# A Windows executable as small as one can be: one section holding its imports and a delay-loaded one,
+# and the branch name Unreal builds into its executables.
+/usr/bin/python3 - "$PG/ProbeGame/Binaries/Win64/ProbeGame-Win64-Shipping.exe" <<'PY4'
+import struct, sys
+dlls = [b"d3d12.dll", b"dxgi.dll", b"XINPUT1_4.dll", b"mfplat.dll", b"api-ms-win-core-synch-l1-2-0.dll"]
+delay = [b"hid.dll"]
+va, raw = 0x1000, 0x400
+sec = bytearray(0x1000)
+imp, dly = 0, 20 * (len(dlls) + 1)
+at, rvas = dly + 32 * (len(delay) + 1), []
+for d in dlls + delay:
+    sec[at:at + len(d)] = d; rvas.append(va + at); at += len(d) + 1
+for i in range(len(dlls)): struct.pack_into("<IIIII", sec, imp + 20 * i, 0, 0, 0, rvas[i], 0)
+for j in range(len(delay)): struct.pack_into("<8I", sec, dly + 32 * j, 1, rvas[len(dlls) + j], 0, 0, 0, 0, 0, 0)
+opt = bytearray(240)
+struct.pack_into("<H", opt, 0, 0x20b); struct.pack_into("<Q", opt, 24, 0x140000000); struct.pack_into("<I", opt, 108, 16)
+struct.pack_into("<II", opt, 112 + 8, va + imp, 20 * (len(dlls) + 1))
+struct.pack_into("<II", opt, 112 + 8 * 13, va + dly, 32 * (len(delay) + 1))
+dos = bytearray(64); dos[0:2] = b"MZ"; struct.pack_into("<I", dos, 0x3c, 0x40)
+head = bytes(dos) + struct.pack("<4sHHIIIHH", b"PE\0\0", 0x8664, 1, 0, 0, 0, 240, 0x22) + bytes(opt) \
+    + struct.pack("<8sIIIIIIHHI", b".idata\0\0", 0x1000, va, 0x1000, raw, 0, 0, 0, 0, 0xC0000040)
+image = bytearray(raw); image[:len(head)] = head
+open(sys.argv[1], "wb").write(bytes(image + sec) + "++UE5+Release-5.3".encode("utf-16-le"))
+PY4
+printf '\x1a\x45\xdf\xa3....webm....V_VP9....' > "$PG/Content/Movies/intro.webm"
+printf '\x30\x26\xb2\x75\x8e\x66\xcf\x11....WMV3....' > "$PG/Content/Movies/old.wmv"
+HOST_NAME="$(hostname -s)"
+printf 'LogInit: Computer: %s\nLogInit: Base directory: Z:%s/Library\nPROBE LAST LINE\n' \
+  "$(printf '%s' "$HOST_NAME" | tr '[:lower:]' '[:upper:]')" "$MACGAMEFIX_HOME" \
+  > "$PFX/drive_c/users/steamuser/AppData/Local/ProbeGame/Saved/Logs/ProbeGame.log"
+check 'has "$("$BIN" --probe-games)" "4949 | Probe Game | Steam Play prefix (4949)"' "every Steam game is listed, with the prefix it runs in"
+"$BIN" --probe-report 4949 "$T/probe.md" video
+PR="$(cat "$T/probe.md")"
+check 'has "$PR" "Main executable: ProbeGame/Binaries/Win64/ProbeGame-Win64-Shipping.exe (x64)" && has "$PR" "Graphics: Direct3D 12" && has "$PR" "Engine: Unreal Engine 5.3" && has "$PR" "Controller: XInput, raw HID (reads controllers directly), Sony'"'"'s pad library (libScePad)"' "the main executable, its imports and the delay-loaded one, the engine and the controller libraries"
+check 'has "$PR" "Video: Media Foundation, 1 WebM, VP9 (Content/Movies/intro.webm), 1 ASF, WMV3 (Content/Movies/old.wmv)" || has "$PR" "Video: Media Foundation, 1 ASF, WMV3 (Content/Movies/old.wmv), 1 WebM, VP9 (Content/Movies/intro.webm)"' "the videos by container and codec"
+check 'has "$PR" "Middleware: NVIDIA Streamline, XeSS" && has "$PR" "(and 1 Windows API sets)" && ! has "$PR" "api-ms-win" && has "$PR" "What goes wrong: Videos or cutscenes"' "the middleware, the imports without the API sets, and what goes wrong"
+check 'has "$PR" "ProbeGame.log, its last lines" && has "$PR" "PROBE LAST LINE" && has "$PR" "Z:~/Library" && ! has "$PR" "$MACGAMEFIX_HOME" && ! has "$PR" "$HOST_NAME" && ! has "$PR" "$(printf '%s' "$HOST_NAME" | tr '[:lower:]' '[:upper:]')" && ! has "$PR" "Fake Game"' "the game's own log, the home folder as ~, no Mac name and no other game"
+rm -rf "$PG" "$SUPPORT/Steam/steamapps/compatdata/4949" "$SUPPORT/Steam/steamapps/appmanifest_4949.acf"
+
 echo "== new fixes, asked first"
 # A newer release of the same fake catalog, and the agent pointed at it.
 cp -R "$RES" "$T/res2"
