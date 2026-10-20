@@ -54,6 +54,9 @@ final class Model: ObservableObject {
     @Published var onlyReview = CommandLine.arguments.contains("--review")
     /// The CrossOver apps and NotProton runners the Wine modules can go into.
     @Published var engineRows: [EngineRow] = []
+    /// The CrossOver apps macOS refused to let this app change, by name, from the
+    /// last look; the Wine Modules tab offers App Management for them.
+    @Published var appManagementBlocked: [String] = []
     /// The CrossOver builds the Wine modules' catalog carries modules for.
     @Published var engineBuilds: [EngineBuild] = []
     /// The Game Feel tab's options, observations and presets.
@@ -469,31 +472,38 @@ extension Model {
         return true
     }
 
-    /// Asks for App Management at once when one of these CrossOver apps needs
-    /// it, rather than halfway through an update. Returns the rows that may go on.
+    /// The rows macOS lets this app change. A refused write makes macOS show its
+    /// own notification, so nothing more is asked here: a CrossOver app it refused
+    /// is kept in appManagementBlocked, for the Wine Modules tab's notice.
     func allowedToChange(_ rows: [EngineRow]) -> [EngineRow] {
         let blocked = rows.filter { !Model.mayChange($0.target) }
-        guard !blocked.isEmpty else { return rows }
-        let alert = NSAlert()
-        alert.messageText = "MacGameFix needs App Management"
-        alert.informativeText = "To change the Wine modules in " + blocked.map(\.target.name).joined(separator: ", ")
-            + ", macOS has to let MacGameFix change apps. Turn MacGameFix on in System Settings › Privacy & "
-            + "Security › App Management, then try again. A new build of MacGameFix may need it turned on again."
-            + (rows.count > blocked.count ? " The NotProton runners need no permission and go ahead." : "")
-        alert.addButton(withTitle: "Open App Management…")
-        alert.addButton(withTitle: "Later")
-        if alert.runModal() == .alertFirstButtonReturn,
-           let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles") {
+        let checked = Set(rows.map(\.target.name))
+        appManagementBlocked = appManagementBlocked.filter { !checked.contains($0) } + blocked.map(\.target.name)
+        return rows.filter { row in !blocked.contains { $0.id == row.id } }
+    }
+
+    /// Check Again: each CrossOver app the modules are kept in, or that was refused.
+    func checkAppManagement() {
+        _ = allowedToChange(engineRows.filter {
+            $0.target.app != nil && (engineKept($0) || appManagementBlocked.contains($0.target.name))
+        })
+    }
+
+    func openAppManagement() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles") {
             NSWorkspace.shared.open(url)
         }
-        return rows.filter { row in !blocked.contains { $0.id == row.id } }
     }
 
     /// Installs into, or removes from, each of these CrossOver installs in turn.
     func engineBatch(_ rows: [EngineRow], install: Bool) {
         guard !busy, !rows.isEmpty else { return }
-        let rows = allowedToChange(rows)
-        guard !rows.isEmpty else { return }
+        let allowed = allowedToChange(rows)
+        let refused = rows.filter { row in !allowed.contains { $0.id == row.id } }.map(\.target.name)
+        let needs = refused.isEmpty ? "" : " " + ListFormatter.localizedString(byJoining: refused)
+            + " " + (refused.count == 1 ? "needs" : "need") + " App Management: see Wine Modules."
+        guard !allowed.isEmpty else { status = needs.trimmingCharacters(in: .whitespaces); return }
+        let rows = allowed
         busy = true
         Task {
             var failed = 0
@@ -515,17 +525,18 @@ extension Model {
                 if code != 0 || !took { failed += 1 }
             }
             busy = false
-            status = failed == 0 ? "Done." : "\(failed) of \(rows.count) need attention — see the log in Settings."
+            status = (failed == 0 ? "Done." : "\(failed) of \(rows.count) need attention — see the log in Settings.") + needs
         }
     }
 
     // MARK: The controllers
 
     /// The Game Feel tab is there while a CrossOver has the Wine modules that
-    /// read its options in: those that carry winebus.so.
+    /// read its options in: those that carry winebus.so. An older build of them
+    /// reads them too, so a new build of the modules does not hide the tab.
     var padAvailable: Bool {
         engineRows.contains { row in
-            row.state == .installed && (engineBuilds.first { $0.build == row.target.build }?.files.keys
+            [.installed, .outdated].contains(row.state) && (engineBuilds.first { $0.build == row.target.build }?.files.keys
                 .contains { $0.hasSuffix("unix/winebus.so") } ?? false)
         }
     }
@@ -669,18 +680,14 @@ extension Model {
                     return GameMode.coverage()
                 }.value
             }
-            // Once a launch: App Management for a CrossOver app the modules are kept in,
-            // asked now rather than when an update needs it. On the next turn of the
-            // main loop: run in this one, the alert's modal loop caught the tab bar
-            // halfway through adding Game Feel, and it stayed with every segment
-            // shrunk to its label (seen 2026-10-19; a probe measured 662 px for the
-            // bar against 857 px without the alert, and 857 px with it deferred).
+            // Once a launch: whether macOS lets this app change the CrossOver apps the
+            // modules are kept in. A refusal shows macOS's own notification, and the
+            // Wine Modules tab its notice; no alert of ours (one beside macOS's was
+            // one too many, 2026-10-20).
             if !appManagementChecked {
                 appManagementChecked = true
                 let apps = rows.filter { $0.target.app != nil && engineKept($0) }
-                if !apps.isEmpty {
-                    DispatchQueue.main.async { MainActor.assumeIsolated { _ = self.allowedToChange(apps) } }
-                }
+                if !apps.isEmpty { _ = allowedToChange(apps) }
             }
             // The first time the modules that read them are in, the options start
             // as they were measured; after that they are written once a launch, so
@@ -877,6 +884,24 @@ struct EngineView: View {
 
     var body: some View {
         Form {
+            if !model.appManagementBlocked.isEmpty {
+                Section {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("macOS does not let MacGameFix change "
+                              + ListFormatter.localizedString(byJoining: model.appManagementBlocked) + ".",
+                              systemImage: "lock.shield")
+                        Text("Turn MacGameFix on in System Settings › Privacy & Security › App Management, then "
+                             + "check again. A new build of MacGameFix may need it turned on again.")
+                            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        HStack {
+                            Spacer()
+                            Button("Check Again") { model.checkAppManagement() }
+                            Button("Open App Management…") { model.openAppManagement() }
+                                .keyboardShortcut(.defaultAction)
+                        }
+                    }
+                }
+            }
             Section {
                 ForEach(model.engineRows) { row in EngineSwitch(row: row, model: model) }
                 if model.engineRows.isEmpty {
