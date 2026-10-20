@@ -4,7 +4,7 @@
   "wine": "Wine version 11.17",
   "patches": "wine-11.17",
   "files": {
-    "aarch64-unix/winebus.so": "20f3c8bd6be1b09b79f60b0fdeac632dfe71418052922033c5a17a4cca8386dd",
+    "aarch64-unix/winebus.so": "3fc42597ecd13f0bf8206ac83ea2fa6d4a32cf5b35c6cb437af8370da8b045c9",
     "aarch64-unix/winecoreaudio.so": "22c3e27fea6dcb1bdb03786e76b5c3d6e046956094e816d04890714c2874a178",
     "aarch64-windows/hidclass.sys": "44830fb591cff33f6d9bfa3e0705c34b1f35cf180299baff139605712e6e2c3d",
     "aarch64-windows/mmdevapi.dll": "8efa718e02365f08f2b44bc45fb3ba0bf4373a6f6485a2b3fb558e091b000e61",
@@ -15,7 +15,7 @@
     "aarch64-windows/xinput1_4.dll": "2e4e078afdb5e907124c132d50b7e866291ea6a70d341f563c10ea951a7a6b8a",
     "aarch64-windows/xinput9_1_0.dll": "db05eb31f3feece046e487297efcf2110cb5e1bf4fee9e9175f3bbb7831ed297",
     "aarch64-windows/xinputuap.dll": "ebb8e95ee1452d48b33aa6f8ef785c398bdd00aa8a08cbe30b9ce3be2253ac07",
-    "x86_64-unix/winebus.so": "84ca64f05edbabad6303f6a4d3ae1cc0d4714dc0144b9b2ce57a034f15268e2d",
+    "x86_64-unix/winebus.so": "fc161e2fe37e4b32c53fcfd1d54eeee57da616ee74aff7d0a04a8f8186f01394",
     "x86_64-unix/winecoreaudio.so": "c48d657a11a7d17f588f50a8f08094100d16600dbd8645e0da90f26ac1a85950",
     "x86_64-windows/hidclass.sys": "981e0d2c37316c0efacdc819343bb0e0f518b761ac45d2e62d883cc500b5171a",
     "x86_64-windows/mmdevapi.dll": "ee554881b3d3c9835e28bcd985c91cb408aa119fdd1ce5e53e747a44f3a87a89",

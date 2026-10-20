@@ -51,6 +51,12 @@ with winevideo 0.5.0's patches; the `qasf` change is
 build used, are pinned in `build/source-inventory-0.5.0.json` and published in
 `build/patches/` at <https://github.com/Jfishin/winevideo>.
 
+Every MacGameFix release from 1.5.3 on also attaches
+`ng3-winevideo-0.5.0-sources.tar.xz`: winevideo 0.5.0's patches, its source
+inventory, its README and its licence texts, as its own app ships them. The Wine
+tree they apply to is CodeWeavers' `crossover-sources-26.2.0.tar.gz`, sha256
+`3846ae094dd49c073467bb2b5e6e17d5bacaebcfab4b6dd2af3f132c64cad6cf`.
+
 The MacGameFix app carries these binaries, this notice and
 `install-ng3-fix.sh`, which puts them into the game's prefix: a CrossOver
 bottle or a Steam Play prefix.

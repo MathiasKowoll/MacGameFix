@@ -188,10 +188,15 @@ Measured later on 2026-10-19, `0006`-`0008`, an Edge over Bluetooth, Steam Input
   asked 32 ms of buffer on a cable and 30 ms over Bluetooth, and kept 21 ms and
   10-30 ms waiting there. Over Bluetooth the haptics stream restarted 54 times in two
   minutes, each restart a mode switch, 30 ms and the pad's audio set up again; kept
-  open, the writer's queue then sat at its 170 ms, the link carrying a little less
-  than the haptics need. A block now takes up to 12 frames more past 32 ms of queue,
-  by interpolation; in a simulation the queue stays at 15-40 ms with the link up to
-  10 % short (not played yet).
+  open, the writer's queue then sat at its 170 ms. The link was the cause: the game
+  sends motor values all the time beside its haptics, each one a control report, up
+  to ~18 a second, and while haptics stream the writer clears the motors from them,
+  so they were copies of one another in the room the haptics need (46.875 of the
+  link's ~65 reports a second), and the haptics got about 40. While haptics stream a
+  copy is no longer written, and the queue keeps 64 ms at most, losing its oldest
+  frames past that. Played again with a DualSense Edge: the queue held 29 ms on
+  average and 34 at most, 94 haptics reports went out every 2 s, nothing was
+  dropped, and the haptics came with the action.
 - MacGameFix's thirty-second tries: the haptics test and every trigger effect,
   with the bytes the modules write, felt over Bluetooth; no macOS permission asked.
 

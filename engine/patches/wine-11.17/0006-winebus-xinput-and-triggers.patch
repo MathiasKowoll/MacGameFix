@@ -27,7 +27,7 @@
  };
  
  /* MacGameFix: a DualSense or DualSense Edge on Bluetooth, shown to games as the
-@@ -247,6 +254,13 @@
+@@ -247,7 +254,22 @@
      signed char fifo[512][2];  /* haptics at 3 kHz, channels 3 and 4 */
      unsigned int fifo_head, fifo_count;
      UInt64 input_at, audio_at, nonzero_at;
@@ -38,10 +38,50 @@
 +    double synth_phase[2];
 +    float synth_level[2];
 +    UInt64 synth_at;
++    BYTE control_last[78];     /* the last report 0x31 written, to skip its copies */
++    BOOL control_known;
++    UInt32 pcm_sent, control_sent, control_skipped, frames_dropped; /* per 2 s, for diagnostics */
  };
++
++/* The most haptics the queue holds: 192 frames, 64 ms. A link that cannot carry
++ * them all loses the oldest frames instead of playing everything later; with its
++ * whole 512 frames the queue sat at 170 ms in Uncharted. */
++#define BT_QUEUE_LIMIT 192
  
  static void pad_game(char *id, size_t size);
-@@ -540,6 +554,9 @@
+ 
+@@ -476,6 +498,19 @@
+         report[6] = pad->motors[1];
+     }
+     report[41] &= ~4;
++    /* While haptics stream, the same report again is not written. The game's
++     * motor values are cleared from it there, and Uncharted sends them all the
++     * time: its copies took up to 18 of the link's ~65 reports a second, and the
++     * haptics, which need 46.875, got about 40. The sequence number and the CRC
++     * are not compared. */
++    if (audio && pad->control_known && !memcmp(report + 2, pad->control_last + 2, sizeof(report) - 6))
++    {
++        pad->control_skipped++;
++        return;
++    }
++    memcpy(pad->control_last, report, sizeof(report));
++    pad->control_known = TRUE;
++    pad->control_sent++;
+     bt_write(pad, report, sizeof(report));
+ }
+ 
+@@ -531,15 +566,19 @@
+         pthread_mutex_lock(&pad->lock);
+         for (i = 0; i < n; i++)
+         {
+-            if (pad->fifo_count == ARRAY_SIZE(pad->fifo))
++            if (pad->fifo_count >= BT_QUEUE_LIMIT)
+             {
+                 pad->fifo_head = (pad->fifo_head + 1) % ARRAY_SIZE(pad->fifo);
+                 pad->fifo_count--;
++                pad->frames_dropped++;
+             }
+             memcpy(pad->fifo[(pad->fifo_head + pad->fifo_count++) % ARRAY_SIZE(pad->fifo)], packet.samples + 2 * i, 2);
              nonzero |= packet.samples[2 * i] || packet.samples[2 * i + 1];
          }
          pad->audio_at = mach_absolute_time();
@@ -51,7 +91,7 @@
          if (nonzero) pad->nonzero_at = pad->audio_at;
          pthread_mutex_unlock(&pad->lock);
          semaphore_signal(pad->wake);
-@@ -547,10 +564,44 @@
+@@ -547,10 +586,44 @@
      return NULL;
  }
  
@@ -100,7 +140,7 @@
  static void *bt_writer(void *arg)
  {
      struct bt_pad *pad = arg;
-@@ -558,9 +609,10 @@
+@@ -558,9 +631,10 @@
      thread_time_constraint_policy_data_t policy;
      BYTE payload[47];
      signed char samples[128];
@@ -113,7 +153,7 @@
  
      policy.period = (uint32_t)bt_ticks(pcm_period);
      policy.computation = (uint32_t)bt_ticks(0.001);
-@@ -580,9 +632,14 @@
+@@ -580,9 +654,14 @@
              bt_wait_until(pad, now + bt_ticks(0.020));
              continue;
          }
@@ -131,7 +171,7 @@
          if ((control = pad->dirty && now >= next_control))
          {
              memcpy(payload, pad->pending, sizeof(payload));
-@@ -595,12 +652,15 @@
+@@ -595,12 +674,15 @@
              bt_control(pad, payload, audio || streaming);
              next_control = mach_absolute_time() + bt_ticks(audio || streaming ? streaming_gap : 0.016);
          }
@@ -148,7 +188,7 @@
          }
          if (streaming && mach_absolute_time() >= next_pcm)
          {
-@@ -608,18 +668,57 @@
+@@ -608,18 +690,61 @@
              if (mach_absolute_time() > next_pcm + bt_ticks(0.040)) next_pcm = mach_absolute_time();
              memset(samples, 0, sizeof(samples));
              pthread_mutex_lock(&pad->lock);
@@ -165,12 +205,15 @@
 +                pad->queue_count++;
 +                if (mach_absolute_time() - pad->queue_since > bt_ticks(2.0))
 +                {
-+                    pad_log("the Bluetooth haptics queue holds %u ms on average, %u ms at most\n",
-+                            pad->queue_sum / pad->queue_count * 1000 / 3000, pad->queue_max * 1000 / 3000);
++                    pad_log("the Bluetooth haptics queue holds %u ms on average, %u ms at most; in 2 s %u haptics "
++                            "and %u control reports written, %u control copies skipped, %u ms of haptics dropped\n",
++                            pad->queue_sum / pad->queue_count * 1000 / 3000, pad->queue_max * 1000 / 3000,
++                            pad->pcm_sent, pad->control_sent, pad->control_skipped, pad->frames_dropped * 1000 / 3000);
 +                    pad->queue_max = pad->queue_sum = pad->queue_count = 0;
++                    pad->pcm_sent = pad->control_sent = pad->control_skipped = pad->frames_dropped = 0;
 +                    pad->queue_since = mach_absolute_time();
 +                }
-+            }
+             }
 +            /* The link cannot always carry the 46.875 reports a second the haptics
 +             * need, and a stream that no longer stops on silence has nothing else
 +             * to empty the queue: it filled to its 170 ms in Uncharted. Past 96
@@ -200,10 +243,11 @@
 +                    pad->fifo_head = (pad->fifo_head + 1) % ARRAY_SIZE(pad->fifo);
 +                    pad->fifo_count--;
 +                }
-             }
++            }
              pthread_mutex_unlock(&pad->lock);
 +            if (!n && synth) bt_synth(pad, heavy, light, samples);
              bt_pcm(pad, index++, samples);
++            pad->pcm_sent++;
              next_pcm += bt_ticks(pcm_period);
 -            if (!audio)
 +            if (!audio && !synth)
@@ -212,7 +256,7 @@
                  /* Let the silent tail reach the actuators, then rumble again. */
                  mach_wait_until(mach_absolute_time() + bt_ticks(0.030));
                  pthread_mutex_lock(&pad->lock);
-@@ -680,6 +779,9 @@
+@@ -680,6 +805,9 @@
      pad->device = device;
      pad->edge = pid == DS_EDGE_PID;
      pad->physical_edge = physical_edge;
@@ -222,7 +266,7 @@
      pad->location = location;
      pad->sock = -1;
      pthread_mutex_init(&pad->lock, NULL);
-@@ -781,6 +883,9 @@
+@@ -781,6 +909,9 @@
      return dwNum;
  }
  
@@ -232,7 +276,7 @@
  static void handle_IOHIDDeviceIOHIDReportCallback(void *context,
          IOReturn result, void *sender, IOHIDReportType type,
          uint32_t reportID, uint8_t *report, CFIndex report_length)
-@@ -800,13 +905,19 @@
+@@ -800,13 +931,19 @@
              impl->bt->input_at = mach_absolute_time();
              usb[0] = 0x01;
              memcpy(usb + 1, report + 2, 63);
@@ -252,7 +296,7 @@
  static void iohid_device_destroy(struct unix_device *iface)
  {
  }
-@@ -823,6 +934,7 @@
+@@ -823,6 +960,7 @@
  
      IOHIDDeviceRegisterInputReportCallback(impl->device, impl->buffer, length, handle_IOHIDDeviceIOHIDReportCallback, iface);
      if (impl->bt) bt_pad_start(impl->bt);
@@ -260,7 +304,7 @@
      return STATUS_SUCCESS;
  }
  
-@@ -830,40 +942,455 @@
+@@ -830,40 +968,455 @@
  {
      struct iohid_device *impl = impl_from_unix_device(iface);
  
@@ -623,7 +667,7 @@
 +                REPORT_COUNT(1, 1),
 +                FEATURE(1, Data|Var|Abs|Null),
 +            END_COLLECTION,
-+
+ 
 +            USAGE(1, HID_USAGE_HAPTICS_WAVEFORM_CUTOFF_TIME),
 +            UNIT(2, 0x1001), /* seconds */
 +            UNIT_EXPONENT(1, -3), /* 10^-3 */
@@ -634,7 +678,7 @@
 +            FEATURE(1, Data|Var|Abs),
 +            UNIT(1, 0),
 +            UNIT_EXPONENT(1, 0),
- 
++
 +            REPORT_ID(1, XINPUT_OUTPUT_ID),
 +            USAGE(1, HID_USAGE_HAPTICS_INTENSITY),
 +            LOGICAL_MINIMUM(4, 0x00000000),
@@ -729,7 +773,7 @@
      return STATUS_SUCCESS;
  }
  
-@@ -872,10 +1399,36 @@
+@@ -872,10 +1425,36 @@
      IOReturn result;
      struct iohid_device *impl = impl_from_unix_device(iface);
  
@@ -768,7 +812,7 @@
      /* How the game drives the pad, said once each, for MacGameFix's list of what
       * each game does: the rumble motors, trigger effects, the motor power. */
      if (output)
-@@ -943,6 +1496,7 @@
+@@ -943,6 +1522,7 @@
              copy[37] = 0;
              report = copy;
          }
@@ -776,7 +820,7 @@
      }
      if (impl->bt && output)
      {
-@@ -951,7 +1505,8 @@
+@@ -951,7 +1531,8 @@
          io->Status = STATUS_SUCCESS;
          return;
      }
@@ -786,7 +830,7 @@
      if (result == kIOReturnSuccess)
      {
          io->Information = packet->reportBufferLen;
-@@ -970,6 +1525,36 @@
+@@ -970,6 +1551,36 @@
      CFIndex report_length = packet->reportBufferLen;
      struct iohid_device *impl = impl_from_unix_device(iface);
  
@@ -823,7 +867,7 @@
      ret = IOHIDDeviceGetReport(impl->device, kIOHIDReportTypeFeature, packet->reportId,
                                 packet->reportBuffer, &report_length);
      /* Which of the pad's stored settings a game reads, once per report. */
-@@ -1000,6 +1585,13 @@
+@@ -1000,6 +1611,13 @@
      IOReturn result;
      struct iohid_device *impl = impl_from_unix_device(iface);
  
@@ -837,7 +881,7 @@
      /* A wired client turns the pad's radio off once it has the pad on the
       * cable (feature 0x08, subcommand 2). Here the radio is the cable. */
      if (impl->bt && packet->reportId == 0x08 && packet->reportBufferLen == 48 &&
-@@ -1126,9 +1718,13 @@
+@@ -1126,9 +1744,13 @@
      impl->sony = desc.vid == SONY_VID && (desc.pid == DUALSENSE_PID || desc.pid == DS_EDGE_PID);
      impl->edge = impl->sony && (desc.pid == DS_EDGE_PID || as_standard);
      impl->as_standard = as_standard;
