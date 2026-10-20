@@ -100,6 +100,14 @@ Steam and NotProton give it (`SteamAppId`, `SteamGameId`,
 CrossOver bottle gave neither on 2026-10-19 (`game=-` in the log), so in a bottle
 only `pad.conf` applies.
 
+When they are read: `winebus.so` reads every line but the haptics' strength once,
+when its `winedevice.exe` starts with the prefix. Under NotProton every launch
+starts the game's own prefix, so a change applies from the game's next start; in
+a CrossOver bottle the prefix starts with Steam or the game opened there and
+stays up, so a change waits until Steam is quit there and opened again. The
+haptics' strength is read by `winecoreaudio.so`, in the game, each time a game
+starts its haptics.
+
 | Line | Effect |
 |---|---|
 | `bluetooth=wired` | A Bluetooth pad shown as wired (`0004`). |

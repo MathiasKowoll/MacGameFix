@@ -1348,9 +1348,12 @@ struct PadGlobalSheet: View {
                 } header: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Every game")
-                        Text("The Wine modules read these when a game starts. A game's own settings win, and so do "
-                             + "its suggested ones.")
+                        Text("The Wine modules read these when a game starts; in CrossOver, when Steam or the game "
+                             + "opens the bottle, so make a change before you open it there, or quit and open it "
+                             + "again. The haptics' strength is read each time a game starts its haptics. A game's "
+                             + "own settings win, and so do its suggested ones.")
                             .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 PadHapticsSection(gain: gain, own: { _ in false }) {
@@ -1427,6 +1430,10 @@ struct PadGameSheet: View {
                             Text("In blue, or marked with a dot, what is this game's own; the rest follows "
                                  + (preset == nil ? "every game's." : "the suggested settings, then every game's."))
                                 .font(.caption).foregroundStyle(.secondary)
+                            Text("They apply under NotProton, from the game's next start. A CrossOver bottle does not "
+                                 + "tell the modules which game runs, so there every game's settings apply.")
+                                .font(.caption).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     .padding(.bottom, 4)
