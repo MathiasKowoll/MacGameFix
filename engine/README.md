@@ -218,8 +218,12 @@ Measured later on 2026-10-19, `0006`-`0008`, an Edge over Bluetooth, Steam Input
   SDL 2 asks for the old emulation at half strength (0x3f to 0x7f), the improved one at twice that: 34 rumbles
   in 73 s, none longer than 239 ms, the motors on 8 % of the time, and it felt right too. With a standard DualSense (firmware 0x0630) the same game asks for the
   improved emulation at full strength (byte 39 0x04, up to 0xff).
+  Onimusha with `rumble=haptics` off, the same Edge over Bluetooth: XInput's rumble, asked for the old way,
+  gets the improved one at the strength the game wrote (the same motor values as with the actuators on): 82
+  rumbles in 218 s, 154 ms each at the median and 857 at most, the motors on 7 % of the time, no haptics
+  stream and nothing dropped.
 
-Not played yet: the FEX (arm64) side, `xinput=pad` with God of War Ragnarök, the tries on a cable, and the improved rumble emulation.
+Not played yet: the FEX (arm64) side, `xinput=pad` with God of War Ragnarök, the tries on a cable, and the improved rumble emulation on a cable.
 
 ## Modules
 
