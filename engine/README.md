@@ -54,7 +54,7 @@ library. Three more patches, from MacGameVideoFix's `mgvf-0010`, `0011`, `0012`,
 
 | Patch | Module | Change |
 |---|---|---|
-| `0006-winebus-xinput-and-triggers.patch` | `winebus.so` | With `xinput=rumble`, the pad's descriptor is left as it is and one more top-level collection follows it: a multi-axis controller with no axis and no button, and two haptics collections, rumble and buzz (winebus's own template), on report ids the DualSense and the Edge do not use (output `0x03`, feature `0x04`, input `0x06`). What `xinput` writes there becomes the pad's `0x02` with the motors (flag0 `0x01`\|`0x02`), handled as the game's own output: the Edge's length, the motor power, the Bluetooth writer. With `trigger_r2=` or `trigger_l2=`, an effect on that trigger, written when the pad starts and kept when a game writes the trigger off; a game that writes an effect of its own owns that trigger from then on. Stopping releases them, and a marker in `/tmp/macgamefix-<uid>` lets the next start release what a torn-down Wine left set. It also changes `0004`'s Bluetooth writer: the haptics stream stays open through silences while the game sends and has no motor values, the queue is held near 32 ms, and with `rumble=haptics` the motor values play on the actuators. |
+| `0006-winebus-xinput-and-triggers.patch` | `winebus.so` | With `xinput=rumble`, the pad's descriptor is left as it is and one more top-level collection follows it: a multi-axis controller with no axis and no button, and two haptics collections, rumble and buzz (winebus's own template), on report ids the DualSense and the Edge do not use (output `0x03`, feature `0x04`, input `0x06`). What `xinput` writes there becomes the pad's `0x02` with the motors (flag0 `0x01`\|`0x02`), handled as the game's own output: the Edge's length, the motor power, the Bluetooth writer. With `trigger_r2=` or `trigger_l2=`, an effect on that trigger, written when the pad starts and kept when a game writes the trigger off; a game that writes an effect of its own owns that trigger from then on. Stopping releases them, and a marker in `/tmp/macgamefix-<uid>` lets the next start release what a torn-down Wine left set. It also changes `0004`'s Bluetooth writer: the haptics stream stays open through silences while the game sends and has no motor values, the queue is held near 32 ms, and with `rumble=haptics` the motor values play on the actuators. A rumble asked for in the old emulation (flag0 `0x01`) is given the improved one of firmware 2.24 (byte 39 `0x04`), as SDL 3 asks for it, on a pad that takes it: every Edge, and a DualSense from 2.24 (feature report `0x20`, bytes 44 and 45). SDL 2, 2.32 included, compares the Edge's own firmware number (`0x0217` on one here) with `0x0224` and asks it for the old one at half strength, so to an Edge the game is shown as an Edge it goes at twice what was written, up to `0xff`; Sony's library and winebus's own XInput rumble keep their strength. Over Bluetooth the writer sets the bits, out of audio mode only. |
 | `0008-xinput-sony-order.patch` | `xinput1_1` to `xinput1_4`, `xinput9_1_0`, `xinputuap` (one source) | A pad with Sony's vendor id and its own descriptor (an unsigned X axis; Wine's SDL descriptor has a signed one) is read in Sony's order: the right stick on Z and Rz, the triggers on Rx and Ry, the buttons as they sit on the face (Square, Cross, Circle, Triangle, ... PS as Guide), the hat counted from its own minimum (0..7, 8 centred), and Y turned over for both sticks, as winexinput turns it over for its own report. |
 | `0007-hidclass-xinput.patch` | `hidclass.sys` | A gamepad, joystick or multi-axis collection with a haptics collection is also offered under the interface `xinput` enumerates. One that carries motors and nothing else is offered to `xinput` only, and to no raw input: it has the pad's vendor and product ids, and Sony's library, which finds its pad by walking the HID interface, would see two. |
 
@@ -210,10 +210,22 @@ Measured later on 2026-10-19, `0006`-`0008`, an Edge over Bluetooth, Steam Input
 - `rumble=haptics`, a DualSense Edge over Bluetooth with Game Mode, NotProton (2026-10-20). Onimusha:
   Way of the Sword rumbles through XInput and sets the motors back to 0 between hits: the stream ran in
   bursts, 16 to 64 reports in a 2 s window, with nothing queued and nothing dropped, and it felt right.
-  Mortal Kombat 1 writes the pad's motors itself and never set them back to 0 in a fight: the stream ran
-  without a break for 90 s, so the tone played the whole fight.
+  In Mortal Kombat 1 the stream ran without a break for 90 s, the tone the whole fight. That was ours: the game
+  (SDL 2) ends a rumble with a report that has no rumble bit, which puts a pad on a cable back to audio
+  haptics, and the Bluetooth writer kept the last motor values. Since 0006 such a report ends the rumble over
+  Bluetooth too: played again with a standard DualSense over Bluetooth, 15 rumbles in 38 s, each about 250 ms
+  (one a hit), the motors on 9 % of the time, and it felt right. With a DualSense Edge over Bluetooth, which
+  SDL 2 asks for the old emulation at half strength (0x3f to 0x7f), the improved one at twice that: 34 rumbles
+  in 73 s, none longer than 239 ms, the motors on 8 % of the time, and it felt right too. On a cable, the same Edge: the game wrote
+  0x19 to 0x7f, the old way, and each rumble went out the improved way at twice that; 17 rumbles in 74 s, 237 ms
+  each at the median and 745 at most, the motors on 6 % of the time, each one ended by SDL's stop. With a standard DualSense (firmware 0x0630) the same game asks for the
+  improved emulation at full strength (byte 39 0x04, up to 0xff).
+  Onimusha with `rumble=haptics` off, the same Edge over Bluetooth: XInput's rumble, asked for the old way,
+  gets the improved one at the strength the game wrote (the same motor values as with the actuators on): 82
+  rumbles in 218 s, 154 ms each at the median and 857 at most, the motors on 7 % of the time, no haptics
+  stream and nothing dropped.
 
-Not played yet: the FEX (arm64) side, `xinput=pad` with God of War Ragnarök, and the tries on a cable.
+Not played yet: the FEX (arm64) side, `xinput=pad` with God of War Ragnarök and the tries on a cable.
 
 ## Modules
 
