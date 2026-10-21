@@ -210,8 +210,11 @@ Measured later on 2026-10-19, `0006`-`0008`, an Edge over Bluetooth, Steam Input
 - `rumble=haptics`, a DualSense Edge over Bluetooth with Game Mode, NotProton (2026-10-20). Onimusha:
   Way of the Sword rumbles through XInput and sets the motors back to 0 between hits: the stream ran in
   bursts, 16 to 64 reports in a 2 s window, with nothing queued and nothing dropped, and it felt right.
-  Mortal Kombat 1 writes the pad's motors itself and never set them back to 0 in a fight: the stream ran
-  without a break for 90 s, so the tone played the whole fight.
+  In Mortal Kombat 1 the stream ran without a break for 90 s, the tone the whole fight. That was ours: the game
+  (SDL 2) ends a rumble with a report that has no rumble bit, which puts a pad on a cable back to audio
+  haptics, and the Bluetooth writer kept the last motor values. Since 0006 such a report ends the rumble over
+  Bluetooth too (not played yet). With a standard DualSense (firmware 0x0630) the same game asks for the
+  improved emulation at full strength (byte 39 0x04, up to 0xff).
 
 Not played yet: the FEX (arm64) side, `xinput=pad` with God of War Ragnarök, the tries on a cable, and the improved rumble emulation.
 
