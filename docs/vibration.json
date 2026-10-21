@@ -1,0 +1,357 @@
+{
+  "about": "The games played for vibration with a DualSense or DualSense Edge on a Mac. A game is added after a session, from what was felt and what the Wine modules logged, never from what it should do. Each connection has its own result. docs/vibration.md is made from this file by tools/vibration-md.py.",
+  "updated": "2026-10-21",
+  "stack": "MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 27), Steam Input off for the game, unless a result says otherwise.",
+  "results": {
+    "works": "Works",
+    "partly": "Partly",
+    "not-recorded": "Played; how it felt was not recorded",
+    "not-played": "Not played yet",
+    "no-vibration": "Does not vibrate",
+    "connection-not-recorded": "Played; which connection was not recorded"
+  },
+  "games": [
+    {
+      "name": "Marvel's Spider-Man 2",
+      "steamAppId": "2651280",
+      "status": "works",
+      "technology": "Its own DualSense support, over raw HID. It plays its haptics as audio on the pad's audio output, which it finds by the audio endpoint's container.",
+      "vibration": "Haptics",
+      "features": [
+        "Haptics",
+        "Adaptive triggers",
+        "Touchpad"
+      ],
+      "description": "Insomniac's PC port drives the pad itself, as on a PS5: haptics on the actuators and adaptive triggers, on a cable and over Bluetooth.",
+      "connections": {
+        "cable": {
+          "result": "works",
+          "pads": "DualSense Edge and DualSense",
+          "date": "2026-10-19"
+        },
+        "bluetooth": {
+          "result": "works",
+          "pads": "DualSense Edge and DualSense",
+          "date": "2026-10-19",
+          "notes": "The same as on a cable."
+        }
+      },
+      "settings": "Suggested: full motor power on the Edge and the Edge's haptics at 2x, on a cable and over Bluetooth.",
+      "details": [
+        "It claims the motor power at 0x00 in every report for a standard DualSense, never for an Edge, which keeps its own stored reduction. With the power at full and the haptics at 2x the Edge felt like a standard DualSense.",
+        "It sends the same haptic signal to both pads (a level meter showed the same peaks and RMS for the same moments).",
+        "It reads feature reports 0x09, 0x20 and 0x05 only.",
+        "The touchpad moved the in-game camera (2026-10-20)."
+      ]
+    },
+    {
+      "name": "F1 23",
+      "steamAppId": "2108330",
+      "status": "works",
+      "technology": "Sony's PC library (libScePad), which finds the pad over HID and plays its haptics on the pad's audio output.",
+      "vibration": "Haptics",
+      "features": [
+        "Haptics",
+        "Adaptive triggers"
+      ],
+      "description": "Codemasters' game uses Sony's own library for the pad: haptics and trigger effects on a cable and over Bluetooth, with the Edge shown as a standard DualSense.",
+      "connections": {
+        "cable": {
+          "result": "works",
+          "pads": "DualSense Edge shown as a DualSense, and DualSense",
+          "date": "2026-10-19",
+          "notes": "In a CrossOver Preview bottle an Edge seen as an Edge worked too: buttons, haptics and triggers."
+        },
+        "bluetooth": {
+          "result": "works",
+          "pads": "DualSense Edge shown as a DualSense, and DualSense; both at once",
+          "date": "2026-10-19",
+          "notes": "A standard DualSense felt jerky at 1x and steady at 2x."
+        }
+      },
+      "settings": "Suggested: the Edge shown as a standard DualSense, and a DualSense's haptics at 2x over Bluetooth. Steam Input off: with it on, the haptics over Bluetooth started and stopped.",
+      "details": [
+        "Under NotProton, as an Edge, the game assigned no buttons (\"No preset control scheme\", 2026-10-15).",
+        "The level meter showed the same continuous signal leaving the modules with Steam Input on or off."
+      ]
+    },
+    {
+      "name": "FINAL FANTASY VII REBIRTH",
+      "steamAppId": "2909400",
+      "status": "works",
+      "technology": "Its own DualSense support, over raw HID; its haptics play as audio on the pad's audio output.",
+      "vibration": "Haptics",
+      "features": [
+        "Haptics"
+      ],
+      "description": "Square Enix's PC port plays its haptics on the pad's actuators. Played over Bluetooth: \"works very well\".",
+      "connections": {
+        "cable": {
+          "result": "not-played"
+        },
+        "bluetooth": {
+          "result": "works",
+          "date": "2026-10-21",
+          "notes": "\"Works very well.\" The modules logged the game keeping 20 ms waiting in the Bluetooth haptics output."
+        }
+      },
+      "details": [
+        "The modules saw its haptics as audio and its motor power claim."
+      ]
+    },
+    {
+      "name": "CONTROL Resonant",
+      "steamAppId": "3669870",
+      "status": "works",
+      "technology": "Its own DualSense support, over raw HID; its haptics play as audio on the pad's audio output.",
+      "vibration": "Haptics",
+      "features": [
+        "Haptics",
+        "Adaptive triggers"
+      ],
+      "description": "Remedy's game drives the pad itself: haptics and trigger effects, on a cable and over Bluetooth.",
+      "connections": {
+        "cable": {
+          "result": "works",
+          "pads": "DualSense Edge and DualSense",
+          "date": "2026-10-19"
+        },
+        "bluetooth": {
+          "result": "works",
+          "pads": "DualSense Edge",
+          "date": "2026-10-19"
+        }
+      }
+    },
+    {
+      "name": "UNCHARTED: Legacy of Thieves Collection",
+      "steamAppId": "1659420",
+      "status": "works",
+      "technology": "Not analysed. It plays haptics as audio and sends motor values beside them.",
+      "vibration": "Haptics",
+      "features": [
+        "Haptics",
+        "Adaptive triggers"
+      ],
+      "description": "Its haptics came with the action over Bluetooth once the modules stopped writing copies of its motor reports.",
+      "connections": {
+        "cable": {
+          "result": "not-recorded",
+          "date": "2026-10-19",
+          "notes": "The haptics output was open: the game asked for 32 ms of buffer."
+        },
+        "bluetooth": {
+          "result": "works",
+          "pads": "DualSense Edge",
+          "date": "2026-10-19",
+          "notes": "The queue held 29 ms on average and 34 at most; 94 haptics reports every 2 s, nothing dropped."
+        }
+      },
+      "details": [
+        "It sends motor values all the time beside its haptics, up to about 18 control reports a second. Over Bluetooth those copies took the room the haptics need, and the haptics restarted 54 times in two minutes, until the modules stopped writing a copy while haptics stream."
+      ]
+    },
+    {
+      "name": "Beast of Reincarnation",
+      "steamAppId": "2001760",
+      "status": "works",
+      "technology": "Its own DualSense support, over raw HID, for the haptics and triggers; it also rumbles through XInput.",
+      "vibration": "Haptics",
+      "features": [
+        "Haptics",
+        "Adaptive triggers",
+        "XInput rumble"
+      ],
+      "description": "Haptics and trigger effects on a cable and over Bluetooth. Its XInput rumble with the modules' XInput option is not played yet.",
+      "connections": {
+        "cable": {
+          "result": "works",
+          "pads": "DualSense Edge and DualSense",
+          "date": "2026-10-18",
+          "notes": "Haptics, on an earlier build of the modules."
+        },
+        "bluetooth": {
+          "result": "works",
+          "pads": "DualSense Edge",
+          "date": "2026-10-19",
+          "notes": "Haptics and triggers, in a CrossOver Preview bottle. Its motors rumbled only with Steam Input on, before the modules had an XInput rumble."
+        }
+      }
+    },
+    {
+      "name": "Ghost of Tsushima",
+      "steamAppId": "2215430",
+      "status": "works",
+      "technology": "Its own DualSense support, over raw HID; its haptics play as audio on the pad's audio output.",
+      "vibration": "Haptics",
+      "features": [
+        "Haptics"
+      ],
+      "description": "Haptics on a cable with both pads.",
+      "connections": {
+        "cable": {
+          "result": "works",
+          "pads": "DualSense Edge and DualSense",
+          "date": "2026-10-18",
+          "notes": "On an earlier build of the modules."
+        },
+        "bluetooth": {
+          "result": "not-played"
+        }
+      }
+    },
+    {
+      "name": "Returnal",
+      "steamAppId": "1649240",
+      "status": "works",
+      "technology": "Sony's PC library (libScePad).",
+      "vibration": "Haptics",
+      "features": [
+        "Haptics"
+      ],
+      "description": "Haptics on a cable with both pads.",
+      "connections": {
+        "cable": {
+          "result": "works",
+          "pads": "DualSense Edge and DualSense",
+          "date": "2026-10-18",
+          "notes": "On an earlier build of the modules."
+        },
+        "bluetooth": {
+          "result": "not-played"
+        }
+      }
+    },
+    {
+      "name": "Mortal Shell II",
+      "steamAppId": "2584270",
+      "status": "works",
+      "technology": "Its own DualSense support, over raw HID: it drives the motors and the trigger effects itself.",
+      "vibration": "Motors",
+      "features": [
+        "Motors",
+        "Adaptive triggers"
+      ],
+      "description": "Its rumble and trigger effects kept working with the modules on a cable.",
+      "connections": {
+        "cable": {
+          "result": "works",
+          "date": "2026-10-18",
+          "notes": "On an earlier build of the modules."
+        },
+        "bluetooth": {
+          "result": "not-played"
+        }
+      }
+    },
+    {
+      "name": "Mortal Kombat 1",
+      "steamAppId": "1971870",
+      "status": "works",
+      "technology": "SDL 2 (SDL2.dll 2.32.0), which drives the pad over HID: the rumble as the pad's emulation of motors.",
+      "vibration": "Motors",
+      "features": [
+        "Motors"
+      ],
+      "description": "Each rumble ends with its hit, on a cable and over Bluetooth, since the Wine modules of 2026-10-20.",
+      "connections": {
+        "cable": {
+          "result": "works",
+          "pads": "DualSense Edge",
+          "date": "2026-10-20",
+          "notes": "17 rumbles in 74 s, the motors on 6 % of the time, each ended by SDL's stop."
+        },
+        "bluetooth": {
+          "result": "works",
+          "pads": "DualSense Edge and DualSense",
+          "date": "2026-10-20",
+          "notes": "15 rumbles in 38 s with a DualSense, 34 in 73 s with an Edge, none longer than about 250 ms."
+        }
+      },
+      "settings": "Rumble on the haptic actuators is optional over Bluetooth.",
+      "details": [
+        "SDL 2 asks an Edge (firmware 0x0217) for the old emulation at half strength and a DualSense from firmware 2.24 for the improved one at full; the modules give the Edge the improved one at twice what SDL wrote, as SDL 3 would.",
+        "SDL ends a rumble with a report that has no rumble bit; over Bluetooth the modules missed it until 2026-10-20, and the rumble went on for the whole fight."
+      ]
+    },
+    {
+      "name": "Onimusha: Way of the Sword",
+      "steamAppId": "2638890",
+      "status": "works",
+      "technology": "XInput only: its executable reads no DualSense, and the store does not list the DualSense for it. Game Feel gives it the pad as an XInput controller.",
+      "vibration": "XInput",
+      "features": [
+        "XInput rumble",
+        "Trigger effects from Game Feel"
+      ],
+      "description": "With the pad shown as an XInput controller, its rumble plays on the motors, or on the haptic actuators if chosen.",
+      "connections": {
+        "cable": {
+          "result": "not-played"
+        },
+        "bluetooth": {
+          "result": "works",
+          "pads": "DualSense Edge",
+          "date": "2026-10-20",
+          "notes": "82 rumbles in 218 s, 154 ms each at the median. Rumble on the haptic actuators felt right too."
+        }
+      },
+      "settings": "The pad as an XInput controller (by the store's rule). Trigger effects for the game from Game Feel: R2 slope, and resist while L2 is pressed."
+    },
+    {
+      "name": "God of War",
+      "steamAppId": "1593500",
+      "status": "works",
+      "technology": "Sony's PC library (libScePad), which does not know the Edge.",
+      "vibration": "Motors",
+      "features": [
+        "Motors",
+        "Lightbar"
+      ],
+      "description": "Shown as a standard DualSense, the Edge rumbles on the motors and gets the game's lightbar. Played before the Wine modules.",
+      "connections": {
+        "cable": {
+          "result": "connection-not-recorded",
+          "date": "2026-10-16"
+        },
+        "bluetooth": {
+          "result": "connection-not-recorded",
+          "date": "2026-10-16"
+        }
+      },
+      "settings": "Suggested: the Edge shown as a standard DualSense.",
+      "details": [
+        "2026-10-16, NotProton's pad bridge (PR #90): rumble on the motors and the lightbar; the game sets no trigger effects."
+      ]
+    },
+    {
+      "name": "Nioh 3",
+      "steamAppId": "3681010",
+      "status": "no-vibration",
+      "technology": "Its own DualSense support, over raw HID. It looks for the pad's audio output through SetupAPI: it reads the pad's container (SPDRP_BASE_CONTAINERID) and searches the audio render interfaces for the same one.",
+      "vibration": "Haptics",
+      "features": [
+        "Haptics (not working yet)",
+        "Lightbar"
+      ],
+      "description": "The game finds the pad and sets its lights and triggers, but never vibrates: Wine registers no audio device with SetupAPI, so the game never finds the pad's output, and with a DualSense it does not fall back to the motors.",
+      "connections": {
+        "cable": {
+          "result": "not-played"
+        },
+        "bluetooth": {
+          "result": "no-vibration",
+          "pads": "DualSense Edge",
+          "date": "2026-10-21"
+        }
+      },
+      "settings": "In the game: all five vibration options on, mode Immersive.",
+      "details": [
+        "A Wine trace showed it asking for the audio render interfaces about 70 times a second, and getting an empty list every time.",
+        "It writes the old rumble emulation once, with both motors at 0, and never a motor value after that.",
+        "It creates and releases XAudio2 without ever playing through it.",
+        "A fix that lists Wine's audio outputs with SetupAPI is being tested (patch 0009)."
+      ]
+    }
+  ]
+}
