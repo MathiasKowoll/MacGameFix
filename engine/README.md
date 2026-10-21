@@ -214,7 +214,9 @@ Measured later on 2026-10-19, `0006`-`0008`, an Edge over Bluetooth, Steam Input
   (SDL 2) ends a rumble with a report that has no rumble bit, which puts a pad on a cable back to audio
   haptics, and the Bluetooth writer kept the last motor values. Since 0006 such a report ends the rumble over
   Bluetooth too: played again with a standard DualSense over Bluetooth, 15 rumbles in 38 s, each about 250 ms
-  (one a hit), the motors on 9 % of the time, and it felt right. With a standard DualSense (firmware 0x0630) the same game asks for the
+  (one a hit), the motors on 9 % of the time, and it felt right. With a DualSense Edge over Bluetooth, which
+  SDL 2 asks for the old emulation at half strength (0x3f to 0x7f), the improved one at twice that: 34 rumbles
+  in 73 s, none longer than 239 ms, the motors on 8 % of the time, and it felt right too. With a standard DualSense (firmware 0x0630) the same game asks for the
   improved emulation at full strength (byte 39 0x04, up to 0xff).
 
 Not played yet: the FEX (arm64) side, `xinput=pad` with God of War Ragnarök, the tries on a cable, and the improved rumble emulation.
