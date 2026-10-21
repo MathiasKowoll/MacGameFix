@@ -90,6 +90,23 @@ Input on for a PlayStation pad in exactly the games the store does not list.
 None of these patches touch a device that is not a DualSense. Without the Game
 Feel options they behave as `0001`-`0003` alone.
 
+### The pad's audio output through SetupAPI
+
+Some games find the pad's audio output through SetupAPI instead of the endpoint's property
+store: they read the HID device's container (`SPDRP_BASE_CONTAINERID`) and look for the audio
+render interface (`{e6327cad-dcec-4949-ae8a-991e976a79d2}`) with the same container. Nioh 3 does,
+about 70 times a second. Wine registers no audio device with SetupAPI, so the list is always empty:
+such a game never opens the pad's output, and with a DualSense it rumbles nothing at all.
+Nioh 3 also reads the endpoints' containers with `SetupDiGetDeviceRegistryPropertyA` and the pad's with
+the W function: Windows gives a WCHAR string from both, Wine's A function an ANSI one, so the two never
+compare equal.
+
+| Patch | Module | Change |
+|---|---|---|
+| `0009-mmdevapi-setupapi-endpoints.patch` | `mmdevapi.dll` | Each endpoint is also written as Windows lists it: a device `SWD\MMDEVAPI\<endpoint id>` of the AudioEndpoint class, with the driver's container as its `ContainerId`, and the render or capture interface, linked while the endpoint is active. Its path, `\\?\SWD#MMDEVAPI#<endpoint id>#<interface class>`, is one `ActivateAudioInterfaceAsync` takes, and the endpoint id in it one `GetDevice` takes. |
+| `0010-setupapi-base-containerid-wchar.patch` | `setupapi.dll` | `SetupDiGetDeviceRegistryPropertyA` returns `SPDRP_BASE_CONTAINERID` as the W function does, a WCHAR string, as Windows returns it. |
+| `0011-xaudio2-mastering-voice-device.patch` | `xaudio2_9.dll` | A mastering voice opens the device the game names, by its endpoint id or its render interface's path, instead of the default one: Wine passed no device to FAudio. The name becomes FAudio's device index, the active render endpoints in the enumerator's order with the default one at 0. |
+
 ### The options
 
 The modules read their options from MacGameFix's support folder, written by its

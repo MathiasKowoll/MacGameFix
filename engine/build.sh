@@ -10,7 +10,7 @@
 # app and NotProton's runner folders name it.
 #
 # x86_64 (the default) is CrossOver's Intel side, run under Rosetta: it writes
-# modules/<id>/x86_64-windows/{winebus.sys,mmdevapi.dll,hidclass.sys,xinput*.dll} and
+# modules/<id>/x86_64-windows/{winebus.sys,mmdevapi.dll,hidclass.sys,setupapi.dll,xaudio2_9.dll,xinput*.dll} and
 # x86_64-unix/{winebus.so,winecoreaudio.so}. arm64 is the FEX side, where Wine runs
 # natively: aarch64-windows/ the same PE files as ARM64X (arm64 and arm64ec in one
 # file, as CrossOver ships them) and aarch64-unix/{winebus.so,winecoreaudio.so}.
@@ -19,7 +19,7 @@
 # runs): SDL2's headers must be installed (brew install sdl2).
 # modules/<id>/built-for.json lists every file built so far.
 # The copied tree and the build directories go under .build/, which git ignores.
-# winebus.sys, mmdevapi.dll, hidclass.sys and xinput are PE (llvm-mingw); winecoreaudio.so is the unix half
+# winebus.sys, mmdevapi.dll, hidclass.sys, setupapi.dll, xaudio2_9.dll and xinput are PE (llvm-mingw); winecoreaudio.so is the unix half
 # (Wine 11 has no PE winecoreaudio.drv: mmdevapi loads the unix library itself).
 # PATCHES=none builds the same modules unpatched, to compare with CodeWeavers' own.
 set -eu
@@ -85,7 +85,7 @@ fi
 
 echo "==> building $ARCH (log: $BUILD/make.log)"
 XINPUT="xinput1_1 xinput1_2 xinput1_3 xinput1_4 xinput9_1_0 xinputuap"
-(cd "$BUILD" && make -j10 dlls/winebus.sys/all dlls/mmdevapi/all dlls/winecoreaudio.drv/all dlls/hidclass.sys/all \
+(cd "$BUILD" && make -j10 dlls/winebus.sys/all dlls/mmdevapi/all dlls/winecoreaudio.drv/all dlls/hidclass.sys/all dlls/setupapi/all dlls/xaudio2_9/all \
   dlls/xinput1_1/all dlls/xinput1_2/all dlls/xinput1_3/all dlls/xinput1_4/all dlls/xinput9_1_0/all dlls/xinputuap/all \
   >"$BUILD/make.log" 2>&1) \
   || { tail -30 "$BUILD/make.log"; exit 1; }
@@ -93,7 +93,7 @@ XINPUT="xinput1_1 xinput1_2 xinput1_3 xinput1_4 xinput9_1_0 xinputuap"
 # The shape the engine's own files have: PE files stripped (winebuild already wrote the
 # 32-byte builtin signature), the unix half with CrossOver's second rpath and signed.
 rm -rf "${OUT:?}/$PE" "${OUT:?}/$UNIX" && mkdir -p "$OUT/$PE" "$OUT/$UNIX"
-for f in dlls/winebus.sys/$PE/winebus.sys dlls/mmdevapi/$PE/mmdevapi.dll dlls/hidclass.sys/$PE/hidclass.sys \
+for f in dlls/winebus.sys/$PE/winebus.sys dlls/mmdevapi/$PE/mmdevapi.dll dlls/hidclass.sys/$PE/hidclass.sys dlls/setupapi/$PE/setupapi.dll dlls/xaudio2_9/$PE/xaudio2_9.dll \
          $(for x in $XINPUT; do printf 'dlls/%s/%s/%s.dll ' "$x" "$PE" "$x"; done); do
   llvm-strip -o "$OUT/$PE/$(basename "$f")" "$BUILD/$f"
 done
