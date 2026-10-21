@@ -16,14 +16,34 @@ def cell(text):
     return text.replace("|", "\\|").replace("\n", " ")
 
 
+def controller(test):
+    name = test["controller"]
+    if name == "not recorded":
+        return "Controller not recorded"
+    return f"{name} shown as a {test['shownAs']}" if test.get("shownAs") else name
+
+
 def connection(game, name):
-    c = game["connections"][name]
-    out = results[c["result"]]
-    if c.get("pads"):
-        out += f", {c['pads']}"
-    if c.get("date"):
-        out += f" ({c['date']})"
-    return out
+    """A table cell: each controller tested on this connection, and its result."""
+    tests = [x for x in game["tests"] if x["connection"] in (name, "not recorded")]
+    if not tests:
+        return results["not-played"]
+    def one(x):
+        when = [x["date"]] if x.get("date") else []
+        if x["connection"] == "not recorded":
+            when.append("connection not recorded")
+        return f"{controller(x)}: {results[x['result']]}" + (f" ({', '.join(when)})" if when else "")
+    return "; ".join(one(x) for x in tests)
+
+
+def test_line(test):
+    where = data["connections"].get(test["connection"], "connection not recorded")
+    text = f"{controller(test)}, {where}: {results[test['result']]}"
+    if test.get("date"):
+        text += f" ({test['date']})"
+    if test.get("notes"):
+        text += f". {test['notes']}"
+    return text
 
 
 lines = [
@@ -58,15 +78,10 @@ for g in data["games"]:
         lines.append(f"- **Library:** {g['library']}")
     lines.append(f"- **Technology:** {g['technology']}")
     lines.append(f"- **Features:** {', '.join(g['features'])}")
-    for name, label in (("cable", "Cable"), ("bluetooth", "Bluetooth")):
-        c = g["connections"][name]
-        text = connection(g, name)
-        if c.get("notes"):
-            text += f". {c['notes']}"
-        lines.append(f"- **{label}:** {text}")
     if g.get("settings"):
         lines.append(f"- **Settings:** {g['settings']}")
     lines.append(f"- **Steam app:** {g['steamAppId']}")
+    lines += ["", "Tested:", ""] + [f"- {test_line(x)}" for x in g["tests"]]
     if g.get("details"):
         lines += ["", "What was measured:", ""] + [f"- {d}" for d in g["details"]]
 
@@ -75,7 +90,7 @@ lines += [
     "## Adding a game",
     "",
     "After a session, add the game to `vibration.json` with what was felt and what the modules logged (Game",
-    "Feel's **Seen** column, or Diagnose this game), one result per connection, then run",
+    "Feel's **Seen** column, or Diagnose this game), one test per controller and connection, then run",
     "`tools/vibration-md.py`. A game that needed a setting says which one; if many players need the same one, it",
     "becomes the game's suggested setting in `app/pad-presets.json`.",
     "",
