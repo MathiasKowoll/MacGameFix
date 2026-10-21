@@ -44,16 +44,18 @@ lines = [
     "- **XInput**: the game rumbles an Xbox-style controller. Game Feel's XInput option gives it the pad as an",
     "  XInput controller, or puts its rumble on the motors.",
     "",
-    "| Game | Vibration | Cable | Bluetooth |",
-    "|---|---|---|---|",
+    "| Game | Vibration | Library | Cable | Bluetooth |",
+    "|---|---|---|---|---|",
 ]
 for g in data["games"]:
-    lines.append(f"| [{cell(g['name'])}](#{g['steamAppId']}) | {cell(g['vibration'])} | "
+    lines.append(f"| [{cell(g['name'])}](#{g['steamAppId']}) | {cell(g['vibration'])} | {cell(g.get('library', ''))} | "
                  f"{cell(connection(g, 'cable'))} | {cell(connection(g, 'bluetooth'))} |")
 
 for g in data["games"]:
     lines += ["", f"<a id=\"{g['steamAppId']}\"></a>", f"## {g['name']}", "", g["description"], ""]
     lines.append(f"- **Status:** {results[g['status']]}")
+    if g.get("library"):
+        lines.append(f"- **Library:** {g['library']}")
     lines.append(f"- **Technology:** {g['technology']}")
     lines.append(f"- **Features:** {', '.join(g['features'])}")
     for name, label in (("cable", "Cable"), ("bluetooth", "Bluetooth")):

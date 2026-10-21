@@ -15,21 +15,21 @@ Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 2
 - **XInput**: the game rumbles an Xbox-style controller. Game Feel's XInput option gives it the pad as an
   XInput controller, or puts its rumble on the motors.
 
-| Game | Vibration | Cable | Bluetooth |
-|---|---|---|---|
-| [Marvel's Spider-Man 2](#2651280) | Haptics | Works, DualSense Edge and DualSense (2026-10-19) | Works, DualSense Edge and DualSense (2026-10-19) |
-| [F1 23](#2108330) | Haptics | Works, DualSense Edge shown as a DualSense, and DualSense (2026-10-19) | Works, DualSense Edge shown as a DualSense, and DualSense; both at once (2026-10-19) |
-| [FINAL FANTASY VII REBIRTH](#2909400) | Haptics | Not played yet | Works (2026-10-21) |
-| [CONTROL Resonant](#3669870) | Haptics | Works, DualSense Edge and DualSense (2026-10-19) | Works, DualSense Edge (2026-10-19) |
-| [UNCHARTED: Legacy of Thieves Collection](#1659420) | Haptics | Played; how it felt was not recorded (2026-10-19) | Works, DualSense Edge (2026-10-19) |
-| [Beast of Reincarnation](#2001760) | Haptics | Works, DualSense Edge and DualSense (2026-10-18) | Works, DualSense Edge (2026-10-19) |
-| [Ghost of Tsushima](#2215430) | Haptics | Works, DualSense Edge and DualSense (2026-10-18) | Not played yet |
-| [Returnal](#1649240) | Haptics | Works, DualSense Edge and DualSense (2026-10-18) | Not played yet |
-| [Mortal Shell II](#2584270) | Motors | Works (2026-10-18) | Not played yet |
-| [Mortal Kombat 1](#1971870) | Motors | Works, DualSense Edge (2026-10-20) | Works, DualSense Edge and DualSense (2026-10-20) |
-| [Onimusha: Way of the Sword](#2638890) | XInput | Not played yet | Works, DualSense Edge (2026-10-20) |
-| [God of War](#1593500) | Motors | Played; which connection was not recorded (2026-10-16) | Played; which connection was not recorded (2026-10-16) |
-| [Nioh 3](#3681010) | Haptics | Not played yet | Does not vibrate, DualSense Edge (2026-10-21) |
+| Game | Vibration | Library | Cable | Bluetooth |
+|---|---|---|---|---|
+| [Marvel's Spider-Man 2](#2651280) | Haptics | Raw HID | Works, DualSense Edge and DualSense (2026-10-19) | Works, DualSense Edge and DualSense (2026-10-19) |
+| [F1 23](#2108330) | Haptics | Sony libScePad | Works, DualSense Edge shown as a DualSense, and DualSense (2026-10-19) | Works, DualSense Edge shown as a DualSense, and DualSense; both at once (2026-10-19) |
+| [FINAL FANTASY VII REBIRTH](#2909400) | Haptics | Raw HID | Not played yet | Works (2026-10-21) |
+| [CONTROL Resonant](#3669870) | Haptics | Raw HID | Works, DualSense Edge and DualSense (2026-10-19) | Works, DualSense Edge (2026-10-19) |
+| [UNCHARTED: Legacy of Thieves Collection](#1659420) | Haptics |  | Played; how it felt was not recorded (2026-10-19) | Works, DualSense Edge (2026-10-19) |
+| [Beast of Reincarnation](#2001760) | Haptics | Raw HID | Works, DualSense Edge and DualSense (2026-10-18) | Works, DualSense Edge (2026-10-19) |
+| [Ghost of Tsushima](#2215430) | Haptics | Raw HID | Works, DualSense Edge and DualSense (2026-10-18) | Not played yet |
+| [Returnal](#1649240) | Haptics | Sony libScePad | Works, DualSense Edge and DualSense (2026-10-18) | Not played yet |
+| [Mortal Shell II](#2584270) | Motors | Raw HID | Works (2026-10-18) | Not played yet |
+| [Mortal Kombat 1](#1971870) | Motors | SDL | Works, DualSense Edge (2026-10-20) | Works, DualSense Edge and DualSense (2026-10-20) |
+| [Onimusha: Way of the Sword](#2638890) | XInput | XInput | Not played yet | Works, DualSense Edge (2026-10-20) |
+| [God of War](#1593500) | Motors | Sony libScePad | Played; which connection was not recorded (2026-10-16) | Played; which connection was not recorded (2026-10-16) |
+| [Nioh 3](#3681010) | Haptics | Raw HID | Not played yet | Does not vibrate, DualSense Edge (2026-10-21) |
 
 <a id="2651280"></a>
 ## Marvel's Spider-Man 2
@@ -37,6 +37,7 @@ Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 2
 Insomniac's PC port drives the pad itself, as on a PS5: haptics on the actuators and adaptive triggers, on a cable and over Bluetooth.
 
 - **Status:** Works
+- **Library:** Raw HID
 - **Technology:** Its own DualSense support, over raw HID. It plays its haptics as audio on the pad's audio output, which it finds by the audio endpoint's container.
 - **Features:** Haptics, Adaptive triggers, Touchpad
 - **Cable:** Works, DualSense Edge and DualSense (2026-10-19)
@@ -57,6 +58,7 @@ What was measured:
 Codemasters' game uses Sony's own library for the pad: haptics and trigger effects on a cable and over Bluetooth, with the Edge shown as a standard DualSense.
 
 - **Status:** Works
+- **Library:** Sony libScePad
 - **Technology:** Sony's PC library (libScePad), which finds the pad over HID and plays its haptics on the pad's audio output.
 - **Features:** Haptics, Adaptive triggers
 - **Cable:** Works, DualSense Edge shown as a DualSense, and DualSense (2026-10-19). In a CrossOver Preview bottle an Edge seen as an Edge worked too: buttons, haptics and triggers.
@@ -75,6 +77,7 @@ What was measured:
 Square Enix's PC port plays its haptics on the pad's actuators. Played over Bluetooth: "works very well".
 
 - **Status:** Works
+- **Library:** Raw HID
 - **Technology:** Its own DualSense support, over raw HID; its haptics play as audio on the pad's audio output.
 - **Features:** Haptics
 - **Cable:** Not played yet
@@ -91,6 +94,7 @@ What was measured:
 Remedy's game drives the pad itself: haptics and trigger effects, on a cable and over Bluetooth.
 
 - **Status:** Works
+- **Library:** Raw HID
 - **Technology:** Its own DualSense support, over raw HID; its haptics play as audio on the pad's audio output.
 - **Features:** Haptics, Adaptive triggers
 - **Cable:** Works, DualSense Edge and DualSense (2026-10-19)
@@ -119,6 +123,7 @@ What was measured:
 Haptics and trigger effects on a cable and over Bluetooth. Its XInput rumble with the modules' XInput option is not played yet.
 
 - **Status:** Works
+- **Library:** Raw HID
 - **Technology:** Its own DualSense support, over raw HID, for the haptics and triggers; it also rumbles through XInput.
 - **Features:** Haptics, Adaptive triggers, XInput rumble
 - **Cable:** Works, DualSense Edge and DualSense (2026-10-18). Haptics, on an earlier build of the modules.
@@ -131,6 +136,7 @@ Haptics and trigger effects on a cable and over Bluetooth. Its XInput rumble wit
 Haptics on a cable with both pads.
 
 - **Status:** Works
+- **Library:** Raw HID
 - **Technology:** Its own DualSense support, over raw HID; its haptics play as audio on the pad's audio output.
 - **Features:** Haptics
 - **Cable:** Works, DualSense Edge and DualSense (2026-10-18). On an earlier build of the modules.
@@ -143,6 +149,7 @@ Haptics on a cable with both pads.
 Haptics on a cable with both pads.
 
 - **Status:** Works
+- **Library:** Sony libScePad
 - **Technology:** Sony's PC library (libScePad).
 - **Features:** Haptics
 - **Cable:** Works, DualSense Edge and DualSense (2026-10-18). On an earlier build of the modules.
@@ -155,6 +162,7 @@ Haptics on a cable with both pads.
 Its rumble and trigger effects kept working with the modules on a cable.
 
 - **Status:** Works
+- **Library:** Raw HID
 - **Technology:** Its own DualSense support, over raw HID: it drives the motors and the trigger effects itself.
 - **Features:** Motors, Adaptive triggers
 - **Cable:** Works (2026-10-18). On an earlier build of the modules.
@@ -167,6 +175,7 @@ Its rumble and trigger effects kept working with the modules on a cable.
 Each rumble ends with its hit, on a cable and over Bluetooth, since the Wine modules of 2026-10-20.
 
 - **Status:** Works
+- **Library:** SDL
 - **Technology:** SDL 2 (SDL2.dll 2.32.0), which drives the pad over HID: the rumble as the pad's emulation of motors.
 - **Features:** Motors
 - **Cable:** Works, DualSense Edge (2026-10-20). 17 rumbles in 74 s, the motors on 6 % of the time, each ended by SDL's stop.
@@ -185,6 +194,7 @@ What was measured:
 With the pad shown as an XInput controller, its rumble plays on the motors, or on the haptic actuators if chosen.
 
 - **Status:** Works
+- **Library:** XInput
 - **Technology:** XInput only: its executable reads no DualSense, and the store does not list the DualSense for it. Game Feel gives it the pad as an XInput controller.
 - **Features:** XInput rumble, Trigger effects from Game Feel
 - **Cable:** Not played yet
@@ -198,6 +208,7 @@ With the pad shown as an XInput controller, its rumble plays on the motors, or o
 Shown as a standard DualSense, the Edge rumbles on the motors and gets the game's lightbar. Played before the Wine modules.
 
 - **Status:** Works
+- **Library:** Sony libScePad
 - **Technology:** Sony's PC library (libScePad), which does not know the Edge.
 - **Features:** Motors, Lightbar
 - **Cable:** Played; which connection was not recorded (2026-10-16)
@@ -215,6 +226,7 @@ What was measured:
 The game finds the pad and sets its lights and triggers, but never vibrates: Wine registers no audio device with SetupAPI, so the game never finds the pad's output, and with a DualSense it does not fall back to the motors.
 
 - **Status:** Does not vibrate
+- **Library:** Raw HID
 - **Technology:** Its own DualSense support, over raw HID. It looks for the pad's audio output through SetupAPI: it reads the pad's container (SPDRP_BASE_CONTAINERID) and searches the audio render interfaces for the same one.
 - **Features:** Haptics (not working yet), Lightbar
 - **Cable:** Not played yet

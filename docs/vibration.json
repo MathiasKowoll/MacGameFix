@@ -16,6 +16,7 @@
       "steamAppId": "2651280",
       "status": "works",
       "technology": "Its own DualSense support, over raw HID. It plays its haptics as audio on the pad's audio output, which it finds by the audio endpoint's container.",
+      "library": "Raw HID",
       "vibration": "Haptics",
       "features": [
         "Haptics",
@@ -49,6 +50,7 @@
       "steamAppId": "2108330",
       "status": "works",
       "technology": "Sony's PC library (libScePad), which finds the pad over HID and plays its haptics on the pad's audio output.",
+      "library": "Sony libScePad",
       "vibration": "Haptics",
       "features": [
         "Haptics",
@@ -80,6 +82,7 @@
       "steamAppId": "2909400",
       "status": "works",
       "technology": "Its own DualSense support, over raw HID; its haptics play as audio on the pad's audio output.",
+      "library": "Raw HID",
       "vibration": "Haptics",
       "features": [
         "Haptics"
@@ -104,6 +107,7 @@
       "steamAppId": "3669870",
       "status": "works",
       "technology": "Its own DualSense support, over raw HID; its haptics play as audio on the pad's audio output.",
+      "library": "Raw HID",
       "vibration": "Haptics",
       "features": [
         "Haptics",
@@ -156,6 +160,7 @@
       "steamAppId": "2001760",
       "status": "works",
       "technology": "Its own DualSense support, over raw HID, for the haptics and triggers; it also rumbles through XInput.",
+      "library": "Raw HID",
       "vibration": "Haptics",
       "features": [
         "Haptics",
@@ -183,6 +188,7 @@
       "steamAppId": "2215430",
       "status": "works",
       "technology": "Its own DualSense support, over raw HID; its haptics play as audio on the pad's audio output.",
+      "library": "Raw HID",
       "vibration": "Haptics",
       "features": [
         "Haptics"
@@ -205,6 +211,7 @@
       "steamAppId": "1649240",
       "status": "works",
       "technology": "Sony's PC library (libScePad).",
+      "library": "Sony libScePad",
       "vibration": "Haptics",
       "features": [
         "Haptics"
@@ -227,6 +234,7 @@
       "steamAppId": "2584270",
       "status": "works",
       "technology": "Its own DualSense support, over raw HID: it drives the motors and the trigger effects itself.",
+      "library": "Raw HID",
       "vibration": "Motors",
       "features": [
         "Motors",
@@ -249,6 +257,7 @@
       "steamAppId": "1971870",
       "status": "works",
       "technology": "SDL 2 (SDL2.dll 2.32.0), which drives the pad over HID: the rumble as the pad's emulation of motors.",
+      "library": "SDL",
       "vibration": "Motors",
       "features": [
         "Motors"
@@ -279,6 +288,7 @@
       "steamAppId": "2638890",
       "status": "works",
       "technology": "XInput only: its executable reads no DualSense, and the store does not list the DualSense for it. Game Feel gives it the pad as an XInput controller.",
+      "library": "XInput",
       "vibration": "XInput",
       "features": [
         "XInput rumble",
@@ -303,6 +313,7 @@
       "steamAppId": "1593500",
       "status": "works",
       "technology": "Sony's PC library (libScePad), which does not know the Edge.",
+      "library": "Sony libScePad",
       "vibration": "Motors",
       "features": [
         "Motors",
@@ -329,6 +340,7 @@
       "steamAppId": "3681010",
       "status": "no-vibration",
       "technology": "Its own DualSense support, over raw HID. It looks for the pad's audio output through SetupAPI: it reads the pad's container (SPDRP_BASE_CONTAINERID) and searches the audio render interfaces for the same one.",
+      "library": "Raw HID",
       "vibration": "Haptics",
       "features": [
         "Haptics (not working yet)",
