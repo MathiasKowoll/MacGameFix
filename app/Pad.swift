@@ -677,7 +677,7 @@ struct PadSession {
         for line in lines where pid(line) == last {
             if line.contains("DualSense Edge") { pads.insert("DualSense Edge") } else if line.contains("DualSense") { pads.insert("DualSense") }
             if line.contains("the Bluetooth DualSense") { links.insert("Bluetooth") }
-            if line.contains("the wired DualSense") { links.insert("USB cable") }
+            if line.contains("the wired DualSense") { links.insert("Cable") }
         }
         if pads.count == 1 { controller = pads.first }
         if links.count == 1 { connection = links.first }

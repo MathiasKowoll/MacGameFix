@@ -34,7 +34,7 @@ body:
     id: connection
     attributes:
       label: Connection
-      description: "USB cable or Bluetooth. Filled in by MacGameFix when the modules saw a single one."
+      description: "Cable or Bluetooth, as the list of games played for vibration names them. Filled in by MacGameFix when the modules saw a single one."
       placeholder: Bluetooth
     validations:
       required: true
