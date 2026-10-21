@@ -1,0 +1,115 @@
+name: A game that vibrates
+description: A game whose vibration works on a Mac, with the controller and the connection it was played with, for the list of games played for vibration.
+title: "[Vibrates] "
+labels: ["vibration"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A report like this adds a game to the [list of games played for vibration](https://github.com/MathiasKowoll/MacGameFix/blob/main/docs/vibration.md),
+        or adds a controller or a connection to a game already there. One report is one test: one controller on one
+        connection. Played the same game on a cable and over Bluetooth? Send two.
+
+        **To send it**: in MacGameFix, open **Game Feel**, click the game, turn on **Diagnose this game** if you
+        can, play long enough to feel it vibrate, close the game, then click **It Vibrates…**. It saves the game's
+        report and opens this form with the game, the controller and the connection the Wine modules saw, and what
+        they saw it do. Check them, say how it felt, and attach the report below. The report names this game alone
+        and writes your home folder as `~`.
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      description: Its name and Steam app id.
+    validations:
+      required: true
+  - type: input
+    id: controller
+    attributes:
+      label: Controller
+      description: "DualSense or DualSense Edge. Filled in by MacGameFix when the modules saw a single one."
+      placeholder: DualSense Edge
+    validations:
+      required: true
+  - type: input
+    id: connection
+    attributes:
+      label: Connection
+      description: "USB cable or Bluetooth. Filled in by MacGameFix when the modules saw a single one."
+      placeholder: Bluetooth
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options:
+        - Works
+        - Partly
+    validations:
+      required: true
+  - type: dropdown
+    id: felt
+    attributes:
+      label: What you felt
+      multiple: true
+      options:
+        - Haptics
+        - Rumble
+        - Trigger effects
+        - The lightbar
+    validations:
+      required: true
+  - type: textarea
+    id: seen
+    attributes:
+      label: What the Wine modules saw
+      description: Filled in by It Vibrates…, from the modules' log. Leave it as it is.
+      render: text
+  - type: input
+    id: library
+    attributes:
+      label: Library
+      description: "How the game talks to the pad: Sony libScePad, SDL, Raw HID or XInput. Filled in by MacGameFix from the game's folder."
+  - type: textarea
+    id: settings
+    attributes:
+      label: The settings
+      description: Filled in by It Vibrates…, as the Wine modules read them. Leave them as they are.
+      render: text
+  - type: dropdown
+    id: runs
+    attributes:
+      label: Where it runs
+      options:
+        - A NotProton runner
+        - A CrossOver bottle
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Its version
+      description: NotProton's or CrossOver's, from its About window.
+  - type: dropdown
+    id: steam-input
+    attributes:
+      label: Steam Input for this game
+      options:
+        - "Off"
+        - "On"
+        - I don't know
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: How it felt
+      description: The moments you played, and anything that needed a setting or still feels off.
+  - type: textarea
+    id: report
+    attributes:
+      label: The report
+      description: Drag the .md file It Vibrates… saved into this box, or paste its contents.
+    validations:
+      required: true
