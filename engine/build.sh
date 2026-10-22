@@ -18,7 +18,8 @@
 # winebus.so is built with SDL, as CodeWeavers build theirs (it opens libSDL2 when it
 # runs): SDL2's headers must be installed (brew install sdl2).
 # modules/<id>/built-for.json lists every file built so far.
-# The copied tree and the build directories go under .build/, which git ignores.
+# The copied tree, made again when its series changes, and the build directories go under
+# .build/, which git ignores.
 # winebus.sys, mmdevapi.dll, hidclass.sys, setupapi.dll, xaudio2_9.dll and xinput are PE (llvm-mingw); winecoreaudio.so is the unix half
 # (Wine 11 has no PE winecoreaudio.drv: mmdevapi loads the unix library itself).
 # PATCHES=none builds the same modules unpatched, to compare with CodeWeavers' own.
@@ -57,6 +58,29 @@ case "$here" in *\ *) echo "no spaces in $here"; exit 1 ;; esac
 MIN="-mmacosx-version-min=$MIN"
 CPU="${HOST%%-*}"; [ "$CPU" = aarch64 ] && CPU=arm64
 
+# A patched tree carries the series it was made from in .series: the SHA-256 of its
+# patches, in the order the loop below applies them. One with no .series or another one
+# (a patch added, removed or changed since, a copy never finished, or a tree made before
+# this check) is made again with every build directory of that id, whose objects came
+# from it: building from it would write the old modules, and built-for.json would vouch
+# for them. The other side's modules came from it too: they go, so that built-for.json
+# lists only what this series built and that side is missing until it is built again.
+# An unpatched tree is never patched.
+if [ -z "$suffix" ]; then
+  series="$(for p in "$SERIES"/*.patch; do [ -f "$p" ] && cat "$p"; done | shasum -a 256 | cut -d' ' -f1)"
+  if [ -d "$TREE" ] && [ "$(cat "$TREE/.series" 2>/dev/null)" != "$series" ]; then
+    echo "==> $(basename "$TREE") does not carry $(basename "$SERIES") as it is now: making it again; both sides of $ID build from scratch"
+    rm -rf "$TREE" "$here/.build/build-$ID-x86_64" "$here/.build/build-$ID-arm64"
+    for d in "$OUT"/*-windows "$OUT"/*-unix; do
+      case "$d" in "$OUT/$PE"|"$OUT/$UNIX") continue ;; esac
+      [ -d "$d" ] || continue
+      rm -rf "$d"
+      case "$d" in */aarch64-*) side=arm64 ;; *) side=x86_64 ;; esac
+      echo "==> removed modules/$ID/$(basename "$d"), built from the old series: build the $side side again ($0 $ID $SRC $3 $side)"
+    done
+  fi
+fi
+
 if [ ! -d "$TREE" ]; then
   echo "==> copying $SRC"
   mkdir -p "$TREE" && (cd "$SRC" && tar cf - .) | (cd "$TREE" && tar xf -)
@@ -66,6 +90,7 @@ if [ ! -d "$TREE" ]; then
       echo "==> applying $(basename "$p")"
       (cd "$TREE" && patch -p1 --forward <"$p")
     done
+    echo "$series" >"$TREE/.series"
   fi
 fi
 

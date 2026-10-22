@@ -653,9 +653,9 @@ extension Model {
         }
     }
 
-    /// The same report, and the form for a game that vibrates opened with the pad and the
-    /// connection the modules saw last and the library the game's folder shows, for the
-    /// list of games played for vibration.
+    /// The same report, and the form for a game that vibrates opened with the pad, the
+    /// connection and the identity the modules saw last and the library the game's folder
+    /// shows, for the list of games played for vibration.
     func padVibrates(_ game: InstalledGame) {
         guard savePadReport(game, as: "MacGameFix vibration report") else { return }
         let store = PadStore.exists ? PadStore.load() : pad
@@ -1491,7 +1491,8 @@ struct PadOptionRows: View {
         if asDualShock4 {
             return xinputChoice.wrappedValue == "rumble"
                 ? "For a game that shows PlayStation buttons through the DualShock 4 but rumbles only through "
-                  + "XInput, as Crysis 2 Remastered seems to: its rumble goes to the motors. Not yet played."
+                  + "XInput: its rumble goes to the motors. No game played has vibrated through it: Crysis 2 "
+                  + "Remastered, played with it on 2026-10-22, sent XInput no rumble."
                 : "XInput gets nothing. A game that rumbles through the DualShock 4, as Mortal Kombat 11 does, "
                   + "needs nothing more."
         }
@@ -1520,9 +1521,12 @@ struct PadOptionRows: View {
                   : "Sony's library claims a standard DualSense's motor power at full and never an Edge's, which then "
                   + "keeps the reduction it stores; this claims it for the Edge too.")
         }
-        Toggle(isOn: flag(\.edgeAsDualSense)) {
+        // Shown as a DualShock 4 the game's file says edge=edge (PadOptions.lines), whatever this row holds.
+        Toggle(isOn: asDualShock4 ? .constant(false) : flag(\.edgeAsDualSense)) {
             label("Show the Edge as a standard DualSense", \.edgeAsDualSense,
-                  "For a game whose Sony library does not know the Edge. The game loses the Edge's back buttons and Fn.")
+                  asDualShock4 ? "Off while the pad is shown as a DualShock 4: the game sees a DualShock 4, whichever "
+                  + "pad it is."
+                  : "For a game whose Sony library does not know the Edge. The game loses the Edge's back buttons and Fn.")
         }
         .disabled(asDualShock4)
         if perGame {
@@ -1945,8 +1949,8 @@ struct PadGameSheet: View {
                         Spacer()
                         Button("It Vibrates…") { model.padVibrates(game) }
                             .help("Saves this game's report and opens a new issue on GitHub that says it vibrates, with "
-                                  + "the controller and the connection the Wine modules saw, for the list of games "
-                                  + "played for vibration.")
+                                  + "the controller, the connection and what the pad was shown to the game as, as the "
+                                  + "Wine modules saw them, for the list of games played for vibration.")
                         Button("Share These Settings…") { model.padShare(game) }
                             .help("Saves this game's report and opens a new issue on GitHub with these settings in it, "
                                   + "to attach it to.")

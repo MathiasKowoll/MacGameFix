@@ -134,13 +134,17 @@ private extension Data {
 // MARK: - What a game is made of
 
 extension ProbeFindings {
-    /// The library the game talks to the pad through, by the names the list of games
-    /// played for vibration uses: Sony's first, since a game that ships it may read HID too.
+    /// The library the game reaches the pad through, by the names the list of games played
+    /// for vibration uses, guessed from its folder. Sony's whenever the game ships it, even
+    /// one that also reads HID, reads through DirectInput and rumbles through Sony's library
+    /// (Mortal Kombat 11), or rumbles only through XInput (Crysis 2 Remastered, which the list
+    /// keeps as XInput). DirectInput only for a game with no other way to the pad.
     var padLibrary: String? {
         if input.contains(where: { $0.hasPrefix("Sony's pad library") }) { return "Sony libScePad" }
         if input.contains("SDL") { return "SDL" }
         if input.contains(where: { $0.hasPrefix("raw HID") }) { return "Raw HID" }
         if input.contains("XInput") { return "XInput" }
+        if input == ["DirectInput 8"] { return "DirectInput" }
         return nil
     }
 }

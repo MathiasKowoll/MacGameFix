@@ -366,6 +366,20 @@ json.dump(d, open(sys.argv[1], "w"))
 PY4
 padwrite
 check 'has "$(cat "$P/pad.d/4245.conf")" "xinput=rumble" && ! has "$(cat "$P/pad.d/4245.conf")" "xinput=off" && ! has "$(cat "$P/pad.d/4245.conf")" "xinput=pad"' "shown as a DualShock 4 with XInput's rumble asked for, the game's own file says xinput=rumble"
+# Every game's Edge shown as a DualSense: winecoreaudio.so reads edge alone, so a game shown as a
+# DualShock 4 says edge=edge in its own file, which the modules read first. The whole file, read back.
+/usr/bin/python3 - "$P/pad.json" <<'PY4'
+import json, sys
+d = json.load(open(sys.argv[1])); d["defaults"]["edgeAsDualSense"] = True
+json.dump(d, open(sys.argv[1], "w"))
+PY4
+padwrite
+check 'has "$(cat "$P/pad.conf")" "edge=dualsense" && [ "$(/usr/bin/grep -v "^#" "$P/pad.d/4245.conf" | tr "\n" " ")" = "bluetooth=wired edge=edge pad_as=dualshock4 xinput=rumble " ]' "every game's Edge shown as a DualSense, a game shown as a DualShock 4 gets edge=edge beside pad_as=dualshock4 in its own file, and nothing else changes there"
+/usr/bin/python3 - "$P/pad.json" <<'PY4'
+import json, sys
+d = json.load(open(sys.argv[1])); d["defaults"]["edgeAsDualSense"] = False
+json.dump(d, open(sys.argv[1], "w"))
+PY4
 /usr/bin/python3 - "$P/pad.json" <<'PY4'
 import json, sys
 d = json.load(open(sys.argv[1])); del d["games"]["4245"]["options"]["ds4XInputRumble"]
@@ -438,9 +452,21 @@ for k, v in urllib.parse.parse_qsl(urllib.parse.urlsplit(sys.argv[1]).query):
 PY3
 }
 printf '10:01:00 [7] game=4242 the Bluetooth DualSense Edge at location 32c48ef2 is shown as wired\n10:01:01 [7] game=4242 observed: the game plays haptics on the Bluetooth DualSense Edge%ss output\n' "'" >> "$MACGAMEFIX_PAD_LOG"
-check 'has "$(vibratesform 4242)" "template: vibration-works.yml" && has "$(vibratesform 4242)" "title: [Vibrates] Fake Game · DualSense Edge · Bluetooth" && has "$(vibratesform 4242)" "controller: DualSense Edge" && has "$(vibratesform 4242)" "connection: Bluetooth" && has "$(vibratesform 4242)" "game: Fake Game (Steam app 4242)" && has "$(vibratesform 4242)" "settings: bluetooth="' "saying a game vibrates opens the vibration form with the pad and the connection of its latest session"
+check 'has "$(vibratesform 4242)" "template: vibration-works.yml" && has "$(vibratesform 4242)" "title: [Vibrates] Fake Game · DualSense Edge · Bluetooth" && has "$(vibratesform 4242)" "controller: DualSense Edge" && has "$(vibratesform 4242)" "connection: Bluetooth" && has "$(vibratesform 4242)" "game: Fake Game (Steam app 4242)" && has "$(vibratesform 4242)" "settings: bluetooth=" && ! has "$(vibratesform 4242)" "shown-as:"' "saying a game vibrates opens the vibration form with the pad and the connection of its latest session, and no identity for a pad shown as itself"
 printf '10:02:00 [8] game=4242 the wired DualSense sent 2000 input reports in 2 s\n10:02:01 [8] game=4242 the Bluetooth DualSense Edge at location 32c48ef2 is shown as wired\n' >> "$MACGAMEFIX_PAD_LOG"
 check '! has "$(vibratesform 4242)" "controller:" && ! has "$(vibratesform 4242)" "connection:" && has "$(vibratesform 4242)" "title: [Vibrates] Fake Game"' "a session with two pads and two connections leaves both to the player"
+# A pad shown as a DualShock 4, as 0013 names it in the log: the identity goes into its field and the title.
+printf '10:03:00 [9] game=4242 the Bluetooth DualSense Edge (shown as a DualShock 4) at location 32c48ef2 is shown as wired\n10:03:00 [9] game=4242 the DualSense Edge (shown as a DualShock 4) at location 32c48ef2 is shown to the game as a USB DualShock 4 (054C:05C4)\n10:03:05 [9] game=4242 observed: the game rumbles the DualSense Edge (shown as a DualShock 4)%ss motors\n' "'" >> "$MACGAMEFIX_PAD_LOG"
+check 'has "$(vibratesform 4242)" "title: [Vibrates] Fake Game · DualSense Edge · Bluetooth · shown as a DualShock 4" && has "$(vibratesform 4242)" "controller: DualSense Edge" && has "$(vibratesform 4242)" "shown-as: DualShock 4" && [ "$(vibratesform 4242 | cut -d: -f1 | tr "\n" " ")" = "template title game controller connection shown-as seen settings " ]' "a pad shown as a DualShock 4 is reported as shown as one, in its own field and in the title, and no other field changes"
+# The next session shows the pad as itself: the identity was the earlier session's alone.
+printf '10:04:00 [10] game=4242 the Bluetooth DualSense Edge at location 32c48ef2 is shown as wired\n' >> "$MACGAMEFIX_PAD_LOG"
+check '! has "$(vibratesform 4242)" "shown-as:" && has "$(vibratesform 4242)" "title: [Vibrates] Fake Game · DualSense Edge · Bluetooth" && ! has "$(vibratesform 4242)" "shown as a"' "an identity an earlier session of the game had is not reported for its latest, which showed the pad as itself"
+# Two pads, an Edge shown as a DualSense (0004's wording) and a standard DualSense as itself: the identity is
+# one pad's, so it is left to the player with the controller.
+printf '10:05:00 [11] game=4242 the Bluetooth DualSense Edge (shown as a DualSense) at location 32c48ef2 is shown as wired\n10:05:01 [11] game=4242 the Bluetooth DualSense at location 1ac3b41b is shown as wired\n' >> "$MACGAMEFIX_PAD_LOG"
+check '! has "$(vibratesform 4242)" "controller:" && ! has "$(vibratesform 4242)" "shown-as:" && has "$(vibratesform 4242)" "connection: Bluetooth" && ! has "$(vibratesform 4242)" "shown as a"' "a session with two pads, one of them shown as another, leaves the identity to the player with the controller"
+printf '10:06:00 [12] game=4242 the Bluetooth DualSense Edge (shown as a DualShock 4) at location 32c48ef2 is shown as wired\n10:06:01 [12] game=4242 the Bluetooth DualSense Edge (shown as a DualSense) at location 32c48ef2 is shown as wired\n' >> "$MACGAMEFIX_PAD_LOG"
+check '! has "$(vibratesform 4242)" "shown-as:" && has "$(vibratesform 4242)" "title: [Vibrates] Fake Game · DualSense Edge · Bluetooth" && ! has "$(vibratesform 4242)" "shown as a"' "a session that showed the pad as two pads leaves the identity to the player"
 unset MACGAMEFIX_PAD_LOG
 
 echo "== the Report tab's probe"
@@ -451,12 +477,13 @@ printf '"AppState"\n{\n\t"appid"\t\t"4949"\n\t"name"\t\t"Probe Game"\n\t"install
   > "$SUPPORT/Steam/steamapps/appmanifest_4949.acf"
 touch "$PFX/user.reg" "$PG/ProbeGame/Binaries/Win64/sl.interposer.dll" "$PG/ProbeGame/Binaries/Win64/libxess.dll" \
   "$PG/ProbeGame/Binaries/Win64/libScePad.dll" "$PG/ProbeGame/Binaries/Win64/CrashReportClient.exe"
-# A Windows executable as small as one can be: one section holding its imports and a delay-loaded one,
-# and the branch name Unreal builds into its executables.
-/usr/bin/python3 - "$PG/ProbeGame/Binaries/Win64/ProbeGame-Win64-Shipping.exe" <<'PY4'
+# A Windows executable as small as one can be: one section holding its imports and the delay-loaded ones,
+# each a list with commas, and the branch name Unreal builds into its executables.
+pe() { # <file> <imports> [delay-loaded]
+/usr/bin/python3 - "$@" <<'PY4'
 import struct, sys
-dlls = [b"d3d12.dll", b"dxgi.dll", b"XINPUT1_4.dll", b"mfplat.dll", b"api-ms-win-core-synch-l1-2-0.dll"]
-delay = [b"hid.dll"]
+dlls = [d.encode() for d in sys.argv[2].split(",") if d]
+delay = [d.encode() for d in (sys.argv[3] if len(sys.argv) > 3 else "").split(",") if d]
 va, raw = 0x1000, 0x400
 sec = bytearray(0x1000)
 imp, dly = 0, 20 * (len(dlls) + 1)
@@ -475,6 +502,9 @@ head = bytes(dos) + struct.pack("<4sHHIIIHH", b"PE\0\0", 0x8664, 1, 0, 0, 0, 240
 image = bytearray(raw); image[:len(head)] = head
 open(sys.argv[1], "wb").write(bytes(image + sec) + "++UE5+Release-5.3".encode("utf-16-le"))
 PY4
+}
+pe "$PG/ProbeGame/Binaries/Win64/ProbeGame-Win64-Shipping.exe" \
+  d3d12.dll,dxgi.dll,XINPUT1_4.dll,mfplat.dll,api-ms-win-core-synch-l1-2-0.dll hid.dll
 printf '\x1a\x45\xdf\xa3....webm....V_VP9....' > "$PG/Content/Movies/intro.webm"
 printf '\x30\x26\xb2\x75\x8e\x66\xcf\x11....WMV3....' > "$PG/Content/Movies/old.wmv"
 HOST_NAME="$(hostname -s)"
@@ -488,6 +518,15 @@ check 'has "$PR" "Main executable: ProbeGame/Binaries/Win64/ProbeGame-Win64-Ship
 check 'has "$PR" "Video: Media Foundation, 1 WebM, VP9 (Content/Movies/intro.webm), 1 ASF, WMV3 (Content/Movies/old.wmv)" || has "$PR" "Video: Media Foundation, 1 ASF, WMV3 (Content/Movies/old.wmv), 1 WebM, VP9 (Content/Movies/intro.webm)"' "the videos by container and codec"
 check 'has "$PR" "Middleware: NVIDIA Streamline, XeSS" && has "$PR" "(and 1 Windows API sets)" && ! has "$PR" "api-ms-win" && has "$PR" "What goes wrong: Videos or cutscenes"' "the middleware, the imports without the API sets, and what goes wrong"
 check 'has "$PR" "ProbeGame.log, its last lines" && has "$PR" "PROBE LAST LINE" && has "$PR" "Z:~/Library" && ! has "$PR" "$MACGAMEFIX_HOME" && ! has "$PR" "$HOST_NAME" && ! has "$PR" "$(printf '%s' "$HOST_NAME" | tr '[:lower:]' '[:upper:]')" && ! has "$PR" "Fake Game"' "the game's own log, the home folder as ~, no Mac name and no other game"
+# The library It Vibrates fills in, by the list's names: Sony's library whenever the game ships it, as for Mortal
+# Kombat 11, which reads its input through DirectInput 8 and rumbles through libScePad, and for Crysis 2
+# Remastered, which rumbles through XInput (the list keeps XInput); DirectInput for a game with no other way.
+pe "$PG/ProbeGame/Binaries/Win64/ProbeGame-Win64-Shipping.exe" d3d11.dll,dxgi.dll,XINPUT1_3.dll
+check 'has "$(MACGAMEFIX_PAD_LOG="$T/pad.log" vibratesform 4949)" "library: Sony libScePad"' "a game that imports XInput and ships Sony's library is reported as Sony libScePad, the folder's guess"
+pe "$PG/ProbeGame/Binaries/Win64/ProbeGame-Win64-Shipping.exe" d3d11.dll,dinput8.dll
+check 'has "$(MACGAMEFIX_PAD_LOG="$T/pad.log" vibratesform 4949)" "library: Sony libScePad"' "a game that imports DirectInput 8 and ships Sony's library is reported as Sony libScePad"
+rm "$PG/ProbeGame/Binaries/Win64/libScePad.dll"
+check 'has "$(MACGAMEFIX_PAD_LOG="$T/pad.log" vibratesform 4949)" "library: DirectInput"' "and one whose only way to the pad is DirectInput 8 as DirectInput"
 rm -rf "$PG" "$SUPPORT/Steam/steamapps/compatdata/4949" "$SUPPORT/Steam/steamapps/appmanifest_4949.acf"
 
 echo "== new fixes, asked first"

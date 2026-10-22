@@ -107,10 +107,12 @@ Played on 2026-10-22: Mortal Kombat 11's `libScePad` opened the pad shown as a
 DualShock 4 (it read `0x12`, `0xa3` and `0x02` and set `0x14`) and the game rumbled
 it, with an Edge over Bluetooth and on a cable and a standard DualSense over
 Bluetooth, XInput off. Crysis 2 Remastered opened it the same way and showed
-PlayStation's prompts, but sent no rumble to it: it rumbles through XInput, which
-is what `xinput=rumble` beside the identity is for (not played yet). With
-`diagnostics=on` the log says which DualShock 4 feature reports a game reads and
-sets, and whether it writes `0x05`.
+PlayStation's prompts, but sent no rumble to it. Played again the same day with
+`xinput=rumble` beside the identity, an Edge over Bluetooth: nothing was written to
+XInput either. It rumbles only the XInput controller it plays with, so it stays one
+(see [`docs/vibration.md`](../docs/vibration.md#2096600)); no game played has vibrated
+through XInput's rumble beside the identity yet. With `diagnostics=on` the log says
+which DualShock 4 feature reports a game reads and sets, and whether it writes `0x05`.
 
 By default the app chooses for each Steam game from its store page: a game listed
 as supporting the DualSense (category 57) gets `xinput=rumble`, which every game
@@ -166,14 +168,22 @@ a CrossOver bottle the prefix starts with Steam or the game opened there and
 stays up, so a change waits until Steam is quit there and opened again. The
 haptics' strength is read by `winecoreaudio.so`, in the game, each time a game
 starts its haptics; `edge` is read there too, when a process lists its audio
-devices, for the game as `winebus.so` knows it, so that both show the same pad.
+devices, for the game as `winebus.so` knows it, so that both name the Edge alike.
+`winecoreaudio.so` reads `edge` alone and never `pad_as`, while `winebus.so` lets
+`pad_as=dualshock4` win over `edge=dualsense`: for a game whose pad is shown as a
+DualShock 4 the app writes `edge=edge` beside `pad_as=dualshock4` in its own file,
+which is read first, so `winecoreaudio.so` does not name an Edge's audio device a
+DualSense's. Over Bluetooth such a pad gets no haptics output (`0013`); on a cable
+it keeps the audio device macOS shows, under its own name, so a standard DualSense
+there is still offered to the game as a DualSense's audio device (the modules' side
+read from their code, not played).
 
 | Line | Effect |
 |---|---|
 | `bluetooth=wired` | A Bluetooth pad shown as wired (`0004`). |
-| `motor_power=full` | An Edge's motor power claimed at `0x00` in every report. Sony's library claims it so for a standard DualSense and never for an Edge, which then stays at the reduction it stores. With `pad_as=dualshock4` it is claimed for either pad: the DualShock 4's output has no motor power to claim it with. |
-| `edge=dualsense` | An Edge shown to the game as a standard DualSense, on a cable or over Bluetooth, its audio device named as a DualSense's too (`0012`): for titles whose Sony library does not know the Edge, or that look for the pad's output by its name. |
-| `pad_as=dualshock4` | A DualSense or an Edge shown to the game as a USB DualShock 4, its reports translated (`0013`): for titles whose Sony code knows only that pad, such as Mortal Kombat 11's `libScePad` (read from its code). On a cable, or over Bluetooth with `bluetooth=wired`; without it a Bluetooth pad is left as it is, and the log says so. It wins over `edge=dualsense`; XInput gets the pad's rumble only with `xinput=rumble` in the game's own file, never the pad itself; for a Bluetooth pad it does not take, `xinput=` applies as usual. The app writes `bluetooth=wired` and the XInput line beside it, so that it takes over Bluetooth too. The game gets no haptics and sets no trigger effects of its own; the chosen trigger effects take the same path as for any game (read from code). Played with Mortal Kombat 11 (see `0013`). |
+| `motor_power=full` | `winebus.so` claims an Edge's motor power at `0x00` in every report (`0004`). Sony's library claims it so for a standard DualSense and never for an Edge, which then stays at the reduction it stores. With `pad_as=dualshock4` it claims it for either pad (`0013`): the DualShock 4's output has no motor power to claim it with. |
+| `edge=dualsense` | `winebus.so` shows an Edge to the game as a standard DualSense, on a cable or over Bluetooth (`0004`), unless `pad_as=dualshock4` shows it as a DualShock 4; `winecoreaudio.so` names the wired Edge's audio device, output and microphone, as a DualSense's too (`0012`), and reads no `pad_as`. For titles whose Sony library does not know the Edge, or that look for the pad's output by its name. |
+| `pad_as=dualshock4` | A DualSense or an Edge shown to the game as a USB DualShock 4, its reports translated (`0013`): for titles whose Sony code knows only that pad, such as Mortal Kombat 11's `libScePad` (read from its code). On a cable, or over Bluetooth with `bluetooth=wired`; without it a Bluetooth pad is left as it is, and the log says so. In `winebus.so` it wins over `edge=dualsense`; `winecoreaudio.so` does not read it. XInput gets the pad's rumble only with `xinput=rumble` in the game's own file, never the pad itself; for a Bluetooth pad it does not take, `xinput=` applies as usual. The app writes `bluetooth=wired`, `edge=edge` and the XInput line beside it: `bluetooth=wired` so that it takes over Bluetooth too, `edge=edge` so that every game's `edge=dualsense` does not name that pad's audio device a DualSense's in `winecoreaudio.so`. The game gets no haptics and sets no trigger effects of its own; the chosen trigger effects take the same path as for any game (read from code). Played with Mortal Kombat 11 (see `0013`). |
 | `haptics_gain_cable=<1-4>`, `edge_haptics_gain_cable=<1-4>` | The haptics multiplied on a cable, a DualSense's and an Edge's, with a soft limit: linear to 0.8, then a curve that never passes 1.0. |
 | `haptics_gain_bluetooth=<1-4>`, `edge_haptics_gain_bluetooth=<1-4>` | The same over Bluetooth. A pad does not feel every game alike on both: a standard DualSense felt the same at 1 in Spider-Man 2, and F1 23's light haptics needed 2 over Bluetooth to feel as steady as on a cable. An older file's `haptics_gain` or `edge_haptics_gain` counts for both connections. |
 | `xinput=off\|rumble\|pad` | What XInput gets of the pad (`0006`-`0008`): nothing; its vibration on the motors (every game's default); the pad itself as an XInput controller (the default for a game the store does not list for the DualSense). |
@@ -354,6 +364,17 @@ do it.
    `PATCHES=none ./build.sh …` builds the same modules unpatched, into `.build/`,
    to compare them with CodeWeavers' own. For 20261006 they match in exports,
    imports and linked libraries.
+
+   The patched copy of the sources in `.build/` carries the series it was made
+   from: `.series`, the SHA-256 of its patches in the order they are applied.
+   When its `.series` is missing or differs from the series as it is now (a patch
+   added, removed or changed, a copy never finished, or a copy made before this
+   check, as every older `.build/` has), `build.sh` says so, makes the copy again
+   and builds both sides of that build from scratch. The other side's modules in
+   `modules/<id>/` came from the old copy too: it removes them and says which
+   side to build again, so the `built-for.json` it writes lists no file of the
+   old series. Run with the script itself on a small fake tree, its tools stubbed,
+   not yet on a Wine build.
 
 ## A new CrossOver build
 

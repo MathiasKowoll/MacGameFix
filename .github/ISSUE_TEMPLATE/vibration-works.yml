@@ -12,9 +12,9 @@ body:
 
         **To send it**: in MacGameFix, open **Game Feel**, click the game, turn on **Diagnose this game** if you
         can, play long enough to feel it vibrate, close the game, then click **It Vibrates…**. It saves the game's
-        report and opens this form with the game, the controller and the connection the Wine modules saw, and what
-        they saw it do. Check them, say how it felt, and attach the report below. The report names this game alone
-        and writes your home folder as `~`.
+        report and opens this form with the game, the controller, the connection and what the pad was shown to the
+        game as, as the Wine modules saw them, and what they saw it do. Check them, say how it felt, and attach the
+        report below. The report names this game alone and writes your home folder as `~`.
   - type: input
     id: game
     attributes:
@@ -38,6 +38,12 @@ body:
       placeholder: Bluetooth
     validations:
       required: true
+  - type: input
+    id: shown-as
+    attributes:
+      label: Shown to the game as
+      description: "DualShock 4 or DualSense, as the list of games played for vibration names them, when Game Feel showed the pad to the game as another pad; empty when it was shown as itself. Filled in by MacGameFix when the modules saw a single one."
+      placeholder: DualShock 4
   - type: dropdown
     id: result
     attributes:
@@ -69,7 +75,7 @@ body:
     id: library
     attributes:
       label: Library
-      description: "How the game talks to the pad: Sony libScePad, SDL, Raw HID or XInput. Filled in by MacGameFix from the game's folder."
+      description: "How the game reaches the pad, as the list of games played for vibration names it: Sony libScePad, SDL, Raw HID, XInput or DirectInput; for a game that rumbles the pad another way than it reads it, the way it rumbles. MacGameFix guesses it from the game's folder: Sony libScePad whenever the game ships Sony's library, even one that rumbles through another (Crysis 2 Remastered rumbles through XInput), and DirectInput only when the game has no other way to the pad. The list keeps what was played."
   - type: textarea
     id: settings
     attributes:

@@ -64,6 +64,11 @@ lines = [
     "- **XInput**: the game rumbles an Xbox-style controller. Game Feel's XInput option gives it the pad as an",
     "  XInput controller, or puts its rumble on the motors.",
     "",
+    "**Library** is how the game reaches the pad: Sony libScePad, SDL, Raw HID, XInput or DirectInput, the names",
+    "Game Feel's **It Vibrates…** fills in from the game's folder. When a game rumbles the pad another way than it",
+    "reads it, the column names the way it rumbles and the entry says so, as for Mortal Kombat 11. A Haptics game",
+    "plays its haptics as audio on the pad's output, whatever its library.",
+    "",
     "| Game | Vibration | Library | Cable | Bluetooth |",
     "|---|---|---|---|---|",
 ]
@@ -75,7 +80,7 @@ for g in data["games"]:
     lines += ["", f"<a id=\"{g['steamAppId']}\"></a>", f"## {g['name']}", "", g["description"], ""]
     lines.append(f"- **Status:** {results[g['status']]}")
     if g.get("library"):
-        lines.append(f"- **Library:** {g['library']}")
+        lines.append(f"- **Library:** {g['library']}" + (f". {g['libraryNote']}" if g.get("libraryNote") else ""))
     lines.append(f"- **Technology:** {g['technology']}")
     lines.append(f"- **Features:** {', '.join(g['features'])}")
     if g.get("settings"):
@@ -89,10 +94,17 @@ lines += [
     "",
     "## Adding a game",
     "",
-    "After a session, add the game to `vibration.json` with what was felt and what the modules logged (Game",
-    "Feel's **Seen** column, or Diagnose this game), one test per controller and connection, then run",
-    "`tools/vibration-md.py`. A game that needed a setting says which one; if many players need the same one, it",
-    "becomes the game's suggested setting in `app/pad-presets.json`.",
+    "Played a game and felt it vibrate? In MacGameFix, open **Game Feel**, click the game, then",
+    "**It Vibrates…**: it saves the game's report and opens the \"A game that vibrates\" form with the game, the",
+    "controller, the connection, what the pad was shown to the game as and the library filled in. One report is",
+    "one test: one controller on one connection.",
+    "",
+    "After a session, or from such a report, add the game to `vibration.json` with what was felt and what the",
+    "modules logged (Game Feel's **Seen** column, or Diagnose this game), one test per controller and connection",
+    "(a report's Controller, Connection, Shown to the game as and Result become a test's `controller`,",
+    "`connection`, `shownAs` and `result`), then run `tools/vibration-md.py`. A game that needed a setting says",
+    "which one; if many players need the same one, it becomes the game's suggested setting in",
+    "`app/pad-presets.json`.",
     "",
 ]
 (docs / "vibration.md").write_text("\n".join(lines))
