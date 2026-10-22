@@ -1498,9 +1498,11 @@ static LONG tex2d_calls;
  * caller supplying one therefore painted exactly one frame out of three
  * hundred, and the black screen that followed was read as "the game does not
  * draw what we hand it" when nothing had actually been handed to it. The size
- * is a property of the buffer, so it is read once from GetCurrentLength and
- * kept. */
-static DWORD known_buffer_len;
+ * is a property of the buffer, so it is asked of each buffer, from
+ * GetCurrentLength. Not kept from the first one: a scene's second video can
+ * have smaller buffers, and on 2026-10-22 the 50th frame's luma sample landed
+ * on one and read past its end with the first video's length -- an access
+ * violation in this DLL that ended the game. */
 
 /* Whether the game ever reads the pixels it is handed.
  *
@@ -1527,6 +1529,17 @@ static DWORD known_buffer_len;
 static HRESULT (WINAPI *real_px_Lock)(void *, BYTE **, DWORD *, DWORD *);
 static HRESULT (WINAPI *real_px_Lock2D)(void *, BYTE **, LONG *);
 
+/* How many bytes this buffer holds: the caller's length, else the buffer's own. */
+static DWORD px_length(void *self, const DWORD *curlen)
+{
+    DWORD len = 0;
+
+    if (curlen && *curlen) return *curlen;
+    if (FAILED(((HRESULT (WINAPI *)(void *, DWORD *))(*(void ***)self)[SLOT_BUF_GETLENGTH])(self, &len)))
+        return 0;
+    return len;
+}
+
 static HRESULT WINAPI my_px_Lock(void *self, BYTE **data, DWORD *maxlen, DWORD *curlen)
 {
     static LONG n;
@@ -1552,7 +1565,7 @@ static HRESULT WINAPI my_px_Lock(void *self, BYTE **data, DWORD *maxlen, DWORD *
      * NV12: the luma plane is the first two thirds, 235 is white in video
      * range; the interleaved chroma that follows is neutral at 128. */
     {
-        DWORD blen = (curlen && *curlen) ? *curlen : known_buffer_len;
+        DWORD blen = px_length(self, curlen);
         char v[8];
         if (SUCCEEDED(hr) && data && *data && blen >= 4096
             && GetEnvironmentVariableA("NG4_PAINT_TEST", v, sizeof(v)) && v[0] == '1')
@@ -1582,7 +1595,7 @@ static HRESULT WINAPI my_px_Lock(void *self, BYTE **data, DWORD *maxlen, DWORD *
         unsigned lo = 255, hi = 0;
         unsigned long long sum = 0;
         int taken = 0;
-        DWORD blen2 = (curlen && *curlen) ? *curlen : known_buffer_len;
+        DWORD blen2 = px_length(self, curlen);
         if (SUCCEEDED(hr) && data && *data && blen2 >= 4096)
         {
             const BYTE *p8 = *data;
@@ -1659,7 +1672,6 @@ static void watch_sample_pixels(void *sample)
     get_len = (HRESULT (WINAPI *)(void *, DWORD *))(*bvt)[SLOT_BUF_GETLENGTH];
     if (FAILED(get_len(buf, &len))) len = 0;
     logf_("  sample carries %lu buffer(s), first is %lu bytes", count, len);
-    known_buffer_len = len;
 
     if (patch_slot("buffer Lock", buf, SLOT_BUF_LOCK, (void *)my_px_Lock, &l1))
         real_px_Lock = (HRESULT (WINAPI *)(void *, BYTE **, DWORD *, DWORD *))l1;
