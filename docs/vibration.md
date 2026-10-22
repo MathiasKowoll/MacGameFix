@@ -41,7 +41,7 @@ Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 2
 | [Teenage Mutant Ninja Turtles: Splintered Fate](#2996040) | XInput | XInput | Not played yet | DualSense Edge: Partly (2026-10-21) |
 | [Nioh 3](#3681010) | Haptics | Raw HID | DualSense Edge: Does not vibrate (2026-10-21) | DualSense Edge: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21) |
 | [NINJA GAIDEN 4](#2627260) | Motors | Raw HID | Not played yet | DualSense Edge shown as a DualSense: Works (2026-10-22) |
-| [Mortal Kombat 11](#976310) | None yet | DirectInput | Not played yet | DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21) |
+| [Mortal Kombat 11](#976310) | Motors | DirectInput | Not played yet | DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualShock 4: Works (2026-10-22) |
 
 <a id="2651280"></a>
 ## Marvel's Spider-Man 2
@@ -530,13 +530,13 @@ What was measured:
 <a id="976310"></a>
 ## Mortal Kombat 11
 
-With XInput off and the Edge shown as a DualSense it plays with the right controls and PlayStation prompts ("never played so well"), but it does not vibrate. With the pad also given as an XInput controller (the store's rule) the buttons were assigned wrong.
+With the pad shown as a DualShock 4 the game's Sony library opens it and the game rumbles it. Shown as a DualSense it plays with the right controls and PlayStation prompts but never vibrates.
 
-- **Status:** Does not vibrate
+- **Status:** Works
 - **Library:** DirectInput
-- **Technology:** NetherRealm's engine (the PC port by QLOC). It reads the pad through DirectInput with its own table, which has the DualSense's id (054C:0CE6) and not the Edge's; the Sony library it ships (2017) knows neither pad.
-- **Features:** PlayStation button prompts
-- **Settings:** Game Feel: the Edge shown as a DualSense; XInput off, on the motors or as a controller gives the same. Steam Input off.
+- **Technology:** NetherRealm's engine (the PC port by QLOC). It reads the pad through DirectInput with its own table and sends its rumble to Sony's library (scePadSetVibration). The library it ships (2017) opens only a USB DualShock 4, so the rumble reaches a DualSense only when the pad is shown to the game as one.
+- **Features:** Motors, PlayStation button prompts
+- **Settings:** Game Feel: the pad shown as a DualShock 4 (patch 0013, not released yet). Steam Input off.
 - **Steam app:** 976310
 
 Tested:
@@ -544,11 +544,13 @@ Tested:
 - DualSense Edge shown as a DualSense, Bluetooth: Does not vibrate (2026-10-21). XInput off, with Steam Input still on for the game. Controls and PlayStation prompts right.
 - DualSense Edge shown as a DualSense, Bluetooth: Does not vibrate (2026-10-21). XInput's rumble on the motors, Steam Input off: no vibration request reached the modules in 3 minutes.
 - DualSense Edge shown as a DualSense, Bluetooth: Does not vibrate (2026-10-21). The pad also as an XInput controller, Steam Input off: still no vibration request.
+- DualSense Edge shown as a DualShock 4, Bluetooth: Works (2026-10-22). Vibrated (the user); 34 motor rises in the log, up to 0xff.
 
 What was measured:
 
-- No motor value and no XInput vibration in the modules' log, in either session.
-- Its executable sends its rumble to XInput (XInputSetState) or to Sony's library (scePadSetVibration), and creates no DirectInput force-feedback effect. The Sony library it ships (2017) does not open a DualSense, and with the pad read through DirectInput the game wrote nothing to XInput, even with the pad there as an XInput controller too.
+- Shown as a DualShock 4, the game's library read the pad's reports 0x12, 0xa3 and 0x02 and set 0x14, all answered by the modules, then wrote the DualShock 4's output 0x05 with its motors; the modules turned it into the DualSense's.
+- With the Edge shown as a DualSense, XInput off, on the motors or as a controller, the game sent no vibration request at all.
+- No light bar write was seen in the session.
 
 ## Adding a game
 
