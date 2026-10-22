@@ -717,10 +717,10 @@
         "PlayStation button prompts"
       ],
       "description": "With XInput off and the Edge shown as a DualSense it plays with the right controls and PlayStation prompts (\"never played so well\"), but it does not vibrate. With the pad also given as an XInput controller (the store's rule) the buttons were assigned wrong.",
-      "settings": "Game Feel: the Edge shown as a DualSense (XInput off or on the motors gives the same). Steam Input off.",
+      "settings": "Game Feel: the Edge shown as a DualSense; XInput off, on the motors or as a controller gives the same. Steam Input off.",
       "details": [
         "No motor value and no XInput vibration in the modules' log, in either session.",
-        "Its executable sends its rumble to XInput (XInputSetState) or to Sony's library (scePadSetVibration), and creates no DirectInput force-feedback effect. The Sony library it ships (2017) does not open a DualSense, and with the pad read through DirectInput the game wrote nothing to XInput."
+        "Its executable sends its rumble to XInput (XInputSetState) or to Sony's library (scePadSetVibration), and creates no DirectInput force-feedback effect. The Sony library it ships (2017) does not open a DualSense, and with the pad read through DirectInput the game wrote nothing to XInput, even with the pad there as an XInput controller too."
       ],
       "tests": [
         {
@@ -738,6 +738,14 @@
           "shownAs": "DualSense",
           "date": "2026-10-21",
           "notes": "XInput's rumble on the motors, Steam Input off: no vibration request reached the modules in 3 minutes."
+        },
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "no-vibration",
+          "shownAs": "DualSense",
+          "date": "2026-10-21",
+          "notes": "The pad also as an XInput controller, Steam Input off: still no vibration request."
         }
       ]
     }
