@@ -1,0 +1,98 @@
+--- a/dlls/xaudio2_7/xaudio_dll.c
++++ b/dlls/xaudio2_7/xaudio_dll.c
+@@ -1731,7 +1731,79 @@
+ 
+     return S_OK;
+ }
++
++#if XAUDIO2_VER >= 8
++/* The device a game names, as FAudio numbers devices: the active render endpoints in the
++ * order IMMDeviceEnumerator lists them, the default one swapped into index 0, as XAudio2
++ * numbers them. A game names an endpoint by its id or by its audio render interface's
++ * path, \\?\SWD#MMDEVAPI#<endpoint id>#{e6327cad-...}; Nioh 3 names its DualSense's that
++ * way, to play the pad's haptics there. 0, the default device, for one that is not found. */
++static UINT32 device_index(const WCHAR *device_id)
++{
++    static const WCHAR prefix[] = L"\\\\?\\SWD#MMDEVAPI#";
++    IMMDeviceEnumerator *enumerator;
++    IMMDeviceCollection *devices;
++    IMMDevice *device;
++    UINT32 count, i, found = ~0u, default_index = 0;
++    WCHAR id[64], *str, *default_id = NULL;
++    const WCHAR *end;
++    HRESULT init;
++    size_t len;
++
++    if (!wcsnicmp(device_id, prefix, ARRAY_SIZE(prefix) - 1))
++        device_id += ARRAY_SIZE(prefix) - 1;
++    end = wcschr(device_id, '#');
++    len = end ? end - device_id : wcslen(device_id);
++    if (len >= ARRAY_SIZE(id))
++        return 0;
++    memcpy(id, device_id, len * sizeof(WCHAR));
++    id[len] = 0;
+ 
++    init = CoInitializeEx(NULL, COINIT_MULTITHREADED);
++    if (SUCCEEDED(CoCreateInstance(&CLSID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER,
++            &IID_IMMDeviceEnumerator, (void **)&enumerator)))
++    {
++        if (SUCCEEDED(IMMDeviceEnumerator_GetDefaultAudioEndpoint(enumerator, eRender, eConsole, &device)))
++        {
++            if (FAILED(IMMDevice_GetId(device, &default_id)))
++                default_id = NULL;
++            IMMDevice_Release(device);
++        }
++        if (SUCCEEDED(IMMDeviceEnumerator_EnumAudioEndpoints(enumerator, eRender, DEVICE_STATE_ACTIVE, &devices)))
++        {
++            if (SUCCEEDED(IMMDeviceCollection_GetCount(devices, &count)))
++                for (i = 0; i < count; i++)
++                {
++                    if (FAILED(IMMDeviceCollection_Item(devices, i, &device)))
++                        continue;
++                    if (SUCCEEDED(IMMDevice_GetId(device, &str)))
++                    {
++                        if (default_id && !wcscmp(str, default_id))
++                            default_index = i;
++                        if (!wcsicmp(str, id))
++                            found = i;
++                        CoTaskMemFree(str);
++                    }
++                    IMMDevice_Release(device);
++                }
++            IMMDeviceCollection_Release(devices);
++        }
++        CoTaskMemFree(default_id);
++        IMMDeviceEnumerator_Release(enumerator);
++    }
++    if (SUCCEEDED(init))
++        CoUninitialize();
++
++    if (found == ~0u)
++    {
++        WARN("device %s not found, opening the default one\n", debugstr_w(id));
++        return 0;
++    }
++    TRACE("device %s is endpoint %u of the active ones, the default %u\n", debugstr_w(id), found, default_index);
++    return found == default_index ? 0 : found == 0 ? default_index : found;
++}
++#endif
++
+ static HRESULT WINAPI IXAudio2Impl_CreateMasteringVoice(IXAudio2 *iface,
+         IXAudio2MasteringVoice **ppMasteringVoice, UINT32 inputChannels,
+         UINT32 inputSampleRate, UINT32 flags,
+@@ -1777,9 +1849,12 @@
+ #if XAUDIO2_VER >= 8
+     TRACE("device id %s, category %#x\n", debugstr_w(deviceId), streamCategory);
+ 
+-    FAudio_CreateMasteringVoice8(This->faudio, &This->mst.faudio_voice, inputChannels,
+-            inputSampleRate, flags, NULL /* TODO: (uint16_t*)deviceId */,
+-            This->mst.effect_chain, (FAudioStreamCategory)streamCategory);
++    if (deviceId && *deviceId)
++        FAudio_CreateMasteringVoice(This->faudio, &This->mst.faudio_voice, inputChannels,
++                inputSampleRate, flags, device_index(deviceId), This->mst.effect_chain);
++    else
++        FAudio_CreateMasteringVoice8(This->faudio, &This->mst.faudio_voice, inputChannels,
++                inputSampleRate, flags, NULL, This->mst.effect_chain, (FAudioStreamCategory)streamCategory);
+ #else
+     TRACE("device index %u\n", index);
+ 
