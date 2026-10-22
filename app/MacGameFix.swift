@@ -1401,9 +1401,10 @@ struct PadOptionRows: View {
     let own: (PartialKeyPath<PadOptions>) -> Bool
     var perGame = false
 
-    /// Shown as a DualShock 4, Bluetooth is a cable (PadOptions.lines), the
-    /// identity wins over the Edge's, and the modules take XInput off, so those
-    /// rows say so and cannot be changed.
+    /// Shown as a DualShock 4, Bluetooth is a cable (PadOptions.lines) and the
+    /// identity wins over the Edge's, so those rows say so and cannot be changed;
+    /// XInput can carry the game's rumble to the motors (ds4XInputRumble), never
+    /// the pad itself.
     private var asDualShock4: Bool { perGame && flag(\.asDualShock4).wrappedValue }
 
     private func title(_ text: String, _ key: PartialKeyPath<PadOptions>) -> Text {
@@ -1418,8 +1419,23 @@ struct PadOptionRows: View {
         }
     }
 
+    /// XInput's choice; shown as a DualShock 4 it is the game's own rumble or
+    /// nothing (PadOptions.ds4XInputRumble), never the pad as a controller.
+    private var xinputChoice: Binding<String> {
+        guard asDualShock4 else { return choice(\.xinput) }
+        let rumble = flag(\.ds4XInputRumble)
+        return Binding(get: { rumble.wrappedValue ? "rumble" : "off" },
+                       set: { rumble.wrappedValue = $0 == "rumble" })
+    }
+
     private var xinputAbout: String {
-        if asDualShock4 { return "Off while the pad is shown as a DualShock 4." }
+        if asDualShock4 {
+            return xinputChoice.wrappedValue == "rumble"
+                ? "For a game that shows PlayStation buttons through the DualShock 4 but rumbles only through "
+                  + "XInput, as Crysis 2 Remastered seems to: its rumble goes to the motors. Not yet played."
+                : "XInput gets nothing. A game that rumbles through the DualShock 4, as Mortal Kombat 11 does, "
+                  + "needs nothing more."
+        }
         switch choice(\.xinput).wrappedValue {
         case "rumble": return "The pad stays itself, and a game that rumbles through XInput, such as Beast of "
             + "Reincarnation, gets its rumble on the motors. For a game the Steam store lists for the DualSense."
@@ -1453,17 +1469,16 @@ struct PadOptionRows: View {
         if perGame {
             Toggle(isOn: flag(\.asDualShock4)) {
                 label("Show the pad as a DualShock 4", \.asDualShock4,
-                      "For a game whose controller code knows only the PS4 pad, such as Mortal Kombat 11. The pad is "
-                      + "shown to the game as a DualShock 4 on a cable, over Bluetooth too, and XInput is off for "
-                      + "it. Not yet played with a game.")
+                      "For a game whose controller code knows only the PS4 pad, such as Mortal Kombat 11, which "
+                      + "vibrates through it (played on 2026-10-22). The pad is shown to the game as a DualShock 4 "
+                      + "on a cable, over Bluetooth too.")
             }
         }
-        Picker(selection: asDualShock4 ? .constant("off") : choice(\.xinput)) {
+        Picker(selection: xinputChoice) {
             Text("Off").tag("off")
             Text("Its rumble on the motors").tag("rumble")
-            Text("The pad as an XInput controller").tag("pad")
-        } label: { label("XInput", \.xinput, xinputAbout) }
-        .disabled(asDualShock4)
+            if !asDualShock4 { Text("The pad as an XInput controller").tag("pad") }
+        } label: { label("XInput", asDualShock4 ? \PadOptions.ds4XInputRumble : \PadOptions.xinput, xinputAbout) }
         Toggle(isOn: flag(\.rumbleHaptics)) {
             label("Rumble on the haptic actuators", \.rumbleHaptics,
                   "Over Bluetooth, a game's motor rumble played on the haptic actuators, as PlayStation games play theirs: the heavy "

@@ -41,7 +41,75 @@
      DWORD location;
      pthread_t writer, receiver;
      pthread_mutex_t lock;
-@@ -902,7 +915,10 @@
+@@ -344,10 +357,12 @@
+  * iohid_device_set_output_report); "edge=dualsense", a Bluetooth Edge shown to
+  * games as the standard pad; "diagnostics=on", which adds what a game writes
+  * to the pad and reads from it to pad.log. */
++/* The lines read, the game's own first (pad_game_count of them). */
++static char pad_lines[32][96];
++static int pad_count = -1, pad_game_count;
++
+ static const char *pad_value(const char *key)
+ {
+-    static char lines[32][96];
+-    static int count = -1;
+     char path[1024], line[128], game[24];
+     const char *home;
+     size_t n, length = strlen(key);
+@@ -355,9 +370,9 @@
+     FILE *f;
+     int i, pass;
+ 
+-    if (count < 0)
++    if (pad_count < 0)
+     {
+-        count = 0;
++        pad_count = 0;
+         pad_game(game, sizeof(game));
+         if ((home = getenv("HOME")))
+         {
+@@ -370,11 +385,12 @@
+                     snprintf(path, sizeof(path), "%s/Library/Application Support/MacGameFix/pad.conf", home);
+                 if (!(f = fopen(path, "r"))) continue;
+                 if (pass == 0) from_game = TRUE;
+-                while (count < 32 && fgets(line, sizeof(line), f))
++                while (pad_count < 32 && fgets(line, sizeof(line), f))
+                 {
+                     n = strcspn(line, "\r\n");
+                     line[n] = 0;
+-                    if (n) snprintf(lines[count++], sizeof(lines[0]), "%s", line);
++                    if (n) snprintf(pad_lines[pad_count++], sizeof(pad_lines[0]), "%s", line);
++                    if (pass == 0) pad_game_count = pad_count;
+                 }
+                 fclose(f);
+             }
+@@ -382,11 +398,23 @@
+         pad_log("settings: %s%s\n", game[0] ? "game " : "no game id, ", game[0] ? game : "every game's");
+         if (from_game) pad_log("settings: pad.d/%s.conf read before pad.conf\n", game);
+     }
+-    for (i = 0; i < count; i++)
+-        if (!strncmp(lines[i], key, length) && lines[i][length] == '=') return lines[i] + length + 1;
++    for (i = 0; i < pad_count; i++)
++        if (!strncmp(pad_lines[i], key, length) && pad_lines[i][length] == '=') return pad_lines[i] + length + 1;
+     return "";
+ }
+ 
++/* Whether the game's own settings, pad.d/<app id>.conf, say "key=value";
++ * every game's pad.conf does not count. */
++static BOOL pad_game_option(const char *option)
++{
++    int i;
++
++    pad_value("");
++    for (i = 0; i < pad_game_count; i++)
++        if (!strcmp(pad_lines[i], option)) return TRUE;
++    return FALSE;
++}
++
+ /* Whether a setting is "key=value". */
+ static BOOL pad_option(const char *option)
+ {
+@@ -902,7 +930,10 @@
      IOHIDDeviceGetReport(pad->device, kIOHIDReportTypeFeature, 0x05, calibration, &length);
      pad->input_at = mach_absolute_time();
      pad->quit = FALSE;
@@ -53,7 +121,7 @@
      pad->running = !pthread_create(&pad->writer, NULL, bt_writer, pad);
      if (pad->running && pad->sock >= 0 && pthread_create(&pad->receiver, NULL, bt_receiver, pad))
      {
-@@ -1044,6 +1060,14 @@
+@@ -1044,6 +1075,14 @@
              usb[0] = 0x01;
              memcpy(usb + 1, report + 2, 63);
              pad_triggers_follow(impl, usb, sizeof(usb));
@@ -68,7 +136,7 @@
              bus_event_queue_input_report(&event_queue, iface, usb, sizeof(usb));
              return;
          }
-@@ -1053,6 +1077,18 @@
+@@ -1053,6 +1092,18 @@
          pad_input_rate(impl);
          pad_triggers_follow(impl, report, report_length);
      }
@@ -87,7 +155,7 @@
      bus_event_queue_input_report(&event_queue, iface, report, report_length);
  }
  
-@@ -1087,6 +1123,25 @@
+@@ -1087,6 +1138,25 @@
                      impl->edge ? "the improved emulation, as every Edge's"
                      : impl->rumble_improved ? "the improved emulation, firmware 2.24 or newer"
                      : "the old emulation, firmware older than 2.24 or not read");
@@ -113,21 +181,51 @@
      }
      IOHIDDeviceRegisterInputReportCallback(impl->device, impl->buffer, length, handle_IOHIDDeviceIOHIDReportCallback, iface);
      if (impl->bt) bt_pad_start(impl->bt);
-@@ -1492,7 +1547,12 @@
+@@ -1414,6 +1484,9 @@
+ #define XINPUT_OUTPUT_ID  0x03
+ #define XINPUT_FEATURE_ID 0x04
+ #define XINPUT_INPUT_ID   0x06
++/* A pad shown as a DualShock 4 declares feature 0x04 itself, so its collection
++ * for xinput takes 0x07, which the DualShock 4's descriptor leaves free. */
++#define XINPUT_FEATURE_ID_DS4 0x07
+ #include "psh_hid_macros.h"
+ static const BYTE xinput_endpoint_head[] =
+ {
+@@ -1492,8 +1565,13 @@
      const BYTE *base = CFDataGetBytePtr(data);
      UINT size = CFDataGetLength(data), extra = 0;
  
 -    if (impl->bt || impl->as_standard)
 +    if (impl->ds4)
-+    {
+     {
 +        base = ds4_usb_descriptor;
 +        size = sizeof(ds4_usb_descriptor);
 +    }
 +    else if (impl->bt || impl->as_standard)
-     {
++    {
          BOOL edge = impl->bt ? impl->bt->edge : FALSE;
  
-@@ -1582,14 +1642,16 @@
+         base = edge ? ds_edge_usb_descriptor : ds_usb_descriptor;
+@@ -1546,6 +1624,18 @@
+         memcpy(at, xinput_haptics_collection, sizeof(xinput_haptics_collection));
+         at += sizeof(xinput_haptics_collection);
+         memcpy(at, xinput_endpoint_tail, sizeof(xinput_endpoint_tail));
++        if (impl->ds4)
++        {
++            /* The feature report id of both haptics collections, REPORT_ID(1, 0x04),
++             * found item by item. */
++            UINT i = size, end = size + extra;
++
++            while (i + 1 < end)
++            {
++                if (buffer[i] == 0x85 && buffer[i + 1] == XINPUT_FEATURE_ID) buffer[i + 1] = XINPUT_FEATURE_ID_DS4;
++                i += 1 + ((buffer[i] & 3) == 3 ? 4 : (buffer[i] & 3));
++            }
++        }
+     }
+     return STATUS_SUCCESS;
+ }
+@@ -1582,14 +1672,16 @@
      if (report != copy) memcpy(copy, report, length);
      copy[1] = (copy[1] & ~0x01) | 0x02;
      copy[39] |= 0x04;
@@ -146,7 +244,7 @@
      }
      return copy;
  }
-@@ -1599,9 +1661,39 @@
+@@ -1599,9 +1691,39 @@
      IOReturn result;
      struct iohid_device *impl = impl_from_unix_device(iface);
  
@@ -160,7 +258,7 @@
 +     * written by the game, and from here on goes as any 0x02 the game writes:
 +     * the rumble emulation, the motor power, the chosen trigger effects, and
 +     * over Bluetooth the writer. */
-+    if (impl->ds4)
++    if (impl->ds4 && !(impl->xinput && packet->reportId == XINPUT_OUTPUT_ID))
 +    {
 +        if (packet->reportId != DS4_OUTPUT_ID || length < 2 || report[0] != DS4_OUTPUT_ID)
 +        {
@@ -187,7 +285,20 @@
  
      /* What xinput writes to the collection added for it: the rumble and the
       * buzz intensity, 16 bits each, which become the pad's output report 0x02
-@@ -1627,7 +1719,7 @@
+@@ -1623,11 +1745,20 @@
+         motors[1] = 0x03;
+         motors[3] = buzz >> 8;
+         motors[4] = rumble >> 8;
++        /* Shown as a DualShock 4, the game's own 0x05 resends the motors it last
++         * set with every light bar write: they are XInput's from now on, so the
++         * two do not undo each other. */
++        if (impl->ds4)
++        {
++            impl->ds4_output.motors[0] = motors[3];
++            impl->ds4_output.motors[1] = motors[4];
++            impl->ds4_output.motors_set = 1;
++        }
+         report = motors;
          length = impl->edge && !impl->as_standard ? 64 : 48;
      }
      output = impl->sony && length >= 48 && report[0] == 0x02 &&
@@ -196,7 +307,7 @@
      /* Said before any copy is made: whether the game wrote it, or XInput did. */
      from_game = report != motors;
  
-@@ -1697,13 +1789,16 @@
+@@ -1697,13 +1828,16 @@
           * standard DualSense and never for an Edge, which then stays at its own
           * stored reduction. With motor_power=full an Edge gets the standard
           * pad's 0x00 in every report (over Bluetooth, the writer claims it in
@@ -216,13 +327,14 @@
              copy[37] = 0;
              report = copy;
          }
-@@ -1739,6 +1834,41 @@
+@@ -1739,10 +1873,46 @@
      CFIndex report_length = packet->reportBufferLen;
      struct iohid_device *impl = impl_from_unix_device(iface);
  
 +    /* A DualShock 4's feature reports are answered here, never by the pad: its
-+     * ids mean other things to a DualSense (see ds4_feature_reply). */
-+    if (impl->ds4)
++     * ids mean other things to a DualSense (see ds4_feature_reply). The
++     * collection added for xinput has its own, 0x07, answered below. */
++    if (impl->ds4 && !(impl->xinput && packet->reportId == XINPUT_FEATURE_ID_DS4))
 +    {
 +        BYTE reply[64];
 +        UINT size = ds4_feature_reply(packet->reportId, impl->ds4_calibration, impl->ds4_calibration_length,
@@ -258,7 +370,21 @@
      /* The waveforms of the collection added for xinput, answered here: rumble,
       * then buzz, each with its duration (0: until changed, as XInputSetState
       * means it) and a cutoff of a second, as winebus answers for its own pads. */
-@@ -1799,6 +1929,27 @@
+-    if (impl->xinput && packet->reportId == XINPUT_FEATURE_ID)
++    if (impl->xinput && packet->reportId == (impl->ds4 ? XINPUT_FEATURE_ID_DS4 : XINPUT_FEATURE_ID))
+     {
+         static const USHORT waveforms[2] = {HID_USAGE_HAPTICS_WAVEFORM_RUMBLE, HID_USAGE_HAPTICS_WAVEFORM_BUZZ};
+         BYTE *out = packet->reportBuffer;
+@@ -1755,7 +1925,7 @@
+             return;
+         }
+         memset(out, 0, 17);
+-        out[0] = XINPUT_FEATURE_ID;
++        out[0] = packet->reportId;
+         for (i = 0; i < 2; i++)
+         {
+             BYTE *entry = out + 1 + 8 * i;
+@@ -1799,8 +1969,29 @@
      IOReturn result;
      struct iohid_device *impl = impl_from_unix_device(iface);
  
@@ -266,7 +392,7 @@
 +     * libScePad sets with 17 bytes) is acknowledged and kept from the pad,
 +     * whose same ids mean other things: 0x08 is where a DualSense's radio is
 +     * turned off. */
-+    if (impl->ds4)
++    if (impl->ds4 && !(impl->xinput && packet->reportId == XINPUT_FEATURE_ID_DS4))
 +    {
 +        if (pad_option("diagnostics=on") && first_time(impl->ds4_sets_told, packet->reportId))
 +        {
@@ -284,9 +410,12 @@
 +    }
 +
      /* The collection added for xinput keeps nothing. */
-     if (impl->xinput && packet->reportId == XINPUT_FEATURE_ID)
+-    if (impl->xinput && packet->reportId == XINPUT_FEATURE_ID)
++    if (impl->xinput && packet->reportId == (impl->ds4 ? XINPUT_FEATURE_ID_DS4 : XINPUT_FEATURE_ID))
      {
-@@ -1855,7 +2006,8 @@
+         io->Information = packet->reportBufferLen;
+         io->Status = STATUS_SUCCESS;
+@@ -1855,7 +2046,8 @@
      struct iohid_device *impl;
      USAGE_AND_PAGE usages;
      CFStringRef str;
@@ -296,10 +425,11 @@
  
      usages.UsagePage = CFNumberToDWORD(IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDPrimaryUsagePageKey)));
      usages.Usage = CFNumberToDWORD(IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDPrimaryUsageKey)));
-@@ -1901,11 +2053,35 @@
+@@ -1900,12 +2092,36 @@
+     if (str) CFStringToWSTR(str, desc.product, ARRAY_SIZE(desc.product));
      str = IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDSerialNumberKey));
      if (str) CFStringToWSTR(str, desc.serialnumber, ARRAY_SIZE(desc.serialnumber));
- 
++
 +    /* The pad it is, whatever the game is shown: everything that drives the pad
 +     * itself (the Bluetooth writer, the triggers, the motor power, the logs)
 +     * goes by this. */
@@ -323,7 +453,7 @@
 +             desc.bus_type == BUS_TYPE_BLUETOOTH && pad_option("pad_as=dualshock4"))
 +        pad_log("pad_as=dualshock4 is not applied to the Bluetooth %s at location %08x: it needs a cable, or "
 +                "bluetooth=wired\n", desc.pid == DS_EDGE_PID ? "DualSense Edge" : "DualSense", (unsigned int)desc.uid);
-+
+ 
      /* With edge=dualsense an Edge is the standard pad to the game, on a cable or
       * over Bluetooth shown as wired: its product ID, name, descriptor and output
       * size, as PR #90's bridge offered (NOTPROTON_PAD_AS=dualsense) for titles
@@ -333,7 +463,7 @@
          pad_option("edge=dualsense"))
      {
          static const WCHAR standard[] = {'D','u','a','l','S','e','n','s','e',' ','W','i','r','e','l','e','s','s',' ',
-@@ -1928,15 +2104,27 @@
+@@ -1928,15 +2144,37 @@
      list_add_tail(&device_list, &impl->unix_device.entry);
      impl->device = IOHIDDevice;
      impl->buffer = NULL;
@@ -356,13 +486,23 @@
 +    if (as_ds4)
 +        pad_log("the %s at location %08x is shown to the game as a USB DualShock 4 (054C:%04X)\n", impl->model,
 +                (unsigned int)desc.uid, DS4_PID);
-+    /* No XInput for a pad shown as a DualShock 4: that pad declares feature
-+     * 0x04, the id the collection added for xinput uses, and a game that reads
-+     * it through Sony's code would get it a second time through XInput. */
-+    impl->xinput = !impl->sony || as_ds4 ? 0 : pad_option("xinput=rumble") ? XINPUT_RUMBLE : pad_option("xinput=pad") ? XINPUT_PAD : 0;
-+    if (as_ds4 && (pad_option("xinput=rumble") || pad_option("xinput=pad")))
-+        pad_log("xinput=%s is not applied to the %s: XInput is off for a pad shown as a DualShock 4\n",
-+                pad_value("xinput"), impl->model);
++    /* A pad shown as a DualShock 4 takes XInput's motors (xinput=rumble), as a
++     * game that reads its pad through Sony's code and rumbles through XInput
++     * needs: Crysis 2 Remastered shows PlayStation prompts through its ps4pad and
++     * sent no rumble to the DualShock 4 (2026-10-22). Never the pad itself as an
++     * XInput controller: the game would read it twice. */
++    impl->xinput = !impl->sony ? 0
++                 : as_ds4 ? (pad_game_option("xinput=rumble") ? XINPUT_RUMBLE : 0)
++                 : pad_option("xinput=rumble") ? XINPUT_RUMBLE : pad_option("xinput=pad") ? XINPUT_PAD : 0;
++    /* Only the game's own rumble line: every game's xinput=rumble would give each
++     * DualShock 4 game the second collection, and the pad's id "&Col01", which
++     * Mortal Kombat 11 was measured without. */
++    if (as_ds4 && pad_option("xinput=pad"))
++        pad_log("xinput=pad is not applied to the %s: a pad shown as a DualShock 4 takes XInput's rumble at most\n",
++                impl->model);
++    else if (as_ds4 && !impl->xinput && pad_option("xinput=rumble"))
++        pad_log("every game's xinput=rumble is not applied to the %s: a pad shown as a DualShock 4 takes it only "
++                "from the game's own settings\n", impl->model);
      if (impl->xinput == XINPUT_RUMBLE) pad_log("XInput's vibration goes to the %s's motors\n", impl->model);
      if (impl->xinput == XINPUT_PAD) pad_log("the %s is an XInput controller, its vibration on the motors\n", impl->model);
  
