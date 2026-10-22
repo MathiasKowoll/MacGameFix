@@ -748,7 +748,7 @@
         "Motors",
         "PlayStation button prompts"
       ],
-      "description": "With the pad shown as a DualShock 4 the game's Sony library opens it and the game rumbles it. Shown as a DualSense it plays with the right controls and PlayStation prompts but never vibrates.",
+      "description": "With the pad shown as a DualShock 4 the game's Sony library opens it and the game rumbles it, on a cable and over Bluetooth. Shown as a DualSense it plays with the right controls and PlayStation prompts but never vibrates.",
       "settings": "Game Feel: the pad shown as a DualShock 4 (patch 0013, not released yet). Steam Input off.",
       "details": [
         "Shown as a DualShock 4, the game's library read the pad's reports 0x12, 0xa3 and 0x02 and set 0x14, all answered by the modules, then wrote the DualShock 4's output 0x05 with its motors; the modules turned it into the DualSense's.",
@@ -787,6 +787,14 @@
           "shownAs": "DualShock 4",
           "date": "2026-10-22",
           "notes": "Vibrated (the user); 34 motor rises in the log, up to 0xff."
+        },
+        {
+          "controller": "DualSense Edge",
+          "connection": "cable",
+          "result": "works",
+          "shownAs": "DualShock 4",
+          "date": "2026-10-22",
+          "notes": "Vibrated (the user); 13 motor rises in the log, both motors up to 0xff."
         }
       ]
     }
