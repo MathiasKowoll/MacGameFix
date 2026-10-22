@@ -2,7 +2,9 @@
 # The automation, offline: the Wine modules put into a runner and taken out, a
 # signed catalog taken or refused, and the agent
 # keeping a marked fix applied across game updates, while Steam writes the game,
-# while the game runs, and when the installer fails. Nothing here touches the
+# while the game runs, and when the installer fails, waiting for a recipe for a
+# macOS game's new build until a catalog brings one, and left alone where that
+# game's installer refuses. Nothing here touches the
 # real Steam libraries or GitHub: MACGAMEFIX_HOME points everything at a
 # throwaway home, and the fixes catalog is a fake one signed with a test key.
 #
@@ -121,9 +123,37 @@ esac
 echo "installing into $dir and $pfx"
 echo 1 > "$dir/keys.marker"; touch "$pfx/fake.key"
 SH
+# A fix made for each build of a macOS game, as Cyberpunk 2077's is: the game's
+# build is in its app, and the catalog's fakeapp.recipes lists the builds it has
+# a recipe for. Every install it is asked for is written down in "runs". A file
+# "blocked" or "half" in the game folder holds the reason it gives on a "Why:"
+# line, as Cyberpunk 2077's does for an executable changed outside MacGameFix
+# or a Mac the fix is not for, and it then refuses to install.
+cat > "$RES/install-fakeapp.sh" <<'SH'
+#!/bin/bash
+dir="$1"; HERE="$(cd "$(dirname "$0")" && pwd)"
+build="$(cat "$dir/FakeNative.app/Contents/build")"
+echo "Game build: $build"
+case "${2:-}" in --status|--restore) ;; *) echo "$build" >> "$dir/runs" ;; esac
+for word in blocked half; do
+  [ -f "$dir/$word" ] || continue
+  case "${2:-}" in --status) echo "Why: $(cat "$dir/$word")"; echo "$word"; exit 0 ;; esac
+  echo "error: $(cat "$dir/$word")"; exit 1
+done
+if ! /usr/bin/grep -qx "$build" "$HERE/fakeapp.recipes"; then
+  case "${2:-}" in --status) echo norecipe; exit 0 ;; --restore) exit 0 ;; esac
+  echo "no recipe for build $build"; exit 1
+fi
+case "${2:-}" in
+  --status) [ -f "$dir/fixed.marker" ] && echo installed || echo absent; exit 0 ;;
+  --restore) rm -f "$dir/fixed.marker"; exit 0 ;;
+esac
+touch "$dir/fixed.marker"
+SH
+printf '1\n' > "$RES/fakeapp.recipes"
 # Made for DXMT, with a codec only CrossOver Preview 27 ships; a second game
-# whose fix writes registry keys; and a third whose DLLs go into the prefix, as
-# NINJA GAIDEN 3's do.
+# whose fix writes registry keys; a third whose DLLs go into the prefix, as
+# NINJA GAIDEN 3's do; and a macOS game whose app its fix changes.
 cat > "$RES/games.json" <<'JSON'
 {"games": [{"name": "Fake Game", "exe": "FakeGame.exe", "carrierDir": "", "script": "install-fake.sh",
   "needsPrefix": false, "symptom": "test", "backend": "dxmt", "gptk": "", "gptkAlso": "",
@@ -133,12 +163,15 @@ cat > "$RES/games.json" <<'JSON'
   "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "", "why": ""},
  {"name": "Fake Prefix", "exe": "FakePrefix.exe", "carrierDir": "", "script": "install-fakekeys.sh",
   "needsPrefix": true, "scope": "prefix", "symptom": "test", "backend": "dxvk", "gptk": "", "gptkAlso": "",
+  "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "", "why": ""},
+ {"name": "Fake Native", "exe": "FakeNative", "carrierDir": "FakeNative.app/Contents/MacOS", "script": "install-fakeapp.sh",
+  "needsPrefix": false, "scope": "app", "symptom": "test", "backend": "", "gptk": "", "gptkAlso": "",
   "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "", "why": ""}]}
 JSON
 /usr/bin/python3 - "$RES" <<'PY'
 import hashlib, json, pathlib, sys
 res = pathlib.Path(sys.argv[1])
-files = {n: hashlib.sha256((res / n).read_bytes()).hexdigest() for n in ("install-fake.sh", "install-fakekeys.sh", "games.json")}
+files = {n: hashlib.sha256((res / n).read_bytes()).hexdigest() for n in ("install-fake.sh", "install-fakekeys.sh", "install-fakeapp.sh", "fakeapp.recipes", "games.json")}
 json.dump({"version": 4000000000, "minimumApp": "1.4.0", "files": files}, open(res / "catalog.json", "w"))
 PY
 PUB="$("$BIN" --new-signing-key "$T/test.key")"
@@ -229,6 +262,70 @@ printf '"AppState"\n{\n\t"appid"\t\t"4343"\n\t"name"\t\t"Fake Prefix"\n\t"StateF
 check 'has "$(games)" "Fake Prefix | runs on DXVK | DLLs into the Steam Play prefix (4343)"' "its DLLs are said to go into the game's Steam Play prefix"
 rm -rf "$FP" "$SUPPORT/Steam/steamapps/compatdata/4343" "$SUPPORT/Steam/steamapps/appmanifest_4343.acf"
 check 'has "$(games)" "Fake Game |" && ! has "$(games)" "Fake Prefix"' "and a game that is not on disk is not listed"
+printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false}' "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
+
+echo "== a fix for a macOS game's app, made for each build of the game"
+# The executable's name stays out of every command line here: the agent takes a
+# process naming it for the game running.
+FN="$SUPPORT/Steam/steamapps/common/Fake Native"
+mkdir -p "$FN/FakeNative.app/Contents/MacOS"; touch "$FN/FakeNative.app/Contents/MacOS/FakeNative"
+native() { # the build: Steam's buildid, and the app's own
+  printf '"AppState"\n{\n\t"appid"\t\t"4545"\n\t"name"\t\t"Fake Native"\n\t"StateFlags"\t\t"4"\n\t"installdir"\t\t"Fake Native"\n\t"buildid"\t\t"%s"\n}\n' "$1" \
+    > "$SUPPORT/Steam/steamapps/appmanifest_4545.acf"
+  echo "$1" > "$FN/FakeNative.app/Contents/build"
+}
+native 2
+check 'has "$(games)" "Fake Native | macOS app; changes its executable"' "a fix that changes a macOS game's app says so beside the game"
+printf '{"kept":[{"name":"Fake Native","folder":"%s"}],"updates":false,"modulesUpdates":false}' "$FN" > "$SUPPORT/MacGameFix/automatic.json"
+OUT="$(agent)"
+check 'has "$OUT" "ok Fake Native: No recipe for this build yet; MacGameFix puts it back when one arrives." && ! has "$OUT" "FAILED" && ! has "$OUT" "report " && [ ! -e "$FN/runs" ]' "with no recipe for the game's build the agent waits: no installer run, no failure, no report"
+check '[ -z "$(agent)" ]' "and nothing more while nothing changes"
+# A newer catalog, still with no recipe for build 2: the agent looks again, and
+# does not say it again.
+recatalog() { # recatalog <dir> <version>: <dir>'s files, signed as that catalog
+  /usr/bin/python3 - "$1" "$2" <<'PY'
+import hashlib, json, pathlib, sys
+res = pathlib.Path(sys.argv[1])
+m = json.load(open(res / "catalog.json"))
+m["version"] = int(sys.argv[2])
+m["files"] = {n: hashlib.sha256((res / n).read_bytes()).hexdigest() for n in m["files"]}
+json.dump(m, open(res / "catalog.json", "w"))
+PY
+  "$BIN" --make-catalog "$1.release" --key "$T/test.key" --from "$1" >/dev/null
+}
+cp -R "$RES" "$T/res-norecipe"; recatalog "$T/res-norecipe" 4000000001
+check 'has "$(update "$T/res-norecipe.release" --pubkey "$PUB")" "catalog 4000000001"' "a newer catalog with still no recipe for that build is taken"
+check '[ -z "$(agent)" ] && [ ! -e "$FN/runs" ] && has "$(menu)" "Fake Native | Waiting for a recipe"' "and the agent, looking again, says nothing twice for the same build"
+OUT="$(menu)"
+check 'has "$OUT" "Fake Native | Waiting for a recipe" && has "$OUT" "summary | 1 waiting for a recipe" && ! has "$OUT" "to review"' "the menu bar counts it waiting for a recipe, not to review"
+native 3
+check 'has "$(agent)" "ok Fake Native: No recipe for this build yet" && [ ! -e "$FN/runs" ]' "a Steam update to another build with no recipe is said again, once for that build"
+# The next catalog carries a recipe for build 3.
+cp -R "$RES" "$T/res-recipe"; printf '1\n3\n' > "$T/res-recipe/fakeapp.recipes"; recatalog "$T/res-recipe" 4000000002
+check 'has "$(update "$T/res-recipe.release" --pubkey "$PUB")" "catalog 4000000002"' "a newer catalog with a recipe for that build is taken"
+OUT="$(agent)"
+check 'has "$OUT" "ok Fake Native: A recipe for this build arrived; the fix is in place." && [ -f "$FN/fixed.marker" ] && [ "$(cat "$FN/runs")" = 3 ] && has "$(menu)" "Fake Native | In place"' "and the agent installs the fix at its next look"
+# After a game update, the executable patched outside MacGameFix: its installer
+# refuses, and running it would fail at every look.
+WHY_HALF="The executable is patched, but not by MacGameFix. Verify the game in Steam, then install here."
+echo "$WHY_HALF" > "$FN/half"; native 4
+OUT="$(agent)"
+check 'has "$OUT" "ok Fake Native: $WHY_HALF" && ! has "$OUT" "FAILED" && ! has "$OUT" "report " && [ "$(cat "$FN/runs")" = 3 ]' "patched outside MacGameFix: the installer's reason, and no installer run, no failure, no report"
+OUT="$(menu)"
+check 'has "$OUT" "Fake Native | Cannot be installed here | $WHY_HALF" && ! has "$OUT" "$WHY_HALF | report"' "the menu bar has it to review, with that reason and no report"
+# Six hours on, nothing changed: looked at again, and not said again.
+/usr/bin/python3 - "$SUPPORT/MacGameFix/agent-state.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+for g in d["games"].values(): g["checked"] = g.get("checked", 0) - 7 * 3600
+json.dump(d, open(sys.argv[1], "w"))
+PY
+check '[ -z "$(agent)" ] && [ "$(cat "$FN/runs")" = 3 ]' "and at the recheck hours later, nothing is run or said again"
+WHY_CHIP="This Mac has an Apple M2 Pro. Apple lists MetalFX denoised upscaling for M3 and later."
+rm -f "$FN/half"; echo "$WHY_CHIP" > "$FN/blocked"; native 5
+OUT="$(agent)"
+check 'has "$OUT" "ok Fake Native: $WHY_CHIP" && ! has "$OUT" "FAILED" && ! has "$OUT" "report " && [ "$(cat "$FN/runs")" = 3 ]' "blocked, on a Mac the fix is not for: the same, with that reason"
+rm -rf "$FN" "$SUPPORT/Steam/steamapps/appmanifest_4545.acf"
 printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false}' "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
 
 echo "== the controllers' options"
@@ -332,6 +429,18 @@ d = json.load(open(sys.argv[1])); d["games"]["4343"] = {"name": "Plus 1.5+2.5"}
 json.dump(d, open(sys.argv[1], "w"))
 PY3
 check 'has "$(shareform 4343)" "title: [Settings] Plus 1.5+2.5"' "a plus in a game's name stays a plus"
+# The form It Vibrates opens: the pad and the connection of the game's latest session, the last process that named it.
+vibratesform() {
+    /usr/bin/python3 - "$("$BIN" --pad-vibrates-url "$1")" <<'PY3'
+import sys, urllib.parse
+for k, v in urllib.parse.parse_qsl(urllib.parse.urlsplit(sys.argv[1]).query):
+    print(k + ": " + v.replace("\n", " | "))
+PY3
+}
+printf '10:01:00 [7] game=4242 the Bluetooth DualSense Edge at location 32c48ef2 is shown as wired\n10:01:01 [7] game=4242 observed: the game plays haptics on the Bluetooth DualSense Edge%ss output\n' "'" >> "$MACGAMEFIX_PAD_LOG"
+check 'has "$(vibratesform 4242)" "template: vibration-works.yml" && has "$(vibratesform 4242)" "title: [Vibrates] Fake Game · DualSense Edge · Bluetooth" && has "$(vibratesform 4242)" "controller: DualSense Edge" && has "$(vibratesform 4242)" "connection: Bluetooth" && has "$(vibratesform 4242)" "game: Fake Game (Steam app 4242)" && has "$(vibratesform 4242)" "settings: bluetooth="' "saying a game vibrates opens the vibration form with the pad and the connection of its latest session"
+printf '10:02:00 [8] game=4242 the wired DualSense sent 2000 input reports in 2 s\n10:02:01 [8] game=4242 the Bluetooth DualSense Edge at location 32c48ef2 is shown as wired\n' >> "$MACGAMEFIX_PAD_LOG"
+check '! has "$(vibratesform 4242)" "controller:" && ! has "$(vibratesform 4242)" "connection:" && has "$(vibratesform 4242)" "title: [Vibrates] Fake Game"' "a session with two pads and two connections leaves both to the player"
 unset MACGAMEFIX_PAD_LOG
 
 echo "== the Report tab's probe"
@@ -533,4 +642,4 @@ printf '{"kept":[],"updates":false,"modulesUpdates":false}' > "$SUPPORT/MacGameF
 check '[ ! -e "$WT/ModeGame.exe" ]' "with it off, the agent does nothing"
 unset MACGAMEFIX_TEMP_DIR
 
-[ "$fail" = 0 ] && echo "==> MacGameFix automation: the Wine modules and their own updates, signed catalogs taken automatically or asked first, what each game runs on, the agent's updates, waits and reports, the menu bar's summary" || exit 1
+[ "$fail" = 0 ] && echo "==> MacGameFix automation: the Wine modules and their own updates, signed catalogs taken automatically or asked first, what each game runs on, the agent's updates, waits and reports, a macOS game waiting for a recipe or refused by its installer, the menu bar's summary" || exit 1

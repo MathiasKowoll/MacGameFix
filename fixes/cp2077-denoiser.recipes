@@ -1,0 +1,20 @@
+# Cyberpunk 2077 for Mac: where its MetalFX denoiser is turned on, a row for
+# each executable of each build of the game (one, so far, for each build).
+# Read by install-cp2077-denoiser.sh, which takes the row made from the
+# executable it finds.
+#
+#   <CFBundleVersion> <sha256 of the executable> <file offset> <bytes there> <bytes written> <sha256 after>
+#
+# Whitespace between fields, lower-case hex, '#' for a comment. The executable
+# is Cyberpunk2077.app/Contents/MacOS/Cyberpunk2077; the bytes are the four at
+# the offset, in file order (00008052 is mov w0,#0, 20008052 mov w0,#1), and
+# the sha256 after is the patched executable's before it is signed again.
+#
+# A build with no row is left alone, and MacGameFix says it waits for a recipe;
+# an executable no row of its build was made from is left alone too, blocked.
+# How a row is found and checked for a new build is in the README, in the
+# section "Cyberpunk 2077 changes four bytes of its app". A new row ships as a
+# catalog update, with no new app.
+
+# 2.5.0, Steam build 26133166; made and checked on 2026-10-22.
+5814786 1d3c32db2fa9150b9c164eaea1fe678b99d244e705de737999a932487a63bcee 0x1494640 00008052 20008052 c9a89e134ec00af6890609f50fe5b66d86d8ee68c1a3918085a00f8a942d3fd0

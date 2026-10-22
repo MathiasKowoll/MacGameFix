@@ -1,4 +1,4 @@
-<!-- Working reference for writing the user guide, read from the app's source at commit 2da1a5b (MacGameFix 1.5.5). Strings are quoted from the code; file:line refer to app/. Regenerate it when the UI changes; it is not the guide itself. -->
+<!-- Working reference for writing the user guide, read from the app's source at commit 2da1a5b (MacGameFix 1.5.5). Strings are quoted from the code; file:line refer to app/. Regenerate it when the UI changes; it is not the guide itself. Amended on branch cyberpunk-metalfx-denoiser for Cyberpunk 2077's fix, the first for a macOS game's app: the entries that mention it cite that branch's lines, the rest still 2da1a5b's. -->
 
 # MacGameFix 1.5.5: everything a user can see and do
 
@@ -62,24 +62,26 @@ Wherever a quoted string is built from a value, `<…>` stands for that value.
 
 **Header** (862-866)
 - Title "MacGameFix".
-- Subtitle: "Fixes go into each game's own folder, a few also into its prefix or bottle, and never change CrossOver. Quit a game before changing its fix."
-- Tooltip on the subtitle: "They work with CrossOver as it ships, CrossOver Preview, and Steam Play tools such as NotProton."
+- Subtitle: "Fixes go into each game's own folder, a few also into its prefix or bottle, one into a macOS game's app, and never change CrossOver. Quit a game before changing its fix." (889)
+- Tooltip on the subtitle: "The Windows games' fixes work with CrossOver as it ships, CrossOver Preview, and Steam Play tools such as NotProton."
 
 **Button row** (870-879). All buttons are disabled while busy.
 - **"Scan"**: looks through the libraries again and asks each game's installer for its state.
 - **"Add Folder…"**: opens a folder picker (multiple folders allowed). Its message is "Choose a Steam library, its steamapps/common folder, or a game folder." (304-315). The chosen folders are saved and a scan runs.
 - **"Select All"**: selects every row the current filter shows.
-- **"Install Selected"**: installs on the selected rows that are not already "Installed" (363). Its keyboard shortcut is Return (876).
+- **"Install Selected"**: installs on the selected rows that are not already "Installed" (363). A selected row waiting for a recipe is skipped (375). Its keyboard shortcut is Return (876).
+  - When a selected row's fix changes a macOS game's app (Cyberpunk 2077), the "Change <game>'s app?" alert asks first (section 3, L; 380, 415-433). Cancel installs nothing, on any row.
 - **"Remove Selected"**: runs the installer with `--restore` on the selected rows that are not "Not installed" (363, 377).
+  - A row waiting for a recipe can be selected for this alone (Core.swift:301): Cyberpunk 2077's installer then deletes the copies it kept for the game's earlier builds, and the row stays "No recipe for this build yet", which counts as done (397-398).
 - After each run the app asks the installer again, and that answer decides the result. The selection is then cleared (381-390).
 
 **Filter row**
 - A segmented picker with hidden label "Show", options **"All" / "Fixed" / "Not fixed" / "All fixes"** (815-817, 883-888). It resets to "All" every time the window opens (812).
   - "Fixed" shows Installed, Older build, Half installed and Needs repair.
-  - "Not fixed" shows Not installed and Cannot be fixed here (832-833).
+  - "Not fixed" shows Not installed, Cannot be fixed here, No recipe for this build yet and Cannot be installed here (869).
   - "All fixes" adds the catalog's games that are not on this Mac (841-845).
 - A toggle **"Only the marked games to review (<n>)"** (889-892).
-  - It only appears when some kept game needs the user: the agent reported "Failed" or "Folder not found".
+  - It only appears when some kept game needs the user: the agent reported "Failed", "Folder not found" or "Cannot be installed here" (MenuBar.swift:31).
   - When on, only those games are listed.
   - It is already on when the window was opened from the menu bar's "<n> to review…" item (`--review`, line 54).
   - A game whose folder is gone has no row, so in practice only "Failed" games show here. This is my inference from the code.
@@ -103,10 +105,11 @@ Wherever a quoted string is built from a value, `<…>` stands for that value.
 | "Keep" | A checkbox | "Keep it applied: put it back after a game update." (942) |
 | "Goes into" | The place cell below, or "—" | See below |
 
-- **Requires** notes are built from these parts (Core.swift:167-189): "runs on DXMT/D3DMetal/DXVK", "needs D3DMetal <v>" or "needs D3DMetal <v> or <v2>", "its videos need <CrossOver>, which ships their codec", "not needed on D3DMetal <v> or later; kept for earlier ones", "needs <CrossOver>; stable CrossOver 26.3 needed MacGameVideoFix's engine, now archived".
+- **Requires** notes are built from these parts (Core.swift:167-189): "runs on DXMT/D3DMetal/DXVK", "needs D3DMetal <v>" or "needs D3DMetal <v> or <v2>", "its videos need <CrossOver>, which ships their codec", "not needed on D3DMetal <v> or later; kept for earlier ones", "needs <CrossOver>; stable CrossOver 26.3 needed MacGameVideoFix's engine, now archived", and for a fix that changes a macOS game's app, first, "macOS app; changes its executable" (Core.swift:176).
 - **Keep** checkbox:
   - Checking it saves the game, its folder and its chosen prefixes for the agent (145-153).
-  - It is disabled when the row is blocked or the app is busy.
+  - It is disabled when the row is blocked or the app is busy, except for a row waiting for a recipe: that one can be kept, and the agent installs its fix when a recipe arrives (977; Core.swift:296). A row already kept can always be unchecked, blocked or not.
+  - Checking it on a fix that changes a macOS game's app (Cyberpunk 2077) asks first, with the Keep form of alert L; Cancel leaves it unchecked (147-150).
   - Nothing in the window warns that it does nothing while the agent is off.
 
 **Status cell** (`GameStatusCell`, 960-983), top to bottom:
@@ -121,15 +124,20 @@ Wherever a quoted string is built from a value, `<…>` stands for that value.
    | "Half installed" | orange |
    | "Needs repair" | orange |
    | "Cannot be fixed here" | red |
+   | "No recipe for this build yet" | grey (Cyberpunk 2077 on a game build its catalog has no recipe for) |
+   | "Cannot be installed here" | red (Cyberpunk 2077: an executable changed outside MacGameFix that no recipe row was made from, or an M1 or M2 Mac) |
 
 2. In orange, the last run's outcome: "Failed — see the log" or "Did not take — see the log" (385-386).
 3. In red, why the row is blocked (Core.swift:251-262):
    - "The installer found nothing in this folder for the fix to ride on."
    - "No prefix for this game was found. Run it once with NotProton or CrossOver, then Scan again."
    - "Choose at least one place for its DLLs." (NINJA GAIDEN 3) or "Choose at least one place for its registry keys."
+   - "MacGameFix waits for a recipe for the game's build <version> (<build>); a catalog update brings it.", or "… for the game's new build; …" when the installer named no build (Core.swift:271-274). This one is grey, not red (1008), leaves Keep available, and the row can still be selected for Remove. The installer answers this only when its catalog has no row for the game's build.
+   - For "Cannot be installed here", and for "Half installed" on a fix that changes a macOS game's app, the installer's own reason, from the "Why:" line of its `--status` (Core.swift:278-283). Cyberpunk 2077's are, with `<build>`, `<chip>` and the Steam sentence filled in: "This executable is not one the recipes for build <build> were made from. In Steam, Properties > Installed Files > Verify integrity of game files should put CD PROJEKT's back, then install here.", "The executable is patched, but not by MacGameFix: no copy of its original is kept. In Steam, … then install here.", "The executable is patched, and the copy MacGameFix kept for this build is not its original. In Steam, … then install here.", and "This Mac has an <chip>. Apple lists MetalFX denoised upscaling for M3 and later, and the game does not ask, so it would offer an option this Mac cannot run." Without a "Why:" line the app says "The installer cannot install the fix here." or "The executable was patched outside MacGameFix; nothing can be installed or removed here."
 4. If the agent failed on a kept game: "In the background: <detail, or 'the fix did not take.'>" in orange. When there is a report link, a **"Report on GitHub…"** button follows, which opens the pre-filled issue (973-979).
 
 **"Goes into" cell** (`GamePrefixCell`, 988-1018)
+- Fix that changes a macOS game's app (Cyberpunk 2077): "Its app", with the tooltip "Changes the game's executable and signs it again ad hoc; the original is kept in MacGameFix's app-backup folder." (1025-1027).
 - Fix that needs no prefix: "Its folder".
   - The code also has an "Its prefix" branch for a game that is in-prefix but needs no prefix. It is probably unreachable, since NG3 needs a prefix. I can't confirm that without games.json.
 - Zero or one prefix: plain text with the prefix name or "—".
@@ -388,6 +396,13 @@ Below the rows:
 - A failure has the action **"Report on GitHub…"**. It opens `issues/new` with the title "<game>: <problem>" and a body containing Game, What happened, the MacGameFix version and catalog, the macOS version, and the installer's last 60 lines with home, user name and serial number removed.
 - That link uses no template, so it opens GitHub's blank issue form (Automation.swift:582-610).
 
+**L. Alert "Change <game>'s app?"** (MacGameFix.swift:415-433)
+- Opened by "Install Selected" when a selected row's fix changes a macOS game's app; today only Cyberpunk 2077's. With several such rows the title is "Change <n> games' apps?". Also opened, for that one row, by checking its Keep box.
+- Text, one row: "MacGameFix writes the recipe's bytes into its executable and signs it again ad hoc, so the developer's signature no longer covers the executable. macOS may ask you to allow MacGameFix under App Management. Remove puts the original back from the copy MacGameFix keeps."
+- Text, several rows: "MacGameFix writes the recipe's bytes into the executables of <names> and signs each again ad hoc, so the developers' signatures no longer cover them. macOS may ask you to allow MacGameFix under App Management. Remove puts the original back from the copy MacGameFix keeps." The names are joined by the system's list format ("A and B", "A, B, and C").
+- From the Keep box, the text ends with " With Keep on, the agent does this in the background whenever the fix is missing, after a game update too, without asking again." and the first button is **"Keep"**.
+- **"Install"** goes ahead with every selected row. **"Cancel"** installs nothing. Removing asks nothing.
+
 ---
 
 ## 4. The menu bar item (`MenuBar.swift`)
@@ -408,7 +423,8 @@ It only exists while the agent runs: "Run from the menu bar" is on.
 2. Either "No game is marked “Keep it applied”." or "Keeping 1 fix applied" / "Keeping <n> fixes applied".
 3. Indented counts, each with an icon:
    - "<n> in place" (checkmark)
-   - **"<n> to review…"** (eye). This is the only clickable count: it opens the window with only those games shown (`--review`).
+   - **"<n> to review…"** (eye). This is the only clickable count: it opens the window with only those games shown (`--review`). It counts the kept games the agent reported "Failed", "Folder not found" or "Cannot be installed here" (MenuBar.swift:31).
+   - "<n> waiting for a recipe" (hourglass): a kept game whose fix is made for each game build, after an update its catalog has no recipe for yet (MenuBar.swift:81). Not clickable, and not counted to review.
    - "<n> not looked at yet" (clock)
 4. If controllers are connected, between separators: "<name>: NN%", plus ", charging" or ", charged", with a battery icon (200-210, 441-451).
 5. "Looking at the games…" while a pass runs, otherwise "Last look: <time>".
@@ -474,6 +490,9 @@ The "Control-Command-F" in the Game Mode footer is advice for full screen in gam
   - "The fix is updated to the newer build."
   - "Steam changed the game; the fix is back in place."
   - "The fix was missing and is back in place."
+  - "A recipe for this build arrived; the fix is in place." (after waiting for one)
+- Waiting, not a failure, with no report link and no dot: "No recipe for this build yet; MacGameFix puts it back when one arrives." It runs the installer only to ask its state, never to install, and says this once for each Steam build, however many catalogs or rechecks come before a recipe (Automation.swift:351-360). The menu bar shows the game as "Waiting for a recipe".
+- Refused by the installer, not a failure, with no report link and no dot: for "Cannot be installed here", and for "Half installed" on a fix that changes a macOS game's app, the message is the installer's reason (see the blockers in 2.1), or "The installer cannot install the fix here." without one. It runs the installer only to ask its state, and says this once for each Steam build (Automation.swift:334-350). The menu bar shows the game as "Cannot be installed here", with that reason, and counts it to review.
 - Failures, which carry a report link:
   - "The installer found nothing in the game folder for the fix to ride on."
   - "The installer failed (status <n>)."
@@ -495,6 +514,7 @@ The "Control-Command-F" in the Game Mode footer is advice for full screen in gam
 | `catalog/<version>/`, `catalog/current` | Downloaded fixes catalogs; two versions are kept |
 | `modules/…` | The same, for the Wine modules |
 | `engine-backup/` | CrossOver's own files, kept while the modules are in (Engine.swift:71) |
+| `app-backup/<bundle id>-<build>/` | The original executable and `_CodeSignature/CodeResources` of a macOS game whose app a fix changed (Cyberpunk 2077), and `apps`, the app or apps it is kept for, one path a line. Kept until the fix is removed from every app listed; a copy kept for another build of the same app is deleted at the next install or removal that works (Core.swift:27; `fixes/install-cp2077-denoiser.sh`) |
 | `pad.json` | Everything Game Feel keeps |
 | `pad.conf` | Every game's options. First line: "# Written by MacGameFix (Game Feel); read by its Wine modules. Edit it there.". Keys: `bluetooth`, `motor_power`, `edge`, `haptics_gain_cable`, `edge_haptics_gain_cable`, `haptics_gain_bluetooth`, `edge_haptics_gain_bluetooth`, `xinput`, `rumble`, `trigger_r2`, `trigger_l2`, `trigger_r2_with_l2`, `trigger_l2_with_r2`, `diagnostics=on` (Pad.swift:94-110, 474-494) |
 | `pad.d/<appid>.conf` | One game's differing lines and its Diagnose setting, headed "# <name>". Removed when no longer needed |
@@ -520,6 +540,7 @@ The "Control-Command-F" in the Game Mode footer is advice for full screen in gam
   - macOS shows its own notification; its text is not in the code. The comment at 729-731 says the app deliberately shows no alert of its own.
   - The app's own texts about it are the "Change CrossOver itself?" alert (B) and the Wine Modules notice (2.2).
   - NotProton runners need no App Management (472).
+  - Installing or removing Cyberpunk 2077's fix writes into the game's app and may meet the same refusal. The app does not probe for it; the installer says "macOS did not let MacGameFix change <app>." and points to App Management, in Settings › Log.
 - **Notifications**: the agent asks for alert permission when it starts (Automation.swift:647). The prompt is macOS's standard one.
 - **Game Mode helper apps**: they declare microphone and camera usage texts, which a game running from them could trigger: "This game would like to access your microphone." and "This game would like to access your camera." (GameMode.swift:110-111).
 - **First launch**: Gatekeeper blocks the ad-hoc-signed app. The README says "Right click > Open" once (README:385-388).

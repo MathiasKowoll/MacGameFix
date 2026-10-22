@@ -1,0 +1,17 @@
+--- a/dlls/setupapi/devinst.c
++++ b/dlls/setupapi/devinst.c
+@@ -3024,6 +3024,14 @@
+         ((char *)PropertyBuffer)[size_written] = 0;
+         return TRUE;
+     }
++
++    /* Windows returns the base container id as a WCHAR string from the ANSI function as well
++     * (the ntoskrnl tests read it with the W one for that reason). A game that reads a pad's
++     * container with one and an audio endpoint's with the other compares two WCHAR strings;
++     * Nioh 3 does, and never finds the pad's output when this one is ANSI. */
++    if (Property == SPDRP_BASE_CONTAINERID)
++        return SetupDiGetDeviceRegistryPropertyW(devinfo, device_data, Property, PropertyRegDataType,
++                PropertyBuffer, PropertyBufferSize, RequiredSize);
+ 
+     if (Property < ARRAY_SIZE(PropertyMap) && PropertyMap[Property].nameA)
+     {

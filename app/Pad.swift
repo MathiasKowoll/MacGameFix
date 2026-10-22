@@ -687,6 +687,47 @@ extension PadStore {
                    "game": "\(name) (Steam app \(appid))",
                    "settings": effective(appid, presets: presets).lines.joined(separator: "\n")])
     }
+
+    /// The form for a game that vibrates, one test of the list of games played for
+    /// vibration: the game, the pad and the connection its latest session had, what the
+    /// modules saw it do, the library it talks to the pad through, and every option it gets.
+    func vibratesIssue(appid: String, name: String, presets: [String: PadPreset], library: String?,
+                       log: String) -> URL? {
+        let session = PadSession(appid: appid, log: log)
+        let seen = (games[appid]?.seen.keys.sorted() ?? []).map(\.label)
+        let title = (["[Vibrates] \(name)"] + [session.controller, session.connection].compactMap { $0 })
+            .joined(separator: " · ")
+        return Issue.new(template: "vibration-works.yml",
+                         ["title": title,
+                          "game": "\(name) (Steam app \(appid))",
+                          "controller": session.controller ?? "",
+                          "connection": session.connection ?? "",
+                          "seen": seen.joined(separator: "\n"),
+                          "library": library ?? "",
+                          "settings": effective(appid, presets: presets).lines.joined(separator: "\n")])
+    }
+}
+
+/// The pad and the connection a game's latest session had, from the modules' log: the
+/// lines of the last process that named the game. Each is nil unless that session saw
+/// exactly one, so a report with two pads or two connections leaves them to the player.
+struct PadSession {
+    var controller: String?
+    var connection: String?
+
+    init(appid: String, log: String) {
+        let lines = log.split(separator: "\n").map(String.init).filter { $0.contains(" game=\(appid) ") }
+        func pid(_ line: String) -> Substring? { line.split(separator: " ").dropFirst().first }
+        guard let last = lines.last.flatMap(pid) else { return }
+        var pads = Set<String>(), links = Set<String>()
+        for line in lines where pid(line) == last {
+            if line.contains("DualSense Edge") { pads.insert("DualSense Edge") } else if line.contains("DualSense") { pads.insert("DualSense") }
+            if line.contains("the Bluetooth DualSense") { links.insert("Bluetooth") }
+            if line.contains("the wired DualSense") { links.insert("Cable") }
+        }
+        if pads.count == 1 { controller = pads.first }
+        if links.count == 1 { connection = links.first }
+    }
 }
 
 // MARK: - Which game an exe is, in a CrossOver bottle

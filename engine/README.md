@@ -26,6 +26,7 @@ they share. With a DualSense Edge on a cable, the HID device reports
 | `0001-winebus.patch` | `winebus.sys` | A USB device with a location ID (`desc.uid`, set by the IOHID and Xbox 360 buses) gets a container built from it instead of a random one. |
 | `0002-winecoreaudio.patch` | `winecoreaudio.so` | `get_prop_value` answers `DEVPKEY_Device_ContainerId` for an `AppleUSBAudioEngine:` endpoint with the same container. The wow64 thunk passes `VT_CLSID` through. |
 | `0003-mmdevapi.patch` | `mmdevapi.dll` | The property store asks the driver for an active endpoint's container instead of reading the registry, which cannot hold a GUID and would keep it after the device is gone. |
+| `0012-winecoreaudio-edge-output-name.patch` | `winecoreaudio.so` | An Edge shown as a standard DualSense (`edge=dualsense`) has the DualSense's audio device on a cable too: its output and microphone are named "DualSense Wireless Controller" instead of macOS's "DualSense Edge Wireless Controller", and their instance id carries the DualSense's product id, as the Bluetooth output already has from `0005`. Under NotProton's bridge NINJA GAIDEN 4 read every output's name and vibrated; that bridge's output was named "DualSense Wireless Controller (Bluetooth Bridge)". |
 
 Both derivations use one namespace, `{<location>-27F2-4948-9654-152804AF6378}`.
 Keep them in sync.
@@ -122,6 +123,32 @@ Input on for a PlayStation pad in exactly the games the store does not list.
 None of these patches touch a device that is not a DualSense. Without the Game
 Feel options they behave as `0001`-`0003` alone.
 
+### The pad's audio output through SetupAPI
+
+Some games find the pad's audio output through SetupAPI instead of the endpoint's property
+store: they read the HID device's container (`SPDRP_BASE_CONTAINERID`) and look for the audio
+render interface (`{e6327cad-dcec-4949-ae8a-991e976a79d2}`) with the same container. Nioh 3 does,
+about 70 times a second. Wine registers no audio device with SetupAPI, so the list is always empty:
+such a game never opens the pad's output, and with a DualSense it rumbles nothing at all.
+Nioh 3 also reads the endpoints' containers with `SetupDiGetDeviceRegistryPropertyA` and the pad's with
+the W function: Windows gives a WCHAR string from both, Wine's A function an ANSI one, so the two never
+compare equal.
+
+| Patch | Module | Change |
+|---|---|---|
+| `0009-mmdevapi-setupapi-endpoints.patch` | `mmdevapi.dll` | Each endpoint is also written as Windows lists it: a device `SWD\MMDEVAPI\<endpoint id>` of the AudioEndpoint class, with the driver's container as its `ContainerId`, and the render or capture interface, linked while the endpoint is active. Its path, `\\?\SWD#MMDEVAPI#<endpoint id>#<interface class>`, is one `ActivateAudioInterfaceAsync` takes, and the endpoint id in it one `GetDevice` takes. |
+| `0010-setupapi-base-containerid-wchar.patch` | `setupapi.dll` | `SetupDiGetDeviceRegistryPropertyA` returns `SPDRP_BASE_CONTAINERID` as the W function does, a WCHAR string, as Windows returns it. |
+| `0011-xaudio2-mastering-voice-device.patch` | `xaudio2_9.dll` | A mastering voice opens the device the game names, by its endpoint id or its render interface's path, instead of the default one: Wine passed no device to FAudio. The name becomes FAudio's device index, the active render endpoints in the enumerator's order with the default one at 0. |
+
+Measured on 2026-10-22 with a DualSense Edge over Bluetooth: with the three patches Nioh 3 found the
+pad's output, created an XAudio2 mastering voice with that interface's path as its device id
+(`\\?\swd#mmdevapi#{0.0.0.00000000}.{…}#{e6327cad-…}`, which `0011` resolved to the pad's endpoint)
+and played its haptics on the Bluetooth pad's output, in its Immersive mode; the player felt them. It
+needed the Edge shown as a standard DualSense and XInput off (`edge=dualsense`, `xinput=off`, its
+suggested settings): with the Edge shown as an Edge, or with XInput's motors device beside the pad
+(`&Col01` in the pad's id), it found the output and never created the voice. In Functional mode, and
+without the patches, it never sends a motor value.
+
 ### The options
 
 The modules read their options from MacGameFix's support folder, written by its
@@ -138,13 +165,14 @@ starts the game's own prefix, so a change applies from the game's next start; in
 a CrossOver bottle the prefix starts with Steam or the game opened there and
 stays up, so a change waits until Steam is quit there and opened again. The
 haptics' strength is read by `winecoreaudio.so`, in the game, each time a game
-starts its haptics.
+starts its haptics; `edge` is read there too, when a process lists its audio
+devices, for the game as `winebus.so` knows it, so that both show the same pad.
 
 | Line | Effect |
 |---|---|
 | `bluetooth=wired` | A Bluetooth pad shown as wired (`0004`). |
 | `motor_power=full` | An Edge's motor power claimed at `0x00` in every report. Sony's library claims it so for a standard DualSense and never for an Edge, which then stays at the reduction it stores. With `pad_as=dualshock4` it is claimed for either pad: the DualShock 4's output has no motor power to claim it with. |
-| `edge=dualsense` | An Edge shown to the game as a standard DualSense, on a cable or over Bluetooth: for titles whose Sony library does not know the Edge. |
+| `edge=dualsense` | An Edge shown to the game as a standard DualSense, on a cable or over Bluetooth, its audio device named as a DualSense's too (`0012`): for titles whose Sony library does not know the Edge, or that look for the pad's output by its name. |
 | `pad_as=dualshock4` | A DualSense or an Edge shown to the game as a USB DualShock 4, its reports translated (`0013`): for titles whose Sony code knows only that pad, such as Mortal Kombat 11's `libScePad` (read from its code). On a cable, or over Bluetooth with `bluetooth=wired`; without it a Bluetooth pad is left as it is, and the log says so. It wins over `edge=dualsense`; XInput gets the pad's rumble only with `xinput=rumble` in the game's own file, never the pad itself; for a Bluetooth pad it does not take, `xinput=` applies as usual. The app writes `bluetooth=wired` and the XInput line beside it, so that it takes over Bluetooth too. The game gets no haptics and sets no trigger effects of its own; the chosen trigger effects take the same path as for any game (read from code). Played with Mortal Kombat 11 (see `0013`). |
 | `haptics_gain_cable=<1-4>`, `edge_haptics_gain_cable=<1-4>` | The haptics multiplied on a cable, a DualSense's and an Edge's, with a soft limit: linear to 0.8, then a curve that never passes 1.0. |
 | `haptics_gain_bluetooth=<1-4>`, `edge_haptics_gain_bluetooth=<1-4>` | The same over Bluetooth. A pad does not feel every game alike on both: a standard DualSense felt the same at 1 in Spider-Man 2, and F1 23's light haptics needed 2 over Bluetooth to feel as steady as on a cable. An older file's `haptics_gain` or `edge_haptics_gain` counts for both connections. |

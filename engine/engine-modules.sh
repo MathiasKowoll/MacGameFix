@@ -71,9 +71,9 @@ for side in x86_64 aarch64; do
   [ -d "$LIB/$side-unix" ] || continue
   if [ -f "$(src "$side-unix/winecoreaudio.so")" ]; then
     FILES="$FILES $side-windows/winebus.sys $side-windows/mmdevapi.dll $side-unix/winecoreaudio.so"
-    # winebus.so (the Bluetooth DualSense), hidclass.sys and xinput (XInput)
-    # came later; a build may not carry them.
-    for f in $side-unix/winebus.so $side-windows/hidclass.sys $XINPUT_DLLS; do
+    # winebus.so (the Bluetooth DualSense), hidclass.sys and xinput (XInput),
+    # then setupapi.dll and xaudio2_9.dll, came later; a build may not carry them.
+    for f in $side-unix/winebus.so $side-windows/hidclass.sys $side-windows/setupapi.dll $side-windows/xaudio2_9.dll $XINPUT_DLLS; do
       case "$f" in */*) ;; *) f="$side-windows/$f" ;; esac
       [ -f "$(src "$f")" ] && FILES="$FILES $f"
     done
@@ -156,7 +156,9 @@ install)
   for f in x86_64-windows/winebus.sys x86_64-windows/mmdevapi.dll x86_64-windows/hidclass.sys \
            x86_64-unix/winecoreaudio.so x86_64-unix/winebus.so aarch64-windows/winebus.sys \
            aarch64-windows/mmdevapi.dll aarch64-windows/hidclass.sys aarch64-unix/winecoreaudio.so \
-           aarch64-unix/winebus.so $(for x in $XINPUT_DLLS; do printf 'x86_64-windows/%s aarch64-windows/%s ' "$x" "$x"; done); do
+           aarch64-unix/winebus.so x86_64-windows/setupapi.dll aarch64-windows/setupapi.dll \
+           x86_64-windows/xaudio2_9.dll aarch64-windows/xaudio2_9.dll \
+           $(for x in $XINPUT_DLLS; do printf 'x86_64-windows/%s aarch64-windows/%s ' "$x" "$x"; done); do
     if [ -f "$SAVE/$f.absent" ]; then
       rm -f "$LIB/$f" 2>/dev/null || refused "$LIB/$f"
       say "  $f (CrossOver had none)"

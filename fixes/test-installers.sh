@@ -9,7 +9,9 @@
 # older reader (outdated) and a missing one (broken). KINGDOM HEARTS and NieR
 # copy their original out of a bottle, so for them only what --status says is
 # tried; nothing here asks or starts a bottle. NINJA GAIDEN 3 goes into a
-# prefix, and its whole life is tried in a fake Steam Play one.
+# prefix, and its whole life is tried in a fake Steam Play one. Cyberpunk 2077's
+# changes a macOS game's app, and its whole life is tried on a fake app built
+# here with cc and signed ad hoc.
 #
 # No game is needed. The game's "original" is the fix's own DLL with its
 # markers and forwarder names blanked: the same exports, and not recognised as
@@ -27,7 +29,7 @@ W="$(mktemp -d)"
 trap '[ -n "${KEEP:-}" ] || rm -rf "$W"' EXIT
 fails=0
 say() { printf '  %-5s %s\n' "$1" "$2"; [ "$1" = ok ] || { fails=$((fails+1)); ls -la "${g:-/nonexistent}" 2>/dev/null | sed 's/^/        /'; }; }
-st() { /bin/bash "$FIX/$1" "$2" --status 2>/dev/null | /usr/bin/grep -E '^(installed|outdated|absent|half|broken)$' | head -1; }
+st() { /bin/bash "$FIX/$1" "$2" --status 2>/dev/null | /usr/bin/grep -E '^(installed|outdated|absent|half|broken|norecipe|blocked)$' | head -1; }
 fake() { # fake <proxy> <dest> <marker>...
   /usr/bin/python3 -I - "$@" <<'PY'
 import sys
@@ -174,4 +176,199 @@ last="$(ng3 --restore 2>/dev/null | tail -1)"
   && ! /usr/bin/grep -q "NINJA GAIDEN" "$pfx/user.reg" \
   && say ok "ng3 in a Steam Play prefix: restored, the overrides gone" || say FAIL "ng3 prefix: restore ($last, $(ng3st))"
 
-if [ "$fails" = 0 ]; then echo "==> every installer: installed, outdated, updated, restored"; else echo "==> $fails failed"; exit 1; fi
+# Cyberpunk 2077's fix writes four bytes into a macOS game's executable and signs
+# the app again, so it is tried on a fake app: a small executable built here,
+# with the word the recipe changes behind a tag the test finds it by, signed ad
+# hoc so the app has a seal, and a framework inside signed on its own. The
+# installer is copied beside a recipe made for that executable. Its whole life:
+# installed, with the hardened runtime and the two entitlements, the framework
+# untouched and nothing else in the game folder changed; installed again, and
+# after a Steam verify, without the kept original being replaced; a broken
+# signature, or a change beside the patch, rebuilt from the original; restored
+# byte for byte; two copies of one build sharing the kept original; stopped by
+# Ctrl-C while signing, or by its reader going away, and put back. Refused, with nothing changed: on an M1
+# or an M2, while the game runs (started by another spelling of its path), for
+# a build with no recipe or an executable no row was made from, for one patched
+# by hand, over a kept copy that is not the original, and when macOS refuses
+# the write; one changed again after an install is put back from the kept
+# original. The copies kept for other builds of this app go at an install and
+# at a removal, a removal on a build with no recipe too; those of another app,
+# or of another bundle id that begins the same, stay.
+# The fake is called Cyberpunk2077, as the game is: the installer knows no other
+# name, and finds the game running by its executable.
+g="$W/cp2077"; app="$g/Cyberpunk2077.app"; exe="$app/Contents/MacOS/Cyberpunk2077"; seal="$app/Contents/_CodeSignature/CodeResources"
+lib="$app/Contents/Frameworks/libFake.dylib"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Frameworks" "$W/cpfix" "$W/cpbin" "$W/cpm1" "$W/cpslow"
+cat > "$W/cp.c" <<'C'
+#include <stdlib.h>
+#include <unistd.h>
+/* "MGVFTEST", then mov w0,#0. */
+const volatile unsigned int word[] = { 0x4656474d, 0x54534554, 0x52800000 };
+int main(int argc, char **argv) { if (argc > 1) sleep(atoi(argv[1])); return word[0] == 0x4656474d ? 0 : 1; }
+C
+printf 'int fake(void) { return 1; }\n' > "$W/lib.c"
+cc -O1 -o "$exe" "$W/cp.c" && cc -dynamiclib -o "$lib" "$W/lib.c" || say FAIL "cp2077: the fake app could not be built (cc)"
+/usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string io.github.macgamefix.test.cp2077' -c 'Add :CFBundleExecutable string Cyberpunk2077' \
+  -c 'Add :CFBundlePackageType string APPL' -c 'Add :CFBundleShortVersionString string 9.9' -c 'Add :CFBundleVersion string 42' \
+  "$app/Contents/Info.plist" >/dev/null
+codesign --force --sign - "$lib" 2>/dev/null && codesign --force --sign - "$app" 2>/dev/null || say FAIL "cp2077: the fake app could not be signed"
+cp "$exe" "$W/cp.orig"; cp "$seal" "$W/cp.seal"; cp "$lib" "$W/cp.lib"; cp "$app/Contents/Info.plist" "$W/cp.plist"
+# A second copy of the same build, in another folder, for the kept copy they share.
+g2="$W/cp2077-second"; ditto "$g" "$g2"
+off="$(/usr/bin/python3 -I -c 'import sys; print(open(sys.argv[1], "rb").read().find(b"MGVFTEST") + 8)' "$exe")"
+cp "$exe" "$W/cp.patched"; printf '\040\000\200\122' | dd of="$W/cp.patched" bs=4 seek=$((off / 4)) count=1 conv=notrunc 2>/dev/null
+cp "$FIX/install-cp2077-denoiser.sh" "$W/cpfix/"
+row="42 $(shasum -a 256 "$exe" | cut -d' ' -f1) $(printf '0x%x' "$off") 00008052 20008052 $(shasum -a 256 "$W/cp.patched" | cut -d' ' -f1)"
+printf '# The fake app'"'"'s recipe.\n%s\n' "$row" > "$W/cpfix/cp2077-denoiser.recipes"
+export MGVF_APP_BACKUP="$W/app-backup"
+# The installer names the app by its real path: $W may be reached through a symbolic link.
+canon="$(cd "$app" && pwd -P)"
+kept="$MGVF_APP_BACKUP/io.github.macgamefix.test.cp2077-42"; stale="$MGVF_APP_BACKUP/io.github.macgamefix.test.cp2077-41"
+mkdir -p "$stale"; echo "an older build's executable" > "$stale/Cyberpunk2077"; echo "$canon" > "$stale/apps"
+other="$MGVF_APP_BACKUP/io.github.macgamefix.test.cp2077-40"; mkdir -p "$other"; echo "/elsewhere/Cyberpunk2077.app" > "$other/apps"
+beta="$MGVF_APP_BACKUP/io.github.macgamefix.test.cp2077-beta-7"; mkdir -p "$beta"; echo "$canon" > "$beta/apps"
+cpst() { FIX="$W/cpfix" st install-cp2077-denoiser.sh "$g"; }
+cpst2() { FIX="$W/cpfix" st install-cp2077-denoiser.sh "$g2"; }
+cp2077() { /bin/bash "$W/cpfix/install-cp2077-denoiser.sh" "$g" "$@"; }
+at() { dd if="$exe" bs=4 skip=$((off / 4)) count=1 2>/dev/null | od -An -tx1 | tr -d ' \n'; }
+back() { ditto "$W/cp.orig" "$exe"; ditto "$W/cp.seal" "$seal"; }
+# Every file of the game folder and its sha256, to see what changed.
+tree() { (cd "$g" && find . -type f -exec shasum -a 256 {} + | sort -k2); }
+changed() { diff "$1" "$2" | sed -n 's/^[<>] [0-9a-f]*  //p' | sort -u | tr '\n' ' '; }
+running() { # a fake game started from inside its folder, by a relative path
+  (cd "$g" && exec ./Cyberpunk2077.app/Contents/MacOS/Cyberpunk2077 30) & cppid=$!
+  sleep 1
+}
+stopped() { kill "$cppid" 2>/dev/null; wait "$cppid" 2>/dev/null; }
+[ "$(cpst)" = absent ] && say ok "cp2077 on a fake app: absent before" || say FAIL "cp2077: absent before ($(cpst))"
+printf '#!/bin/sh\necho "Apple M2 Pro"\n' > "$W/cpbin/sysctl"; chmod +x "$W/cpbin/sysctl"
+printf '#!/bin/sh\necho "Apple M1"\n' > "$W/cpm1/sysctl"; chmod +x "$W/cpm1/sysctl"
+m2st="$(PATH="$W/cpbin:$PATH" cpst)"; m1st="$(PATH="$W/cpm1:$PATH" cpst)"
+! PATH="$W/cpbin:$PATH" cp2077 > "$W/cp.m2.log" 2>&1 && /usr/bin/grep -q "M3 and later" "$W/cp.m2.log" && cmp -s "$exe" "$W/cp.orig" \
+  && ! PATH="$W/cpm1:$PATH" cp2077 > "$W/cp.m1.log" 2>&1 && /usr/bin/grep -q "an Apple M1\. " "$W/cp.m1.log" && cmp -s "$exe" "$W/cp.orig" \
+  && [ "$m2st" = blocked ] && [ "$m1st" = blocked ] && [ ! -e "$kept" ] && [ -d "$stale" ] \
+  && say ok "cp2077 on a fake app: blocked on an M1 and an M2, and installing there changes nothing" || say FAIL "cp2077: M1/M2 ($m1st, $m2st, $(tail -1 "$W/cp.m2.log"))"
+running
+! /bin/bash "$W/cpfix/install-cp2077-denoiser.sh" "$g/" > "$W/cp.run.log" 2>&1 && /usr/bin/grep -q "is running" "$W/cp.run.log" && cmp -s "$exe" "$W/cp.orig" \
+  && say ok "cp2077 on a fake app: refused while the game runs, started and named by other spellings of its path" || say FAIL "cp2077: running ($(tail -1 "$W/cp.run.log"))"
+stopped
+mkdir -p "$kept"; echo "not the original" > "$kept/Cyberpunk2077"; cp "$kept/Cyberpunk2077" "$W/cp.junk"
+! cp2077 > "$W/cp.junk.log" 2>&1 && /usr/bin/grep -q "is not this build's original" "$W/cp.junk.log" && cmp -s "$exe" "$W/cp.orig" \
+  && cmp -s "$kept/Cyberpunk2077" "$W/cp.junk" && [ "$(cpst)" = absent ] \
+  && say ok "cp2077 on a fake app: a kept copy that is not the original is refused, and both stay as they were" || say FAIL "cp2077: junk copy ($(cpst), $(tail -1 "$W/cp.junk.log"))"
+rm -rf "$kept"
+# Two rows for one build: the one made from this executable is found, whichever comes first.
+printf '42 %s 0x%x 00008052 20008052 %s\n%s\n' "$(printf 'a%.0s' $(seq 64))" "$off" "$(printf 'b%.0s' $(seq 64))" "$row" > "$W/cpfix/cp2077-denoiser.recipes"
+[ "$(cpst)" = absent ] && say ok "cp2077 on a fake app: of two rows for one build, the one made from this executable is taken" || say FAIL "cp2077: two rows ($(cpst))"
+tree > "$W/cp.tree.before"
+cp2077 > "$W/cp.install1.log" 2>&1 || say FAIL "cp2077: install failed: $(tail -2 "$W/cp.install1.log")"
+keys="$(codesign -d --entitlements - --xml "$app" 2>/dev/null | /usr/bin/grep -o '<key>[^<]*</key>' | tr '\n' ' ')"
+[ "$(cpst)" = installed ] && [ "$(at)" = 20008052 ] && codesign --verify --strict "$app" 2>/dev/null \
+  && say ok "cp2077 on a fake app: installed, the four bytes written, the app's signature verifies" || say FAIL "cp2077: installed ($(cpst), $(at))"
+flags="$(codesign -dv "$app" 2>&1 | /usr/bin/grep -o 'flags=[^ ]*')"
+[ "$flags" = "flags=0x10002(adhoc,runtime)" ] \
+  && [ "$keys" = "<key>com.apple.security.cs.allow-dyld-environment-variables</key> <key>com.apple.security.cs.disable-library-validation</key> " ] \
+  && say ok "cp2077 on a fake app: signed ad hoc with the hardened runtime and the two entitlements" || say FAIL "cp2077: signature ($flags, $keys)"
+tree > "$W/cp.tree.installed"
+[ "$(changed "$W/cp.tree.before" "$W/cp.tree.installed")" = "./Cyberpunk2077.app/Contents/MacOS/Cyberpunk2077 " ] && cmp -s "$seal" "$W/cp.seal" && cmp -s "$lib" "$W/cp.lib" \
+  && say ok "cp2077 on a fake app: of every file in the game folder only the executable changed; the seal and the framework are the same" \
+  || say FAIL "cp2077: files changed: $(changed "$W/cp.tree.before" "$W/cp.tree.installed")"
+[ "$(cd "$kept" && ls -A | tr '\n' ' ')" = "CodeResources Cyberpunk2077 apps " ] && cmp -s "$kept/Cyberpunk2077" "$W/cp.orig" && cmp -s "$kept/CodeResources" "$W/cp.seal" \
+  && [ "$(cat "$kept/apps")" = "$canon" ] \
+  && say ok "cp2077 on a fake app: the original and its seal kept outside the app, for this app, and nothing else there" || say FAIL "cp2077: kept copy ($(cd "$kept" && ls -A | tr '\n' ' '))"
+[ ! -e "$stale" ] && /usr/bin/grep -q "removed the copy kept for build 41" "$W/cp.install1.log" && [ -d "$other" ] && [ -d "$beta" ] \
+  && say ok "cp2077 on a fake app: the copy kept for another build of this app is removed; another app's, and another bundle id's, stay" || say FAIL "cp2077: stale copies"
+"$exe" && say ok "cp2077 on a fake app: the signed executable starts" || say FAIL "cp2077: the signed executable does not start"
+inode="$(stat -f %i "$kept/Cyberpunk2077")"; cp "$exe" "$W/cp.installed"
+cp2077 > "$W/cp.install2.log" 2>&1 && [ "$(cpst)" = installed ] && [ "$(stat -f %i "$kept/Cyberpunk2077")" = "$inode" ] && cmp -s "$exe" "$W/cp.installed" \
+  && say ok "cp2077 on a fake app: installing again changes nothing" || say FAIL "cp2077: install twice ($(cpst))"
+back
+[ "$(cpst)" = absent ] && cp2077 > "$W/cp.install3.log" 2>&1 && [ "$(cpst)" = installed ] && [ "$(stat -f %i "$kept/Cyberpunk2077")" = "$inode" ] \
+  && say ok "cp2077 on a fake app: after the original comes back it installs again, and the kept original is not replaced" || say FAIL "cp2077: after a verify ($(cpst))"
+ditto "$W/cp.patched" "$exe"
+[ "$(cpst)" = broken ] && cp2077 > "$W/cp.install4.log" 2>&1 && [ "$(cpst)" = installed ] && codesign --verify --strict "$app" 2>/dev/null \
+  && say ok "cp2077 on a fake app: patched and not signed is broken, and installing signs it" || say FAIL "cp2077: broken ($(cpst))"
+# Patched, with its tag changed too, and not signed: installing starts from the
+# original, so the tag comes back and the executable starts (it fails without it).
+cp "$W/cp.patched" "$W/cp.tampered"; printf 'X' | dd of="$W/cp.tampered" bs=1 seek=$((off - 8)) count=1 conv=notrunc 2>/dev/null
+ditto "$W/cp.tampered" "$exe"
+[ "$(cpst)" = broken ] && cp2077 > "$W/cp.install5.log" 2>&1 && [ "$(cpst)" = installed ] && "$exe" \
+  && say ok "cp2077 on a fake app: a broken executable changed beside the patch is rebuilt from the original" || say FAIL "cp2077: tampered ($(cpst), $(tail -1 "$W/cp.install5.log"))"
+# Ctrl-C while the app is being signed: the original goes back. The installer
+# runs in a process group of its own with Ctrl-C not ignored, as from a
+# terminal (a background job of a script ignores it), and its codesign waits
+# until it is told.
+printf '#!/bin/sh\ncase " $* " in *" --force "*) : > "%s"; sleep 5 ;; esac\nexec /usr/bin/codesign "$@"\n' "$W/cp.signing" > "$W/cpslow/codesign"
+chmod +x "$W/cpslow/codesign"
+back
+PATH="$W/cpslow:$PATH" /usr/bin/python3 -I -c 'import os, signal, sys; os.setpgrp(); signal.signal(signal.SIGINT, signal.SIG_DFL); os.execv(sys.argv[1], sys.argv[1:])' \
+  /bin/bash "$W/cpfix/install-cp2077-denoiser.sh" "$g" > "$W/cp.interrupted.log" 2>&1 & ipid=$!
+n=0; while [ ! -e "$W/cp.signing" ] && [ $n -lt 100 ]; do sleep 0.1; n=$((n + 1)); done
+kill -INT -- "-$ipid" 2>/dev/null; wait "$ipid"; irc=$?
+[ -e "$W/cp.signing" ] && [ "$irc" != 0 ] && cmp -s "$exe" "$W/cp.orig" && cmp -s "$seal" "$W/cp.seal" && [ "$(cpst)" = absent ] \
+  && [ -z "$(ls "$app/Contents/MacOS" | /usr/bin/grep -v '^Cyberpunk2077$')" ] && /usr/bin/grep -q "back in place" "$W/cp.interrupted.log" \
+  && say ok "cp2077 on a fake app: Ctrl-C while signing puts the original back" || say FAIL "cp2077: interrupted ($(cpst), rc $irc, $(tail -1 "$W/cp.interrupted.log"))"
+# The reader of its output gone in the middle, as when MacGameFix quits: the
+# next line it writes fails, and the original goes back. Its sha256 is slowed
+# so that the reader is gone by then, and SIGPIPE is not ignored, whatever
+# started this test.
+mkdir -p "$W/cpslowsha"; printf '#!/bin/sh\nsleep 1\nexec /usr/bin/shasum "$@"\n' > "$W/cpslowsha/shasum"; chmod +x "$W/cpslowsha/shasum"
+PATH="$W/cpslowsha:$PATH" /usr/bin/python3 -I -c 'import os, signal, sys; signal.signal(signal.SIGPIPE, signal.SIG_DFL); os.execv(sys.argv[1], sys.argv[1:])' \
+  /bin/bash "$W/cpfix/install-cp2077-denoiser.sh" "$g" 2> "$W/cp.gone.log" | head -n 4 > "$W/cp.gone.out"
+[ "$(tail -1 "$W/cp.gone.out" | cut -c1-5)" = "[2/3]" ] && cmp -s "$exe" "$W/cp.orig" && cmp -s "$seal" "$W/cp.seal" && [ "$(cpst)" = absent ] \
+  && /usr/bin/grep -q "back in place" "$W/cp.gone.log" \
+  && say ok "cp2077 on a fake app: its reader gone after the write, the original goes back" || say FAIL "cp2077: reader gone ($(cpst), $(tail -1 "$W/cp.gone.log"))"
+cp2077 > "$W/cp.install6.log" 2>&1 && [ "$(cpst)" = installed ] || say FAIL "cp2077: install after the interruption ($(cpst))"
+# The second copy of the build shares the kept original, and keeps it until it is removed too.
+/bin/bash "$W/cpfix/install-cp2077-denoiser.sh" "$g2" > "$W/cp.second.log" 2>&1 && [ "$(cpst2)" = installed ] \
+  && [ "$(sort "$kept/apps" | tr '\n' ' ')" = "$(printf '%s\n%s\n' "$canon" "$(cd "$g2/Cyberpunk2077.app" && pwd -P)" | sort | tr '\n' ' ')" ] \
+  && say ok "cp2077 on a fake app: a second copy of the build shares the kept original" || say FAIL "cp2077: second copy ($(cpst2))"
+running
+! cp2077 --restore > "$W/cp.restore-run.log" 2>&1 && /usr/bin/grep -q "is running" "$W/cp.restore-run.log" && [ "$(cpst)" = installed ] \
+  && say ok "cp2077 on a fake app: removing is refused while the game runs" || say FAIL "cp2077: restore while running ($(cpst))"
+stopped
+mkdir -p "$stale"; echo "an older build's executable" > "$stale/Cyberpunk2077"; echo "$canon" > "$stale/apps"
+cp2077 --restore > "$W/cp.restore.log" 2>&1 || say FAIL "cp2077: restore failed: $(tail -2 "$W/cp.restore.log")"
+[ "$(cpst)" = absent ] && cmp -s "$exe" "$W/cp.orig" && cmp -s "$seal" "$W/cp.seal" && codesign --verify --strict "$app" 2>/dev/null \
+  && tree > "$W/cp.tree.restored" && cmp -s "$W/cp.tree.before" "$W/cp.tree.restored" \
+  && say ok "cp2077 on a fake app: restored byte for byte, every file as before, its own signature back" || say FAIL "cp2077: restore ($(cpst))"
+[ ! -e "$stale" ] && /usr/bin/grep -q "removed the copy kept for build 41" "$W/cp.restore.log" \
+  && say ok "cp2077 on a fake app: removing drops the copy kept for another build too" || say FAIL "cp2077: stale copy at restore"
+[ -d "$kept" ] && [ "$(cat "$kept/apps")" = "$(cd "$g2/Cyberpunk2077.app" && pwd -P)" ] && [ "$(cpst2)" = installed ] \
+  && /bin/bash "$W/cpfix/install-cp2077-denoiser.sh" "$g2" --restore > "$W/cp.second-restore.log" 2>&1 && [ "$(cpst2)" = absent ] && [ ! -e "$kept" ] \
+  && say ok "cp2077 on a fake app: the shared copy stays for the other copy, and goes when that one is removed" || say FAIL "cp2077: shared copy ($(cpst2))"
+/usr/libexec/PlistBuddy -c 'Set :CFBundleVersion 43' "$app/Contents/Info.plist"
+[ "$(cpst)" = norecipe ] && ! cp2077 > "$W/cp.norecipe.log" 2>&1 && cmp -s "$exe" "$W/cp.orig" && [ ! -e "$MGVF_APP_BACKUP/io.github.macgamefix.test.cp2077-43" ] \
+  && say ok "cp2077 on a fake app: a build with no recipe is norecipe, and installing changes nothing" || say FAIL "cp2077: norecipe ($(cpst))"
+# After a game update with no recipe yet, removing is all that clears the copy
+# kept for the build before.
+mkdir -p "$kept"; cp "$W/cp.orig" "$kept/Cyberpunk2077"; echo "$canon" > "$kept/apps"
+cp2077 --restore > "$W/cp.restore-norecipe.log" 2>&1 && [ ! -e "$kept" ] && /usr/bin/grep -q "removed the copy kept for build 42" "$W/cp.restore-norecipe.log" \
+  && cmp -s "$exe" "$W/cp.orig" && [ "$(cpst)" = norecipe ] \
+  && say ok "cp2077 on a fake app: removing on a build with no recipe drops the copy kept for the build before" || say FAIL "cp2077: restore on norecipe ($(tail -1 "$W/cp.restore-norecipe.log"))"
+rm -f "$app/Contents/Info.plist"
+nost="$(/bin/bash "$W/cpfix/install-cp2077-denoiser.sh" "$g" --status 2>&1)"
+case "$nost" in *"Will Create"*|*"Game build"*) nost_ok=0 ;; *) nost_ok=1 ;; esac
+[ "$nost_ok" = 1 ] && [ "$(cpst)" = norecipe ] && say ok "cp2077 on a fake app: with no Info.plist it names no build and has no recipe" || say FAIL "cp2077: no Info.plist ($nost)"
+cp "$W/cp.plist" "$app/Contents/Info.plist"
+# Signed again by someone else: neither the original nor patched, with a row for its build.
+codesign --force --sign - --options runtime "$app" 2>/dev/null; cp "$exe" "$W/cp.other"
+[ "$(cpst)" = blocked ] && ! cp2077 > "$W/cp.other.log" 2>&1 && /usr/bin/grep -q "Verify integrity" "$W/cp.other.log" && cmp -s "$exe" "$W/cp.other" \
+  && say ok "cp2077 on a fake app: an executable no row was made from is blocked, with Steam's verify as the way back" || say FAIL "cp2077: other executable ($(cpst))"
+back; cp2077 > /dev/null 2>&1; ditto "$W/cp.other" "$exe"
+[ "$(cpst)" = blocked ] && cp2077 --restore > "$W/cp.restore-other.log" 2>&1 && [ "$(cpst)" = absent ] && cmp -s "$exe" "$W/cp.orig" && [ ! -e "$kept" ] \
+  && say ok "cp2077 on a fake app: changed again after MacGameFix installed, it is blocked, and removing puts the kept original back" \
+  || say FAIL "cp2077: changed after install ($(cpst), $(tail -1 "$W/cp.restore-other.log"))"
+back; printf '\040\000\200\122' | dd of="$exe" bs=4 seek=$((off / 4)) count=1 conv=notrunc 2>/dev/null; cp "$exe" "$W/cp.byhand"
+[ "$(cpst)" = half ] && ! cp2077 > "$W/cp.half.log" 2>&1 && /usr/bin/grep -q "Verify integrity" "$W/cp.half.log" && ! cp2077 --restore > /dev/null 2>&1 \
+  && cmp -s "$exe" "$W/cp.byhand" && say ok "cp2077 on a fake app: patched by hand is half, and install and restore leave it" || say FAIL "cp2077: half ($(cpst))"
+# App Management refuses a write into the app with EPERM; a sandbox that denies
+# writes inside the app does the same.
+back
+! /usr/bin/sandbox-exec -p "(version 1)(allow default)(deny file-write* (subpath \"$canon\"))" \
+    /bin/bash "$W/cpfix/install-cp2077-denoiser.sh" "$g" > "$W/cp.refused.log" 2>&1 \
+  && /usr/bin/grep -q "App Management" "$W/cp.refused.log" && cmp -s "$exe" "$W/cp.orig" && [ "$(cpst)" = absent ] \
+  && say ok "cp2077 on a fake app: a write macOS refuses points to App Management, nothing changed" || say FAIL "cp2077: refused ($(tail -2 "$W/cp.refused.log"))"
+unset MGVF_APP_BACKUP
+
+if [ "$fails" = 0 ]; then echo "==> every installer: installed, outdated, updated, restored; Cyberpunk 2077's app patched, signed and put back"; else echo "==> $fails failed"; exit 1; fi
