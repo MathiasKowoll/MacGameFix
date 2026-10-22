@@ -407,6 +407,164 @@
       ]
     },
     {
+      "name": "Resonance: A Plague Tale Legacy",
+      "steamAppId": "2713000",
+      "status": "works",
+      "technology": "Asobo's own engine, with its own DualSense code on Sony's pad code, over raw HID. Its haptics play as audio on the pad's output through Wwise Motion.",
+      "library": "Raw HID",
+      "vibration": "Haptics",
+      "features": [
+        "Haptics"
+      ],
+      "description": "Haptics over Bluetooth with the defaults.",
+      "details": [
+        "The modules logged the game opening the Bluetooth haptics output and keeping 16 to 44 ms waiting in it.",
+        "The Bluetooth haptics queue sat at its 64 ms cap, with about 1.6 s of every 2 s of haptics dropped; it did not show in the feel."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "date": "2026-10-21",
+          "notes": "\"Vibrated very well.\""
+        }
+      ]
+    },
+    {
+      "name": "Resident Evil Requiem",
+      "steamAppId": "3764200",
+      "status": "works",
+      "technology": "Capcom's RE Engine, with Sony's pad library linked in, over raw HID. It chooses between its own audio vibration device, when it believes the pad's audio output exists, and the motors, and it tells Bluetooth from a cable.",
+      "library": "Sony libScePad",
+      "vibration": "Motors",
+      "features": [
+        "Motors",
+        "Adaptive triggers"
+      ],
+      "description": "Over Bluetooth it vibrates with Bluetooth as a cable turned off for the game: it then sees a Bluetooth pad with no audio output and vibrates it itself. With the pad shown as wired it sets the trigger effects, never opens the pad's audio output and leaves the motors at zero.",
+      "settings": "Game Feel: Bluetooth as a cable off for this game.",
+      "details": [
+        "With Bluetooth as a cable on (the default), the modules logged trigger effects and motor values always at 0, and no haptics output opened (2026-10-21).",
+        "It vibrated the same way on NotProton's direct mode, without an audio output (2026-10-16).",
+        "Not played on a cable with the modules yet."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "date": "2026-10-21",
+          "notes": "Bluetooth as a cable off for the game."
+        }
+      ]
+    },
+    {
+      "name": "PRAGMATA",
+      "steamAppId": "3357650",
+      "status": "works",
+      "technology": "Capcom's RE Engine, with Sony's pad library linked in, over raw HID, the same as Resident Evil Requiem.",
+      "library": "Sony libScePad",
+      "vibration": "Motors",
+      "features": [
+        "Motors",
+        "Adaptive triggers"
+      ],
+      "description": "Over Bluetooth it vibrates with Bluetooth as a cable turned off for the game, as Resident Evil Requiem does.",
+      "settings": "Game Feel: Bluetooth as a cable off for this game.",
+      "details": [
+        "On NotProton's older bridge, with the pad's audio output visible, it set trigger effects and did not vibrate, and on a cable it did not vibrate either (2026-10-16).",
+        "Not played on a cable with the modules yet."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "date": "2026-10-21",
+          "notes": "Bluetooth as a cable off for the game."
+        }
+      ]
+    },
+    {
+      "name": "Crysis Remastered",
+      "steamAppId": "1715130",
+      "status": "works",
+      "technology": "CryEngine, reading an XInput controller only.",
+      "library": "XInput",
+      "vibration": "XInput",
+      "features": [
+        "XInput rumble",
+        "Trigger effects from Game Feel"
+      ],
+      "description": "It reads an Xbox-style controller. Game Feel gives it the pad as an XInput controller and puts its rumble on the actuators over Bluetooth; the trigger effects come from Game Feel.",
+      "settings": "Game Feel: the pad as an XInput controller (by the store's rule), its rumble on the actuators over Bluetooth, R2 slope and L2 vibrate.",
+      "details": [
+        "The modules logged the game's motor values and its rumble played on the actuators over Bluetooth, with no haptics dropped."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "date": "2026-10-21",
+          "notes": "On NotProton's Rosetta runner."
+        }
+      ]
+    },
+    {
+      "name": "Crysis 2 Remastered",
+      "steamAppId": "2096600",
+      "status": "works",
+      "technology": "CryEngine, reading the pad as an XInput controller. It ships Sony's pad library, which was not needed.",
+      "library": "XInput",
+      "vibration": "XInput",
+      "features": [
+        "XInput rumble",
+        "Trigger effects from Game Feel"
+      ],
+      "description": "It reads an Xbox-style controller. Game Feel gives it the pad as an XInput controller and puts its rumble on the actuators over Bluetooth; the trigger effects come from Game Feel.",
+      "settings": "Game Feel: the pad as an XInput controller (by the store's rule), its rumble on the actuators over Bluetooth, R2 slope and L2 vibrate.",
+      "details": [
+        "The modules logged the game's motor values and its rumble played on the actuators over Bluetooth, with no haptics dropped."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "date": "2026-10-21",
+          "notes": "On NotProton's Rosetta runner."
+        }
+      ]
+    },
+    {
+      "name": "Crysis 3 Remastered",
+      "steamAppId": "2096610",
+      "status": "works",
+      "technology": "CryEngine, reading the pad as an XInput controller.",
+      "library": "XInput",
+      "vibration": "XInput",
+      "features": [
+        "XInput rumble",
+        "Trigger effects from Game Feel"
+      ],
+      "description": "It reads an Xbox-style controller. Game Feel gives it the pad as an XInput controller and puts its rumble on the actuators over Bluetooth; the trigger effects come from Game Feel.",
+      "settings": "Game Feel: the pad as an XInput controller (by the store's rule), its rumble on the actuators over Bluetooth, R2 slope and L2 vibrate.",
+      "details": [
+        "The modules logged the game's motor values and its rumble played on the actuators over Bluetooth, with no haptics dropped."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "date": "2026-10-21",
+          "notes": "On NotProton's FEX runner."
+        }
+      ]
+    },
+    {
       "name": "Nioh 3",
       "steamAppId": "3681010",
       "status": "no-vibration",
@@ -417,13 +575,15 @@
         "Haptics (not working yet)",
         "Lightbar"
       ],
-      "description": "The game finds the pad and sets its lights and triggers, but never vibrates: Wine registers no audio device with SetupAPI, so the game never finds the pad's output, and with a DualSense it does not fall back to the motors.",
+      "description": "The game finds the pad and sets its lights and triggers, but never vibrates. With two SetupAPI patches of the modules (0009 and 0010, not released) it finds the pad's audio output, asks for its path and stops searching, but never opens it.",
       "settings": "In the game: all five vibration options on, mode Immersive.",
       "details": [
-        "A Wine trace showed it asking for the audio render interfaces about 70 times a second, and getting an empty list every time.",
-        "It writes the old rumble emulation once, with both motors at 0, and never a motor value after that.",
+        "Without patch 0009 it asked for the audio render interfaces about 70 times a second and got an empty list every time.",
+        "With 0009 and 0010 it finds the output whose container is the pad's, asks for its path once and stops; it never opens it, as audio, through MMDevice or as a file.",
+        "It writes the old rumble emulation once, with both motors at 0, and never a motor value after that; its pad thread sets XInput's vibration to 0 every frame.",
         "It creates and releases XAudio2 without ever playing through it.",
-        "A fix that lists Wine's audio outputs with SetupAPI is being tested (patch 0009)."
+        "Neither the Edge shown as a DualSense nor XInput off for the game changed it.",
+        "Proton on Linux shows the same: the triggers work and the haptic vibration does not (ValveSoftware/Proton#9473)."
       ],
       "tests": [
         {
@@ -431,6 +591,46 @@
           "connection": "bluetooth",
           "result": "no-vibration",
           "date": "2026-10-21"
+        },
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "no-vibration",
+          "shownAs": "DualSense",
+          "date": "2026-10-21"
+        },
+        {
+          "controller": "DualSense Edge",
+          "connection": "cable",
+          "result": "no-vibration",
+          "date": "2026-10-21"
+        }
+      ]
+    },
+    {
+      "name": "Mortal Kombat 11",
+      "steamAppId": "976310",
+      "status": "no-vibration",
+      "technology": "NetherRealm's engine (the PC port by QLOC). It reads the pad through DirectInput with its own table, which has the DualSense's id (054C:0CE6) and not the Edge's; the Sony library it ships (2017) knows neither pad.",
+      "library": "DirectInput",
+      "vibration": "None yet",
+      "features": [
+        "PlayStation button prompts"
+      ],
+      "description": "With XInput off and the Edge shown as a DualSense it plays with the right controls and PlayStation prompts (\"never played so well\"), but it does not vibrate. With the pad also given as an XInput controller (the store's rule) the buttons were assigned wrong.",
+      "settings": "Game Feel: XInput off for this game, and the Edge shown as a DualSense.",
+      "details": [
+        "No motor value in the modules' log.",
+        "Next: XInput's rumble on the motors (xinput=rumble), with the Edge still shown as a DualSense."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "no-vibration",
+          "shownAs": "DualSense",
+          "date": "2026-10-21",
+          "notes": "Controls and PlayStation prompts right."
         }
       ]
     }

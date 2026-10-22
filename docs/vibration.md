@@ -29,7 +29,14 @@ Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 2
 | [Mortal Kombat 1](#1971870) | Motors | SDL | DualSense Edge: Works (2026-10-20) | DualSense: Works (2026-10-20); DualSense Edge: Works (2026-10-20) |
 | [Onimusha: Way of the Sword](#2638890) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-20) |
 | [God of War](#1593500) | Motors | Sony libScePad | DualSense Edge shown as a DualSense: Works (2026-10-16, connection not recorded) | DualSense Edge shown as a DualSense: Works (2026-10-16, connection not recorded) |
-| [Nioh 3](#3681010) | Haptics | Raw HID | Not played yet | DualSense Edge: Does not vibrate (2026-10-21) |
+| [Resonance: A Plague Tale Legacy](#2713000) | Haptics | Raw HID | Not played yet | DualSense Edge: Works (2026-10-21) |
+| [Resident Evil Requiem](#3764200) | Motors | Sony libScePad | Not played yet | DualSense Edge: Works (2026-10-21) |
+| [PRAGMATA](#3357650) | Motors | Sony libScePad | Not played yet | DualSense Edge: Works (2026-10-21) |
+| [Crysis Remastered](#1715130) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21) |
+| [Crysis 2 Remastered](#2096600) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21) |
+| [Crysis 3 Remastered](#2096610) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21) |
+| [Nioh 3](#3681010) | Haptics | Raw HID | DualSense Edge: Does not vibrate (2026-10-21) | DualSense Edge: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21) |
+| [Mortal Kombat 11](#976310) | None yet | DirectInput | Not played yet | DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21) |
 
 <a id="2651280"></a>
 ## Marvel's Spider-Man 2
@@ -260,10 +267,133 @@ What was measured:
 
 - 2026-10-16, NotProton's pad bridge (PR #90): rumble on the motors and the lightbar; the game sets no trigger effects.
 
+<a id="2713000"></a>
+## Resonance: A Plague Tale Legacy
+
+Haptics over Bluetooth with the defaults.
+
+- **Status:** Works
+- **Library:** Raw HID
+- **Technology:** Asobo's own engine, with its own DualSense code on Sony's pad code, over raw HID. Its haptics play as audio on the pad's output through Wwise Motion.
+- **Features:** Haptics
+- **Steam app:** 2713000
+
+Tested:
+
+- DualSense Edge, Bluetooth: Works (2026-10-21). "Vibrated very well."
+
+What was measured:
+
+- The modules logged the game opening the Bluetooth haptics output and keeping 16 to 44 ms waiting in it.
+- The Bluetooth haptics queue sat at its 64 ms cap, with about 1.6 s of every 2 s of haptics dropped; it did not show in the feel.
+
+<a id="3764200"></a>
+## Resident Evil Requiem
+
+Over Bluetooth it vibrates with Bluetooth as a cable turned off for the game: it then sees a Bluetooth pad with no audio output and vibrates it itself. With the pad shown as wired it sets the trigger effects, never opens the pad's audio output and leaves the motors at zero.
+
+- **Status:** Works
+- **Library:** Sony libScePad
+- **Technology:** Capcom's RE Engine, with Sony's pad library linked in, over raw HID. It chooses between its own audio vibration device, when it believes the pad's audio output exists, and the motors, and it tells Bluetooth from a cable.
+- **Features:** Motors, Adaptive triggers
+- **Settings:** Game Feel: Bluetooth as a cable off for this game.
+- **Steam app:** 3764200
+
+Tested:
+
+- DualSense Edge, Bluetooth: Works (2026-10-21). Bluetooth as a cable off for the game.
+
+What was measured:
+
+- With Bluetooth as a cable on (the default), the modules logged trigger effects and motor values always at 0, and no haptics output opened (2026-10-21).
+- It vibrated the same way on NotProton's direct mode, without an audio output (2026-10-16).
+- Not played on a cable with the modules yet.
+
+<a id="3357650"></a>
+## PRAGMATA
+
+Over Bluetooth it vibrates with Bluetooth as a cable turned off for the game, as Resident Evil Requiem does.
+
+- **Status:** Works
+- **Library:** Sony libScePad
+- **Technology:** Capcom's RE Engine, with Sony's pad library linked in, over raw HID, the same as Resident Evil Requiem.
+- **Features:** Motors, Adaptive triggers
+- **Settings:** Game Feel: Bluetooth as a cable off for this game.
+- **Steam app:** 3357650
+
+Tested:
+
+- DualSense Edge, Bluetooth: Works (2026-10-21). Bluetooth as a cable off for the game.
+
+What was measured:
+
+- On NotProton's older bridge, with the pad's audio output visible, it set trigger effects and did not vibrate, and on a cable it did not vibrate either (2026-10-16).
+- Not played on a cable with the modules yet.
+
+<a id="1715130"></a>
+## Crysis Remastered
+
+It reads an Xbox-style controller. Game Feel gives it the pad as an XInput controller and puts its rumble on the actuators over Bluetooth; the trigger effects come from Game Feel.
+
+- **Status:** Works
+- **Library:** XInput
+- **Technology:** CryEngine, reading an XInput controller only.
+- **Features:** XInput rumble, Trigger effects from Game Feel
+- **Settings:** Game Feel: the pad as an XInput controller (by the store's rule), its rumble on the actuators over Bluetooth, R2 slope and L2 vibrate.
+- **Steam app:** 1715130
+
+Tested:
+
+- DualSense Edge, Bluetooth: Works (2026-10-21). On NotProton's Rosetta runner.
+
+What was measured:
+
+- The modules logged the game's motor values and its rumble played on the actuators over Bluetooth, with no haptics dropped.
+
+<a id="2096600"></a>
+## Crysis 2 Remastered
+
+It reads an Xbox-style controller. Game Feel gives it the pad as an XInput controller and puts its rumble on the actuators over Bluetooth; the trigger effects come from Game Feel.
+
+- **Status:** Works
+- **Library:** XInput
+- **Technology:** CryEngine, reading the pad as an XInput controller. It ships Sony's pad library, which was not needed.
+- **Features:** XInput rumble, Trigger effects from Game Feel
+- **Settings:** Game Feel: the pad as an XInput controller (by the store's rule), its rumble on the actuators over Bluetooth, R2 slope and L2 vibrate.
+- **Steam app:** 2096600
+
+Tested:
+
+- DualSense Edge, Bluetooth: Works (2026-10-21). On NotProton's Rosetta runner.
+
+What was measured:
+
+- The modules logged the game's motor values and its rumble played on the actuators over Bluetooth, with no haptics dropped.
+
+<a id="2096610"></a>
+## Crysis 3 Remastered
+
+It reads an Xbox-style controller. Game Feel gives it the pad as an XInput controller and puts its rumble on the actuators over Bluetooth; the trigger effects come from Game Feel.
+
+- **Status:** Works
+- **Library:** XInput
+- **Technology:** CryEngine, reading the pad as an XInput controller.
+- **Features:** XInput rumble, Trigger effects from Game Feel
+- **Settings:** Game Feel: the pad as an XInput controller (by the store's rule), its rumble on the actuators over Bluetooth, R2 slope and L2 vibrate.
+- **Steam app:** 2096610
+
+Tested:
+
+- DualSense Edge, Bluetooth: Works (2026-10-21). On NotProton's FEX runner.
+
+What was measured:
+
+- The modules logged the game's motor values and its rumble played on the actuators over Bluetooth, with no haptics dropped.
+
 <a id="3681010"></a>
 ## Nioh 3
 
-The game finds the pad and sets its lights and triggers, but never vibrates: Wine registers no audio device with SetupAPI, so the game never finds the pad's output, and with a DualSense it does not fall back to the motors.
+The game finds the pad and sets its lights and triggers, but never vibrates. With two SetupAPI patches of the modules (0009 and 0010, not released) it finds the pad's audio output, asks for its path and stops searching, but never opens it.
 
 - **Status:** Does not vibrate
 - **Library:** Raw HID
@@ -275,13 +405,38 @@ The game finds the pad and sets its lights and triggers, but never vibrates: Win
 Tested:
 
 - DualSense Edge, Bluetooth: Does not vibrate (2026-10-21)
+- DualSense Edge shown as a DualSense, Bluetooth: Does not vibrate (2026-10-21)
+- DualSense Edge, Cable: Does not vibrate (2026-10-21)
 
 What was measured:
 
-- A Wine trace showed it asking for the audio render interfaces about 70 times a second, and getting an empty list every time.
-- It writes the old rumble emulation once, with both motors at 0, and never a motor value after that.
+- Without patch 0009 it asked for the audio render interfaces about 70 times a second and got an empty list every time.
+- With 0009 and 0010 it finds the output whose container is the pad's, asks for its path once and stops; it never opens it, as audio, through MMDevice or as a file.
+- It writes the old rumble emulation once, with both motors at 0, and never a motor value after that; its pad thread sets XInput's vibration to 0 every frame.
 - It creates and releases XAudio2 without ever playing through it.
-- A fix that lists Wine's audio outputs with SetupAPI is being tested (patch 0009).
+- Neither the Edge shown as a DualSense nor XInput off for the game changed it.
+- Proton on Linux shows the same: the triggers work and the haptic vibration does not (ValveSoftware/Proton#9473).
+
+<a id="976310"></a>
+## Mortal Kombat 11
+
+With XInput off and the Edge shown as a DualSense it plays with the right controls and PlayStation prompts ("never played so well"), but it does not vibrate. With the pad also given as an XInput controller (the store's rule) the buttons were assigned wrong.
+
+- **Status:** Does not vibrate
+- **Library:** DirectInput
+- **Technology:** NetherRealm's engine (the PC port by QLOC). It reads the pad through DirectInput with its own table, which has the DualSense's id (054C:0CE6) and not the Edge's; the Sony library it ships (2017) knows neither pad.
+- **Features:** PlayStation button prompts
+- **Settings:** Game Feel: XInput off for this game, and the Edge shown as a DualSense.
+- **Steam app:** 976310
+
+Tested:
+
+- DualSense Edge shown as a DualSense, Bluetooth: Does not vibrate (2026-10-21). Controls and PlayStation prompts right.
+
+What was measured:
+
+- No motor value in the modules' log.
+- Next: XInput's rumble on the motors (xinput=rumble), with the Edge still shown as a DualSense.
 
 ## Adding a game
 
