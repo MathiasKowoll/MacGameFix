@@ -301,6 +301,18 @@ d = json.load(open(sys.argv[1])); d["games"]["4343"] = {"name": "Plus 1.5+2.5"}
 json.dump(d, open(sys.argv[1], "w"))
 PY3
 check 'has "$(shareform 4343)" "title: [Settings] Plus 1.5+2.5"' "a plus in a game's name stays a plus"
+# The form It Vibrates opens: the pad and the connection of the game's latest session, the last process that named it.
+vibratesform() {
+    /usr/bin/python3 - "$("$BIN" --pad-vibrates-url "$1")" <<'PY3'
+import sys, urllib.parse
+for k, v in urllib.parse.parse_qsl(urllib.parse.urlsplit(sys.argv[1]).query):
+    print(k + ": " + v.replace("\n", " | "))
+PY3
+}
+printf '10:01:00 [7] game=4242 the Bluetooth DualSense Edge at location 32c48ef2 is shown as wired\n10:01:01 [7] game=4242 observed: the game plays haptics on the Bluetooth DualSense Edge%ss output\n' "'" >> "$MACGAMEFIX_PAD_LOG"
+check 'has "$(vibratesform 4242)" "template: vibration-works.yml" && has "$(vibratesform 4242)" "title: [Vibrates] Fake Game · DualSense Edge · Bluetooth" && has "$(vibratesform 4242)" "controller: DualSense Edge" && has "$(vibratesform 4242)" "connection: Bluetooth" && has "$(vibratesform 4242)" "game: Fake Game (Steam app 4242)" && has "$(vibratesform 4242)" "settings: bluetooth="' "saying a game vibrates opens the vibration form with the pad and the connection of its latest session"
+printf '10:02:00 [8] game=4242 the wired DualSense sent 2000 input reports in 2 s\n10:02:01 [8] game=4242 the Bluetooth DualSense Edge at location 32c48ef2 is shown as wired\n' >> "$MACGAMEFIX_PAD_LOG"
+check '! has "$(vibratesform 4242)" "controller:" && ! has "$(vibratesform 4242)" "connection:" && has "$(vibratesform 4242)" "title: [Vibrates] Fake Game"' "a session with two pads and two connections leaves both to the player"
 unset MACGAMEFIX_PAD_LOG
 
 echo "== the Report tab's probe"

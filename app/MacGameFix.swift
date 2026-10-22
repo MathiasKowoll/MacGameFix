@@ -617,6 +617,25 @@ extension Model {
         }
     }
 
+    /// The same report, and the form for a game that vibrates opened with the pad and the
+    /// connection the modules saw last and the library the game's folder shows, for the
+    /// list of games played for vibration.
+    func padVibrates(_ game: InstalledGame) {
+        guard savePadReport(game, as: "MacGameFix vibration report") else { return }
+        let store = PadStore.exists ? PadStore.load() : pad
+        let presets = padPresets, extra = extraFolders
+        let log = (try? String(contentsOf: PadStore.log, encoding: .utf8)) ?? ""
+        Task {
+            let library = await Task.detached {
+                ProbeGames.all(extra: extra).first { $0.appid == game.appid }.flatMap { Probe.look($0).padLibrary }
+            }.value
+            if let link = store.vibratesIssue(appid: game.appid, name: game.name, presets: presets,
+                                              library: library, log: log) {
+                NSWorkspace.shared.open(link)
+            }
+        }
+    }
+
     /// Saves a game's report where the user chooses and shows it in the Finder;
     /// false if the user cancels or it could not be written.
     private func savePadReport(_ game: InstalledGame, as kind: String) -> Bool {
@@ -1847,6 +1866,10 @@ struct PadGameSheet: View {
                             .help("The Wine modules log what this game writes to the pad, the haptics' levels and delays, "
                                   + "for this game alone, from its next start.")
                         Spacer()
+                        Button("It Vibrates…") { model.padVibrates(game) }
+                            .help("Saves this game's report and opens a new issue on GitHub that says it vibrates, with "
+                                  + "the controller and the connection the Wine modules saw, for the list of games "
+                                  + "played for vibration.")
                         Button("Share These Settings…") { model.padShare(game) }
                             .help("Saves this game's report and opens a new issue on GitHub with these settings in it, "
                                   + "to attach it to.")
@@ -1859,6 +1882,9 @@ struct PadGameSheet: View {
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     Text("If these settings feel right, share them the same way: shared settings that a report backs "
                          + "become this game's suggested ones for everyone.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text("If it vibrates, say so the same way, once for each controller and connection you played: "
+                         + "a game's report that it vibrates adds it to the list of games played for vibration.")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     VStack(alignment: .leading, spacing: 4) {
                         if let preset {
@@ -2238,6 +2264,16 @@ enum Entry {
             let store = PadStore.load()
             let name = store.games[appid]?.name ?? SteamGames.installed().first { $0.appid == appid }?.name ?? appid
             print(store.shareIssue(appid: appid, name: name, presets: PadPresets.load())?.absoluteString ?? "")
+            exit(0)
+        }
+        if let appid = value("--pad-vibrates-url") {
+            // The form It Vibrates opens for a game, for the tests.
+            let store = PadStore.load()
+            let name = store.games[appid]?.name ?? SteamGames.installed().first { $0.appid == appid }?.name ?? appid
+            let library = ProbeGames.all().first { $0.appid == appid }.flatMap { Probe.look($0).padLibrary }
+            let log = (try? String(contentsOf: PadStore.log, encoding: .utf8)) ?? ""
+            print(store.vibratesIssue(appid: appid, name: name, presets: PadPresets.load(), library: library,
+                                      log: log)?.absoluteString ?? "")
             exit(0)
         }
         if let root = value("--engine-install") ?? value("--engine-remove") {

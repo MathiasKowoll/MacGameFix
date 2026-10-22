@@ -380,6 +380,12 @@ verified result before anything is installed.
   Settings…**: it saves the same report and opens the form with the game and every option it gets filled
   in; attach the file there and say how it felt. Shared settings that a report backs become the game's
   suggested settings in Game Feel.
+- **A game that vibrates.** In **Game Feel**, click the game, play it with **Diagnose this game** on if you
+  can, close it, and click **It Vibrates…**. It saves the same report and opens the form with the game, the
+  controller and the connection the Wine modules saw in its latest session, what they saw it do, and the
+  library it talks to the pad through; say what you felt and attach the file. One report is one controller on
+  one connection: played on a cable and over Bluetooth, send two. Reports like this make the
+  [list of games played for vibration](docs/vibration.md).
 - **A game fix does not work.** Copy the lines about the game from **Settings › Log** into the form.
 
 ## Opening it the first time

@@ -133,6 +133,18 @@ private extension Data {
 
 // MARK: - What a game is made of
 
+extension ProbeFindings {
+    /// The library the game talks to the pad through, by the names the list of games
+    /// played for vibration uses: Sony's first, since a game that ships it may read HID too.
+    var padLibrary: String? {
+        if input.contains(where: { $0.hasPrefix("Sony's pad library") }) { return "Sony libScePad" }
+        if input.contains("SDL") { return "SDL" }
+        if input.contains(where: { $0.hasPrefix("raw HID") }) { return "Raw HID" }
+        if input.contains("XInput") { return "XInput" }
+        return nil
+    }
+}
+
 struct ProbeFindings: Sendable {
     var exe: String?
     var exeSize: Int64 = 0
