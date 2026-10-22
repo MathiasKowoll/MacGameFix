@@ -795,6 +795,14 @@
           "shownAs": "DualShock 4",
           "date": "2026-10-22",
           "notes": "Vibrated (the user); 13 motor rises in the log, both motors up to 0xff."
+        },
+        {
+          "controller": "DualSense",
+          "connection": "bluetooth",
+          "result": "works",
+          "shownAs": "DualShock 4",
+          "date": "2026-10-22",
+          "notes": "Vibrated (the user); 40 motor rises in the log, up to 0xff."
         }
       ]
     }

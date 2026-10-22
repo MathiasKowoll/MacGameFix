@@ -41,7 +41,7 @@ Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 2
 | [Teenage Mutant Ninja Turtles: Splintered Fate](#2996040) | XInput | XInput | Not played yet | DualSense Edge: Partly (2026-10-21) |
 | [Nioh 3](#3681010) | Haptics | Raw HID | DualSense Edge: Does not vibrate (2026-10-21) | DualSense Edge: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21) |
 | [NINJA GAIDEN 4](#2627260) | Motors | Raw HID | Not played yet | DualSense Edge shown as a DualSense: Works (2026-10-22) |
-| [Mortal Kombat 11](#976310) | Motors | DirectInput | DualSense Edge shown as a DualShock 4: Works (2026-10-22) | DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualShock 4: Works (2026-10-22) |
+| [Mortal Kombat 11](#976310) | Motors | DirectInput | DualSense Edge shown as a DualShock 4: Works (2026-10-22) | DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualShock 4: Works (2026-10-22); DualSense shown as a DualShock 4: Works (2026-10-22) |
 
 <a id="2651280"></a>
 ## Marvel's Spider-Man 2
@@ -546,6 +546,7 @@ Tested:
 - DualSense Edge shown as a DualSense, Bluetooth: Does not vibrate (2026-10-21). The pad also as an XInput controller, Steam Input off: still no vibration request.
 - DualSense Edge shown as a DualShock 4, Bluetooth: Works (2026-10-22). Vibrated (the user); 34 motor rises in the log, up to 0xff.
 - DualSense Edge shown as a DualShock 4, Cable: Works (2026-10-22). Vibrated (the user); 13 motor rises in the log, both motors up to 0xff.
+- DualSense shown as a DualShock 4, Bluetooth: Works (2026-10-22). Vibrated (the user); 40 motor rises in the log, up to 0xff.
 
 What was measured:
 
