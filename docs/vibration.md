@@ -39,7 +39,7 @@ Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 2
 | [Revenge of the Savage Planet](#2787320) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21) |
 | [TIEBREAK - GRAND SLAM EDITION](#2264340) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21) |
 | [Teenage Mutant Ninja Turtles: Splintered Fate](#2996040) | XInput | XInput | Not played yet | DualSense Edge: Partly (2026-10-21) |
-| [Nioh 3](#3681010) | Haptics | Raw HID | DualSense Edge: Does not vibrate (2026-10-21) | DualSense Edge: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21) |
+| [Nioh 3](#3681010) | Haptics | Raw HID | DualSense Edge: Does not vibrate (2026-10-21) | DualSense Edge: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Works (2026-10-22) |
 | [NINJA GAIDEN 4](#2627260) | Motors | Raw HID | Not played yet | DualSense Edge shown as a DualSense: Works (2026-10-22) |
 | [Mortal Kombat 11](#976310) | Motors | DirectInput | DualSense Edge shown as a DualShock 4: Works (2026-10-22) | DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualShock 4: Works (2026-10-22); DualSense shown as a DualShock 4: Works (2026-10-22) |
 
@@ -480,13 +480,13 @@ What was measured:
 <a id="3681010"></a>
 ## Nioh 3
 
-The game finds the pad and sets its lights and triggers, but never vibrates. With two SetupAPI patches of the modules (0009 and 0010, not released) it finds the pad's audio output, asks for its path and stops searching, but never opens it.
+Haptics over Bluetooth, "vibrated very well", with three Wine module patches that are not released yet (0009, 0010, 0011) and the Edge shown as a standard DualSense with XInput off. Without the patches it finds no output and never vibrates, in Immersive or Functional mode.
 
-- **Status:** Does not vibrate
+- **Status:** Works
 - **Library:** Raw HID
-- **Technology:** Its own DualSense support, over raw HID. It looks for the pad's audio output through SetupAPI: it reads the pad's container (SPDRP_BASE_CONTAINERID) and searches the audio render interfaces for the same one.
-- **Features:** Haptics (not working yet), Lightbar
-- **Settings:** In the game: all five vibration options on, mode Immersive.
+- **Technology:** Its own DualSense support, over raw HID. It finds the pad's audio output through SetupAPI (the pad's container, SPDRP_BASE_CONTAINERID, against the audio render interfaces) and plays its haptics there through an XAudio2 mastering voice opened on that interface's path.
+- **Features:** Haptics, Lightbar
+- **Settings:** Game Feel: the Edge shown as a DualSense, XInput off. In the game: vibration mode Immersive.
 - **Steam app:** 3681010
 
 Tested:
@@ -494,15 +494,16 @@ Tested:
 - DualSense Edge, Bluetooth: Does not vibrate (2026-10-21)
 - DualSense Edge shown as a DualSense, Bluetooth: Does not vibrate (2026-10-21)
 - DualSense Edge, Cable: Does not vibrate (2026-10-21)
+- DualSense Edge shown as a DualSense, Bluetooth: Works (2026-10-22). Patches 0009-0011, XInput off, Immersive: "vibrated very well".
 
 What was measured:
 
-- Without patch 0009 it asked for the audio render interfaces about 70 times a second and got an empty list every time.
-- With 0009 and 0010 it finds the output whose container is the pad's, asks for its path once and stops; it never opens it, as audio, through MMDevice or as a file.
-- It writes the old rumble emulation once, with both motors at 0, and never a motor value after that; its pad thread sets XInput's vibration to 0 every frame.
-- It creates and releases XAudio2 without ever playing through it.
-- Neither the Edge shown as a DualSense nor XInput off for the game changed it.
-- Proton on Linux shows the same: the triggers work and the haptic vibration does not (ValveSoftware/Proton#9473).
+- 0009 lists Wine's audio outputs as SetupAPI interfaces with their containers; 0010 returns SPDRP_BASE_CONTAINERID as a WCHAR string from the A function, as Windows does; with both the game finds the pad's output.
+- It then creates an XAudio2 mastering voice with that output's path as its device id; 0011 makes XAudio2 open that device (Wine ignored the id and used the default output).
+- With the Edge shown as an Edge, or with XInput's rumble on the motors (the pad's id gains "&Col01"), it found the output and never created the voice.
+- The modules logged the haptics output opened on the Bluetooth pad, peaks up to 1.12, the queue at about 29 ms and nothing dropped.
+- In Functional mode, and without the patches, it never sends a motor value: a game that sees a DualSense plays only haptics.
+- Proton on Linux shows the same failure without these pieces: the triggers work and the haptic vibration does not (ValveSoftware/Proton#9473).
 
 <a id="2627260"></a>
 ## NINJA GAIDEN 4
