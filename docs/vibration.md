@@ -40,7 +40,7 @@ Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 2
 | [TIEBREAK - GRAND SLAM EDITION](#2264340) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21) |
 | [Teenage Mutant Ninja Turtles: Splintered Fate](#2996040) | XInput | XInput | Not played yet | DualSense Edge: Partly (2026-10-21) |
 | [Nioh 3](#3681010) | Haptics | Raw HID | DualSense Edge: Does not vibrate (2026-10-21) | DualSense Edge: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21) |
-| [NINJA GAIDEN 4](#2627260) | None yet | Raw HID | Not played yet | DualSense Edge: Does not vibrate (2026-10-21) |
+| [NINJA GAIDEN 4](#2627260) | Motors | Raw HID | Not played yet | DualSense Edge shown as a DualSense: Works (2026-10-22) |
 | [Mortal Kombat 11](#976310) | None yet | DirectInput | Not played yet | DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21) |
 
 <a id="2651280"></a>
@@ -507,22 +507,25 @@ What was measured:
 <a id="2627260"></a>
 ## NINJA GAIDEN 4
 
-With the defaults the controller does nothing. As an XInput controller it plays, with Xbox prompts, but does not vibrate: the game reads the pad, asks once for the old rumble emulation with both motors at 0 and never sends a motor value, as Nioh 3 does.
+Its own DualSense code drives the pad's motors, once it is shown a standard DualSense and the pad is a single HID device. With the Edge shown as an Edge, or with XInput's rumble on the motors (which adds a collection, so the pad's id gains "&Col01"), its code does not take the pad: no controller at all.
 
-- **Status:** Does not vibrate
+- **Status:** Works
 - **Library:** Raw HID
 - **Technology:** Its own pad code over raw HID (its executable is encrypted; its imports match Nioh 3's), plus XInput and DirectInput.
-- **Features:** 
-- **Settings:** Game Feel: the pad as an XInput controller.
+- **Features:** Motors
+- **Settings:** Game Feel: the Edge shown as a DualSense, XInput off. Steam Input off.
 - **Steam app:** 2627260
 
 Tested:
 
-- DualSense Edge, Bluetooth: Does not vibrate (2026-10-21). As an XInput controller: controls and Xbox prompts, no vibration.
+- DualSense Edge shown as a DualSense, Bluetooth: Works (2026-10-22). XInput off: controls and vibration.
 
 What was measured:
 
-- With Bluetooth as a cable off as well, the controller did not work: the game read the pad's report 0x05, which switches a Bluetooth DualSense to its full report, and the modules saw nothing from it afterwards.
+- With the defaults, and with the Edge shown as a DualSense but XInput's rumble on the motors, the game read the pad's reports 0x09, 0x20 and 0x05 and asked once for the old rumble emulation with both motors at 0, and the controller did nothing.
+- As an XInput controller it played, with Xbox prompts, and did not vibrate.
+- With the Edge shown as a DualSense and XInput off, the modules logged the game rumbling the pad's motors through its own code.
+- With Bluetooth as a cable off too, the controller did not work: the game read the pad's report 0x05, which switches a Bluetooth DualSense to its full report, and the modules saw nothing from it afterwards.
 
 <a id="976310"></a>
 ## Mortal Kombat 11
