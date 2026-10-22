@@ -1393,11 +1393,18 @@ struct ControllersView: View {
 private let padGains: [Double] = [1, 1.5, 2, 2.5, 3]
 
 /// The options' rows, for every game and for one: the same form either way. A
-/// row whose value is the game's own is in the accent colour.
+/// row whose value is the game's own is in the accent colour. Showing the pad as
+/// a DualShock 4 is a row of one game's form alone (PadOptions.asDualShock4).
 struct PadOptionRows: View {
     let flag: (WritableKeyPath<PadOptions, Bool?>) -> Binding<Bool>
     let choice: (WritableKeyPath<PadOptions, String?>) -> Binding<String>
     let own: (PartialKeyPath<PadOptions>) -> Bool
+    var perGame = false
+
+    /// Shown as a DualShock 4, Bluetooth is a cable (PadOptions.lines), the
+    /// identity wins over the Edge's, and the modules take XInput off, so those
+    /// rows say so and cannot be changed.
+    private var asDualShock4: Bool { perGame && flag(\.asDualShock4).wrappedValue }
 
     private func title(_ text: String, _ key: PartialKeyPath<PadOptions>) -> Text {
         own(key) ? Text(text).foregroundColor(.accentColor) : Text(text)
@@ -1412,6 +1419,7 @@ struct PadOptionRows: View {
     }
 
     private var xinputAbout: String {
+        if asDualShock4 { return "Off while the pad is shown as a DualShock 4." }
         switch choice(\.xinput).wrappedValue {
         case "rumble": return "The pad stays itself, and a game that rumbles through XInput, such as Beast of "
             + "Reincarnation, gets its rumble on the motors. For a game the Steam store lists for the DualSense."
@@ -1423,25 +1431,39 @@ struct PadOptionRows: View {
     }
 
     var body: some View {
-        Toggle(isOn: flag(\.bluetoothAsCable)) {
+        Toggle(isOn: asDualShock4 ? .constant(true) : flag(\.bluetoothAsCable)) {
             label("Bluetooth as a cable", \.bluetoothAsCable,
-                  "A DualSense or DualSense Edge on Bluetooth is shown to games as the same pad on a cable, so they "
+                  asDualShock4 ? "On while the pad is shown as a DualShock 4: the game sees a DualShock 4 on a cable."
+                  : "A DualSense or DualSense Edge on Bluetooth is shown to games as the same pad on a cable, so they "
                   + "give it haptics and adaptive triggers as wired.")
         }
+        .disabled(asDualShock4)
         Toggle(isOn: flag(\.fullMotorPower)) {
             label("Full motor power on the Edge", \.fullMotorPower,
-                  "Sony's library claims a standard DualSense's motor power at full and never an Edge's, which then "
+                  asDualShock4 ? "Shown as a DualShock 4, the game cannot set the motor power: a DualShock 4 has "
+                  + "none. This claims it at full for either pad."
+                  : "Sony's library claims a standard DualSense's motor power at full and never an Edge's, which then "
                   + "keeps the reduction it stores; this claims it for the Edge too.")
         }
         Toggle(isOn: flag(\.edgeAsDualSense)) {
             label("Show the Edge as a standard DualSense", \.edgeAsDualSense,
                   "For a game whose Sony library does not know the Edge. The game loses the Edge's back buttons and Fn.")
         }
-        Picker(selection: choice(\.xinput)) {
+        .disabled(asDualShock4)
+        if perGame {
+            Toggle(isOn: flag(\.asDualShock4)) {
+                label("Show the pad as a DualShock 4", \.asDualShock4,
+                      "For a game whose controller code knows only the PS4 pad, such as Mortal Kombat 11. The pad is "
+                      + "shown to the game as a DualShock 4 on a cable, over Bluetooth too, and XInput is off for "
+                      + "it. Not yet played with a game.")
+            }
+        }
+        Picker(selection: asDualShock4 ? .constant("off") : choice(\.xinput)) {
             Text("Off").tag("off")
             Text("Its rumble on the motors").tag("rumble")
             Text("The pad as an XInput controller").tag("pad")
         } label: { label("XInput", \.xinput, xinputAbout) }
+        .disabled(asDualShock4)
         Toggle(isOn: flag(\.rumbleHaptics)) {
             label("Rumble on the haptic actuators", \.rumbleHaptics,
                   "Over Bluetooth, a game's motor rumble played on the haptic actuators, as PlayStation games play theirs: the heavy "
@@ -1817,7 +1839,7 @@ struct PadGameSheet: View {
         VStack(spacing: 0) {
             Form {
                 Section {
-                    PadOptionRows(flag: flag, choice: trigger, own: isOwn)
+                    PadOptionRows(flag: flag, choice: trigger, own: isOwn, perGame: true)
                 } header: {
                     HStack(alignment: .center, spacing: 14) {
                         PadCover(appid: game.appid, height: 96)
