@@ -40,6 +40,7 @@ Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 2
 | [TIEBREAK - GRAND SLAM EDITION](#2264340) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21) |
 | [Teenage Mutant Ninja Turtles: Splintered Fate](#2996040) | XInput | XInput | Not played yet | DualSense Edge: Partly (2026-10-21) |
 | [Nioh 3](#3681010) | Haptics | Raw HID | DualSense Edge: Does not vibrate (2026-10-21) | DualSense Edge: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21) |
+| [NINJA GAIDEN 4](#2627260) | None yet | Raw HID | Not played yet | DualSense Edge: Does not vibrate (2026-10-21) |
 | [Mortal Kombat 11](#976310) | None yet | DirectInput | Not played yet | DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21) |
 
 <a id="2651280"></a>
@@ -502,6 +503,26 @@ What was measured:
 - It creates and releases XAudio2 without ever playing through it.
 - Neither the Edge shown as a DualSense nor XInput off for the game changed it.
 - Proton on Linux shows the same: the triggers work and the haptic vibration does not (ValveSoftware/Proton#9473).
+
+<a id="2627260"></a>
+## NINJA GAIDEN 4
+
+With the defaults the controller does nothing. As an XInput controller it plays, with Xbox prompts, but does not vibrate: the game reads the pad, asks once for the old rumble emulation with both motors at 0 and never sends a motor value, as Nioh 3 does.
+
+- **Status:** Does not vibrate
+- **Library:** Raw HID
+- **Technology:** Its own pad code over raw HID (its executable is encrypted; its imports match Nioh 3's), plus XInput and DirectInput.
+- **Features:** 
+- **Settings:** Game Feel: the pad as an XInput controller.
+- **Steam app:** 2627260
+
+Tested:
+
+- DualSense Edge, Bluetooth: Does not vibrate (2026-10-21). As an XInput controller: controls and Xbox prompts, no vibration.
+
+What was measured:
+
+- With Bluetooth as a cable off as well, the controller did not work: the game read the pad's report 0x05, which switches a Bluetooth DualSense to its full report, and the modules saw nothing from it afterwards.
 
 <a id="976310"></a>
 ## Mortal Kombat 11

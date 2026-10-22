@@ -709,6 +709,29 @@
       ]
     },
     {
+      "name": "NINJA GAIDEN 4",
+      "steamAppId": "2627260",
+      "status": "no-vibration",
+      "technology": "Its own pad code over raw HID (its executable is encrypted; its imports match Nioh 3's), plus XInput and DirectInput.",
+      "library": "Raw HID",
+      "vibration": "None yet",
+      "features": [],
+      "description": "With the defaults the controller does nothing. As an XInput controller it plays, with Xbox prompts, but does not vibrate: the game reads the pad, asks once for the old rumble emulation with both motors at 0 and never sends a motor value, as Nioh 3 does.",
+      "settings": "Game Feel: the pad as an XInput controller.",
+      "details": [
+        "With Bluetooth as a cable off as well, the controller did not work: the game read the pad's report 0x05, which switches a Bluetooth DualSense to its full report, and the modules saw nothing from it afterwards."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "no-vibration",
+          "date": "2026-10-21",
+          "notes": "As an XInput controller: controls and Xbox prompts, no vibration."
+        }
+      ]
+    },
+    {
       "name": "Mortal Kombat 11",
       "steamAppId": "976310",
       "status": "no-vibration",
