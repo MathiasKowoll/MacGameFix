@@ -17,11 +17,11 @@ Wherever a quoted string is built from a value, `<…>` stands for that value.
 ## 1. The main window
 
 **The window itself**
-- It is a `WindowGroup("MacGameFix")`: default size 1080×760, minimum 720×460 (MacGameFix.swift:2087-2090, 801).
+- It is a `WindowGroup("MacGameFix")`: default size 1080×760, minimum 720×460 (MacGameFix.swift:2109-2112, 801).
 - It starts a game scan when it opens (804).
 - When that scan finishes, it looks at the CrossOver installs if it has not yet (343).
 - Opening the window removes the dot from the menu bar icon (88-94). If the agent is on, opening it also restarts or re-registers the agent (98-104).
-- Closing the last window quits this process (2074). If an install is running, the quit waits for it to finish (2076-2080).
+- Closing the last window quits this process (2096). If an install is running, the quit waits for it to finish (2098-2102).
 
 **Tabs, in order** (779-792)
 
@@ -163,16 +163,16 @@ Wherever a quoted string is built from a value, `<…>` stands for that value.
 - Header tooltip: "Unlike the game fixes, these go into CrossOver itself. Quit that CrossOver's games first. In a CrossOver app, macOS asks to allow MacGameFix under App Management, and the app is signed again ad hoc." (1069-1077)
 - Footer: "Only a CrossOver of a build and Wine the modules were built for can be turned on." (1079)
 
-One row per CrossOver app (in /Applications and ~/Applications) and per NotProton runner (`EngineSwitch`, 1899-1928):
+One row per CrossOver app (in /Applications and ~/Applications) and per NotProton runner (`EngineSwitch`, 1921-1950):
 - **Name**, for example "CrossOver Preview 20261006", "CrossOver 26.3", or "NotProton runner · CrossOver Preview 20261015". Copies with the same name get " (<app or runner folder>)" (Engine.swift:122, 134, 139-144).
-- **Caption**: "<build> · <state>", or "<build> · no modules for this build" when no modules exist (1908-1909).
+- **Caption**: "<build> · <state>", or "<build> · no modules for this build" when no modules exist (1930-1931).
   - States (Engine.swift:41-57): "…", "Installed" (green), "Older modules: install again" (orange), "Partly installed" (orange), "Not installed", "No modules for this build yet".
   - After a failed run, an orange "Failed — see the log in Settings" is added (527).
-- **"Update"** (state Older modules) or **"Install Again"** (Not installed or Partly installed). These only appear when the switch is on but the modules are behind (705-707, 1917-1920).
+- **"Update"** (state Older modules) or **"Install Again"** (Not installed or Partly installed). These only appear when the switch is on but the modules are behind (705-707, 1939-1942).
 - **Switch**: on installs the modules, off removes them (434-438).
   - Turning on a CrossOver app first shows the "Change CrossOver itself?" alert (section 3). Turning on a runner, or turning anything off, shows no question.
-  - The switch is disabled while the state is "…", when there are no modules, or while busy (429, 1924).
-  - Row tooltip: the install's root path (1926).
+  - The switch is disabled while the state is "…", when there are no modules, or while busy (429, 1946).
+  - Row tooltip: the install's root path (1948).
 
 Below the rows:
 - Empty state: "Looking…" or "No CrossOver or NotProton runner found." (1049-1051)
@@ -208,7 +208,7 @@ Below the rows:
 - **"Settings"**: "As every game", or the differences joined by ", ".
   - " (suggested)" is added when the difference comes from a preset, or from the Steam-store rule ("an XInput controller"), rather than from the user (1381-1385).
 - **"Seen"**: what the modules logged the game doing: "haptics as audio", "rumble motors", "rumble through XInput", "trigger effects", "sets the motor power", "played over Bluetooth" (Pad.swift:230-238).
-- Covers come from Steam's `appcache/librarycache/<appid>/library_600x900.jpg` or `header.jpg`. A grey tile with a gamepad stands in where Steam has none (1648-1693).
+- Covers come from Steam's `appcache/librarycache/<appid>/library_600x900.jpg` or `header.jpg`. A grey tile with a gamepad stands in where Steam has none (1670-1715).
 
 **Footer** (1352-1367)
 - "No Steam game found." / "No game matches." / "<n> game(s)".
@@ -226,9 +226,9 @@ Below the rows:
 - Footer: the same count texts as Game Feel, plus the "Show" picker (15/25/50/100, no tooltip, saved under `reportPerPage`), chevrons and "Page x of y" (1163-1177).
 - The list is every Steam appmanifest whose install folder exists, except app 228980 (Probe.swift:21-41).
 
-### 2.5 Settings (`SettingsView`, 1932-2056)
+### 2.5 Settings (`SettingsView`, 1954-2078)
 
-**"Background"** (1937-1962)
+**"Background"** (1959-1984)
 - **"Run from the menu bar"**: installs or removes the LaunchAgent (206-213).
   - Tooltip: "MacGameFix starts when you log in and stays in the menu bar. Every two minutes it puts back the fix of a game marked “Keep it applied” after Steam updates or verifies it, once the game is closed."
   - If the agent can't be started, the error goes to the Log, not to an alert: "Could not start the agent: …" (208).
@@ -236,31 +236,31 @@ Below the rows:
   - Tooltip: "Beside the raccoon in the menu bar: a gamepad and the battery left in a connected controller, the lowest if there are several. The menu lists each one."
 - **"Icon"** picker: **"Raccoon and gamepad" / "Gamepad" / "Battery only"**. Disabled unless the agent is on and the battery option is on.
   - Tooltip: "What stands beside the battery in the menu bar. With no controller connected, the gamepad stays if it is chosen; otherwise the raccoon shows."
-- For each kept game whose folder is gone: "<name>: folder gone" in orange, with a **"Stop Keeping It"** button that removes the game from the kept list (1955-1961).
+- For each kept game whose folder is gone: "<name>: folder gone" in orange, with a **"Stop Keeping It"** button that removes the game from the kept list (1977-1983).
 
-**"Game Mode"** (1964-1980)
+**"Game Mode"** (1986-2002)
 - Toggle **"Game Mode for CrossOver's games"** (default off).
   - Tooltip: "macOS turns Game Mode on for a game in full screen whose app says it is a game. A game in CrossOver runs from a copy of Wine that does not say so; with this on, it runs from one that does, kept in MacGameFix's folder. CrossOver itself is not changed, and turning this off takes it all away."
 - When on, a coverage line follows (GameMode.swift:266-277): "For <CrossOver name> (Intel and FEX), …." or "No CrossOver of a release this was checked with: 26.1, 26.3, Preview 20261006 or 20261015."
   - The line only fills in after the toggle is flipped, or after a CrossOver scan with Game Mode on (190-194, 722-727).
 - Footer: "Play in full screen: the green button, or Control-Command-F. Game Mode also doubles what a wireless controller's Bluetooth link carries, which a DualSense's haptics need."
 
-**"Game fix updates"** (1982-2004)
+**"Game fix updates"** (2004-2026)
 - Picker **"Game fixes"**: "Automatic" / "Ask first" / "Off" (default Automatic).
   - Tooltip: "New fixes from GitHub, looked for once a day. “Ask first” checks the signature and tells you; nothing is installed until you say so."
 - **"New fixes ready (<n>)"** with **"Install"**, in orange, when one is waiting.
 - **"Catalog"**: the version and **"Check Now"**. As in Wine Modules, this downloads and installs a newer catalog, then scans the games again (274-293).
 - Footer: "The Wine modules have their own, in Wine Modules."
 
-**"Recent"**. Only shown when the agent has recorded events (2006-2022).
+**"Recent"**. Only shown when the agent has recorded events (2028-2044).
 - Up to 5 of the newest events, as "<game>: <message>" (orange if it failed), with the abbreviated date.
 - A **"Report…"** button when the event has a report link.
 
-**"Games"** (2024-2039)
+**"Games"** (2046-2061)
 - A disclosure group **"Folders searched (<n>)"** listing every library path. The ones the user added have a **"Remove"** button.
 - **"Add Folder…"**, the same as on the Games tab.
 
-**"Log"**, a disclosure group (2041-2051)
+**"Log"**, a disclosure group (2063-2073)
 - Monospaced, selectable text, 160 pt tall.
 - Lines include "▸ <game> — <folder>", "  into the <prefix>", the installer's output indented, "▸ Wine modules — <name> — <root>", "The report could not be saved: …", and "Could not start the agent: …".
 - **The log is kept in memory only** (35, 302). It holds what this window ran and is lost when the window closes. The README and `game-fix.yml` both tell users to copy lines from Settings › Log, so the guide should say to copy them before closing the window.
@@ -322,16 +322,16 @@ Below the rows:
 
 - If the user cancels the Save panel, no issue opens.
 
-**F. "Every Game's Settings…" sheet** (`PadGlobalSheet`, 1720-1776)
+**F. "Every Game's Settings…" sheet** (`PadGlobalSheet`, 1742-1798)
 - Section header "Every game", with this caption: "The Wine modules read these when a game starts; in CrossOver, when Steam or the game opens the bottle, so make a change before you open it there, or quit and open it again. The haptics' strength is read each time a game starts its haptics. A game's own settings win, and so do its suggested ones."
-- Option rows. Each has a caption that is always visible (1414-1452):
+- Option rows. Each has a caption that is always visible (1421-1474):
   - Toggle **"Bluetooth as a cable"**
   - Toggle **"Full motor power on the Edge"**
   - Toggle **"Show the Edge as a standard DualSense"**
-  - Picker **"XInput"**: "Off" / "Its rumble on the motors" / "The pad as an XInput controller". Its caption changes with the choice (1414-1423).
+  - Picker **"XInput"**: "Off" / "Its rumble on the motors" / "The pad as an XInput controller". Its caption changes with the choice (1421-1431).
   - Toggle **"Rumble on the haptic actuators"**
 - Toggle **"Diagnostics in the modules' log"**. Tooltip: "What a game writes to the pad and reads from it, and a level meter of its haptics, in /tmp/macgamefix-<uid>/pad.log."
-- **"Haptics strength"**: a grid with columns "DualSense" and "DualSense Edge" and rows "Cable" and "Bluetooth". Each cell is a picker with 1×, 1.5×, 2×, 2.5×, 3×. Each cell has its own tooltip, for example "A standard DualSense on a cable." (1619-1645). A haptics try row follows.
+- **"Haptics strength"**: a grid with columns "DualSense" and "DualSense Edge" and rows "Cable" and "Bluetooth". Each cell is a picker with 1×, 1.5×, 2×, 2.5×, 3×. Each cell has its own tooltip, for example "A standard DualSense on a cable." (1641-1667). A haptics try row follows.
 - **"Trigger effects"**
   - Caption: "For a game that sets none of its own, such as an XInput title. A game that sets one takes that trigger over."
   - Grid columns "Effect" and "Strength". Rows "R2", "  while L2 is pressed", "L2", "  while R2 is pressed".
@@ -343,21 +343,23 @@ Below the rows:
 - Every change writes `pad.json`, `pad.conf` and `pad.d/` right away (581-587). There is no Save button.
 - **"Done"** (Return) closes the sheet. Closing it stops any running try.
 
-**G. Popover "What each effect does"** (1477-1510)
-- A table with columns "Effect", "How it feels", "Suits", "Default strength". The row texts are at 1461-1474.
+**G. Popover "What each effect does"** (1499-1532)
+- A table with columns "Effect", "How it feels", "Suits", "Default strength". The row texts are at 1483-1496.
 - Two notes under it:
   - "While the other is pressed: a second effect that replaces a trigger's own while the other trigger is held, a weapon on R2 while L2 aims, say. The other counts as pressed from about a sixth of its travel."
   - "Strength runs from 1, light, to 8, the pad's strongest; Default is each effect's own. The pad keeps an effect until something else is written: the Wine modules release the triggers when the game's Wine stops, or when the next game starts."
 
-**H. Per-game Game Feel sheet.** Opened by clicking a game in Game Feel (`PadGameSheet`, 1780-1895).
+**H. Per-game Game Feel sheet.** Opened by clicking a game in Game Feel (`PadGameSheet`, 1802-1917).
 - **Header**: a cover and the name, then:
   - "In blue, or marked with a dot, what is this game's own; the rest follows every game's." If the game has a preset, the end reads "the suggested settings, then every game's."
   - "They apply under NotProton, from the game's next start. A CrossOver bottle does not tell the modules which game runs, so there every game's settings apply."
 - **Options**: the same option rows, haptics grid, trigger grid and both try rows as sheet F.
+  - One row is here alone, after "Show the Edge as a standard DualSense": toggle **"Show the pad as a DualShock 4"**, with the caption "For a game whose controller code knows only the PS4 pad, such as Mortal Kombat 11, which vibrates through it (played on 2026-10-22). The pad is shown to the game as a DualShock 4 on a cable, over Bluetooth too." It writes `pad_as=dualshock4`, `bluetooth=wired` and an XInput line to the game's `pad.d/<appid>.conf`, whatever the Bluetooth row held: `xinput=off`, or `xinput=rumble` when the picker below says so (PadOptions.ds4XInputRumble); turned off again, the `pad_as` line goes and the Bluetooth row's value comes back (Pad.swift:108-115). Sheet F never shows it, and every game's settings never carry it (Pad.swift:443-444).
+  - While it is on, "Bluetooth as a cable" shows on and "Show the Edge as a standard DualSense" is greyed out; the Bluetooth caption reads "On while the pad is shown as a DualShock 4: the game sees a DualShock 4 on a cable." The "XInput" picker offers "Off" and "Its rumble on the motors" only, the game's own choice (Off unless asked), with the captions "XInput gets nothing. A game that rumbles through the DualShock 4, as Mortal Kombat 11 does, needs nothing more." and "For a game that shows PlayStation buttons through the DualShock 4 but rumbles only through XInput, as Crysis 2 Remastered seems to: its rumble goes to the motors. Not yet played." (1407, 1422, 1434-1440, 1452, 1461-1466). The "Full motor power on the Edge" caption reads "Shown as a DualShock 4, the game cannot set the motor power: a DualShock 4 has none. This claims it at full for either pad." (1443-1444). The table's "Settings" column says "shown as a DualShock 4" and drops the Bluetooth, Edge and XInput words (Pad.swift:138-147).
   - The game's own values show as accent-coloured titles, or with a small dot.
-  - Setting a value back to what the game would get anyway stops it being the game's own (1792-1805).
+  - Setting a value back to what the game would get anyway stops it being the game's own (1814-1827).
   - There is no Diagnostics toggle and no "Measured with" line here.
-- **"About this game"** (1843-1878)
+- **"About this game"** (1865-1900)
   - Toggle **"Diagnose this game"**. Tooltip: "The Wine modules log what this game writes to the pad, the haptics' levels and delays, for this game alone, from its next start."
   - **"Share These Settings…"**. Tooltip: "Saves this game's report and opens a new issue on GitHub with these settings in it, to attach it to."
   - **"Make a Report…"**. Tooltip: "Saves this game's report and opens a new issue on GitHub to attach it to."
@@ -368,14 +370,14 @@ Below the rows:
     - "Seen: …." when something was seen.
     - "Steam app <id>".
 - **Bottom bar**
-  - When the game has options of its own: **"Use Every Game's"** (no preset) or **"Use the Suggested"** (preset). Either one clears the game's own options (1882-1886).
+  - When the game has options of its own: **"Use Every Game's"** (no preset) or **"Use the Suggested"** (preset). Either one clears the game's own options (1904-1908).
   - **"Done"** (Return). Closing the sheet stops any running try.
 
 **I. Export Save panel.** From "Export…" in Game Feel.
 - Suggested name "MacGameFix controllers.json", JSON only, no default folder set (691-702).
 - Contents: the global options and, for each game, the app ID, name, options that differ, what was seen, and the preset note (Pad.swift:534-561).
 
-**J. Try rows.** These are inline in sheets F and H, not separate windows (`PadTryRow`, 1697-1717; PadTester.swift).
+**J. Try rows.** These are inline in sheets F and H, not separate windows (`PadTryRow`, 1719-1739; PadTester.swift).
 - Idle text for haptics: "Plays a rumble soft, medium and strong, then hits left and right, at the strength above for the pad connected and how it is connected."
 - Idle text for triggers: "Sets the effects above on the pad connected; rumble and recoil follow a stand-in for a game's rumble."
 - Button **"Try for 30 Seconds"**, which becomes **"Stop"** while running. Tooltip: "Close any game first: the try writes to the pad as the Wine modules do."
@@ -447,11 +449,11 @@ It only exists while the agent runs: "Run from the menu bar" is on.
 **Keyboard shortcuts.** Only Return, as the default button:
 - "Install Selected" (Games, 876)
 - "Open App Management…" (1042)
-- "Done" in the Report sheet, the Every Game's Settings sheet and the per-game sheet (1281, 1769, 1888)
+- "Done" in the Report sheet, the Every Game's Settings sheet and the per-game sheet (1281, 1791, 1910)
 
 The "Control-Command-F" in the Game Mode footer is advice for full screen in games, not an app shortcut.
 
-**Command-line flags**, all in one binary (2100-2306):
+**Command-line flags**, all in one binary (2122-2328):
 - `--agent`: the menu bar agent
 - `--review`: opens the window with only the games to review
 - One-off commands that print or write and then exit: `--agent-once`, `--menu-report`, `--pad-write`, `--pad-export <file>`, `--pad-report`, `--games-report` (named in the README), `--game-mode-keep|--game-mode-remove|--game-mode-report`, `--engine-report`, `--pad-game-report <appid> <path>`, `--probe-report <appid> <path> [symptom]`, `--probe-games`, `--pad-share-url <appid>`, `--engine-install|--engine-remove <root>`, `--update-from <dir> [--pubkey --kind modules]`, `--new-signing-key <file>`, `--make-catalog <out> --key <file> [--from]`
@@ -605,7 +607,7 @@ The "Control-Command-F" in the Game Mode footer is advice for full screen in gam
 
 These matter for the guide. The quoted on-screen labels in the code are what users will see.
 
-- The README calls the agent option *Run in the background, from the menu bar*; the label is "Run from the menu bar" (1938).
+- The README calls the agent option *Run in the background, from the menu bar*; the label is "Run from the menu bar" (1960).
 - The README calls the update choices *Install them automatically / Ask before installing them / Do not look for them*; the picker says "Automatic" / "Ask first" / "Off" (219-224).
 - The README's icon choices are "raccoon and a gamepad, a gamepad, or nothing"; the picker says "Raccoon and gamepad" / "Gamepad" / "Battery only".
 - The README says *Keep it applied*; the column is titled "Keep", and that phrase only appears in its tooltip and in the menu bar.

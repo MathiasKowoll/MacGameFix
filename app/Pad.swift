@@ -22,6 +22,17 @@ struct PadOptions: Codable, Equatable, Hashable {
     var fullMotorPower: Bool?
     /// The Edge shown to the game as a standard DualSense.
     var edgeAsDualSense: Bool?
+    /// The DualSense or Edge shown to the game as a USB DualShock 4, its reports
+    /// translated both ways, for a game whose Sony code knows only the PS4 pad.
+    /// A game's own alone: a game whose library knows the DualSense would lose its
+    /// haptics and adaptive triggers, so it is never every game's.
+    var asDualShock4: Bool?
+    /// Shown as a DualShock 4, XInput's rumble on the motors as well: for a game
+    /// that shows PlayStation buttons through the DualShock 4 but rumbles only
+    /// through XInput. The game's own too: every game's xinput=rumble does not
+    /// reach a pad shown as a DualShock 4, which the modules then keep a single
+    /// device, as Mortal Kombat 11 was measured.
+    var ds4XInputRumble: Bool?
     /// The haptics multiplied, with a soft limit, per pad and per connection: a
     /// pad does not feel the same stream alike on a cable and over Bluetooth.
     var hapticsGainCable: Double?
@@ -57,6 +68,8 @@ struct PadOptions: Codable, Equatable, Hashable {
         PadOptions(bluetoothAsCable: bluetoothAsCable ?? base.bluetoothAsCable,
                    fullMotorPower: fullMotorPower ?? base.fullMotorPower,
                    edgeAsDualSense: edgeAsDualSense ?? base.edgeAsDualSense,
+                   asDualShock4: asDualShock4 ?? base.asDualShock4,
+                   ds4XInputRumble: ds4XInputRumble ?? base.ds4XInputRumble,
                    hapticsGainCable: hapticsGainCable ?? base.hapticsGainCable,
                    edgeHapticsGainCable: edgeHapticsGainCable ?? base.edgeHapticsGainCable,
                    hapticsGainBluetooth: hapticsGainBluetooth ?? base.hapticsGainBluetooth,
@@ -76,6 +89,8 @@ struct PadOptions: Codable, Equatable, Hashable {
         PadOptions(bluetoothAsCable: bluetoothAsCable == base.bluetoothAsCable ? nil : bluetoothAsCable,
                    fullMotorPower: fullMotorPower == base.fullMotorPower ? nil : fullMotorPower,
                    edgeAsDualSense: edgeAsDualSense == base.edgeAsDualSense ? nil : edgeAsDualSense,
+                   asDualShock4: asDualShock4 == base.asDualShock4 ? nil : asDualShock4,
+                   ds4XInputRumble: ds4XInputRumble == base.ds4XInputRumble ? nil : ds4XInputRumble,
                    hapticsGainCable: hapticsGainCable == base.hapticsGainCable ? nil : hapticsGainCable,
                    edgeHapticsGainCable: edgeHapticsGainCable == base.edgeHapticsGainCable ? nil : edgeHapticsGainCable,
                    hapticsGainBluetooth: hapticsGainBluetooth == base.hapticsGainBluetooth ? nil : hapticsGainBluetooth,
@@ -90,17 +105,32 @@ struct PadOptions: Codable, Equatable, Hashable {
     }
 
     /// The lines the modules read, as engine/README.md lists them. Numbers with a
-    /// point whatever the language: the modules read them that way.
+    /// point whatever the language: the modules read them that way. A pad shown as
+    /// a DualShock 4 is written with bluetooth=wired whatever the Bluetooth row says:
+    /// the modules show the DualShock 4 only for a pad on a cable or shown as wired,
+    /// and a Bluetooth pad left as it is would stay a DualSense. Its XInput line is
+    /// always written, rumble or off (ds4XInputRumble): the modules take XInput's
+    /// rumble for such a pad only from the game's own file, and never make it an
+    /// XInput controller.
     var lines: [String] {
         var out: [String] = []
-        if let v = bluetoothAsCable { out.append("bluetooth=" + (v ? "wired" : "off")) }
+        if asDualShock4 == true {
+            out.append("bluetooth=wired")
+        } else if let v = bluetoothAsCable {
+            out.append("bluetooth=" + (v ? "wired" : "off"))
+        }
         if let v = fullMotorPower { out.append("motor_power=" + (v ? "full" : "game")) }
         if let v = edgeAsDualSense { out.append("edge=" + (v ? "dualsense" : "edge")) }
+        if let v = asDualShock4 { out.append("pad_as=" + (v ? "dualshock4" : "self")) }
         if let v = hapticsGainCable { out.append("haptics_gain_cable=" + PadOptions.number(v)) }
         if let v = edgeHapticsGainCable { out.append("edge_haptics_gain_cable=" + PadOptions.number(v)) }
         if let v = hapticsGainBluetooth { out.append("haptics_gain_bluetooth=" + PadOptions.number(v)) }
         if let v = edgeHapticsGainBluetooth { out.append("edge_haptics_gain_bluetooth=" + PadOptions.number(v)) }
-        if let v = xinput, PadOptions.xinputModes.contains(v) { out.append("xinput=" + v) }
+        if asDualShock4 == true {
+            out.append("xinput=" + (ds4XInputRumble == true ? "rumble" : "off"))
+        } else if let v = xinput, PadOptions.xinputModes.contains(v) {
+            out.append("xinput=" + v)
+        }
         if let v = rumbleHaptics { out.append("rumble=" + (v ? "haptics" : "motors")) }
         if let v = triggerR2, PadTrigger(v) != nil { out.append("trigger_r2=" + v) }
         if let v = triggerL2, PadTrigger(v) != nil { out.append("trigger_l2=" + v) }
@@ -116,14 +146,23 @@ struct PadOptions: Codable, Equatable, Hashable {
     /// In words, for the list: what these options change.
     var summary: [String] {
         var out: [String] = []
-        if let v = bluetoothAsCable { out.append(v ? "Bluetooth as a cable" : "Bluetooth as it is") }
+        // Shown as a DualShock 4, Bluetooth is a cable and the Edge's identity does not apply: the words would say
+        // otherwise.
+        let ds4 = asDualShock4 == true
+        if let v = bluetoothAsCable, !ds4 { out.append(v ? "Bluetooth as a cable" : "Bluetooth as it is") }
         if let v = fullMotorPower { out.append(v ? "full motor power" : "the game's motor power") }
-        if let v = edgeAsDualSense { out.append(v ? "Edge shown as a DualSense" : "Edge shown as an Edge") }
+        if ds4 { out.append("shown as a DualShock 4") } else if asDualShock4 == false { out.append("shown as itself") }
+        if let v = edgeAsDualSense, !ds4 { out.append(v ? "Edge shown as a DualSense" : "Edge shown as an Edge") }
         if let v = hapticsGainCable { out.append("DualSense haptics \(PadOptions.times(v)) on a cable") }
         if let v = edgeHapticsGainCable { out.append("Edge haptics \(PadOptions.times(v)) on a cable") }
         if let v = hapticsGainBluetooth { out.append("DualSense haptics \(PadOptions.times(v)) over Bluetooth") }
         if let v = edgeHapticsGainBluetooth { out.append("Edge haptics \(PadOptions.times(v)) over Bluetooth") }
-        if let v = xinput { out.append(v == "pad" ? "an XInput controller" : v == "rumble" ? "XInput's rumble" : "no XInput") }
+        // Shown as a DualShock 4, XInput carries the game's rumble or nothing (ds4XInputRumble).
+        if ds4 {
+            out.append(ds4XInputRumble == true ? "XInput's rumble" : "no XInput")
+        } else if let v = xinput {
+            out.append(v == "pad" ? "an XInput controller" : v == "rumble" ? "XInput's rumble" : "no XInput")
+        }
         if let v = rumbleHaptics { out.append(v ? "rumble on the actuators" : "rumble on the motors") }
         if let v = triggerR2, let t = PadTrigger(v) { out.append("R2 \(t.words)") }
         if let v = triggerL2, let t = PadTrigger(v) { out.append("L2 \(t.words)") }
@@ -139,7 +178,7 @@ struct PadOptions: Codable, Equatable, Hashable {
 
 extension PadOptions {
     private enum CodingKeys: String, CodingKey {
-        case bluetoothAsCable, fullMotorPower, edgeAsDualSense
+        case bluetoothAsCable, fullMotorPower, edgeAsDualSense, asDualShock4, ds4XInputRumble
         case hapticsGainCable, edgeHapticsGainCable, hapticsGainBluetooth, edgeHapticsGainBluetooth
         case xinput, rumbleHaptics, triggerR2, triggerL2, triggerR2WithL2, triggerL2WithR2
         /// Before the three modes: XInput's rumble on or off.
@@ -155,6 +194,8 @@ extension PadOptions {
         self.init(bluetoothAsCable: try c.decodeIfPresent(Bool.self, forKey: .bluetoothAsCable),
                   fullMotorPower: try c.decodeIfPresent(Bool.self, forKey: .fullMotorPower),
                   edgeAsDualSense: try c.decodeIfPresent(Bool.self, forKey: .edgeAsDualSense),
+                  asDualShock4: try c.decodeIfPresent(Bool.self, forKey: .asDualShock4),
+                  ds4XInputRumble: try c.decodeIfPresent(Bool.self, forKey: .ds4XInputRumble),
                   hapticsGainCable: try c.decodeIfPresent(Double.self, forKey: .hapticsGainCable) ?? gain,
                   edgeHapticsGainCable: try c.decodeIfPresent(Double.self, forKey: .edgeHapticsGainCable) ?? edgeGain,
                   hapticsGainBluetooth: try c.decodeIfPresent(Double.self, forKey: .hapticsGainBluetooth) ?? gain,
@@ -174,6 +215,8 @@ extension PadOptions {
         try c.encodeIfPresent(bluetoothAsCable, forKey: .bluetoothAsCable)
         try c.encodeIfPresent(fullMotorPower, forKey: .fullMotorPower)
         try c.encodeIfPresent(edgeAsDualSense, forKey: .edgeAsDualSense)
+        try c.encodeIfPresent(asDualShock4, forKey: .asDualShock4)
+        try c.encodeIfPresent(ds4XInputRumble, forKey: .ds4XInputRumble)
         try c.encodeIfPresent(hapticsGainCable, forKey: .hapticsGainCable)
         try c.encodeIfPresent(edgeHapticsGainCable, forKey: .edgeHapticsGainCable)
         try c.encodeIfPresent(hapticsGainBluetooth, forKey: .hapticsGainBluetooth)
@@ -417,6 +460,9 @@ struct PadStore: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         defaults = try c.decodeIfPresent(PadOptions.self, forKey: .defaults)?.over(.firstRun) ?? .firstRun
+        // A game's own alone (PadOptions.asDualShock4), even if pad.json was edited by hand.
+        defaults.asDualShock4 = nil
+        defaults.ds4XInputRumble = nil
         diagnostics = try c.decodeIfPresent(Bool.self, forKey: .diagnostics) ?? false
         games = try c.decodeIfPresent([String: PadGame].self, forKey: .games) ?? [:]
         logRead = try c.decodeIfPresent(UInt64.self, forKey: .logRead) ?? 0

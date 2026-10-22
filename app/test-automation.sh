@@ -347,6 +347,37 @@ check 'has "$(cat "$P/pad.d/4242.conf")" "haptics_gain_cable=2.50" && has "$(cat
 check 'has "$(cat "$P/pad.d/4243.conf")" "haptics_gain_bluetooth=2.00" && ! has "$(cat "$P/pad.d/4243.conf")" "haptics_gain_cable="' "a gain over Bluetooth alone leaves the cable to every game's"
 check 'has "$(cat "$P/pad.conf")" "xinput=rumble" && has "$(cat "$P/pad.conf")" "rumble=motors" && has "$(cat "$P/pad.conf")" "trigger_r2=off" && has "$(cat "$P/pad.d/4244.conf")" "xinput=off" && has "$(cat "$P/pad.d/4244.conf")" "trigger_r2=weapon@6" && has "$(cat "$P/pad.d/4244.conf")" "trigger_l2=rumble" && has "$(cat "$P/pad.d/4244.conf")" "trigger_r2_with_l2=weapon@8" && has "$(cat "$P/pad.conf")" "trigger_l2_with_r2=off"' "XInput's rumble for every game, triggers free; a game's own written as the modules read them, a second effect too"
 check 'has "$(cat "$P/pad.d/4242.conf")" "xinput=pad" && has "$(cat "$(dirname "$P")/MacGameFix/pad.json")" "\"dualSense\" : false"' "a game the store does not list for the DualSense gets the pad as an XInput controller, and the answer is kept"
+# A pad shown as a DualShock 4 is one game's alone, and is written as wired over
+# Bluetooth whatever the game's Bluetooth row says; its XInput line is always
+# written, off unless the game asks for XInput's rumble (ds4XInputRumble), never
+# the pad as a controller.
+/usr/bin/python3 - "$P/pad.json" <<'PY4'
+import json, sys
+d = json.load(open(sys.argv[1])); d["defaults"]["asDualShock4"] = True; d["games"]["4245"] = {"name": "PS4 Game", "options": {"asDualShock4": True, "xinput": "pad", "bluetoothAsCable": False}}
+json.dump(d, open(sys.argv[1], "w"))
+PY4
+padwrite
+ds4every() { /usr/bin/python3 -c 'import json, sys; print("asDualShock4" in json.load(open(sys.argv[1]))["defaults"])' "$P/pad.json"; }
+check 'has "$(cat "$P/pad.d/4245.conf")" "pad_as=dualshock4" && has "$(cat "$P/pad.d/4245.conf")" "bluetooth=wired" && ! has "$(cat "$P/pad.d/4245.conf")" "bluetooth=off" && has "$(cat "$P/pad.d/4245.conf")" "xinput=off" && ! has "$(cat "$P/pad.d/4245.conf")" "xinput=pad" && ! has "$(cat "$P/pad.conf")" "pad_as=" && [ "$(ds4every)" = False ]' "a game shown as a DualShock 4 gets pad_as=dualshock4, Bluetooth as a cable and XInput off; every game's never gets it"
+/usr/bin/python3 - "$P/pad.json" <<'PY4'
+import json, sys
+d = json.load(open(sys.argv[1])); d["games"]["4245"]["options"]["ds4XInputRumble"] = True
+json.dump(d, open(sys.argv[1], "w"))
+PY4
+padwrite
+check 'has "$(cat "$P/pad.d/4245.conf")" "xinput=rumble" && ! has "$(cat "$P/pad.d/4245.conf")" "xinput=off" && ! has "$(cat "$P/pad.d/4245.conf")" "xinput=pad"' "shown as a DualShock 4 with XInput's rumble asked for, the game's own file says xinput=rumble"
+/usr/bin/python3 - "$P/pad.json" <<'PY4'
+import json, sys
+d = json.load(open(sys.argv[1])); del d["games"]["4245"]["options"]["ds4XInputRumble"]
+json.dump(d, open(sys.argv[1], "w"))
+PY4
+/usr/bin/python3 - "$P/pad.json" <<'PY4'
+import json, sys
+d = json.load(open(sys.argv[1])); del d["games"]["4245"]["options"]["asDualShock4"]
+json.dump(d, open(sys.argv[1], "w"))
+PY4
+padwrite
+check 'has "$(cat "$P/pad.d/4245.conf")" "xinput=pad" && has "$(cat "$P/pad.d/4245.conf")" "bluetooth=off" && ! has "$(cat "$P/pad.d/4245.conf")" "pad_as=" && ! has "$(cat "$P/pad.d/4245.conf")" "bluetooth=wired"' "cleared, the line goes and the game's other options stay, its Bluetooth row again"
 printf '10:00:00 [1] game=4242 observed: the game plays haptics on the Bluetooth DualSense Edge%ss output\n10:00:01 [2] game=4242 observed: the game sets trigger effects on the DualSense Edge\n10:00:02 [3] game=- the Bluetooth DualSense Edge at location 32c48ef2 is shown as wired\n10:00:03 [4] game=4242 observ' "'" > "$MACGAMEFIX_PAD_LOG"
 padwrite
 check 'has "$(padreport)" "4242 | Fake Game | " && has "$(padreport)" "seen haptics,triggers"' "what the modules logged is kept per game; a line with no game says nothing"
