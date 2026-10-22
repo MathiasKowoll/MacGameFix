@@ -324,7 +324,14 @@ enum Agent {
             guard changed || everything || now.timeIntervalSince(memory.checked) > recheck else { continue }
             if isRunning(game) { continue } // Looked at again once it is closed.
 
-            let word = await Fixer.status(game, folder: folder, prefixes: kept.prefixes, catalog: catalogDir)
+            let look = game.needsPrefix
+                ? Fixer.Look(state: await Fixer.status(game, folder: folder, prefixes: kept.prefixes, catalog: catalogDir))
+                : await Fixer.look(game, folder: folder, prefix: nil, catalog: catalogDir)
+            let word = look.state
+            // A fix for a macOS game's app that its installer will not install
+            // here: an executable changed outside MacGameFix, patched or not, or
+            // a Mac the fix is not for. Running it would only fail again.
+            let refused = word == .blocked || (word == .half && game.inApp)
             var event: AgentEvent?
             if word == .installed {
                 if memory.state != "installed" && !memory.state.isEmpty {
@@ -333,6 +340,24 @@ enum Agent {
             } else if word == .noCarrier {
                 event = failure(game, now, "The installer found nothing in the game folder for the fix to ride on.",
                                 output: [], catalog: catalog)
+            } else if refused {
+                // Not a failure of the fix, and nothing to report: the user is
+                // told the installer's reason once a build, and the window
+                // shows it beside the game.
+                if memory.state != "blocked" || memory.build != build {
+                    event = AgentEvent(date: now, game: game.name,
+                                       message: look.note ?? "The installer cannot install the fix here.", failed: false)
+                }
+            } else if word == .noRecipe {
+                // A fix made for each build of the game, and none for this one
+                // in the catalog yet: nothing to run and nothing to report, said
+                // once a build. A newer catalog makes `changed` true, and the
+                // look after it installs.
+                if memory.state != "norecipe" || memory.build != build {
+                    event = AgentEvent(date: now, game: game.name,
+                                       message: "No recipe for this build yet; MacGameFix puts it back when one arrives.",
+                                       failed: false)
+                }
             } else {
                 let out = Collected()
                 let code = await Fixer.run(game, folder: folder, prefixes: kept.prefixes, catalog: catalogDir, []) {
@@ -342,9 +367,11 @@ enum Agent {
                 if code == 0 && after == .installed {
                     let message = word == .outdated
                         ? "The fix is updated to the newer build."
-                        : changed && !memory.build.isEmpty && memory.build != build
-                            ? "Steam changed the game; the fix is back in place."
-                            : "The fix was missing and is back in place."
+                        : memory.state == "norecipe"
+                            ? "A recipe for this build arrived; the fix is in place."
+                            : changed && !memory.build.isEmpty && memory.build != build
+                                ? "Steam changed the game; the fix is back in place."
+                                : "The fix was missing and is back in place."
                     event = AgentEvent(date: now, game: game.name, message: message, failed: false)
                 } else {
                     event = failure(game, now,
@@ -355,6 +382,8 @@ enum Agent {
             }
             if word == .installed { memory.state = "installed" }
             if word == .noCarrier { memory.state = "failed" }
+            if word == .noRecipe { memory.state = "norecipe" }
+            if refused { memory.state = "blocked" }
             memory.build = build
             memory.catalog = catalog
             memory.checked = now
@@ -595,7 +624,7 @@ enum Report {
             \(tail.joined(separator: "\n"))
             ```
 
-            _Please say which runner you use (CrossOver, CrossOver Preview, NotProton) and what the game shows._
+            _Please say which runner you use (CrossOver, CrossOver Preview, NotProton), or that it is a macOS game, and what the game shows._
             """
         }
         compose()

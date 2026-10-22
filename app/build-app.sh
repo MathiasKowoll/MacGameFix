@@ -4,17 +4,19 @@
 # It carries the fixes that live in a game's own folder -- a proxy DLL beside the
 # game, plus registry keys in the game's own prefix for the titles that need
 # them -- so they work with a CrossOver as CodeWeavers shipped it, with CrossOver
-# Preview, and with a Steam Play tool such as NotProton; and the one that lives
+# Preview, and with a Steam Play tool such as NotProton; the one that lives
 # in the game's prefix instead, NINJA GAIDEN 3's, whose DLLs go into the
-# system32 of its CrossOver bottle or Steam Play prefix for that game alone.
-# Nothing here touches an engine.
+# system32 of its CrossOver bottle or Steam Play prefix for that game alone;
+# and the one for a macOS game, Cyberpunk 2077's, which changes the game's own
+# app and signs it again ad hoc. Nothing here touches an engine.
 #
 # WHICH GAMES, GATHERED AND NOT LISTED. A written-out list is the thing that went
 # stale in the controller app twice. A title is in when all of this holds:
 #
 #   - an installer under fixes/ names it on an MGVF-GAME line, and declares
-#     MGVF-SCOPE: folder, or MGVF-SCOPE: prefix for a fix that goes into the
-#     game's prefix and not its folder
+#     MGVF-SCOPE: folder, MGVF-SCOPE: prefix for a fix that goes into the
+#     game's prefix and not its folder, or MGVF-SCOPE: app for one that changes
+#     a macOS game's app
 #   - process-features.json, generated from the wiki's own table, gives it no
 #     codec -- a staged GStreamer plugin goes INTO the engine -- or names, in
 #     codec_shipped_by, a CrossOver that already carries that codec as
@@ -69,8 +71,8 @@ for script in sorted((root / "fixes").glob("install-*.sh")):
         also = [x.strip() for x in rest[1].split(",") if x.strip()] if len(rest) > 1 else []
         p = procs.get(exe)
         reason = None
-        if not scope or scope.group(1) not in ("folder", "prefix"):
-            reason = "neither a game-folder nor a prefix fix"
+        if not scope or scope.group(1) not in ("folder", "prefix", "app"):
+            reason = "not a game-folder, a prefix or an app fix"
         elif p is None:
             reason = "not in process-features.json"
         elif p.get("codec") and not p.get("codec_shipped_by"):
@@ -85,7 +87,7 @@ for script in sorted((root / "fixes").glob("install-*.sh")):
             "alsoRuns": also,
             "carrierDir": carrier,
             "script": script.name,
-            # folder, or prefix: the app then says the fix's DLLs go there.
+            # folder, prefix or app: the app then says where the fix goes.
             "scope": scope.group(1),
             # The one installer that writes registry keys sources bottles.sh to
             # find where; the app has to name that place for it.
