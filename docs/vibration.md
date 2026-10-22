@@ -4,7 +4,7 @@
 
 The games played for vibration with a DualSense or DualSense Edge on a Mac. A game is added after a session, from what was felt and what the Wine modules logged, never from what it should do. Each test names its controller and its connection.
 
-Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 27), Steam Input off for the game, unless a result says otherwise. Updated 2026-10-21.
+Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 27), Steam Input off for the game, unless a result says otherwise. Updated 2026-10-22.
 
 **How a game vibrates** decides what Game Feel needs to give it:
 
@@ -33,7 +33,7 @@ Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 2
 | [Resident Evil Requiem](#3764200) | Motors | Sony libScePad | Not played yet | DualSense Edge: Works (2026-10-21) |
 | [PRAGMATA](#3357650) | Motors | Sony libScePad | Not played yet | DualSense Edge: Works (2026-10-21) |
 | [Crysis Remastered](#1715130) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21) |
-| [Crysis 2 Remastered](#2096600) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21) |
+| [Crysis 2 Remastered](#2096600) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21); DualSense Edge shown as a DualShock 4: Does not vibrate (2026-10-22); DualSense Edge shown as a DualShock 4: Does not vibrate (2026-10-22) |
 | [Crysis 3 Remastered](#2096610) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21) |
 | [SILENT HILL 2](#2124490) | Haptics | Raw HID | Not played yet | DualSense Edge: Works (2026-10-21) |
 | [Revenge of the Savage Planet](#2787320) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21) |
@@ -370,10 +370,13 @@ It reads an Xbox-style controller. Game Feel gives it the pad as an XInput contr
 Tested:
 
 - DualSense Edge, Bluetooth: Works (2026-10-21). On NotProton's Rosetta runner. Steam Input was on for the game (Steam's default for a game the store does not list for the DualSense).
+- DualSense Edge shown as a DualShock 4, Bluetooth: Does not vibrate (2026-10-22). PlayStation prompts; the game opened the pad through its Sony code and sent no rumble to it.
+- DualSense Edge shown as a DualShock 4, Bluetooth: Does not vibrate (2026-10-22). With XInput's rumble beside the identity: nothing written to XInput either.
 
 What was measured:
 
 - The modules logged the game's motor values and its rumble played on the actuators over Bluetooth, with no haptics dropped.
+- Shown as a DualShock 4 (2026-10-22) the game's copy of Sony's library opened the pad and the game showed PlayStation prompts, but it sent no rumble, to the DualShock 4 or to XInput's motors beside it: it rumbles only the XInput controller it plays with. It stays an XInput controller.
 
 <a id="2096610"></a>
 ## Crysis 3 Remastered

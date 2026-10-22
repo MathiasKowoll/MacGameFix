@@ -1,6 +1,6 @@
 {
   "about": "The games played for vibration with a DualSense or DualSense Edge on a Mac. A game is added after a session, from what was felt and what the Wine modules logged, never from what it should do. Each test names its controller and its connection. docs/vibration.md is made from this file by tools/vibration-md.py.",
-  "updated": "2026-10-21",
+  "updated": "2026-10-22",
   "stack": "MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 27), Steam Input off for the game, unless a result says otherwise.",
   "results": {
     "works": "Works",
@@ -526,7 +526,8 @@
       "description": "It reads an Xbox-style controller. Game Feel gives it the pad as an XInput controller and puts its rumble on the actuators over Bluetooth; the trigger effects come from Game Feel.",
       "settings": "Game Feel: the pad as an XInput controller (by the store's rule), its rumble on the actuators over Bluetooth, R2 slope and L2 vibrate.",
       "details": [
-        "The modules logged the game's motor values and its rumble played on the actuators over Bluetooth, with no haptics dropped."
+        "The modules logged the game's motor values and its rumble played on the actuators over Bluetooth, with no haptics dropped.",
+        "Shown as a DualShock 4 (2026-10-22) the game's copy of Sony's library opened the pad and the game showed PlayStation prompts, but it sent no rumble, to the DualShock 4 or to XInput's motors beside it: it rumbles only the XInput controller it plays with. It stays an XInput controller."
       ],
       "tests": [
         {
@@ -535,6 +536,22 @@
           "result": "works",
           "date": "2026-10-21",
           "notes": "On NotProton's Rosetta runner. Steam Input was on for the game (Steam's default for a game the store does not list for the DualSense)."
+        },
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "no-vibration",
+          "shownAs": "DualShock 4",
+          "date": "2026-10-22",
+          "notes": "PlayStation prompts; the game opened the pad through its Sony code and sent no rumble to it."
+        },
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "no-vibration",
+          "shownAs": "DualShock 4",
+          "date": "2026-10-22",
+          "notes": "With XInput's rumble beside the identity: nothing written to XInput either."
         }
       ]
     },
