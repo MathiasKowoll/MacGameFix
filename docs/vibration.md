@@ -35,6 +35,10 @@ Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 2
 | [Crysis Remastered](#1715130) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21) |
 | [Crysis 2 Remastered](#2096600) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21) |
 | [Crysis 3 Remastered](#2096610) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21) |
+| [SILENT HILL 2](#2124490) | Haptics | Raw HID | Not played yet | DualSense Edge: Works (2026-10-21) |
+| [Revenge of the Savage Planet](#2787320) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21) |
+| [TIEBREAK - GRAND SLAM EDITION](#2264340) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21) |
+| [Teenage Mutant Ninja Turtles: Splintered Fate](#2996040) | XInput | XInput | Not played yet | DualSense Edge: Partly (2026-10-21) |
 | [Nioh 3](#3681010) | Haptics | Raw HID | DualSense Edge: Does not vibrate (2026-10-21) | DualSense Edge: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21) |
 | [Mortal Kombat 11](#976310) | None yet | DirectInput | Not played yet | DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21) |
 
@@ -389,6 +393,87 @@ Tested:
 What was measured:
 
 - The modules logged the game's motor values and its rumble played on the actuators over Bluetooth, with no haptics dropped.
+
+<a id="2124490"></a>
+## SILENT HILL 2
+
+Haptics over Bluetooth with the defaults.
+
+- **Status:** Works
+- **Library:** Raw HID
+- **Technology:** Unreal Engine 5.1 with Epic's older Sony controller plugin, over raw HID. Its haptics play as audio on the pad's output through Wwise Motion.
+- **Features:** Haptics
+- **Steam app:** 2124490
+
+Tested:
+
+- DualSense Edge, Bluetooth: Works (2026-10-21)
+
+What was measured:
+
+- The modules logged the game opening the Bluetooth haptics output and playing haptics on it, and some motor values too.
+- The Bluetooth haptics queue sat at its 64 ms cap, with about 1.6 s of every 2 s of haptics dropped, as in Resonance: A Plague Tale Legacy.
+
+<a id="2787320"></a>
+## Revenge of the Savage Planet
+
+It reads an Xbox-style controller; Game Feel gives it the pad as an XInput controller, and its rumble goes to the motors.
+
+- **Status:** Works
+- **Library:** XInput
+- **Technology:** Unreal Engine 5.3, reading an XInput controller only.
+- **Features:** XInput rumble
+- **Settings:** Game Feel: the pad as an XInput controller.
+- **Steam app:** 2787320
+
+Tested:
+
+- DualSense Edge, Bluetooth: Works (2026-10-21). Works with the Edge.
+
+What was measured:
+
+- The modules logged the game rumbling the pad's motors through XInput.
+
+<a id="2264340"></a>
+## TIEBREAK - GRAND SLAM EDITION
+
+It reads an Xbox-style controller; Game Feel gives it the pad as an XInput controller, and its rumble goes to the motors.
+
+- **Status:** Works
+- **Library:** XInput
+- **Technology:** Big Ant Studios' own engine, reading XInput and DirectInput.
+- **Features:** XInput rumble
+- **Settings:** Game Feel: the pad as an XInput controller (by the store's rule).
+- **Steam app:** 2264340
+
+Tested:
+
+- DualSense Edge, Bluetooth: Works (2026-10-21)
+
+What was measured:
+
+- The modules logged the game's motor values rising and falling through XInput for the whole session.
+
+<a id="2996040"></a>
+## Teenage Mutant Ninja Turtles: Splintered Fate
+
+As an XInput controller it vibrates, but the game sees the controller twice. With XInput off it sees one controller, shown as a DualSense, and does not vibrate.
+
+- **Status:** Partly
+- **Library:** XInput
+- **Technology:** Super Evil Megacorp's engine. It reads the pad through XInput and through a path of its own, where it shows a DualSense.
+- **Features:** XInput rumble
+- **Settings:** Game Feel: XInput off for this game, against the duplicate.
+- **Steam app:** 2996040
+
+Tested:
+
+- DualSense Edge, Bluetooth: Partly (2026-10-21). As an XInput controller: vibration, and the controller twice. XInput off: one controller, no vibration.
+
+What was measured:
+
+- With the pad as an XInput controller the modules logged the game rumbling it through XInput.
+- Next: XInput's rumble on the motors alone (the defaults), so the game keeps its own DualSense and rumbles through XInput.
 
 <a id="3681010"></a>
 ## Nioh 3

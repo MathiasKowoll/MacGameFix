@@ -565,6 +565,105 @@
       ]
     },
     {
+      "name": "SILENT HILL 2",
+      "steamAppId": "2124490",
+      "status": "works",
+      "technology": "Unreal Engine 5.1 with Epic's older Sony controller plugin, over raw HID. Its haptics play as audio on the pad's output through Wwise Motion.",
+      "library": "Raw HID",
+      "vibration": "Haptics",
+      "features": [
+        "Haptics"
+      ],
+      "description": "Haptics over Bluetooth with the defaults.",
+      "details": [
+        "The modules logged the game opening the Bluetooth haptics output and playing haptics on it, and some motor values too.",
+        "The Bluetooth haptics queue sat at its 64 ms cap, with about 1.6 s of every 2 s of haptics dropped, as in Resonance: A Plague Tale Legacy."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "date": "2026-10-21"
+        }
+      ]
+    },
+    {
+      "name": "Revenge of the Savage Planet",
+      "steamAppId": "2787320",
+      "status": "works",
+      "technology": "Unreal Engine 5.3, reading an XInput controller only.",
+      "library": "XInput",
+      "vibration": "XInput",
+      "features": [
+        "XInput rumble"
+      ],
+      "description": "It reads an Xbox-style controller; Game Feel gives it the pad as an XInput controller, and its rumble goes to the motors.",
+      "settings": "Game Feel: the pad as an XInput controller.",
+      "details": [
+        "The modules logged the game rumbling the pad's motors through XInput."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "date": "2026-10-21",
+          "notes": "Works with the Edge."
+        }
+      ]
+    },
+    {
+      "name": "TIEBREAK - GRAND SLAM EDITION",
+      "steamAppId": "2264340",
+      "status": "works",
+      "technology": "Big Ant Studios' own engine, reading XInput and DirectInput.",
+      "library": "XInput",
+      "vibration": "XInput",
+      "features": [
+        "XInput rumble"
+      ],
+      "description": "It reads an Xbox-style controller; Game Feel gives it the pad as an XInput controller, and its rumble goes to the motors.",
+      "settings": "Game Feel: the pad as an XInput controller (by the store's rule).",
+      "details": [
+        "The modules logged the game's motor values rising and falling through XInput for the whole session."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "date": "2026-10-21"
+        }
+      ]
+    },
+    {
+      "name": "Teenage Mutant Ninja Turtles: Splintered Fate",
+      "steamAppId": "2996040",
+      "status": "partly",
+      "technology": "Super Evil Megacorp's engine. It reads the pad through XInput and through a path of its own, where it shows a DualSense.",
+      "library": "XInput",
+      "vibration": "XInput",
+      "features": [
+        "XInput rumble"
+      ],
+      "description": "As an XInput controller it vibrates, but the game sees the controller twice. With XInput off it sees one controller, shown as a DualSense, and does not vibrate.",
+      "settings": "Game Feel: XInput off for this game, against the duplicate.",
+      "details": [
+        "With the pad as an XInput controller the modules logged the game rumbling it through XInput.",
+        "Next: XInput's rumble on the motors alone (the defaults), so the game keeps its own DualSense and rumbles through XInput."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "partly",
+          "date": "2026-10-21",
+          "notes": "As an XInput controller: vibration, and the controller twice. XInput off: one controller, no vibration."
+        }
+      ]
+    },
+    {
       "name": "Nioh 3",
       "steamAppId": "3681010",
       "status": "no-vibration",
