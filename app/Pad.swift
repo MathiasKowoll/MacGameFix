@@ -111,7 +111,11 @@ struct PadOptions: Codable, Equatable, Hashable {
     /// and a Bluetooth pad left as it is would stay a DualSense. Its XInput line is
     /// always written, rumble or off (ds4XInputRumble): the modules take XInput's
     /// rumble for such a pad only from the game's own file, and never make it an
-    /// XInput controller.
+    /// XInput controller. Its edge line is always edge=edge: winebus.so lets pad_as
+    /// win over edge=dualsense, but winecoreaudio.so reads edge alone (0012), and
+    /// every game's edge=dualsense would name the audio device of a pad shown as a
+    /// DualShock 4 a DualSense's. The game's own file is read first, and its first
+    /// line with a key wins.
     var lines: [String] {
         var out: [String] = []
         if asDualShock4 == true {
@@ -120,7 +124,11 @@ struct PadOptions: Codable, Equatable, Hashable {
             out.append("bluetooth=" + (v ? "wired" : "off"))
         }
         if let v = fullMotorPower { out.append("motor_power=" + (v ? "full" : "game")) }
-        if let v = edgeAsDualSense { out.append("edge=" + (v ? "dualsense" : "edge")) }
+        if asDualShock4 == true {
+            out.append("edge=edge")
+        } else if let v = edgeAsDualSense {
+            out.append("edge=" + (v ? "dualsense" : "edge"))
+        }
         if let v = asDualShock4 { out.append("pad_as=" + (v ? "dualshock4" : "self")) }
         if let v = hapticsGainCable { out.append("haptics_gain_cable=" + PadOptions.number(v)) }
         if let v = edgeHapticsGainCable { out.append("edge_haptics_gain_cable=" + PadOptions.number(v)) }
@@ -689,44 +697,57 @@ extension PadStore {
     }
 
     /// The form for a game that vibrates, one test of the list of games played for
-    /// vibration: the game, the pad and the connection its latest session had, what the
-    /// modules saw it do, the library it talks to the pad through, and every option it gets.
+    /// vibration: the game, the pad, the connection and the identity its latest session
+    /// had, what the modules saw it do, the library its folder shows (padLibrary), and every
+    /// option it gets.
     func vibratesIssue(appid: String, name: String, presets: [String: PadPreset], library: String?,
                        log: String) -> URL? {
         let session = PadSession(appid: appid, log: log)
         let seen = (games[appid]?.seen.keys.sorted() ?? []).map(\.label)
-        let title = (["[Vibrates] \(name)"] + [session.controller, session.connection].compactMap { $0 })
+        let title = (["[Vibrates] \(name)"]
+                     + [session.controller, session.connection, session.shownAs.map { "shown as a \($0)" }]
+                        .compactMap { $0 })
             .joined(separator: " · ")
         return Issue.new(template: "vibration-works.yml",
                          ["title": title,
                           "game": "\(name) (Steam app \(appid))",
                           "controller": session.controller ?? "",
                           "connection": session.connection ?? "",
+                          "shown-as": session.shownAs ?? "",
                           "seen": seen.joined(separator: "\n"),
                           "library": library ?? "",
                           "settings": effective(appid, presets: presets).lines.joined(separator: "\n")])
     }
 }
 
-/// The pad and the connection a game's latest session had, from the modules' log: the
-/// lines of the last process that named the game. Each is nil unless that session saw
-/// exactly one, so a report with two pads or two connections leaves them to the player.
+/// The pad, the connection and the identity a game's latest session had, from the
+/// modules' log: the lines of the last process that named the game. Each is nil unless
+/// that session saw exactly one, so a report with two pads or two connections leaves them
+/// to the player.
 struct PadSession {
     var controller: String?
     var connection: String?
+    /// What the game was shown instead of the pad, as the list of games played for
+    /// vibration names it: "DualShock 4" or "DualSense", from the modules' "DualSense Edge
+    /// (shown as a DualShock 4)" (0013) or "... (shown as a DualSense)" (0004, 0005). It is
+    /// one pad's, so nil with the controller too; nil for a pad shown as itself.
+    var shownAs: String?
 
     init(appid: String, log: String) {
         let lines = log.split(separator: "\n").map(String.init).filter { $0.contains(" game=\(appid) ") }
         func pid(_ line: String) -> Substring? { line.split(separator: " ").dropFirst().first }
         guard let last = lines.last.flatMap(pid) else { return }
-        var pads = Set<String>(), links = Set<String>()
+        var pads = Set<String>(), links = Set<String>(), shown = Set<String>()
         for line in lines where pid(line) == last {
             if line.contains("DualSense Edge") { pads.insert("DualSense Edge") } else if line.contains("DualSense") { pads.insert("DualSense") }
             if line.contains("the Bluetooth DualSense") { links.insert("Bluetooth") }
             if line.contains("the wired DualSense") { links.insert("Cable") }
+            if line.contains("(shown as a DualShock 4)") { shown.insert("DualShock 4") }
+            if line.contains("(shown as a DualSense)") { shown.insert("DualSense") }
         }
         if pads.count == 1 { controller = pads.first }
         if links.count == 1 { connection = links.first }
+        if shown.count == 1, pads.count == 1 { shownAs = shown.first }
     }
 }
 

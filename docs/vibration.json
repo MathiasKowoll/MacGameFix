@@ -518,6 +518,7 @@
       "status": "works",
       "technology": "CryEngine, reading the pad as an XInput controller. It ships Sony's pad library, which was not needed.",
       "library": "XInput",
+      "libraryNote": "It ships Sony's library, so It Vibrates\u2026 fills in Sony libScePad; its rumble goes through XInput.",
       "vibration": "XInput",
       "features": [
         "XInput rumble",
@@ -767,7 +768,8 @@
       "steamAppId": "976310",
       "status": "works",
       "technology": "NetherRealm's engine (the PC port by QLOC). It reads the pad through DirectInput with its own table and sends its rumble to Sony's library (scePadSetVibration). The library it ships (2017) opens only a USB DualShock 4, so the rumble reaches a DualSense only when the pad is shown to the game as one.",
-      "library": "DirectInput",
+      "library": "Sony libScePad",
+      "libraryNote": "Its input is read through DirectInput.",
       "vibration": "Motors",
       "features": [
         "Motors",

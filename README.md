@@ -28,8 +28,9 @@ archived repository.
 | `app/` | The application: `Core.swift` (installers, games, libraries), `Engine.swift` (the Wine modules), `Pad.swift` (the Game Feel tab's options and what it writes for the modules), `Probe.swift` (the Report tab: what a game is made of, and its report), `pad-presets.json` (options measured per title), `Automation.swift` (the background agent, signed catalog updates, reports), `MenuBar.swift` (the agent's menu bar item), `MacGameFix.swift` (the window), `AppIcon.icon` (the icon); `build-app.sh` and `test-automation.sh`. |
 | `fixes/` | One installer per fix (`install-*.sh`), the DLLs they put in place, Cyberpunk 2077's recipe for each build of the game (`cp2077-denoiser.recipes`), the C source of each DLL and the scripts that build them (`build-proxy.sh`, `build-asf-reader.sh`, `check-builds.sh`), and the third-party notices. |
 | `process-features.json` | The table: per game executable, its symptom, backend, toolkit, codec and engine needs. The app is built from it. |
-| `tools/` | The probes and capture scripts the fixes were found with: video and Media Foundation observers, HID traces, a game survey. |
-| `engine/` | Not a game fix: four patched Wine modules that go into CrossOver itself, so that games find a DualSense's haptic output on a cable, and take the pad on Bluetooth as the same pad on a cable. The built modules per CrossOver build, their installer (`engine-modules.sh`), the patches and `build.sh`; see [`engine/README.md`](engine/README.md). The app's Wine Modules tab installs them. |
+| `tools/` | The probes and capture scripts the fixes were found with: video and Media Foundation observers, HID traces, a game survey; and `vibration-md.py`, which writes the list of games played for vibration from its JSON. |
+| `docs/` | The [list of games played for vibration](docs/vibration.md): `vibration.json`, its source, and `vibration.md`, made from it by `tools/vibration-md.py`. Also the inventory of what the app shows (`ui-inventory.md`) and the documentation's screenshots (`images/`). |
+| `engine/` | Not a game fix: patched Wine modules that go into CrossOver itself, for a DualSense or DualSense Edge: its haptics on a cable and over Bluetooth, the pad on Bluetooth as the same pad on a cable, XInput (its rumble on the motors, or the pad as an XInput controller), trigger effects for a game that sets none, the pad's audio output for games that find it through SetupAPI and XAudio2, and the Edge shown as a standard DualSense or the pad as a DualShock 4. The built modules per CrossOver build, their installer (`engine-modules.sh`), the patches and `build.sh`; see [`engine/README.md`](engine/README.md). The app's Wine Modules tab installs them. |
 | `legacy/` | What MacGameVideoFix's wiki and notes found, per game and in general (`legacy/wiki/Findings.md`, `legacy/wiki/Diagnosing-a-new-game.md`). Kept as written; some pages describe the engine work that stayed behind. |
 
 ## What it does
@@ -49,8 +50,10 @@ The window has four tabs, and a fifth once the Wine modules are in a CrossOver:
 and where a fix that writes registry keys goes, shown *All* (every supported game on this Mac),
 *Fixed*, *Not fixed*, or *All fixes*, which adds the fixes for games that are not on this Mac;
 **Wine Modules**, the one part that changes CrossOver
-itself (patched Wine modules for a DualSense's haptics on a cable, the pad on
-Bluetooth as if on a cable, and XInput, see [`engine/README.md`](engine/README.md)), with a
+itself (patched Wine modules for a DualSense's haptics on a cable and over Bluetooth, the pad on
+Bluetooth as if on a cable, XInput, trigger effects for a game that sets none, the pad's audio output
+through SetupAPI and XAudio2, and the Edge or the pad shown to a game as another pad, see
+[`engine/README.md`](engine/README.md)), with a
 switch and an Update button for every CrossOver app and NotProton runner, and
 the modules' own updates; **Game Feel**, the DualSense's options for every game
 and, in a table of the Steam games on this Mac, for each one, with what the
@@ -507,8 +510,9 @@ run from MacGameFix, where macOS may ask for App Management.
   suggested settings in Game Feel.
 - **A game that vibrates.** In **Game Feel**, click the game, play it with **Diagnose this game** on if you
   can, close it, and click **It Vibrates…**. It saves the same report and opens the form with the game, the
-  controller and the connection the Wine modules saw in its latest session, what they saw it do, and the
-  library it talks to the pad through; say what you felt and attach the file. One report is one controller on
+  controller, the connection and what the pad was shown to the game as (a DualShock 4 or a DualSense), as
+  the Wine modules saw them in its latest session, what they saw it do, and the library it reaches the pad
+  through, guessed from its folder; say what you felt and attach the file. One report is one controller on
   one connection: played on a cable and over Bluetooth, send two. Reports like this make the
   [list of games played for vibration](docs/vibration.md).
 - **A game fix does not work.** Copy the lines about the game from **Settings › Log** into the form.

@@ -15,6 +15,11 @@ Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 2
 - **XInput**: the game rumbles an Xbox-style controller. Game Feel's XInput option gives it the pad as an
   XInput controller, or puts its rumble on the motors.
 
+**Library** is how the game reaches the pad: Sony libScePad, SDL, Raw HID, XInput or DirectInput, the names
+Game Feel's **It Vibrates…** fills in from the game's folder. When a game rumbles the pad another way than it
+reads it, the column names the way it rumbles and the entry says so, as for Mortal Kombat 11. A Haptics game
+plays its haptics as audio on the pad's output, whatever its library.
+
 | Game | Vibration | Library | Cable | Bluetooth |
 |---|---|---|---|---|
 | [Marvel's Spider-Man 2](#2651280) | Haptics | Raw HID | DualSense Edge: Works (2026-10-19); DualSense: Works (2026-10-19) | DualSense Edge: Works (2026-10-19); DualSense: Works (2026-10-19) |
@@ -41,7 +46,7 @@ Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 2
 | [Teenage Mutant Ninja Turtles: Splintered Fate](#2996040) | XInput | XInput | Not played yet | DualSense Edge: Partly (2026-10-21) |
 | [Nioh 3](#3681010) | Haptics | Raw HID | DualSense Edge: Does not vibrate (2026-10-21) | DualSense Edge: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Works (2026-10-22) |
 | [NINJA GAIDEN 4](#2627260) | Motors | Raw HID | Not played yet | DualSense Edge shown as a DualSense: Works (2026-10-22) |
-| [Mortal Kombat 11](#976310) | Motors | DirectInput | DualSense Edge shown as a DualShock 4: Works (2026-10-22) | DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualShock 4: Works (2026-10-22); DualSense shown as a DualShock 4: Works (2026-10-22) |
+| [Mortal Kombat 11](#976310) | Motors | Sony libScePad | DualSense Edge shown as a DualShock 4: Works (2026-10-22) | DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualShock 4: Works (2026-10-22); DualSense shown as a DualShock 4: Works (2026-10-22) |
 
 <a id="2651280"></a>
 ## Marvel's Spider-Man 2
@@ -361,7 +366,7 @@ What was measured:
 It reads an Xbox-style controller. Game Feel gives it the pad as an XInput controller and puts its rumble on the actuators over Bluetooth; the trigger effects come from Game Feel.
 
 - **Status:** Works
-- **Library:** XInput
+- **Library:** XInput. It ships Sony's library, so It Vibrates… fills in Sony libScePad; its rumble goes through XInput.
 - **Technology:** CryEngine, reading the pad as an XInput controller. It ships Sony's pad library, which was not needed.
 - **Features:** XInput rumble, Trigger effects from Game Feel
 - **Settings:** Game Feel: the pad as an XInput controller (by the store's rule), its rumble on the actuators over Bluetooth, R2 slope and L2 vibrate.
@@ -537,7 +542,7 @@ What was measured:
 With the pad shown as a DualShock 4 the game's Sony library opens it and the game rumbles it, on a cable and over Bluetooth. Shown as a DualSense it plays with the right controls and PlayStation prompts but never vibrates.
 
 - **Status:** Works
-- **Library:** DirectInput
+- **Library:** Sony libScePad. Its input is read through DirectInput.
 - **Technology:** NetherRealm's engine (the PC port by QLOC). It reads the pad through DirectInput with its own table and sends its rumble to Sony's library (scePadSetVibration). The library it ships (2017) opens only a USB DualShock 4, so the rumble reaches a DualSense only when the pad is shown to the game as one.
 - **Features:** Motors, PlayStation button prompts
 - **Settings:** Game Feel: the pad shown as a DualShock 4 (patch 0013, not released yet). Steam Input off.
@@ -560,7 +565,14 @@ What was measured:
 
 ## Adding a game
 
-After a session, add the game to `vibration.json` with what was felt and what the modules logged (Game
-Feel's **Seen** column, or Diagnose this game), one test per controller and connection, then run
-`tools/vibration-md.py`. A game that needed a setting says which one; if many players need the same one, it
-becomes the game's suggested setting in `app/pad-presets.json`.
+Played a game and felt it vibrate? In MacGameFix, open **Game Feel**, click the game, then
+**It Vibrates…**: it saves the game's report and opens the "A game that vibrates" form with the game, the
+controller, the connection, what the pad was shown to the game as and the library filled in. One report is
+one test: one controller on one connection.
+
+After a session, or from such a report, add the game to `vibration.json` with what was felt and what the
+modules logged (Game Feel's **Seen** column, or Diagnose this game), one test per controller and connection
+(a report's Controller, Connection, Shown to the game as and Result become a test's `controller`,
+`connection`, `shownAs` and `result`), then run `tools/vibration-md.py`. A game that needed a setting says
+which one; if many players need the same one, it becomes the game's suggested setting in
+`app/pad-presets.json`.
