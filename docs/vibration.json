@@ -626,14 +626,16 @@
       "description": "It reads an Xbox-style controller; Game Feel gives it the pad as an XInput controller, and its rumble goes to the motors.",
       "settings": "Game Feel: the pad as an XInput controller (by the store's rule).",
       "details": [
-        "The modules logged the game's motor values rising and falling through XInput for the whole session."
+        "The modules logged the game's motor values rising and falling through XInput for the whole session.",
+        "It shows Xbox prompts with the DualSense: its controller table lists the DualShock 4, not the DualSense."
       ],
       "tests": [
         {
           "controller": "DualSense Edge",
           "connection": "bluetooth",
           "result": "works",
-          "date": "2026-10-21"
+          "date": "2026-10-21",
+          "notes": "Works well (the user). Xbox prompts."
         }
       ]
     },

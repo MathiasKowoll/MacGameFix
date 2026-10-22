@@ -448,11 +448,12 @@ It reads an Xbox-style controller; Game Feel gives it the pad as an XInput contr
 
 Tested:
 
-- DualSense Edge, Bluetooth: Works (2026-10-21)
+- DualSense Edge, Bluetooth: Works (2026-10-21). Works well (the user). Xbox prompts.
 
 What was measured:
 
 - The modules logged the game's motor values rising and falling through XInput for the whole session.
+- It shows Xbox prompts with the DualSense: its controller table lists the DualShock 4, not the DualSense.
 
 <a id="2996040"></a>
 ## Teenage Mutant Ninja Turtles: Splintered Fate
