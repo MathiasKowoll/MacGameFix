@@ -11,6 +11,11 @@
       "options": { "edgeAsDualSense": true, "hapticsGainBluetooth": 2 },
       "measured": "2026-10-15, NotProton: as an Edge the game assigned no buttons (\"No preset control scheme\"); as a standard DualSense full control, haptics and trigger effects. 2026-10-19, MacGameFix's modules, an Edge over Bluetooth: with Steam Input on for the game the haptics started and stopped; with it off they were as steady as on a cable. A standard DualSense over Bluetooth felt jerky at 1× and almost like the cable at 2×."
     },
+    "3681010": {
+      "title": "Nioh 3",
+      "options": { "edgeAsDualSense": true, "xinput": "off" },
+      "measured": "2026-10-22, MacGameFix's modules with patches 0009-0011, an Edge over Bluetooth, the game's vibration on Immersive: it found the pad's audio output through SetupAPI, opened an XAudio2 mastering voice on it and played its haptics. With the Edge shown as an Edge, or with XInput's rumble on the motors, it never opened the voice and never vibrated."
+    },
     "2651280": {
       "title": "Marvel's Spider-Man 2",
       "options": { "fullMotorPower": true, "edgeHapticsGainCable": 2, "edgeHapticsGainBluetooth": 2 },

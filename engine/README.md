@@ -107,6 +107,15 @@ compare equal.
 | `0010-setupapi-base-containerid-wchar.patch` | `setupapi.dll` | `SetupDiGetDeviceRegistryPropertyA` returns `SPDRP_BASE_CONTAINERID` as the W function does, a WCHAR string, as Windows returns it. |
 | `0011-xaudio2-mastering-voice-device.patch` | `xaudio2_9.dll` | A mastering voice opens the device the game names, by its endpoint id or its render interface's path, instead of the default one: Wine passed no device to FAudio. The name becomes FAudio's device index, the active render endpoints in the enumerator's order with the default one at 0. |
 
+Measured on 2026-10-22 with a DualSense Edge over Bluetooth: with the three patches Nioh 3 found the
+pad's output, created an XAudio2 mastering voice with that interface's path as its device id
+(`\\?\swd#mmdevapi#{0.0.0.00000000}.{…}#{e6327cad-…}`, which `0011` resolved to the pad's endpoint)
+and played its haptics on the Bluetooth pad's output, in its Immersive mode; the player felt them. It
+needed the Edge shown as a standard DualSense and XInput off (`edge=dualsense`, `xinput=off`, its
+suggested settings): with the Edge shown as an Edge, or with XInput's motors device beside the pad
+(`&Col01` in the pad's id), it found the output and never created the voice. In Functional mode, and
+without the patches, it never sends a motor value.
+
 ### The options
 
 The modules read their options from MacGameFix's support folder, written by its
