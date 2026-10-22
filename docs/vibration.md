@@ -40,7 +40,7 @@ Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 2
 | [TIEBREAK - GRAND SLAM EDITION](#2264340) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-21) |
 | [Teenage Mutant Ninja Turtles: Splintered Fate](#2996040) | XInput | XInput | Not played yet | DualSense Edge: Partly (2026-10-21) |
 | [Nioh 3](#3681010) | Haptics | Raw HID | DualSense Edge: Does not vibrate (2026-10-21) | DualSense Edge: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21) |
-| [Mortal Kombat 11](#976310) | None yet | DirectInput | Not played yet | DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21) |
+| [Mortal Kombat 11](#976310) | None yet | DirectInput | Not played yet | DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21) |
 
 <a id="2651280"></a>
 ## Marvel's Spider-Man 2
@@ -348,7 +348,7 @@ It reads an Xbox-style controller. Game Feel gives it the pad as an XInput contr
 
 Tested:
 
-- DualSense Edge, Bluetooth: Works (2026-10-21). On NotProton's Rosetta runner.
+- DualSense Edge, Bluetooth: Works (2026-10-21). On NotProton's Rosetta runner. Steam Input was on for the game (Steam's default for a game the store does not list for the DualSense).
 
 What was measured:
 
@@ -368,7 +368,7 @@ It reads an Xbox-style controller. Game Feel gives it the pad as an XInput contr
 
 Tested:
 
-- DualSense Edge, Bluetooth: Works (2026-10-21). On NotProton's Rosetta runner.
+- DualSense Edge, Bluetooth: Works (2026-10-21). On NotProton's Rosetta runner. Steam Input was on for the game (Steam's default for a game the store does not list for the DualSense).
 
 What was measured:
 
@@ -388,7 +388,7 @@ It reads an Xbox-style controller. Game Feel gives it the pad as an XInput contr
 
 Tested:
 
-- DualSense Edge, Bluetooth: Works (2026-10-21). On NotProton's FEX runner.
+- DualSense Edge, Bluetooth: Works (2026-10-21). On NotProton's FEX runner. Steam Input was on for the game (set in Steam).
 
 What was measured:
 
@@ -511,17 +511,18 @@ With XInput off and the Edge shown as a DualSense it plays with the right contro
 - **Library:** DirectInput
 - **Technology:** NetherRealm's engine (the PC port by QLOC). It reads the pad through DirectInput with its own table, which has the DualSense's id (054C:0CE6) and not the Edge's; the Sony library it ships (2017) knows neither pad.
 - **Features:** PlayStation button prompts
-- **Settings:** Game Feel: XInput off for this game, and the Edge shown as a DualSense.
+- **Settings:** Game Feel: the Edge shown as a DualSense (XInput off or on the motors gives the same). Steam Input off.
 - **Steam app:** 976310
 
 Tested:
 
-- DualSense Edge shown as a DualSense, Bluetooth: Does not vibrate (2026-10-21). Controls and PlayStation prompts right.
+- DualSense Edge shown as a DualSense, Bluetooth: Does not vibrate (2026-10-21). XInput off, with Steam Input still on for the game. Controls and PlayStation prompts right.
+- DualSense Edge shown as a DualSense, Bluetooth: Does not vibrate (2026-10-21). XInput's rumble on the motors, Steam Input off: no vibration request reached the modules in 3 minutes.
 
 What was measured:
 
-- No motor value in the modules' log.
-- Next: XInput's rumble on the motors (xinput=rumble), with the Edge still shown as a DualSense.
+- No motor value and no XInput vibration in the modules' log, in either session.
+- Its executable sends its rumble to XInput (XInputSetState) or to Sony's library (scePadSetVibration), and creates no DirectInput force-feedback effect. The Sony library it ships (2017) does not open a DualSense, and with the pad read through DirectInput the game wrote nothing to XInput.
 
 ## Adding a game
 

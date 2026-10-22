@@ -508,7 +508,7 @@
           "connection": "bluetooth",
           "result": "works",
           "date": "2026-10-21",
-          "notes": "On NotProton's Rosetta runner."
+          "notes": "On NotProton's Rosetta runner. Steam Input was on for the game (Steam's default for a game the store does not list for the DualSense)."
         }
       ]
     },
@@ -534,7 +534,7 @@
           "connection": "bluetooth",
           "result": "works",
           "date": "2026-10-21",
-          "notes": "On NotProton's Rosetta runner."
+          "notes": "On NotProton's Rosetta runner. Steam Input was on for the game (Steam's default for a game the store does not list for the DualSense)."
         }
       ]
     },
@@ -560,7 +560,7 @@
           "connection": "bluetooth",
           "result": "works",
           "date": "2026-10-21",
-          "notes": "On NotProton's FEX runner."
+          "notes": "On NotProton's FEX runner. Steam Input was on for the game (set in Steam)."
         }
       ]
     },
@@ -717,10 +717,10 @@
         "PlayStation button prompts"
       ],
       "description": "With XInput off and the Edge shown as a DualSense it plays with the right controls and PlayStation prompts (\"never played so well\"), but it does not vibrate. With the pad also given as an XInput controller (the store's rule) the buttons were assigned wrong.",
-      "settings": "Game Feel: XInput off for this game, and the Edge shown as a DualSense.",
+      "settings": "Game Feel: the Edge shown as a DualSense (XInput off or on the motors gives the same). Steam Input off.",
       "details": [
-        "No motor value in the modules' log.",
-        "Next: XInput's rumble on the motors (xinput=rumble), with the Edge still shown as a DualSense."
+        "No motor value and no XInput vibration in the modules' log, in either session.",
+        "Its executable sends its rumble to XInput (XInputSetState) or to Sony's library (scePadSetVibration), and creates no DirectInput force-feedback effect. The Sony library it ships (2017) does not open a DualSense, and with the pad read through DirectInput the game wrote nothing to XInput."
       ],
       "tests": [
         {
@@ -729,7 +729,15 @@
           "result": "no-vibration",
           "shownAs": "DualSense",
           "date": "2026-10-21",
-          "notes": "Controls and PlayStation prompts right."
+          "notes": "XInput off, with Steam Input still on for the game. Controls and PlayStation prompts right."
+        },
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "no-vibration",
+          "shownAs": "DualSense",
+          "date": "2026-10-21",
+          "notes": "XInput's rumble on the motors, Steam Input off: no vibration request reached the modules in 3 minutes."
         }
       ]
     }
