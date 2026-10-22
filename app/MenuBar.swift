@@ -23,12 +23,13 @@ struct KeptLine: Equatable {
     var detail: String?
     var report: String?
 
-    enum Condition: CaseIterable { case inPlace, review, waiting }
+    enum Condition: CaseIterable { case inPlace, review, recipe, waiting }
 
     var condition: Condition {
         switch word {
         case "In place": return .inPlace
-        case "Failed", "Folder not found": return .review
+        case "Failed", "Folder not found", "Cannot be installed here": return .review
+        case "Waiting for a recipe": return .recipe
         default: return .waiting
         }
     }
@@ -45,6 +46,15 @@ struct KeptLine: Equatable {
             guard let memory = state.games[kept.key], !memory.state.isEmpty else { return line("Not looked at yet") }
             switch memory.state {
             case "installed": return line("In place")
+            // A fix made for each build of the game, with none for this build
+            // yet: nothing for the user to do, and a catalog update ends it.
+            case "norecipe": return line("Waiting for a recipe")
+            // A fix for a macOS game's app its installer will not install here:
+            // the user has to act (Steam's verify, or Keep off), so it is to
+            // review, with the installer's reason, but nothing failed.
+            case "blocked":
+                let last = state.events.last { $0.game == kept.name && !$0.failed }
+                return line("Cannot be installed here", last?.message)
             case "failed":
                 let last = state.events.last { $0.game == kept.name && $0.failed }
                 return line("Failed", last?.message, last?.report)
@@ -68,6 +78,7 @@ struct KeptLine: Equatable {
             switch condition {
             case .inPlace: return Group(condition: condition, text: "\(n) in place", symbol: "checkmark.circle")
             case .review: return Group(condition: condition, text: "\(n) to review", symbol: "eye")
+            case .recipe: return Group(condition: condition, text: "\(n) waiting for a recipe", symbol: "hourglass")
             case .waiting: return Group(condition: condition, text: "\(n) not looked at yet", symbol: "clock")
             }
         }
@@ -176,8 +187,8 @@ final class MenuBarAgent: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: The menu, built fresh each time it opens
 
     /// A summary, however many games are marked: how many are in place, to
-    /// review or waiting for a first look. The games
-    /// themselves are in the window.
+    /// review, waiting for a recipe for a new game build, or waiting for a first
+    /// look. The games themselves are in the window.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         let state = AgentState.load()

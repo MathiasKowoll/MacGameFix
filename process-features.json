@@ -36,6 +36,14 @@
       "symptom": "Windows light up in flat violet, cyan and yellow",
       "not_needed_from_gptk": "4.0b3"
     },
+    "Cyberpunk2077": {
+      "title": "Cyberpunk 2077",
+      "backend": "",
+      "codec": "",
+      "gptk": "",
+      "env": {},
+      "symptom": "MetalFX denoiser left off by the game"
+    },
     "DevilMayCry5.exe": {
       "title": "Devil May Cry 5",
       "backend": "d3dmetal",

@@ -6,7 +6,9 @@
 // system32 of its bottle or Steam Play prefix, and overrides for that executable
 // alone. None of them changes CrossOver, so they work with CrossOver as
 // CodeWeavers ships it, with CrossOver Preview, and with a Steam Play tool such
-// as NotProton.
+// as NotProton. Cyberpunk 2077's is for a macOS game, with no Wine: it changes
+// four bytes of the game's executable, from a recipe for each build of the
+// game, and signs its app again ad hoc.
 // The one exception is its own tab: the Wine modules (Engine.swift), which go
 // into a CrossOver app or a NotProton runner.
 //
@@ -143,6 +145,9 @@ final class Model: ObservableObject {
     }
 
     func setKept(_ hit: Hit, _ on: Bool) {
+        // Keeping a fix that changes a macOS game's app lets the agent change
+        // the app in the background, so it is asked about as installing is.
+        if on, hit.game.inApp, !isKept(hit), !confirmGameApps([hit], keep: true) { objectWillChange.send(); return }
         settings.kept.removeAll { $0.key == hit.key }
         if on {
             settings.kept.append(KeptGame(name: hit.game.name, folder: hit.folder.path,
@@ -159,7 +164,7 @@ final class Model: ObservableObject {
     func choosePrefix(_ hit: Hit, _ prefix: Prefix, _ on: Bool) {
         guard let i = hits.firstIndex(where: { $0.id == hit.id }) else { return }
         hits[i].chosen = hits[i].prefixes.filter { $0 == prefix ? on : hits[i].chosen.contains($0) }
-        if hits[i].blocker != nil { hits[i].selected = false }
+        if !hits[i].selectable { hits[i].selected = false }
         if let k = settings.kept.firstIndex(where: { $0.key == hit.key }) {
             settings.kept[k].prefixes = hits[i].chosen.map(\.path.path)
             settings.save()
@@ -297,7 +302,7 @@ final class Model: ObservableObject {
         set { UserDefaults.standard.set(newValue.map(\.path), forKey: extraKey) }
     }
 
-    var selected: [Hit] { hits.filter { $0.selected && $0.blocker == nil } }
+    var selected: [Hit] { hits.filter { $0.selected && $0.selectable } }
 
     func note(_ s: String) { log.append(s) }
 
@@ -352,19 +357,27 @@ final class Model: ObservableObject {
             hit.state = .unknown
             return hit
         }
-        hit.state = await Fixer.status(hit.game, folder: hit.folder, prefixes: hit.chosen.map(\.path.path),
-                                       catalog: resources)
-        if hit.state == .noCarrier { hit.selected = false }
+        if hit.game.needsPrefix {
+            hit.state = await Fixer.status(hit.game, folder: hit.folder, prefixes: hit.chosen.map(\.path.path),
+                                           catalog: resources)
+        } else {
+            let look = await Fixer.look(hit.game, folder: hit.folder, prefix: nil, catalog: resources)
+            (hit.state, hit.build, hit.note) = (look.state, look.build, look.note)
+        }
+        if !hit.selectable { hit.selected = false }
         return hit
     }
 
     func apply(install: Bool) {
         guard !busy else { return }
-        let targets = selected.filter { install ? $0.state != .installed : $0.state != .absent }
+        // A row waiting for a recipe is only removed: what MacGameFix kept for
+        // the game's earlier builds goes.
+        let targets = selected.filter { install ? $0.blocker == nil && $0.state != .installed : $0.state != .absent }
         guard !targets.isEmpty else {
             status = install ? "Nothing selected needs installing." : "Nothing selected is installed."
             return
         }
+        if install, !confirmGameApps(targets.filter(\.game.inApp)) { return }
         busy = true
         Task {
             var done = 0, failed = 0
@@ -381,7 +394,8 @@ final class Model: ObservableObject {
                 if let i = hits.firstIndex(where: { $0.id == hit.id }) {
                     var h = await probe(hits[i])
                     // The re-probe is the authority, not the exit code.
-                    let took = install ? h.state == .installed : h.state == .absent
+                    let took = install ? h.state == .installed
+                        : h.state == .absent || (hit.state == .noRecipe && h.state == .noRecipe)
                     if code != 0 { failed += 1; h.outcome = "Failed — see the log" }
                     else if !took { failed += 1; h.outcome = "Did not take — see the log" }
                     // A success is already in the state beside it, and in the status line.
@@ -393,6 +407,28 @@ final class Model: ObservableObject {
             busy = false
             status = failed == 0 ? "Done: \(done) game(s)." : "Done, \(failed) of \(done) need attention."
         }
+    }
+
+    /// A fix that changes a macOS game's own app is asked about first, as a
+    /// CrossOver app is in Wine Modules: it signs the app again. Keep asks too,
+    /// since the agent then does it in the background.
+    private func confirmGameApps(_ hits: [Hit], keep: Bool = false) -> Bool {
+        guard !hits.isEmpty else { return true }
+        let alert = NSAlert()
+        alert.messageText = hits.count == 1 ? "Change \(hits[0].game.name)'s app?" : "Change \(hits.count) games' apps?"
+        alert.informativeText = (hits.count == 1
+            ? "MacGameFix writes the recipe's bytes into its executable and signs it again ad hoc, so the developer's "
+                + "signature no longer covers the executable."
+            : "MacGameFix writes the recipe's bytes into the executables of "
+                + ListFormatter.localizedString(byJoining: hits.map(\.game.name))
+                + " and signs each again ad hoc, so the developers' signatures no longer cover them.")
+            + " macOS may ask you to allow MacGameFix under App Management. Remove puts the original back from the "
+            + "copy MacGameFix keeps."
+            + (keep ? " With Keep on, the agent does this in the background whenever the fix is missing, after a game "
+                + "update too, without asking again." : "")
+        alert.addButton(withTitle: keep ? "Keep" : "Install")
+        alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn
     }
 }
 
@@ -849,7 +885,7 @@ struct GamesView: View {
         switch filter {
         case .all, .allFixes: return true
         case .fixed: return [.installed, .outdated, .half, .broken].contains(hit.state)
-        case .notFixed: return [.absent, .noCarrier].contains(hit.state)
+        case .notFixed: return [.absent, .noCarrier, .noRecipe, .blocked].contains(hit.state)
         }
     }
 
@@ -870,7 +906,7 @@ struct GamesView: View {
         Binding(get: { Set(model.hits.filter(\.selected).map(\.id)) },
                 set: { ids in
                     for i in model.hits.indices {
-                        model.hits[i].selected = ids.contains(model.hits[i].id) && model.hits[i].blocker == nil
+                        model.hits[i].selected = ids.contains(model.hits[i].id) && model.hits[i].selectable
                     }
                 })
     }
@@ -879,10 +915,10 @@ struct GamesView: View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("MacGameFix").font(.title2.bold())
-                Text("Fixes go into each game's own folder, a few also into its prefix or bottle, and never change CrossOver. Quit a game before changing its fix.")
+                Text("Fixes go into each game's own folder, a few also into its prefix or bottle, one into a macOS game's app, and never change CrossOver. Quit a game before changing its fix.")
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .help("They work with CrossOver as it ships, CrossOver Preview, and Steam Play tools such as NotProton.")
+                    .help("The Windows games' fixes work with CrossOver as it ships, CrossOver Preview, and Steam Play tools such as NotProton.")
             }
 
             HStack {
@@ -957,7 +993,7 @@ struct GamesView: View {
                             Toggle("", isOn: Binding(get: { model.isKept(hit) }, set: { model.setKept(hit, $0) }))
                                 .labelsHidden()
                                 .toggleStyle(.checkbox)
-                                .disabled(hit.blocker != nil || model.busy)
+                                .disabled((!hit.keepable && !model.isKept(hit)) || model.busy)
                                 .help("Keep it applied: put it back after a game update.")
                         }
                     }
@@ -987,7 +1023,8 @@ struct GameStatusCell: View {
                 Text(o).font(.caption).foregroundStyle(.orange).lineLimit(2).help(o)
             }
             if let b = hit.blocker {
-                Text(b).font(.caption).foregroundStyle(.red).lineLimit(2).help(b)
+                // Waiting for a recipe is not a fault: a catalog update ends it.
+                Text(b).font(.caption).foregroundStyle(hit.state == .noRecipe ? Color.secondary : Color.red).lineLimit(2).help(b)
             }
             if let line = model.keptLine(hit), line.word == "Failed" {
                 let detail = "In the background: \(line.detail ?? "the fix did not take.")"
@@ -1015,7 +1052,10 @@ struct GamePrefixCell: View {
     }
 
     var body: some View {
-        if !hit.game.needsPrefix {
+        if hit.game.inApp {
+            Text("Its app").font(.caption).foregroundStyle(.secondary)
+                .help("Changes the game's executable and signs it again ad hoc; the original is kept in MacGameFix's app-backup folder.")
+        } else if !hit.game.needsPrefix {
             Text(hit.game.inPrefix ? "Its prefix" : "Its folder").font(.caption).foregroundStyle(.secondary)
         } else if hit.prefixes.count <= 1 {
             Text(hit.chosen.first.map(name) ?? "—").font(.caption).foregroundStyle(.secondary).lineLimit(2)

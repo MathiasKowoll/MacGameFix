@@ -23,6 +23,8 @@ enum Paths {
     static var settings: URL { support.appendingPathComponent("automatic.json") }
     static var state: URL { support.appendingPathComponent("agent-state.json") }
     static var installLock: URL { support.appendingPathComponent("installer.lock") }
+    /// The original executables of the macOS games whose app a fix changes.
+    static var appBackup: URL { support.appendingPathComponent("app-backup") }
 }
 
 // MARK: - Running an installer
@@ -117,7 +119,8 @@ struct Game: Decodable, Identifiable, Hashable {
     let script: String
     let needsPrefix: Bool
     /// "prefix" for a fix whose DLLs go into the game's prefix and not its
-    /// folder; "folder", or absent in catalogs older than the field, for the rest.
+    /// folder; "app" for one that changes a macOS game's own app; "folder", or
+    /// absent in catalogs older than the field, for the rest.
     let scope: String?
     let symptom: String
     let backend: String
@@ -139,6 +142,10 @@ struct Game: Decodable, Identifiable, Hashable {
     /// NINJA GAIDEN 3's: its DLLs and overrides go into the prefix, a CrossOver
     /// bottle or a Steam Play prefix, and nothing into the game folder.
     var inPrefix: Bool { scope == "prefix" }
+
+    /// Cyberpunk 2077's: a macOS game, whose executable the fix changes and
+    /// whose app it signs again ad hoc. No Wine runs it.
+    var inApp: Bool { scope == "app" }
 
     /// Where the fix's part outside the game folder goes, said before the place.
     var prefixWhat: String { inPrefix ? "Its DLLs and overrides go into" : "Registry keys go into" }
@@ -166,6 +173,7 @@ struct Game: Decodable, Identifiable, Hashable {
     /// What the backend and toolkit fields mean to someone choosing settings.
     var requirementNote: String? {
         var parts: [String] = []
+        if inApp { parts.append("macOS app; changes its executable") }
         switch backend {
         case "dxmt": parts.append("runs on DXMT")
         case "d3dmetal": parts.append("runs on D3DMetal")
@@ -206,7 +214,7 @@ struct Prefix: Hashable, Identifiable {
 }
 
 enum FixState: Equatable {
-    case unknown, installed, outdated, absent, half, broken, noCarrier
+    case unknown, installed, outdated, absent, half, broken, noCarrier, noRecipe, blocked
 
     var label: String {
         switch self {
@@ -217,6 +225,8 @@ enum FixState: Equatable {
         case .half: return "Half installed"
         case .broken: return "Needs repair"
         case .noCarrier: return "Cannot be fixed here"
+        case .noRecipe: return "No recipe for this build yet"
+        case .blocked: return "Cannot be installed here"
         }
     }
 
@@ -225,7 +235,7 @@ enum FixState: Equatable {
         case .installed: return .green
         case .outdated: return .blue
         case .half, .broken: return .orange
-        case .noCarrier: return .red
+        case .noCarrier, .blocked: return .red
         default: return .secondary
         }
     }
@@ -240,6 +250,12 @@ struct Hit: Identifiable {
     /// `prefixes`, each a run of its installer.
     var chosen: [Prefix] = []
     var state: FixState = .unknown
+    /// The game's build, when its installer names it: a fix made for each build
+    /// of the game says which one it found.
+    var build: String?
+    /// Why, in the installer's words, when it says so on a "Why:" line: what a
+    /// fix for a macOS game's app gives for a row it cannot install.
+    var note: String?
     var selected = false
     /// What went wrong the last time this game's fix was installed or removed.
     var outcome: String?
@@ -252,6 +268,19 @@ struct Hit: Identifiable {
         if state == .noCarrier {
             return "The installer found nothing in this folder for the fix to ride on."
         }
+        if state == .noRecipe {
+            return "MacGameFix waits for a recipe for " + (build.map { "the game's build \($0)" } ?? "the game's new build")
+                + "; a catalog update brings it."
+        }
+        // A fix for a macOS game's app that its installer will not install
+        // here: an executable changed outside MacGameFix, patched or not, or a
+        // Mac the fix is not for. Its installer says which, and what to do.
+        if state == .blocked {
+            return note ?? "The installer cannot install the fix here."
+        }
+        if state == .half && game.inApp {
+            return note ?? "The executable was patched outside MacGameFix; nothing can be installed or removed here."
+        }
         if game.needsPrefix && prefixes.isEmpty {
             return "No prefix for this game was found. Run it once with NotProton or CrossOver, then Scan again."
         }
@@ -260,6 +289,16 @@ struct Hit: Identifiable {
         }
         return nil
     }
+
+    /// Whether Keep can be turned on: not for a row that is blocked, but for
+    /// one waiting for a recipe, which the agent installs once it comes. A
+    /// kept row can always be turned off.
+    var keepable: Bool { blocker == nil || state == .noRecipe }
+
+    /// Whether the row can be selected: one that is not blocked, and one
+    /// waiting for a recipe, which Remove Selected may still clear of the
+    /// copies kept for the game's earlier builds. Install skips it.
+    var selectable: Bool { blocker == nil || state == .noRecipe }
 }
 
 // MARK: - Finding libraries and prefixes
@@ -515,8 +554,10 @@ enum Catalog {
 
 enum Fixer {
     /// The installer's word for a folder: installed, outdated (an older build of
-    /// the fix, which installing again replaces), absent, half, broken;
-    /// noCarrier when it found nothing there for the fix to ride on.
+    /// the fix, which installing again replaces), absent, half, broken,
+    /// noRecipe for a game build the fix has no recipe for yet, or blocked when
+    /// it will not install here and says why; noCarrier when it found nothing
+    /// there for the fix to ride on.
     static func status(_ game: Game, folder: URL, prefixes: [String], catalog: URL) async -> FixState {
         guard game.needsPrefix, !prefixes.isEmpty else {
             return await status(game, folder: folder, prefix: nil, catalog: catalog)
@@ -527,30 +568,56 @@ enum Fixer {
     }
 
     /// One word for several prefixes: theirs when they agree; else a fix the
-    /// installer could not place, a broken one, an older build, or a fix in
-    /// some of them only.
+    /// installer could not place, one it will not install, one with no recipe
+    /// for the game's build, a broken one, an older build, or a fix in some of
+    /// them only.
     static func combined(_ states: [FixState]) -> FixState {
         guard let first = states.first else { return .unknown }
         if states.allSatisfy({ $0 == first }) { return first }
         if states.contains(.noCarrier) { return .noCarrier }
+        if states.contains(.blocked) { return .blocked }
+        if states.contains(.noRecipe) { return .noRecipe }
         if states.contains(.broken) { return .broken }
         if states.allSatisfy({ $0 == .installed || $0 == .outdated }) { return .outdated }
         return .half
     }
 
     static func status(_ game: Game, folder: URL, prefix: String?, catalog: URL) async -> FixState {
+        await look(game, folder: folder, prefix: prefix, catalog: catalog).state
+    }
+
+    /// What an installer's --status says: the word, the game's build when it
+    /// names it on a "Game build:" line, as one made for each build of the
+    /// game does, and its reason when it gives one on a "Why:" line.
+    struct Look {
+        var state: FixState
+        var build: String? = nil
+        var note: String? = nil
+    }
+
+    /// "norecipe" is the word of an installer made for each build of the game
+    /// for a build it has no recipe for yet; "blocked", of one that will not
+    /// install here, with its reason on the "Why:" line.
+    static func look(_ game: Game, folder: URL, prefix: String?, catalog: URL) async -> Look {
         let out = Collected()
         let code = await run(game, folder: folder, prefix: prefix, catalog: catalog, ["--status"]) { out.add($0) }
-        let word = out.all.map { $0.trimmingCharacters(in: .whitespaces) }
-            .first { ["installed", "outdated", "broken", "half", "absent"].contains($0) }
-        guard code == 0, let word else { return .noCarrier }
-        switch word {
-        case "installed": return .installed
-        case "outdated": return .outdated
-        case "half": return .half
-        case "broken": return .broken
-        default: return .absent
+        let lines = out.all.map { $0.trimmingCharacters(in: .whitespaces) }
+        let word = lines.first { ["installed", "outdated", "broken", "half", "absent", "norecipe", "blocked"].contains($0) }
+        func after(_ prefix: String) -> String? {
+            lines.first { $0.hasPrefix(prefix) }.map { String($0.dropFirst(prefix.count)) }
         }
+        var look = Look(state: .noCarrier, build: after("Game build: "), note: after("Why: "))
+        guard code == 0, let word else { return look }
+        switch word {
+        case "installed": look.state = .installed
+        case "outdated": look.state = .outdated
+        case "half": look.state = .half
+        case "broken": look.state = .broken
+        case "norecipe": look.state = .noRecipe
+        case "blocked": look.state = .blocked
+        default: look.state = .absent
+        }
+        return look
     }
 
     /// Runs the game's installer on its folder, holding the lock the app and the
@@ -576,6 +643,8 @@ enum Fixer {
         let script = catalog.appendingPathComponent(game.script).path
         var env: [String: String] = [:]
         if game.needsPrefix, let prefix { env["MGVF_BOTTLE"] = prefix }
+        // Where a fix that changes a game's app keeps its original.
+        if game.inApp { env["MGVF_APP_BACKUP"] = Paths.appBackup.path }
         return await runStreaming("/bin/bash", [script, folder.path] + extra, environment: env, onLine: onLine)
     }
 }
@@ -627,7 +696,7 @@ struct SteamApp {
 }
 
 /// Is the game running? Under Wine its executable's name is in the command
-/// line of the process that runs it.
+/// line of the process that runs it, and a macOS game's is in its path.
 func isRunning(_ game: Game) -> Bool {
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: "/bin/ps")

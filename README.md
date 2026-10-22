@@ -1,13 +1,15 @@
 # MacGameFix
 
 Fixes for Windows games on a Mac that go into the game's own folder, and the
-small macOS application that installs, checks and removes them.
+small macOS application that installs, checks and removes them. One more is
+for a macOS game: it turns on the MetalFX denoiser that Cyberpunk 2077 ships
+and leaves off, by changing the game's own app.
 
-None of them changes CrossOver. They work with CrossOver as CodeWeavers ships
-it, with CrossOver Preview, and with Steam Play tools for macOS such as
-[NotProton](https://github.com/NotProtonNot/NotProton): a proxy DLL beside the
-game, and for a few titles registry keys in the game's own prefix. One,
-NINJA GAIDEN 3: Razor's Edge, puts its DLLs in that prefix instead.
+None of them changes CrossOver. The Windows games' fixes work with CrossOver as
+CodeWeavers ships it, with CrossOver Preview, and with Steam Play tools for
+macOS such as [NotProton](https://github.com/NotProtonNot/NotProton): a proxy
+DLL beside the game, and for a few titles registry keys in the game's own
+prefix. One, NINJA GAIDEN 3: Razor's Edge, puts its DLLs in that prefix instead.
 
 This repository is where the fixes live now. They started in
 [MacGameVideoFix](https://github.com/MathiasKowoll/MacGameVideoFix), which also
@@ -24,7 +26,7 @@ archived repository.
 | Folder | What it holds |
 | --- | --- |
 | `app/` | The application: `Core.swift` (installers, games, libraries), `Engine.swift` (the Wine modules), `Pad.swift` (the Game Feel tab's options and what it writes for the modules), `Probe.swift` (the Report tab: what a game is made of, and its report), `pad-presets.json` (options measured per title), `Automation.swift` (the background agent, signed catalog updates, reports), `MenuBar.swift` (the agent's menu bar item), `MacGameFix.swift` (the window), `AppIcon.icon` (the icon); `build-app.sh` and `test-automation.sh`. |
-| `fixes/` | One installer per fix (`install-*.sh`), the DLLs they put in place, the C source of each DLL and the scripts that build them (`build-proxy.sh`, `build-asf-reader.sh`, `check-builds.sh`), and the third-party notices. |
+| `fixes/` | One installer per fix (`install-*.sh`), the DLLs they put in place, Cyberpunk 2077's recipe for each build of the game (`cp2077-denoiser.recipes`), the C source of each DLL and the scripts that build them (`build-proxy.sh`, `build-asf-reader.sh`, `check-builds.sh`), and the third-party notices. |
 | `process-features.json` | The table: per game executable, its symptom, backend, toolkit, codec and engine needs. The app is built from it. |
 | `tools/` | The probes and capture scripts the fixes were found with: video and Media Foundation observers, HID traces, a game survey. |
 | `engine/` | Not a game fix: four patched Wine modules that go into CrossOver itself, so that games find a DualSense's haptic output on a cable, and take the pad on Bluetooth as the same pad on a cable. The built modules per CrossOver build, their installer (`engine-modules.sh`), the patches and `build.sh`; see [`engine/README.md`](engine/README.md). The app's Wine Modules tab installs them. |
@@ -79,6 +81,12 @@ every prefix checked: the installer runs once for each. Two bottles of the same 
 their folder. Unchecking a prefix does not take the fix out
 of it; removing the fix with it checked does.
 
+Cyberpunk 2077's is the one fix for a macOS game. No Wine runs the game, and
+nothing goes into its folder: the fix changes the game's own app, and it needs
+an M3 or later. Its *Requires* column says "macOS app; changes its executable",
+and *Goes into* says "Its app". See
+[its section](#cyberpunk-2077-changes-four-bytes-of-its-app).
+
 `MacGameFix --games-report` prints the same in a terminal.
 
 ## Keeping fixes applied, and new fixes
@@ -91,10 +99,15 @@ until you turn it on, and the fixes stay in the games' own folders as before.
   `io.github.macgamefix.agent`) that starts when you log in and looks at the
   marked games every two minutes. When Steam updates or verifies a game and its
   fix is gone, the agent installs it again. It waits until the game is closed
-  and Steam has finished writing it.
+  and Steam has finished writing it. A fix made for each build of the game,
+  Cyberpunk 2077's, waits after an update for a catalog that carries a recipe
+  for the new build, and is installed when one arrives. When its installer
+  will not install it, on an app changed outside MacGameFix or a Mac it is not
+  for, the agent says why once for that build, runs nothing, and reports no
+  failure.
 - **The menu bar.** The agent lives there as a raccoon. Its menu is a summary,
-  however many games are marked: how many fixes are in place, to review, or
-  not looked at yet. A count you can act
+  however many games are marked: how many fixes are in place, to review,
+  waiting for a recipe, or not looked at yet. A count you can act
   on opens the window on those games; the window has the detail. The menu also
   looks at every game or for new fixes on demand.
   - A dot by the raccoon's ear means something new to look at: new fixes or a
@@ -182,6 +195,7 @@ open Steam there (engine/README.md, "The options").
 | --- | --- | --- |
 | Beast of Reincarnation | Startup video plays with sound, no picture | D3DMetal, CrossOver Preview 27 |
 | CONTROL Resonant | Lit rooms behind windows drawn in flat colours | D3DMetal |
+| Cyberpunk 2077 | The MetalFX denoiser it ships is left off | The macOS version 2.5.0, an M3 or later |
 | Devil May Cry 5 | Crashes when a skill preview plays | D3DMetal |
 | DYNASTY WARRIORS: ORIGINS | Cutscenes with sound and no picture | D3DMetal, CrossOver Preview 27 |
 | God of War | White specks on characters in dim light | DXMT |
@@ -208,17 +222,18 @@ open Steam there (engine/README.md, "The options").
 | Wo Long: Fallen Dynasty | Cutscene with sound and a black picture | D3DMetal |
 
 The list is not written by hand. The build takes every installer in `fixes/`
-that declares a game-folder or a prefix fix, and keeps the games for which the table
+that declares a game-folder, a prefix or an app fix, and keeps the games for which the table
 records no engine requirement, and either no codec or a CrossOver that ships
 that codec as CodeWeavers distributes it.
 
-**Measured, and what was not.** Every fix here was measured on a CrossOver 26.3
+**Measured, and what was not.** Every Windows game's fix here was measured on a CrossOver 26.3
 that carried MacGameVideoFix's engine patches, which do not touch these fixes;
 Spider-Man 2, God of War and Mortal Kombat 11 on CrossOver Preview 27 through NotProton;
 NINJA GAIDEN 3 in a bottle of a patched CrossOver Preview 27 (27.0.0.40921), on 2026-08-28.
 For Wo Long, Nioh 3 and KINGDOM HEARTS Dream Drop Distance, that the fix needs
 nothing of the engine is read off how it works, not established by a run on an
-untouched CrossOver.
+untouched CrossOver. Cyberpunk 2077's, which no Wine runs, has its own
+measurements in its section.
 
 **Game Porting Toolkit 4.0b3.** The app marks five titles as not needing their
 fix from 4.0b3 on: the four below and Mortal Shell 2, which was also played
@@ -358,6 +373,116 @@ with Microsoft's shader tools taken from the release of
 once, cached in `~/Library/Caches/MacGameVideoFix`, and checked against the
 verified result before anything is installed.
 
+### Cyberpunk 2077 changes four bytes of its app
+
+Cyberpunk 2077 for Mac carries Apple's MetalFX denoiser
+(`MTLFXTemporalDenoisedScaler`) and does not offer it: its renderer answers
+"not supported" from a method of two instructions, `mov w0,#0; ret`. CD
+PROJEKT's notes for 2.5 first said "Added support for MetalFX Frame
+Interpolation and Denoising on Mac", published on 2026-10-21, and were edited
+within a day to drop "Denoising". The fix writes `mov w0,#1` over the first
+instruction, so that the method answers "supported" and the game offers the
+denoiser. It is the one fix here for a macOS game: no Wine runs it, and
+nothing goes beside the app.
+
+- **What changes.** Four bytes of `Cyberpunk2077.app/Contents/MacOS/Cyberpunk2077`,
+  `20 00 80 52` at file offset `0x1494640` in 2.5.0 (build 5814786), and the
+  app's signature. A community script that does the same also turns four
+  branches after the call into no-ops. Each of them follows the same call
+  directly, so once the method answers 1 they change nothing, and MacGameFix
+  writes only the one word. That the four change nothing, and that the one
+  word is enough for the game to offer the denoiser, is read off the code, and
+  the game played on 2026-10-22 had that one word written by hand: the same
+  executable, byte for byte, that this installer leaves.
+- **The signature.** The changed executable is no longer covered by CD
+  PROJEKT's signature, so the app is signed again ad hoc:
+  `codesign --force --sign - --options runtime --entitlements <plist> <app>`,
+  without `--deep` and without clearing extended attributes. The entitlements
+  are two of CD PROJEKT's own, `com.apple.security.cs.allow-dyld-environment-variables`
+  and `com.apple.security.cs.disable-library-validation`; without the second,
+  the ad hoc executable cannot load CD PROJEKT's frameworks under the hardened
+  runtime. Only the executable changes: the four dylibs in `Contents/Frameworks`
+  keep CD PROJEKT's signatures, and `Contents/_CodeSignature/CodeResources` is
+  written again byte for byte the same.
+- **What is lost.** The entitlements only CD PROJEKT's provisioning profile
+  allows: `com.apple.developer.sustained-execution`, the application identifier
+  and the team identifier. An ad hoc signature that carries them is killed at
+  launch. Apple describes sustained execution as holding a game at its steady
+  level of performance from launch, rather than a burst first; what losing it
+  does to this game was not measured.
+- **The original is kept** in
+  `~/Library/Application Support/MacGameFix/app-backup/<bundle id>-<build>/`:
+  the executable and its `CodeResources`, copied before anything is written and
+  never replaced, and in `apps` the app it is kept for. *Remove* puts both
+  back, checks that CD PROJEKT's signature verifies again, and deletes the
+  copy; two copies of the game at the same build share it, and it goes when
+  both are removed. Steam's *Verify integrity of game files* should put the
+  original back as well; that was not tried. A copy kept for an earlier build
+  of the same app is deleted at the next install or removal that works, since
+  that executable is gone, and by *Remove Selected* on a row waiting for a
+  recipe, the one thing it does there.
+- **Stopped half way.** From the four bytes written to a signature that
+  verifies, the executable cannot start. Stopped there, by an error, by Ctrl-C,
+  or by MacGameFix quitting while it runs, the installer puts the original
+  back. Broken all the same (*Needs repair*), installing again starts from the
+  kept original, so what is signed is always the recipe's executable.
+- **M3 or later.** Apple lists MetalFX denoised upscaling for Apple9 GPUs and
+  later: M3, M4 and M5. The game does not ask MetalFX whether the Mac can do
+  it, so on an M1 or an M2 the option would appear with nothing behind it: the
+  row shows *Cannot be installed here*, with the reason, and the installer
+  refuses. A fix already in can still be removed there.
+- **A game update waits for a recipe.** The recipe is data: a row for each
+  executable of each game build in `fixes/cp2077-denoiser.recipes`. A build
+  with no row shows *No recipe for this build yet*, and nothing is changed;
+  with *Keep it applied* on, the agent says so once for that build, however
+  often it looks, and waits. The row for a new build comes in a catalog update,
+  with no new app, and the agent then installs the fix.
+- **Changed outside MacGameFix.** An executable patched outside MacGameFix,
+  with no copy of its original kept, shows *Half installed*; one changed any
+  other way, signed again by another tool for instance, so that no row was
+  made from it, shows *Cannot be installed here*. Either way MacGameFix
+  installs and removes nothing there, and says why beside the game. With *Keep
+  it applied* on, the agent says it once for that build, with no failure and
+  no report, and the menu bar counts the game to review. Steam's verify should
+  put CD PROJEKT's executable back (not tried), and the fix installs from there.
+- **Asked first.** *Install Selected* asks before it changes the app, as
+  turning on the Wine modules in a CrossOver app does, and so does turning on
+  *Keep it applied*, since the agent then changes the app in the background. macOS may ask you to
+  allow MacGameFix under System Settings › Privacy & Security › App
+  Management, and a write it refuses changes nothing; the log says so. Whether
+  it asks for a game in a Steam library on an external volume was not measured.
+
+**How a row is made for a new build.** The anchors, as found in 2.5.0: the
+setting's name, `MetalFX_Denoiser`, appears in the code as its 64-bit FNV-1a
+hash, `0x78134c36793c27dc`; beside it the game asks the renderer, through slot
+`0x388` of its virtual table (`ldr x8, [x8, #0x388]`, then `blr x8`), whether
+the denoiser is supported; and the method in that slot is the two-instruction
+override, `mov w0,#0; ret`, at `0x101494640`, which is file offset `0x1494640`.
+For a new build, find the three again in the new executable, check that the
+word at the method reads `00008052`, write `20008052` into a copy, and take the
+copy's sha256 before signing it. Then sign the copy as above, check it with
+`codesign --verify --strict`, and check in the game that the option appears.
+Only then does the row go in:
+`<CFBundleVersion> <sha256 before> <offset> 00008052 20008052 <sha256 after>`.
+A build shipped with more than one executable under one CFBundleVersion gets a
+row for each; the installer takes the row made from the executable it finds.
+
+Measured on 2026-10-22 on an M4 Max. On copies of the game's app: the four
+bytes, and the signing, after which only the executable differed from CD
+PROJEKT's app, its four frameworks kept their signatures and `CodeResources`
+came out the same. With test executables: an ad hoc one under the hardened
+runtime without `disable-library-validation` could not load one of CD
+PROJEKT's dylibs, and one carrying the restricted entitlements was killed at
+launch. The game on that Mac, with the one word written by hand, was played
+the same day and looked good to the player. The installer on the real game,
+run from a terminal: it refused that hand-patched executable (*Half
+installed*); after CD PROJEKT's executable was put back, it installed, removed
+(CD PROJEKT's signature verified again and the kept copy was deleted) and
+installed again, and what it left is the hand-patched executable byte for byte
+(sha256 `2f7c3ca9…651d`). Not measured: frame times with the denoiser on or
+off, any M3 Mac, what Steam's verify does to the changed app, and the install
+run from MacGameFix, where macOS may ask for App Management.
+
 ## Reporting a problem
 
 [Open an issue](https://github.com/MathiasKowoll/MacGameFix/issues/new/choose) with the form that fits:
@@ -421,12 +546,27 @@ throwaway home and a fake game and catalog:
 - what each fix requires, said beside the game;
 - while Steam writes the game and while the game runs;
 - an older build of a fix replaced with the catalog's;
-- a failing installer's report.
+- a failing installer's report;
+- a macOS game's fix waiting for a recipe for the game's build, with no failure
+  and no report, said once for that build through a newer catalog without one,
+  until a catalog brings one;
+- a macOS game's app changed outside MacGameFix, or on a Mac the fix is not
+  for: the installer's reason, once for each build, never run, no failure and
+  no report.
 
 `fixes/test-installers.sh` takes every folder installer through its life on
 throwaway folders, with no game needed: installed, an older build, updated,
 restored to the game's own file, and an older or missing reader where a fix
-has one.
+has one. Cyberpunk 2077's goes through its life on a fake app built there with
+`cc`: installed and signed, with every other file of the game folder as it
+was; rebuilt from the original when broken; restored byte for byte; two copies
+of a build sharing the kept original; the original put back after Ctrl-C while
+signing and after its reader goes away. It is refused, with nothing changed,
+on an M1 and an M2, while the game runs (started by another spelling of its
+path), for a build with no recipe, for an executable no row was made from, for
+one patched by hand, over a kept copy that is not the original, and when macOS
+refuses the write. Copies kept for other builds go at an install and at a
+removal, and another app's stay.
 
 **Building a fix's DLL.** `fixes/build-proxy.sh` and
 `fixes/build-asf-reader.sh` need llvm-mingw (or another x86_64-w64-mingw32
@@ -439,17 +579,19 @@ the MGVF-GAME lines with `process-features.json` and a built app's copies with
 ## How each fix is made
 
 Every fix is one installer in `fixes/` and the files it puts in the game
-folder. A proxy DLL takes the name of a DLL the game already loads, keeps the
-game's own as `<name>_real.dll`, and forwards every export to it; the source
-named below is the code that runs inside it. The source of each shipped DLL is
-the one that writes the log name the DLL carries, which is how
-`fixes/check-builds.sh` finds it. What was found, and how, is in the game's
-page under `legacy/wiki/`.
+folder; Cyberpunk 2077's puts none there, and changes four bytes of the game's
+executable instead, from a recipe. A proxy DLL takes the name of a DLL the
+game already loads, keeps the game's own as `<name>_real.dll`, and forwards
+every export to it; the source named below is the code that runs inside it.
+The source of each shipped DLL is the one that writes the log name the DLL
+carries, which is how `fixes/check-builds.sh` finds it. What was found, and
+how, is in the game's page under `legacy/wiki/`.
 
 | Installer | Games | What goes in the game folder | Built from | Findings |
 | --- | --- | --- | --- | --- |
 | `install-runtime-fix.sh` | Beast of Reincarnation, Life is Strange: Double Exposure, Life is Strange: Reunion, Mortal Shell 2 | `libogg_64.dll` under `Engine/Binaries/ThirdParty/Ogg/Win64` | `ue5-media-fix.c` | [Beast](legacy/wiki/Beast-of-Reincarnation.md), [Double Exposure](legacy/wiki/Life-is-Strange-Double-Exposure.md), [Reunion](legacy/wiki/Life-is-Strange-Reunion.md), [Mortal Shell 2](legacy/wiki/Mortal-Shell-2.md) |
 | `install-ctl-fix.sh` | CONTROL Resonant | `PxFoundation_x64.dll` (from `PxFoundation_x64-ctl.dll`) | `ctl-window-fix.c` | [CONTROL Resonant](legacy/wiki/Control-Resonant.md) |
+| `install-cp2077-denoiser.sh` | Cyberpunk 2077 | Nothing beside the game: four bytes of `Cyberpunk2077.app/Contents/MacOS/Cyberpunk2077`, at the offset its build's row in `cp2077-denoiser.recipes` names, and the app signed again ad hoc; the original kept in MacGameFix's `app-backup` folder | Not built: a recipe for each game build, and none of CD PROJEKT's code ships | [Its section](#cyberpunk-2077-changes-four-bytes-of-its-app) |
 | `install-re-vc1-fix.sh` | Devil May Cry 5, RESIDENT EVIL 2, RESIDENT EVIL 3 | `amd_ags_x64.dll` (from `amd_ags_x64-dmc5.dll`, or `amd_ags_x64-re2.dll` for both RE titles), and the reader | `mf-reader-fallback.c` | [RE Engine VC-1](legacy/wiki/RE-Engine-VC1.md) |
 | `install-dwo-bridge.sh` | DYNASTY WARRIORS: ORIGINS, Wo Long: Fallen Dynasty | `libxess.dll` | `dwo-video-bridge.c` | [DYNASTY WARRIORS: ORIGINS](legacy/wiki/Dynasty-Warriors-Origins.md), [Wo Long](legacy/wiki/Wo-Long-Fallen-Dynasty.md) |
 | `install-gow-fix.sh` | God of War | `libSceJobManager.dll` (from `libSceJobManager-gow.dll`) and `gow-depth-fix.ini` | `gow-depth-fix.c` | [God of War](legacy/wiki/God-of-War.md) |
@@ -504,6 +646,9 @@ page under `legacy/wiki/`.
   its fix installs (LGPL-2.1-or-later).
 - **[d9vk](https://github.com/Sikarugir-App/d9vk) by Sikarugir-App** (zlib):
   the Direct3D 9 that NINJA GAIDEN 3 runs on.
+- **The Cyberpunk 2077 patch** comes from a community script published
+  anonymously; its author is not known. MacGameFix writes one of its five
+  words.
 - Everything else, and the findings behind every fix, is in `legacy/` here and
   in the archived [MacGameVideoFix](https://github.com/MathiasKowoll/MacGameVideoFix)
   with its full history.

@@ -268,7 +268,7 @@ bundle_drift=0
 if [ -d "$bundle" ]; then
   compared=0
   for f in "$HERE"/*.dll "$HERE"/install-*.sh "$HERE"/pe.pl "$HERE"/bottles.sh "$HERE"/sm2-shadertool \
-           "$HERE"/*-LICENCES.md; do
+           "$HERE"/*-LICENCES.md "$HERE"/*.recipes; do
     [ -f "$f" ] || continue
     b="$bundle/$(basename "$f")"
     [ -f "$b" ] || continue

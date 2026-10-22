@@ -21,6 +21,7 @@ body:
         - A NotProton runner
         - A CrossOver bottle
         - Both
+        - Native macOS (no Wine)
         - Other
     validations:
       required: true
@@ -37,7 +38,7 @@ body:
     id: versions
     attributes:
       label: Versions
-      description: MacGameFix, CrossOver or the NotProton runner, and macOS.
+      description: MacGameFix, CrossOver or the NotProton runner (for a macOS game, the game's own version), and macOS.
     validations:
       required: true
   - type: textarea
