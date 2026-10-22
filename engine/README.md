@@ -26,6 +26,7 @@ they share. With a DualSense Edge on a cable, the HID device reports
 | `0001-winebus.patch` | `winebus.sys` | A USB device with a location ID (`desc.uid`, set by the IOHID and Xbox 360 buses) gets a container built from it instead of a random one. |
 | `0002-winecoreaudio.patch` | `winecoreaudio.so` | `get_prop_value` answers `DEVPKEY_Device_ContainerId` for an `AppleUSBAudioEngine:` endpoint with the same container. The wow64 thunk passes `VT_CLSID` through. |
 | `0003-mmdevapi.patch` | `mmdevapi.dll` | The property store asks the driver for an active endpoint's container instead of reading the registry, which cannot hold a GUID and would keep it after the device is gone. |
+| `0012-winecoreaudio-edge-output-name.patch` | `winecoreaudio.so` | An Edge shown as a standard DualSense (`edge=dualsense`) has the DualSense's audio device on a cable too: its output and microphone are named "DualSense Wireless Controller" instead of macOS's "DualSense Edge Wireless Controller", and their instance id carries the DualSense's product id, as the Bluetooth output already has from `0005`. Under NotProton's bridge NINJA GAIDEN 4 read every output's name and vibrated; that bridge's output was named "DualSense Wireless Controller (Bluetooth Bridge)". |
 
 Both derivations use one namespace, `{<location>-27F2-4948-9654-152804AF6378}`.
 Keep them in sync.
@@ -132,13 +133,14 @@ starts the game's own prefix, so a change applies from the game's next start; in
 a CrossOver bottle the prefix starts with Steam or the game opened there and
 stays up, so a change waits until Steam is quit there and opened again. The
 haptics' strength is read by `winecoreaudio.so`, in the game, each time a game
-starts its haptics.
+starts its haptics; `edge` is read there too, when a process lists its audio
+devices, for the game as `winebus.so` knows it, so that both show the same pad.
 
 | Line | Effect |
 |---|---|
 | `bluetooth=wired` | A Bluetooth pad shown as wired (`0004`). |
 | `motor_power=full` | An Edge's motor power claimed at `0x00` in every report. Sony's library claims it so for a standard DualSense and never for an Edge, which then stays at the reduction it stores. |
-| `edge=dualsense` | An Edge shown to the game as a standard DualSense, on a cable or over Bluetooth: for titles whose Sony library does not know the Edge. |
+| `edge=dualsense` | An Edge shown to the game as a standard DualSense, on a cable or over Bluetooth, its audio device named as a DualSense's too (`0012`): for titles whose Sony library does not know the Edge, or that look for the pad's output by its name. |
 | `haptics_gain_cable=<1-4>`, `edge_haptics_gain_cable=<1-4>` | The haptics multiplied on a cable, a DualSense's and an Edge's, with a soft limit: linear to 0.8, then a curve that never passes 1.0. |
 | `haptics_gain_bluetooth=<1-4>`, `edge_haptics_gain_bluetooth=<1-4>` | The same over Bluetooth. A pad does not feel every game alike on both: a standard DualSense felt the same at 1 in Spider-Man 2, and F1 23's light haptics needed 2 over Bluetooth to feel as steady as on a cable. An older file's `haptics_gain` or `edge_haptics_gain` counts for both connections. |
 | `xinput=off\|rumble\|pad` | What XInput gets of the pad (`0006`-`0008`): nothing; its vibration on the motors (every game's default); the pad itself as an XInput controller (the default for a game the store does not list for the DualSense). |
