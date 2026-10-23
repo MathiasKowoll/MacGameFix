@@ -914,16 +914,20 @@
       "name": "God of War Ragnar\u00f6k",
       "steamAppId": "2322010",
       "status": "works",
-      "technology": "Its executable carries Sony's library (libScePad: adaptive triggers, haptics) and loads it through the PlayStation PC SDK, but under Wine Steam answers that it runs on a Steam Deck, and the game never loads the SDK. What is left is XInput.",
+      "technology": "Its executable carries Sony's library (libScePad: adaptive triggers, haptics) and loads it through the PlayStation PC SDK, but under Wine Steam answers that it runs on a Steam Deck, and the game never loads the SDK. It then reads the controller as Steam presents it: with Steam Input on, through Steam's own XInput controller and Steam Input's controller type, which names a DualSense; with Steam Input off, through XInput alone.",
       "library": "XInput",
       "vibration": "XInput",
       "features": [
-        "XInput rumble"
+        "XInput rumble",
+        "PlayStation button prompts"
       ],
-      "description": "As an XInput controller it rumbles on the motors, with Xbox button prompts and no adaptive triggers or haptics: those come from Sony's SDK, which does not run under Wine.",
-      "settings": "Game Feel: the pad as an XInput controller, set for the game (the store lists the DualSense). Steam Input off.",
+      "description": "With Steam Input on for the game, it shows PlayStation buttons and vibrates: Steam reads the pad, gives the game its controller and sends the game's rumble back to the pad's motors. With Steam Input off, as an XInput controller, it vibrates with Xbox buttons. No adaptive triggers or haptics either way: those come from Sony's SDK, which does not run under Wine.",
+      "settings": "Steam Input ON for this game (an exception to Steam Input off): Game Feel with the Edge shown as a standard DualSense and XInput's rumble (the store's rule). Without Steam Input: the pad as an XInput controller, with Xbox buttons.",
       "details": [
-        "347 motor rises in three minutes, up to 0xc9 on both motors, through XInput.",
+        "Steam Input on: the input came through Steam's controller (130 reports a second reached the pad's HID device), and the game's rumble came back through XInput to the pad's motors: 232 rises in four and a half minutes, given the improved rumble emulation by the modules.",
+        "Steam Input off, XInput's rumble only: the game had no controls, since it reads XInput and XInput then has only the motors.",
+        "Steam Input off, the pad as an XInput controller: 347 motor rises in three minutes, Xbox buttons.",
+        "With Wine's hidraw off (NotProton's Disable hidraw) the pad reached the game through SDL as an XInput controller, with Xbox buttons; the Wine modules took no part.",
         "Under NotProton, Steam's IsSteamRunningOnSteamDeck answers yes, so the game skips PsPcSdk and libScePad; told no, the SDK's initialisation fails (0x8a800111) and the game exits (measured 2026-10-16)."
       ],
       "tests": [
@@ -932,9 +936,18 @@
           "connection": "bluetooth",
           "result": "works",
           "date": "2026-10-23",
-          "notes": "Vibrates well (the user); Xbox prompts, no adaptive triggers."
+          "notes": "Steam Input off, the pad as an XInput controller: vibrates well (the user), Xbox prompts, no adaptive triggers."
+        },
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "shownAs": "DualSense",
+          "date": "2026-10-23",
+          "notes": "Steam Input on: PlayStation prompts and vibration (the user); 232 motor rises through Steam's controller."
         }
-      ]
+      ],
+      "libraryNote": "With Steam Input on, Steam reads the pad and gives the game its controller and button type."
     }
   ],
   "controllers": [

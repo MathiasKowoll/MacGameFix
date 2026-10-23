@@ -49,7 +49,7 @@ plays its haptics as audio on the pad's output, whatever its library.
 | [Mortal Kombat 11](#976310) | Motors | Sony libScePad | DualSense Edge shown as a DualShock 4: Works (2026-10-22) | DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualSense: Does not vibrate (2026-10-21); DualSense Edge shown as a DualShock 4: Works (2026-10-22); DualSense shown as a DualShock 4: Works (2026-10-22) |
 | [Crash Bandicoot 4: It's About Time](#1378990) | Motors | Raw HID | Not played yet | DualSense Edge: Works (2026-10-23); DualSense Edge shown as a DualShock 4: Works (2026-10-23) |
 | [Crash Bandicoot N. Sane Trilogy](#731490) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-23); DualSense Edge shown as a DualShock 4: Does not vibrate (2026-10-23); DualSense Edge shown as a DualShock 4: Does not vibrate (2026-10-23) |
-| [God of War Ragnarök](#2322010) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-23) |
+| [God of War Ragnarök](#2322010) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-23); DualSense Edge shown as a DualSense: Works (2026-10-23) |
 
 <a id="2651280"></a>
 ## Marvel's Spider-Man 2
@@ -614,22 +614,26 @@ What was measured:
 <a id="2322010"></a>
 ## God of War Ragnarök
 
-As an XInput controller it rumbles on the motors, with Xbox button prompts and no adaptive triggers or haptics: those come from Sony's SDK, which does not run under Wine.
+With Steam Input on for the game, it shows PlayStation buttons and vibrates: Steam reads the pad, gives the game its controller and sends the game's rumble back to the pad's motors. With Steam Input off, as an XInput controller, it vibrates with Xbox buttons. No adaptive triggers or haptics either way: those come from Sony's SDK, which does not run under Wine.
 
 - **Status:** Works
-- **Library:** XInput
-- **Technology:** Its executable carries Sony's library (libScePad: adaptive triggers, haptics) and loads it through the PlayStation PC SDK, but under Wine Steam answers that it runs on a Steam Deck, and the game never loads the SDK. What is left is XInput.
-- **Features:** XInput rumble
-- **Settings:** Game Feel: the pad as an XInput controller, set for the game (the store lists the DualSense). Steam Input off.
+- **Library:** XInput. With Steam Input on, Steam reads the pad and gives the game its controller and button type.
+- **Technology:** Its executable carries Sony's library (libScePad: adaptive triggers, haptics) and loads it through the PlayStation PC SDK, but under Wine Steam answers that it runs on a Steam Deck, and the game never loads the SDK. It then reads the controller as Steam presents it: with Steam Input on, through Steam's own XInput controller and Steam Input's controller type, which names a DualSense; with Steam Input off, through XInput alone.
+- **Features:** XInput rumble, PlayStation button prompts
+- **Settings:** Steam Input ON for this game (an exception to Steam Input off): Game Feel with the Edge shown as a standard DualSense and XInput's rumble (the store's rule). Without Steam Input: the pad as an XInput controller, with Xbox buttons.
 - **Steam app:** 2322010
 
 Tested:
 
-- DualSense Edge, Bluetooth: Works (2026-10-23). Vibrates well (the user); Xbox prompts, no adaptive triggers.
+- DualSense Edge, Bluetooth: Works (2026-10-23). Steam Input off, the pad as an XInput controller: vibrates well (the user), Xbox prompts, no adaptive triggers.
+- DualSense Edge shown as a DualSense, Bluetooth: Works (2026-10-23). Steam Input on: PlayStation prompts and vibration (the user); 232 motor rises through Steam's controller.
 
 What was measured:
 
-- 347 motor rises in three minutes, up to 0xc9 on both motors, through XInput.
+- Steam Input on: the input came through Steam's controller (130 reports a second reached the pad's HID device), and the game's rumble came back through XInput to the pad's motors: 232 rises in four and a half minutes, given the improved rumble emulation by the modules.
+- Steam Input off, XInput's rumble only: the game had no controls, since it reads XInput and XInput then has only the motors.
+- Steam Input off, the pad as an XInput controller: 347 motor rises in three minutes, Xbox buttons.
+- With Wine's hidraw off (NotProton's Disable hidraw) the pad reached the game through SDL as an XInput controller, with Xbox buttons; the Wine modules took no part.
 - Under NotProton, Steam's IsSteamRunningOnSteamDeck answers yes, so the game skips PsPcSdk and libScePad; told no, the SDK's initialisation fails (0x8a800111) and the game exits (measured 2026-10-16).
 
 ## Adding a game
