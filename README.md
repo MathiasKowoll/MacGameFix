@@ -597,6 +597,32 @@ with `xcrun notarytool store-credentials`).
   signed with another key are refused. `MacGameFix --new-signing-key <file>`
   makes one and prints the public half.
 
+**A change to the fixes or the Wine modules alone needs no new app.** Installed
+apps take each catalog from the latest release on their own, so the release
+stays and only that catalog's three files are replaced. A new version is for a
+change to the app itself.
+1. Merge the change into main and build from main. The build writes both
+   catalogs in `app/dist`, each with a new version.
+2. Run `fixes/test-installers.sh` and `fixes/check-builds.sh`, and compare the
+   new `catalog.json` (or `modules.json`) with the one on the release: only the
+   files of the change differ, and `minimumApp` is the same.
+3. Replace only that catalog's files on the latest release:
+   `gh release upload <tag> --repo MathiasKowoll/MacGameFix --clobber
+   app/dist/catalog.json app/dist/catalog.json.sig app/dist/catalog.zip`
+   (or the three `modules.*` files).
+4. Download them again and compare them with `app/dist`, then let an installed
+   app take them in a throwaway home:
+   `MACGAMEFIX_HOME=$(mktemp -d) MacGameFix --update-from <folder>` must say it
+   installed the new catalog, which proves the signature.
+5. Add a dated section to the release notes, *Fixes updated, <date>* or *Wine
+   modules updated, <date>*, naming the commit and the pull request, what
+   changed and what was not played yet. The tag does not move: the app did not
+   change.
+
+Apps then take it within a day, or at once with *Check for New Fixes* in the
+menu bar or *Check Now* in Wine Modules. First done on 2026-10-22, for Mortal
+Kombat 11's movies (#14) in 1.5.6.
+
 **Testing it.** `app/test-automation.sh` checks all of it offline, with a
 throwaway home and a fake game and catalog:
 - refused and accepted catalogs;
