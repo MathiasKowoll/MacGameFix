@@ -1,0 +1,36 @@
+{
+  "title": "DYNASTY WARRIORS: ORIGINS",
+  "installer": "install-dwo-bridge.sh",
+  "scope": "folder",
+  "executable": "DWORIGINS.exe",
+  "carrierDirectory": null,
+  "alsoRuns": [],
+  "summary": "The player needs D3D11 video interfaces D3DMetal lacks, and the decoded frame carried across to its D3D12 renderer.",
+  "page": "legacy/wiki/Dynasty-Warriors-Origins.md",
+  "installs": [
+    "libxess.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "dwo-video-bridge.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [],
+  "excerpts": [
+    {
+      "file": "dwo-video-bridge.c",
+      "symbol": "d3d12_open_shared_handle",
+      "note": "The D3D12 renderer opens the handle of a frame decoded on the D3D11 device; the bridge answers with a texture on the game's own device that carries the frame across."
+    },
+    {
+      "file": "dwo-video-bridge.c",
+      "symbol": "res_get_shared_handle",
+      "note": "On the D3D11 side IDXGIResource::GetSharedHandle returns E_NOTIMPL; the bridge hands out a handle of its own that the D3D12 side recognises."
+    }
+  ],
+  "symptom": "Cutscenes play with sound and subtitles, and a black picture.",
+  "cause": "The cutscenes are WebM (VP9) decoded by IMFSourceReader on a separate D3D11 device and presented by a D3D12 renderer: the frame never reaches the renderer, and a stock CrossOver 26.3 ships no demuxer that opens a WebM.",
+  "fix": "A bridge in libxess.dll answers the shared handle of each decoded frame and carries it across to the D3D12 renderer. On CrossOver Preview 27 that is all it needs.",
+  "backend": "D3DMetal",
+  "crossover": "Preview 27 (2026-10-14)"
+}

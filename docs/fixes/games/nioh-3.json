@@ -1,0 +1,38 @@
+{
+  "title": "Nioh 3",
+  "installer": "install-nioh3-bridge.sh",
+  "scope": "folder",
+  "executable": "Nioh3.exe",
+  "carrierDirectory": null,
+  "alsoRuns": [],
+  "summary": "Cutscene runs with sound, picture black. Same bridge as DYNASTY WARRIORS on a different carrier; its VP9 is decoded by the fix's own reader, since Preview's decoder draws magenta blocks into it.",
+  "page": "legacy/wiki/Nioh-3.md",
+  "installs": [
+    "amd_ags_x64-nioh3.dll",
+    "mgvf-asf-reader-LICENCES.md",
+    "mgvf-asf-reader.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "dwo-video-bridge.c",
+    "asf-reader.c",
+    "wmv-dmo.c",
+    "wm-reader.c",
+    "dshow-graph.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [],
+  "excerpts": [
+    {
+      "file": "dwo-video-bridge.c",
+      "symbol": "d3d12_open_shared_handle",
+      "note": "The D3D12 renderer opens the handle of a frame decoded on the D3D11 device; the bridge answers with a texture on the game's own device that carries the frame across."
+    },
+    {
+      "file": "dwo-video-bridge.c",
+      "symbol": "res_get_shared_handle",
+      "note": "On the D3D11 side IDXGIResource::GetSharedHandle returns E_NOTIMPL; the bridge hands out a handle of its own that the D3D12 side recognises."
+    }
+  ],
+  "cause": "The game asks for D3D-backed decode on a D3D12 renderer; the frames the D3D11 decoder produces never reach the renderer."
+}

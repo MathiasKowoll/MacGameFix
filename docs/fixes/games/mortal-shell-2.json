@@ -1,0 +1,27 @@
+{
+  "title": "Mortal Shell 2",
+  "installer": "install-runtime-fix.sh",
+  "scope": "folder",
+  "executable": "MortalShell2-Win64-Shipping.exe",
+  "carrierDirectory": "Engine/Binaries/ThirdParty/Ogg/Win64",
+  "alsoRuns": [],
+  "summary": "Unreal Engine 5 titles that crash on the first cutscene. The carrier sits under a compiler-named subfolder, which the script discovers rather than assumes.",
+  "page": "legacy/wiki/Mortal-Shell-2.md",
+  "installs": [
+    "libogg_64.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "ue5-media-fix.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [],
+  "excerpts": [
+    {
+      "file": "ue5-media-fix.c",
+      "symbol": "force_electra_software",
+      "note": "Sets Electra.Win.H264UseOldOutputPath, found by its own name rather than by an address, so Electra takes its CPU buffer path and never the D3D one."
+    }
+  ],
+  "cause": "On a D3D12 device Electra takes its GPU output buffer path, which asks every D3D12 resource for ID3DDestructionNotifier and uses the answer without checking it; under D3DMetal there is none, and it reads address 0."
+}

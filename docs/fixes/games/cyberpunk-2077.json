@@ -1,0 +1,36 @@
+{
+  "title": "Cyberpunk 2077",
+  "installer": "install-cp2077-denoiser.sh",
+  "scope": "app",
+  "executable": "Cyberpunk2077",
+  "carrierDirectory": "Cyberpunk2077.app/Contents/MacOS",
+  "alsoRuns": [],
+  "summary": "Writes the one instruction that makes the game offer the MetalFX denoiser it ships, and signs its app again ad hoc. M3 or later.",
+  "page": null,
+  "installs": [
+    "cp2077-denoiser.recipes"
+  ],
+  "builtFrom": [
+    "cp2077-denoiser.recipes"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [
+    {
+      "name": "An anonymous community script",
+      "url": null,
+      "note": "The patch comes from it; MacGameFix writes one of its five words."
+    }
+  ],
+  "excerpts": [
+    {
+      "file": "cp2077-denoiser.recipes",
+      "from": "^# 2\\.5\\.0",
+      "to": "^5814786 ",
+      "note": "The recipe for 2.5.0: the build, the executable's hash, the offset, the four bytes there (mov w0,#0) and the four written (mov w0,#1), and the hash after."
+    }
+  ],
+  "symptom": "The MetalFX denoiser the Mac version ships (MTLFXTemporalDenoisedScaler) is never offered in the settings.",
+  "cause": "The renderer answers \"not supported\" from a method of two instructions, `mov w0,#0; ret`.",
+  "fix": "Four bytes of the executable: `mov w0,#1` over the first instruction, at the offset its build's row in `cp2077-denoiser.recipes` names, and the app signed again ad hoc. The original is kept aside.",
+  "backend": "None: the macOS version 2.5.0 runs natively, on an M3 or later."
+}

@@ -1,0 +1,30 @@
+{
+  "title": "NINJA GAIDEN 4",
+  "installer": "install-ng4-fix.sh",
+  "scope": "folder",
+  "executable": "NINJAGAIDEN4-Steam.exe",
+  "carrierDirectory": null,
+  "alsoRuns": [],
+  "summary": "The game asks Media Foundation whether anything decodes VP9 and quits if the answer is zero; on D3DMetal 4 its fences are repaired so it presents at all. Needs the staged Matroska demuxer too, except on CrossOver Preview 27, which ships it.",
+  "page": "legacy/wiki/Ninja-Gaiden-4.md",
+  "installs": [
+    "dstorage-ng4.dll"
+  ],
+  "builtFrom": [
+    "../tools/ng4-observe.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [],
+  "excerpts": [
+    {
+      "file": "../tools/ng4-observe.c",
+      "symbol": "my_MFTEnumEx",
+      "note": "When the engine finds no VP9 decoder, the gate the game asks Media Foundation is answered with the H.264 decoder's entry, so the game goes on and decodes in software."
+    },
+    {
+      "file": "../tools/ng4-observe.c",
+      "symbol": "my_QWaitF",
+      "note": "On D3DMetal 4: a fence wait for a value no one has signalled yet is bridged through the CPU instead of being handed to the GPU."
+    }
+  ]
+}

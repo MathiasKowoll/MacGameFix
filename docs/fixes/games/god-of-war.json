@@ -1,0 +1,32 @@
+{
+  "title": "God of War",
+  "installer": "install-gow-fix.sh",
+  "scope": "folder",
+  "executable": "GoW.exe",
+  "carrierDirectory": null,
+  "alsoRuns": [],
+  "summary": "White specks on characters in dim light: an EQUAL depth test after a prepass, which the translated shaders do not match bit for bit.",
+  "page": "legacy/wiki/God-of-War.md",
+  "installs": [
+    "libSceJobManager-gow.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "gow-depth-fix.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [
+    {
+      "name": "The author of \"God Of War 2018 White Dot Fix (through Crossover)\" on r/macgaming",
+      "url": null,
+      "note": "Found the depth test behind the white specks."
+    }
+  ],
+  "excerpts": [
+    {
+      "file": "gow-depth-fix.c",
+      "symbol": "hk_CreateDepthStencilState",
+      "note": "Every depth state that tests EQUAL is created with the replacement test read from gow-depth-fix.ini, which removes the white specks."
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "title": "Wo Long: Fallen Dynasty",
+  "installer": "install-dwo-bridge.sh",
+  "scope": "folder",
+  "executable": "WoLong.exe",
+  "carrierDirectory": null,
+  "alsoRuns": [],
+  "summary": "The player needs D3D11 video interfaces D3DMetal lacks, and the decoded frame carried across to its D3D12 renderer.",
+  "page": "legacy/wiki/Wo-Long-Fallen-Dynasty.md",
+  "installs": [
+    "libxess.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "dwo-video-bridge.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [],
+  "excerpts": [
+    {
+      "file": "dwo-video-bridge.c",
+      "symbol": "d3d12_open_shared_handle",
+      "note": "The D3D12 renderer opens the handle of a frame decoded on the D3D11 device; the bridge answers with a texture on the game's own device that carries the frame across."
+    },
+    {
+      "file": "dwo-video-bridge.c",
+      "symbol": "res_get_shared_handle",
+      "note": "On the D3D11 side IDXGIResource::GetSharedHandle returns E_NOTIMPL; the bridge hands out a handle of its own that the D3D12 side recognises."
+    }
+  ],
+  "cause": "The video is decoded on a D3D11 device and presented by a D3D12 renderer; the game negotiates a player, is told yes and tears it down, never reading a sample, because the frame has no way across."
+}

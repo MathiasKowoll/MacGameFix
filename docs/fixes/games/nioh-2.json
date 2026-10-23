@@ -1,0 +1,39 @@
+{
+  "title": "Nioh 2",
+  "installer": "install-nioh-bridge.sh",
+  "scope": "folder",
+  "executable": "nioh2.exe",
+  "carrierDirectory": null,
+  "alsoRuns": [],
+  "summary": "Cutscene runs with sound and no picture. Its video is WMV3, which the fix decodes itself where the engine cannot. Runs on DXMT only.",
+  "page": "legacy/wiki/Nioh-2.md",
+  "installs": [
+    "GfeSDK.dll",
+    "mgvf-asf-reader-LICENCES.md",
+    "mgvf-asf-reader.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "p5s-video-bridge.c",
+    "asf-reader.c",
+    "wmv-dmo.c",
+    "wm-reader.c",
+    "dshow-graph.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [
+    {
+      "name": "winevideo",
+      "url": "https://github.com/Jfishin/winevideo",
+      "note": "Independent confirmation of the shared-texture cutscene path, which winevideo repairs inside a patched Wine d3d9.dll."
+    }
+  ],
+  "excerpts": [
+    {
+      "file": "p5s-video-bridge.c",
+      "symbol": "my_CreateRenderTarget",
+      "note": "Wine's d3d9 answers a shared render target with S_OK and a null handle; where it leaves that hole, the bridge hands the game a real shared handle."
+    }
+  ],
+  "cause": "As in Nioh: no WMV3 decoder in CrossOver, and the shared D3D9 surface the cutscene is presented onto comes back with a null share handle."
+}

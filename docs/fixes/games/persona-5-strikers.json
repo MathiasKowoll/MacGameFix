@@ -1,0 +1,39 @@
+{
+  "title": "Persona 5 Strikers",
+  "installer": "install-p5s-bridge.sh",
+  "scope": "folder",
+  "executable": "game.exe",
+  "carrierDirectory": null,
+  "alsoRuns": [],
+  "summary": "Cutscene runs with sound and no picture. Its video is VC-1 with WMA Pro audio, which the fix decodes itself where the engine cannot. Runs on DXMT only.",
+  "page": "legacy/wiki/Persona-5-Strikers.md",
+  "installs": [
+    "amd_ags_x64.dll",
+    "mgvf-asf-reader-LICENCES.md",
+    "mgvf-asf-reader.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "p5s-video-bridge.c",
+    "asf-reader.c",
+    "wmv-dmo.c",
+    "wm-reader.c",
+    "dshow-graph.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [
+    {
+      "name": "winevideo",
+      "url": "https://github.com/Jfishin/winevideo",
+      "note": "Independent confirmation of the shared-texture cutscene path, which winevideo repairs inside a patched Wine d3d9.dll."
+    }
+  ],
+  "excerpts": [
+    {
+      "file": "p5s-video-bridge.c",
+      "symbol": "my_CreateRenderTarget",
+      "note": "Wine's d3d9 answers a shared render target with S_OK and a null handle; where it leaves that hole, the bridge hands the game a real shared handle."
+    }
+  ],
+  "cause": "No CrossOver ships a VC-1 decoder, and with one staged the reader still never reads a sample, because the shared D3D9 render target it is given has a null handle."
+}

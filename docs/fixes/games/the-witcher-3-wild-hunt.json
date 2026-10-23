@@ -1,0 +1,37 @@
+{
+  "title": "The Witcher 3: Wild Hunt",
+  "installer": "install-w3-fix.sh",
+  "scope": "folder",
+  "executable": "witcher3.exe",
+  "carrierDirectory": "bin/x64_dx12",
+  "alsoRuns": [],
+  "summary": "Refuses the stream-output pipeline that crashes D3DMetal's shader converter, and lets the game offer DLSS.",
+  "page": "legacy/wiki/The-Witcher-3.md",
+  "installs": [
+    "amd_fidelityfx_loader_dx12-w3.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "w3-streamout-fix.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [
+    {
+      "name": "tholtman1-del",
+      "url": "https://github.com/tholtman1-del/witcher3-crossover-fix",
+      "note": "The diagnosis of the black screen and the rule that refuses the pipeline (MIT)."
+    }
+  ],
+  "excerpts": [
+    {
+      "file": "w3-streamout-fix.c",
+      "symbol": "refuse",
+      "note": "tholtman1-del's rule: a geometry-shader pipeline that streams out, or has no pixel shader, is refused."
+    },
+    {
+      "file": "w3-streamout-fix.c",
+      "symbol": "my_gfx",
+      "note": "The refusal: E_INVALIDARG before the pipeline reaches Apple's shader converter, which crashed on it and left the game deadlocked on a black screen."
+    }
+  ]
+}
