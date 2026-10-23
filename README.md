@@ -516,6 +516,12 @@ run from MacGameFix, where macOS may ask for App Management.
   one connection: played on a cable and over Bluetooth, send two. Reports like this make the
   [list of games played for vibration](docs/vibration.md).
 - **A game fix does not work.** Copy the lines about the game from **Settings › Log** into the form.
+- **A game fix works.** For the list of verified games: say the versions and what you played, whether it
+  was tried without the fix, and attach the report the **Report** tab saves for the game with the lines
+  about it from **Settings › Log**. A game is verified from what was played, not from what should work.
+- **A game works without its fix**, on a newer Game Porting Toolkit or CrossOver. Remove the fix first
+  (**Remove Selected** in **Games**), play the moment it was for, and send the report made after that.
+  Reports like this are what mark a fix as no longer needed from a toolkit on.
 
 ## Opening it the first time
 

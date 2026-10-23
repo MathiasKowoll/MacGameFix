@@ -1,0 +1,103 @@
+name: A game fix works
+description: A fix from MacGameFix's Games tab made a game work, with what shows it, for the list of verified games.
+title: "[Works] "
+labels: ["fix-works"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A game goes on the verified list from what was played, never from what should work. What makes
+        a report count is that someone else could check it: the versions, what was played, and the report
+        file. **How to report** on [macgamefix.app](https://macgamefix.app/docs/reporting) walks you through it.
+
+        Until the app has a button for this, attach the report the **Report** tab saves for the game
+        (**Save the Report and Open an Issue…**) and copy the lines about the game from **Settings › Log**.
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      description: Its name, and its Steam app id if you know it.
+    validations:
+      required: true
+  - type: dropdown
+    id: runs
+    attributes:
+      label: Where it runs
+      options:
+        - A NotProton runner
+        - A CrossOver bottle
+        - Native macOS (no Wine)
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Graphics backend
+      options:
+        - D3DMetal
+        - DXMT
+        - DXVK / MoltenVK
+        - None (a macOS game)
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: MacGameFix, CrossOver or the NotProton runner and its build, Game Porting Toolkit (D3DMetal) if it applies, macOS, and your Mac's chip (M1, M2 Pro…).
+    validations:
+      required: true
+  - type: input
+    id: game-version
+    attributes:
+      label: The game's version
+      description: As the game or Steam shows it. A game update can make a fix match nothing.
+  - type: textarea
+    id: played
+    attributes:
+      label: What you played
+      description: Where in the game and for how long, and the moment the fix is for (the cutscene, the first video, the character select).
+    validations:
+      required: true
+  - type: dropdown
+    id: without
+    attributes:
+      label: Without the fix
+      description: Was it tried on the same setup with the fix removed? That is what shows the fix is what made the difference.
+      options:
+        - It fails the way the fix's page says
+        - It fails in another way (say how below)
+        - It works without it too
+        - Not tried
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: MacGameFix's log
+      description: The lines about this game from Settings › Log (copy them while the app is open), from the install to after you played, and the fix's own log from the game's folder if it writes one, such as mk11-face-fix.log.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: The report
+      description: Attach the file the app saved. It names this game alone, writes your home folder as ~ and leaves your Mac's name out.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots or a recording
+      description: The moment the fix is for, working. Optional, and worth more than a description.
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before you send it
+      options:
+        - label: I played it myself with the fix installed, on the versions above.
+          required: true
+        - label: The report and the log are from that session.
+          required: true
