@@ -48,7 +48,10 @@
       "fix": "NV12 put back on the menu, and one console variable found by its own name. **No addresses any more**",
       "backend": null,
       "crossover": "Stable 26.3, on an engine carrying **winevideo**'s `winegstreamer`. A plain 26.3 stalls after two frames",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Beast-of-Reincarnation.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Beast-of-Reincarnation.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "CONTROL Resonant",
@@ -97,7 +100,10 @@
       "fix": "Metal 4 off for this title; the pipelines built with `interiorPS` are created writing nothing",
       "backend": "**D3DMetal**, D3D12",
       "crossover": "Stable 26.3 with Game Porting Toolkit 4.0b2 (2026-09-26)",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Control-Resonant.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Control-Resonant.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": "4.0b3"
     },
     {
       "title": "Cyberpunk 2077",
@@ -140,7 +146,10 @@
       "fix": "Four bytes of the executable: `mov w0,#1` over the first instruction, at the offset its build's row in `cp2077-denoiser.recipes` names, and the app signed again ad hoc. The original is kept aside.",
       "backend": "None: the macOS version 2.5.0 runs natively, on an M3 or later.",
       "crossover": null,
-      "pageUrl": null
+      "pageUrl": null,
+      "graphicsBackend": null,
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "Devil May Cry 5",
@@ -185,7 +194,10 @@
       "fix": "The fix's own VC-1 reader in the game folder (`install-re-vc1-fix.sh`); the staged codec still works and is used first where present",
       "backend": "D3DMetal, D3D12",
       "crossover": "Stable 26.3 with the codec staged; CrossOver Preview 27 through NotProton with nothing staged (2026-10-14)",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/RE-Engine-VC1.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/RE-Engine-VC1.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "DYNASTY WARRIORS: ORIGINS",
@@ -234,7 +246,10 @@
       "fix": "A bridge in libxess.dll answers the shared handle of each decoded frame and carries it across to the D3D12 renderer. On CrossOver Preview 27 that is all it needs.",
       "backend": "D3DMetal",
       "crossover": "Preview 27 (2026-10-14)",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Dynasty-Warriors-Origins.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Dynasty-Warriors-Origins.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "God of War",
@@ -278,7 +293,10 @@
       "fix": "That depth test is created as GREATER_EQUAL",
       "backend": "**DXMT**, D3D11",
       "crossover": "Preview 27, through NotProton, under Rosetta and under FEX",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/God-of-War.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/God-of-War.md",
+      "graphicsBackend": "dxmt",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "KINGDOM HEARTS Dream Drop Distance",
@@ -328,7 +346,10 @@
       "fix": "Software decode, and the luma and chroma planes written straight into the game's own plane textures",
       "backend": "**D3DMetal**, D3D11 **and** D3D12",
       "crossover": "Stable 26.3, on a copy of it carrying this project's `winegstreamer` (2026-08-31)",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Kingdom-Hearts.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Kingdom-Hearts.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "KINGDOM HEARTS HD 1.5+2.5 ReMIX",
@@ -378,7 +399,10 @@
       "fix": "Software decode, and the luma and chroma planes written straight into the game's own plane textures",
       "backend": "**D3DMetal**, D3D11 **and** D3D12",
       "crossover": "Stable 26.3, on a copy of it carrying this project's `winegstreamer` (2026-08-31)",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Kingdom-Hearts.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Kingdom-Hearts.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "Life is Strange: Double Exposure",
@@ -416,7 +440,10 @@
       "fix": "Refuse them — the same DLL Reunion uses",
       "backend": null,
       "crossover": "Stable 26.3. **Freezes on the D3DMetal 3.0 that build ships**, with or without the fix; this title needs Game Porting Toolkit 4.0b2 — see below",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Life-is-Strange-Double-Exposure.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Life-is-Strange-Double-Exposure.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": "4",
+      "notNeededFromGptk": "4.0b3"
     },
     {
       "title": "Life is Strange: Reunion",
@@ -454,7 +481,10 @@
       "fix": "Refuse them, which is what Windows does",
       "backend": null,
       "crossover": "Stable 26.3. **Freezes on the D3DMetal 3.0 that build ships**, with or without the fix; this title needs Game Porting Toolkit 4.0b2 — see below",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Life-is-Strange-Reunion.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Life-is-Strange-Reunion.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": "4",
+      "notNeededFromGptk": "4.0b3"
     },
     {
       "title": "Marvel's Spider-Man 2",
@@ -513,7 +543,10 @@
       "fix": "macprotips': the wide R32 views made raw, and four shaders rebuilt raw from your own exe. Ours: no DLL override, and a UAV barrier after `CS_VolumetricFogCopy`",
       "backend": "**D3DMetal**, D3D12",
       "crossover": "Preview 27, through NotProton; M5 Macs do not have the limit",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Spider-Man-2.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Spider-Man-2.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "Mortal Kombat 11",
@@ -584,7 +617,10 @@
       "fix": "Every such view is created as an `R32_FLOAT` view three times as long, and the two morph shaders read a delta's three floats one by one",
       "backend": "**D3DMetal** with D3D12 (`MK11_DX12.exe`) and **DXMT** with D3D11 (`MK11.exe`): one install covers both, whichever Steam starts",
       "crossover": "Preview 27 through NotProton, Game Porting Toolkit 4.0b3 (2026-10-16 and 17)",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Mortal-Kombat-11.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Mortal-Kombat-11.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "Mortal Shell 2",
@@ -622,7 +658,10 @@
       "fix": "Runtime patch, **4 sites**, all four confirmed at runtime",
       "backend": null,
       "crossover": "Stable 26.3, played through both with winevideo and without",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Mortal-Shell-2.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Mortal-Shell-2.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": "4.0b3"
     },
     {
       "title": "NieR Replicant ver.1.22474487139",
@@ -667,7 +706,10 @@
       "fix": "Software decode, and the frame converted and written into the game's own target",
       "backend": "**D3DMetal**, D3D11",
       "crossover": "Stable 26.3, measured on a stock one, with Game Porting Toolkit 4.0b2; CrossOver Preview 27 through NotProton with nothing staged (2026-10-14)",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/NieR-Replicant.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/NieR-Replicant.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "NINJA GAIDEN 3: Razor's Edge",
@@ -718,7 +760,10 @@
       "fix": "Four DLLs in the prefix's system32 for this executable only: d9vk for Direct3D 9, and winevideo's qasf, quartz and winegstreamer for the movies. The prefix's own copies are kept aside.",
       "backend": "DXVK (d9vk), in a prefix",
       "crossover": "A patched CrossOver Preview 27 (27.0.0.40921), 2026-08-28",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Ninja-Gaiden-3-Razors-Edge.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Ninja-Gaiden-3-Razors-Edge.md",
+      "graphicsBackend": "dxvk",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "NINJA GAIDEN 4",
@@ -766,7 +811,10 @@
       "fix": "Stage `libgstmatroska` beside the decoder; answer the VP9 MFT gate and decode in software",
       "backend": "**D3DMetal**, D3D12",
       "crossover": "Stable 26.3.0.39832, measured on a stock install as well as on this project's patched engine; CrossOver Preview 27 through NotProton, with nothing staged (2026-10-14)",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Ninja-Gaiden-4.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Ninja-Gaiden-4.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": "3",
+      "notNeededFromGptk": null
     },
     {
       "title": "Nioh 2",
@@ -816,7 +864,10 @@
       "fix": "The fix's own WMV3 reader (or a staged decoder), then hand the game a share handle that exists",
       "backend": "**DXMT only.** The sidecar needs `GetSharedHandle`, `E_NOTIMPL` under D3DMetal",
       "crossover": "Stable 26.3, on a copy of it carrying this project's `winegstreamer` (2026-08-31); CrossOver Preview 27 through NotProton with nothing staged (2026-10-14)",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Nioh-2.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Nioh-2.md",
+      "graphicsBackend": "dxmt",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "Nioh 3",
@@ -871,7 +922,10 @@
       "fix": "The DYNASTY WARRIORS video bridge, on `amd_ags_x64.dll`",
       "backend": "**D3DMetal**, D3D12 — the opposite of Nioh and Nioh 2",
       "crossover": "Stable 26.3, on an engine carrying this project's `winegstreamer`; CrossOver Preview 27 through NotProton, with its VP9 decoded by the fix (2026-10-14)",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Nioh-3.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Nioh-3.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "Nioh",
@@ -921,7 +975,10 @@
       "fix": "The fix's own WMV3 reader (or a staged decoder), then hand the game a share handle that exists",
       "backend": "**DXMT only.** The sidecar needs `GetSharedHandle`, `E_NOTIMPL` under D3DMetal",
       "crossover": "Stable 26.3 (`cxoffice-26.3.0rc2`), with winevideo 0.5 in the bottle — 27 Aug 2026; CrossOver Preview 27 through NotProton with nothing staged (2026-10-14)",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Nioh.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Nioh.md",
+      "graphicsBackend": "dxmt",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "Persona 5 Strikers",
@@ -971,7 +1028,10 @@
       "fix": "The fix's own VC-1 and WMA Pro reader (or a staged VC-1 decoder), then bridge D3D9 to D3D11",
       "backend": "**DXMT only.** D3DMetal cannot produce a shared handle at all",
       "crossover": "Plays on stable 26.3 with the codec staged, and on CrossOver Preview 27 through NotProton with nothing staged (2026-10-14)",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Persona-5-Strikers.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Persona-5-Strikers.md",
+      "graphicsBackend": "dxmt",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "RESIDENT EVIL 2",
@@ -1016,7 +1076,10 @@
       "fix": "The fix's own VC-1 reader in the game folder (`install-re-vc1-fix.sh`); the staged codec still works and is used first where present",
       "backend": "D3DMetal, D3D12",
       "crossover": "Stable 26.3 with the codec staged; CrossOver Preview 27 through NotProton with nothing staged (2026-10-14)",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/RE-Engine-VC1.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/RE-Engine-VC1.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "RESIDENT EVIL 3",
@@ -1061,7 +1124,10 @@
       "fix": "The fix's own VC-1 reader in the game folder (`install-re-vc1-fix.sh`); the staged codec still works and is used first where present",
       "backend": "D3DMetal, D3D12",
       "crossover": "Stable 26.3 with the codec staged; CrossOver Preview 27 through NotProton with nothing staged (2026-10-14)",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/RE-Engine-VC1.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/RE-Engine-VC1.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "RESONANCE: A PLAGUE TALE LEGACY",
@@ -1098,7 +1164,10 @@
       "fix": "Lower the shader model floor to 6.6, in memory",
       "backend": "D3DMetal, D3D12",
       "crossover": "Stable 26.3 (`cxoffice-26.3.0rc2`), Game Porting Toolkit 3.0 and 4.0b2 alike",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Resonance-A-Plague-Tale-Legacy.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Resonance-A-Plague-Tale-Legacy.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": "4.0b3"
     },
     {
       "title": "The Witcher 3: Wild Hunt",
@@ -1153,7 +1222,10 @@
       "fix": "Refuse that pipeline; tell the one Streamline check that there is no Wine",
       "backend": "**D3DMetal**, D3D12, Metal 4 on",
       "crossover": "Stable 26.3 with Game Porting Toolkit 4.0b2 (2026-09-30)",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/The-Witcher-3.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/The-Witcher-3.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "TMNT: Splintered Fate",
@@ -1191,7 +1263,10 @@
       "fix": "Look in the container first, and answer for it when there is nothing to find",
       "backend": "**D3DMetal**, D3D12",
       "crossover": "Stable 26.3, on a copy of it carrying this project's `winegstreamer` (2026-08-31)",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/TMNT-Splintered-Fate.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/TMNT-Splintered-Fate.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "Tormented Souls 2",
@@ -1229,7 +1304,10 @@
       "fix": "Put 16:9 modes in the list the game reads",
       "backend": "**D3DMetal**, D3D12 (and D3D11 — it fails identically either way)",
       "crossover": "Stable 26.3 with Game Porting Toolkit 4.0b2 (2026-08-31). The measurements below were made on `crossover-preview-arm64-20260821`, which is no longer a supported engine",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Tormented-Souls-2.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Tormented-Souls-2.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
     },
     {
       "title": "Wo Long: Fallen Dynasty",
@@ -1278,7 +1356,10 @@
       "fix": "The DYNASTY WARRIORS bridge, on `libxess.dll`",
       "backend": "**D3DMetal**, D3D12",
       "crossover": "Stable 26.3, on a copy of it carrying this project's `winegstreamer` (2026-08-31)",
-      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Wo-Long-Fallen-Dynasty.md"
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Wo-Long-Fallen-Dynasty.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
     }
   ]
 }

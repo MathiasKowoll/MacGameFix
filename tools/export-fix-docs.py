@@ -12,6 +12,9 @@ where it already lives, so nothing is written twice:
     hand when the game is added and checked here against the installer;
   - the summary table at the top of the game's page under legacy/wiki (Symptom, Cause, Fix,
     Backend, CrossOver), unless the game's file says it otherwise;
+  - process-features.json, the app's own table by executable: the graphics backend, the Game
+    Porting Toolkit generation, and the one from which D3DMetal fixes the game by itself, so the
+    fix is no longer needed there;
   - the excerpts, cut out of the source by the name of the function, so they follow the code.
     A permalink pins each one to the last commit that changed its file.
 
@@ -27,6 +30,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GAMES = os.path.join(ROOT, 'docs', 'fixes', 'games')
 OUT = os.path.join(ROOT, 'docs', 'fixes', 'fixes.json')
+FEATURES = os.path.join(ROOT, 'process-features.json')
 REPO = 'https://github.com/MathiasKowoll/MacGameFix'
 TABLE_KEYS = {'Symptom': 'symptom', 'Cause': 'cause', 'Fix': 'fix', 'Backend': 'backend', 'CrossOver': 'crossover'}
 LANGUAGES = {'.c': 'c', '.h': 'c', '.sh': 'bash', '.py': 'python', '.pl': 'perl', '.hlsl': 'hlsl', '.recipes': 'text'}
@@ -93,7 +97,12 @@ def pinned(path):
     return git('log', '-1', '--format=%H', '--', rel)
 
 
-def game(file):
+def process_features():
+    with open(FEATURES, encoding='utf-8') as f:
+        return json.load(f)['processes']
+
+
+def game(file, features):
     with open(os.path.join(GAMES, file), encoding='utf-8') as f:
         d = json.load(f)
     parts = installer_line(d['installer'], d['title'])
@@ -105,6 +114,10 @@ def game(file):
     if not d.get('symptom'):
         fail(f'{file}: no symptom, in the file or in its page\'s table')
     d['pageUrl'] = f'{REPO}/blob/main/{d["page"]}' if d.get('page') else None
+    row = features.get(d.get('executable') or '', {})
+    d['graphicsBackend'] = row.get('backend') or None
+    d['gptk'] = row.get('gptk') or None
+    d['notNeededFromGptk'] = row.get('not_needed_from_gptk') or None
     excerpts = []
     for e in d.get('excerpts', []):
         first, last, code = cut(e['file'], e)
@@ -125,7 +138,8 @@ def game(file):
 
 
 def main():
-    games = [game(f) for f in sorted(os.listdir(GAMES)) if f.endswith('.json')]
+    features = process_features()
+    games = [game(f, features) for f in sorted(os.listdir(GAMES)) if f.endswith('.json')]
     text = json.dumps({'repository': REPO, 'games': games}, ensure_ascii=False, indent=2) + '\n'
     if '--check' in sys.argv:
         with open(OUT, encoding='utf-8') as f:

@@ -44,6 +44,10 @@ symptom, the cause and the fix are read from.
   `MGVF-GAME` line, and the export fails if they stop agreeing.
 - `symptom`, `cause` and `fix` come from the page's table. Write them in the
   file only where the page has none, or says it for several games at once.
+- `graphicsBackend`, `gptk` and `notNeededFromGptk` come from the app's
+  `process-features.json`, by executable. `notNeededFromGptk` is the Game
+  Porting Toolkit from which D3DMetal fixes the game by itself, measured with
+  every fix removed; the fix stays for anyone on an earlier one.
 - An excerpt names a function (`symbol`), or a range between two patterns
   (`from`, `to`) for a script or a recipe. It is cut from the source on every
   export, so it follows the code; nothing is pasted by hand.
