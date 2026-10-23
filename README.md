@@ -204,6 +204,7 @@ open Steam there (engine/README.md, "The options").
 | Devil May Cry 5 | Crashes when a skill preview plays | D3DMetal |
 | DYNASTY WARRIORS: ORIGINS | Cutscenes with sound and no picture | D3DMetal, CrossOver Preview 27 |
 | God of War | White specks on characters in dim light | DXMT |
+| God of War Ragnarök | Adaptive triggers never reach the pad | A DualSense or DualSense Edge, Bluetooth as a cable over Bluetooth |
 | KINGDOM HEARTS Dream Drop Distance | Cutscenes with a solid green picture; a crash dialog on exit | D3DMetal, a prefix |
 | KINGDOM HEARTS HD 1.5+2.5 ReMIX | The same, for the six titles of the package | D3DMetal, a prefix |
 | Life is Strange: Double Exposure | Freezes after a while | D3DMetal 4 |
@@ -377,6 +378,36 @@ with Microsoft's shader tools taken from the release of
 [SpiderMan2Fix](https://github.com/macprotips/SpiderMan2Fix). They are downloaded
 once, cached in `~/Library/Caches/MacGameVideoFix`, and checked against the
 verified result before anything is installed.
+
+### God of War Ragnarök sends its trigger effects to the pad
+
+Under Wine, Steam tells Ragnarök it runs on a Steam Deck, and on a Steam Deck the
+game never loads Sony's library: the adaptive-trigger effects it builds go to
+its own `scePadSetTriggerEffect` wrapper, which drops them. A probe counted 979
+in eight minutes on 2026-10-23, every one dropped. The fix puts a jump at that
+wrapper and writes each effect to the pad as the DualSense's own trigger effect,
+in an output report that carries only the trigger fields, so the rumble the
+game sends through XInput, or Steam through Steam Input, is left alone. It
+answers the game what the wrapper always answered, and on the game's exit it
+releases the triggers.
+
+- **Where it finds the code.** By the name the wrapper hands on: the one
+  function that loads the address of the string `scePadSetTriggerEffect` and
+  starts as the wrapper does. A game update that changed that code finds
+  nothing, and the game runs as it does without the fix; `gowr-triggers.log`
+  says so.
+- **Which pad.** A DualSense or an Edge shown with the wired output report,
+  which is what the Wine modules show on a cable and over Bluetooth with
+  *Bluetooth as a cable*. Over Bluetooth without it, nothing is written. The
+  Wine modules see the effect as the game's own, so a trigger effect chosen in
+  Game Feel gives way on that trigger.
+- **Played** on 2026-10-23 with Steam Input on and a DualSense Edge shown as a
+  DualSense over Bluetooth: L2's vibration near the end of its travel came
+  through. The effects seen in that play were all L2 vibration; R2 and the
+  other modes are converted the way Sony documents them and were not seen.
+  Not played on a cable, nor with a standard DualSense.
+- **Steam Input on** is this game's configuration: the game then takes its
+  controller and PlayStation buttons from Steam (see the vibration list).
 
 ### Cyberpunk 2077 changes four bytes of its app
 
@@ -707,6 +738,7 @@ how, is in the game's page under `legacy/wiki/`.
 | `install-re-vc1-fix.sh` | Devil May Cry 5, RESIDENT EVIL 2, RESIDENT EVIL 3 | `amd_ags_x64.dll` (from `amd_ags_x64-dmc5.dll`, or `amd_ags_x64-re2.dll` for both RE titles), and the reader | `mf-reader-fallback.c` | [RE Engine VC-1](legacy/wiki/RE-Engine-VC1.md) |
 | `install-dwo-bridge.sh` | DYNASTY WARRIORS: ORIGINS, Wo Long: Fallen Dynasty | `libxess.dll` | `dwo-video-bridge.c` | [DYNASTY WARRIORS: ORIGINS](legacy/wiki/Dynasty-Warriors-Origins.md), [Wo Long](legacy/wiki/Wo-Long-Fallen-Dynasty.md) |
 | `install-gow-fix.sh` | God of War | `libSceJobManager.dll` (from `libSceJobManager-gow.dll`) and `gow-depth-fix.ini` | `gow-depth-fix.c` | [God of War](legacy/wiki/God-of-War.md) |
+| `install-gowr-triggers.sh` | God of War Ragnarök | `bink2w64.dll` (from `bink2w64-gowr.dll`) | `gowr-triggers.c` | [Its section](#god-of-war-ragnarök-sends-its-trigger-effects-to-the-pad) |
 | `install-kh-bridge.sh` | KINGDOM HEARTS Dream Drop Distance, KINGDOM HEARTS HD 1.5+2.5 ReMIX | `dinput8.dll` (from `dinput8-kh.dll`); the original is the bottle's or prefix's own `dinput8`, copied beside it | `dwo-video-bridge.c` | [KINGDOM HEARTS](legacy/wiki/Kingdom-Hearts.md) |
 | `install-sm2-fix.sh` | Marvel's Spider-Man 2 | `amd_ags_x64.dll` (from `amd_ags_x64-sm2.dll`), and shaders rewritten from the game's own executable by `sm2-shadertool` | `sm2-tpose-fix.c` with `sm2fix_core.c`; the tool from `sm2-shadertool.c` and `sm2-shaderfix.c` | [Spider-Man 2](legacy/wiki/Spider-Man-2.md) |
 | `install-mk11-fix.sh` | Mortal Kombat 11 | `amd_ags_x64.dll` under `Binaries/Retail` (from `amd_ags_x64-mk11.dll`) | `mk11-face-fix.c` with `sm2fix_core.c`, `mk11-morph-shaders.h` (from `mk11-morph/`) and `mk11-movie.c` | [Mortal Kombat 11](legacy/wiki/Mortal-Kombat-11.md) |
