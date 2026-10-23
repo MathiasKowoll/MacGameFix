@@ -1,0 +1,33 @@
+{
+  "title": "KINGDOM HEARTS HD 1.5+2.5 ReMIX",
+  "installer": "install-kh-bridge.sh",
+  "scope": "folder",
+  "executable": "KINGDOM HEARTS HD 1.5+2.5 Launcher.exe",
+  "carrierDirectory": null,
+  "alsoRuns": [],
+  "summary": "Cutscenes run with sound and a solid green picture: the luma and chroma planes never reach the game's own textures. The same DLL also swallows the shutdown fault that makes Wine open a crash dialog when a launcher or a title closes, so one install fixes both.",
+  "page": "legacy/wiki/Kingdom-Hearts.md",
+  "installs": [
+    "bottles.sh",
+    "dinput8-kh.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "dwo-video-bridge.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [],
+  "excerpts": [
+    {
+      "file": "dwo-video-bridge.c",
+      "symbol": "strip_d3d_attributes",
+      "note": "The game asks for decode into D3D video textures; the reader gets a copy of its attributes without the two that ask for it, so it decodes in software."
+    },
+    {
+      "file": "dwo-video-bridge.c",
+      "symbol": "plane_write",
+      "note": "The decoded NV12 frame is written straight into the luma and chroma textures the game created, so its own shader has planes to convert."
+    }
+  ],
+  "cause": "The same as Dream Drop Distance: the game copies the two planes of a shared NV12 texture into its own textures, which D3DMetal cannot hand it, so the picture is solid green."
+}

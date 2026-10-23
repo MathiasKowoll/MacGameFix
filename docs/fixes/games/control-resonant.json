@@ -1,0 +1,31 @@
+{
+  "title": "CONTROL Resonant",
+  "installer": "install-ctl-fix.sh",
+  "scope": "folder",
+  "executable": "CONTROLResonant.exe",
+  "carrierDirectory": null,
+  "alsoRuns": [],
+  "summary": "Hides the window-interior shader D3DMetal draws as flat colours.",
+  "page": "legacy/wiki/Control-Resonant.md",
+  "installs": [
+    "PxFoundation_x64-ctl.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "ctl-window-fix.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [],
+  "excerpts": [
+    {
+      "file": "ctl-window-fix.c",
+      "symbol": "my_gfx",
+      "note": "The pipeline whose pixel shader draws the lit rooms behind windows is created with its colour writes muted, from a copy of the game's description."
+    },
+    {
+      "file": "ctl-window-fix.c",
+      "symbol": "mute",
+      "note": "Zeroes the write mask of each of the eight render targets in the blend description."
+    }
+  ]
+}

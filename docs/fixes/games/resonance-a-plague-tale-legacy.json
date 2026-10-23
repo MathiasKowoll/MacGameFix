@@ -1,0 +1,26 @@
+{
+  "title": "RESONANCE: A PLAGUE TALE LEGACY",
+  "installer": "install-resonance-fix.sh",
+  "scope": "folder",
+  "executable": "Resonance.exe",
+  "carrierDirectory": null,
+  "alsoRuns": [],
+  "summary": "Refuses to start: \"Shader Model 6.7 is not supported by this device\". It also turns HDR10 on by itself on a display it reads as HDR and starts to a black screen, so HDR10 0 goes into its ENGINESETTINGS file.",
+  "page": "legacy/wiki/Resonance-A-Plague-Tale-Legacy.md",
+  "installs": [
+    "NvCloth_x64-resonance.dll"
+  ],
+  "builtFrom": [
+    "shader-floor-fix.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [],
+  "excerpts": [
+    {
+      "file": "shader-floor-fix.c",
+      "symbol": "lower_the_floor",
+      "note": "Finds the one `cmp eax, 67h` that compares the shader model with 6.7 and makes it 6.6, in memory only; with any other number of matches it touches nothing."
+    }
+  ],
+  "cause": "D3DMetal reports Shader Model 6.6, because that is what it has, and the game refuses to start below 6.7."
+}

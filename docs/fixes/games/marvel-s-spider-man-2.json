@@ -1,0 +1,41 @@
+{
+  "title": "Marvel's Spider-Man 2",
+  "installer": "install-sm2-fix.sh",
+  "scope": "folder",
+  "executable": "Spider-Man2.exe",
+  "carrierDirectory": null,
+  "alsoRuns": [],
+  "summary": "Characters stay in a T-pose and the symbiote breaks on M1-M4 Macs: D3DMetal reads and writes typed buffers only to element 2^28.",
+  "page": "legacy/wiki/Spider-Man-2.md",
+  "installs": [
+    "amd_ags_x64-sm2.dll",
+    "pe.pl",
+    "sm2-shadertool"
+  ],
+  "builtFrom": [
+    "sm2-tpose-fix.c",
+    "sm2fix_core.c",
+    "sm2-shadertool.c",
+    "sm2-shaderfix.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [
+    {
+      "name": "macprotips",
+      "url": "https://github.com/macprotips/SpiderMan2Fix",
+      "note": "The diagnosis, the raw views and the four rewritten shaders (public domain). MacGameFix adds a carrier that needs no DLL override and a barrier after the volumetric fog copy."
+    }
+  ],
+  "excerpts": [
+    {
+      "file": "sm2-tpose-fix.c",
+      "symbol": "hk_CreateShaderResourceView",
+      "note": "macprotips': the wide R32 views past element 2^28 are created raw, which D3DMetal reads in full."
+    },
+    {
+      "file": "sm2-tpose-fix.c",
+      "symbol": "hk_Dispatch",
+      "note": "Ours: a UAV barrier after the volumetric fog copy, which removed the black blocks in the sandstorm stage."
+    }
+  ]
+}

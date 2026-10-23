@@ -1,0 +1,47 @@
+{
+  "title": "Mortal Kombat 11",
+  "installer": "install-mk11-fix.sh",
+  "scope": "folder",
+  "executable": "MK11_DX12.exe",
+  "carrierDirectory": "Binaries/Retail",
+  "alsoRuns": [
+    "MK11.exe"
+  ],
+  "summary": "Has the face morph read its three-float deltas the way D3DMetal and DXMT can, which removes the dark patches, and gives the movies their colours and their frame order back. DirectX 12 and 11 alike.",
+  "page": "legacy/wiki/Mortal-Kombat-11.md",
+  "installs": [
+    "amd_ags_x64-mk11.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "mk11-face-fix.c",
+    "sm2fix_core.c",
+    "mk11-morph-shaders.h",
+    "mk11-movie.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [
+    {
+      "name": "Anton Pavliuk",
+      "url": "https://github.com/CyberDogFK/mk11-crossover-fix",
+      "note": "Found and published first that the movie frames come out in decode order, and the reordering (MIT, DirectX 11 only); mk11-movie.c is a separate implementation."
+    }
+  ],
+  "excerpts": [
+    {
+      "file": "mk11-face-fix.c",
+      "symbol": "hk_CreateShaderResourceView",
+      "note": "The faces. Every three-float buffer view is created as a one-float view three times as long, which D3DMetal and DXMT both read correctly; the rewritten morph shaders then read a delta's three floats one by one."
+    },
+    {
+      "file": "mk11-movie.c",
+      "symbol": "movie_GetOutputAvailableType",
+      "note": "The colours. CrossOver's H.264 decoder leaves NV12 out of the types it offers, so the game took YV12 and drew it as NV12. NV12 is offered again, first."
+    },
+    {
+      "file": "mk11-movie.c",
+      "symbol": "hand_out",
+      "note": "The frame order. The decoder hands frames out in decode order; the fix holds them and hands out the one that comes first in display order."
+    }
+  ]
+}

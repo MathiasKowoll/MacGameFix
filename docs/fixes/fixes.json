@@ -1,0 +1,1365 @@
+{
+  "repository": "https://github.com/MathiasKowoll/MacGameFix",
+  "games": [
+    {
+      "title": "Beast of Reincarnation",
+      "installer": "install-runtime-fix.sh",
+      "scope": "folder",
+      "executable": "BeastOfReincarnation-Win64-Shipping.exe",
+      "carrierDirectory": "Engine/Binaries/ThirdParty/Ogg/Win64",
+      "alsoRuns": [],
+      "summary": "Unreal Engine 5 titles that crash on the first cutscene. The carrier sits under a compiler-named subfolder, which the script discovers rather than assumes.",
+      "page": "legacy/wiki/Beast-of-Reincarnation.md",
+      "installs": [
+        "libogg_64.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "ue5-media-fix.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "fixes/ue5-media-fix.c",
+          "symbol": "my_GetOutputAvailableType",
+          "note": "Electra asks the H.264 decoder for the types it can output; CrossOver's offers no NV12, so the fix puts NV12 back in the list.",
+          "language": "c",
+          "startLine": 456,
+          "endLine": 491,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/ue5-media-fix.c#L456-L491",
+          "code": "static HRESULT WINAPI my_GetOutputAvailableType(void *self, DWORD stream,\n                                                DWORD index, void **type)\n{\n    HRESULT hr = real_GetOutputAvailableType(self, stream, index, type);\n    if (SUCCEEDED(hr) && type && *type)\n    {\n        GUID sub;\n        if (type_subtype(*type, &sub))\n        {\n            char label[32];\n            snprintf(label, sizeof(label), \"offers type %lu\", index);\n            describe_subtype(label, &sub);\n\n            if (restore_nv12 && !IsEqualGUID(&sub, &guid_MFVideoFormat_NV12))\n            {\n                static LONG said;\n                if (type_set_subtype(*type, &guid_MFVideoFormat_NV12))\n                {\n                    if (InterlockedIncrement(&said) == 1)\n                        logf_(\"  -> relabelled as NV12, which is what Electra \"\n                              \"requires and what winegstreamer censored\");\n                }\n                else if (InterlockedIncrement(&said) == 1)\n                    logf_(\"  -> could NOT relabel to NV12\");\n            }\n        }\n        else\n            logf_(\"  offers type %lu (subtype unreadable)\", index);\n    }\n    else if (hr == 0xC00D36B9L)   /* MF_E_NO_MORE_TYPES */\n        logf_(\"  ...that is all it offers (%lu total). The game picks from \"\n              \"this list, and stops here if none will do.\", index);\n    else\n        logf_(\"GetOutputAvailableType(%lu) -> 0x%08lx\", index, hr);\n    return hr;\n}"
+        },
+        {
+          "file": "fixes/ue5-media-fix.c",
+          "symbol": "force_electra_software",
+          "note": "Sets Electra.Win.H264UseOldOutputPath, found by its own name rather than by an address, so Electra takes its CPU buffer path and never the D3D one.",
+          "language": "c",
+          "startLine": 1284,
+          "endLine": 1376,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/ue5-media-fix.c#L1284-L1376",
+          "code": "static void force_electra_software(void)\n{\n    BYTE *base = (BYTE *)GetModuleHandleA(NULL);\n    int done = 0;\n    if (electra_sw_forced || !base) return;\n    electra_sw_forced = TRUE;\n\n    read_switches();\n    logf_(\"putting Electra on its old output path\");\n\n    /* The two IsSoftware call sites used to be patched here, by address.\n     *\n     * They are gone, and nothing is read off a disassembly any more. The\n     * software path comes from the engine instead: winegstreamer patch 0006,\n     * carried from winevideo, stops advertising MF_SA_D3D_AWARE on macOS, so\n     * Electra never builds a D3D11 device and answers its own IsSoftware()\n     * honestly. That is in the engine this project ships and it does not move\n     * when the game does.\n     *\n     * Those addresses broke three times in sixteen days -- 2026-08-24,\n     * 08-31 and 09-08 -- and each time they took the console variable down\n     * with them, because the check refused before reaching it. The variable is\n     * found by name and never needed the addresses at all; that coupling was\n     * the actual defect, and this is where it ends.\n     *\n     * Measured 2026-09-09 on UE5-CL-408709: with the variable set and no byte\n     * patched anywhere, the video plays. Without the variable the title\n     * crashes in the D3D path, EXCEPTION_ACCESS_VIOLATION reading 0x0 -- so\n     * patch 0006 alone is not enough and the variable below is load-bearing. */\n\n    /* The console variable is a pointer read from a fixed address and written\n     * through -- a wild write on any build but the one it was read from, and\n     * that build is gone. Left alone until it is found the same way the calls\n     * were. */\n    /* The values live at object + 0x50, and that was read off the vtable\n     * rather than guessed.\n     *\n     * What the fixed address holds in this build is an IConsoleVariable, not\n     * the two plain ints the old code wrote -- its first qword is a pointer\n     * into .rdata, so writing 1 at offset zero would destroy the vtable and\n     * produce exactly the null dereference this afternoon was spent chasing.\n     *\n     * Its vtable says where the data is. Slot 12 is `lea rax,[rcx+0x50] ; ret`\n     * -- AsVariableInt returning the embedded TConsoleVariableData<int32> --\n     * and slot 8 is `mov al,1 ; ret`, which is the \"this is an int variable\"\n     * answer. So the two int32s the old build had at offset zero are at 0x50\n     * here, and the old write is right about what to set and wrong only about\n     * where.\n     *\n     * Read before writing anyway: the default is 0, so anything else means\n     * this is not what it is thought to be, and then nothing is touched. */\n    {\n        void **slot = find_cvar_slot(base);\n        void *obj;\n        if (!slot)\n        {\n            /* There is no falling back to a remembered address any more. What\n             * made that safe was the call-site check proving this was the build\n             * the address came from, and that check is gone. A remembered\n             * address on a build it was not read from is a wild write. */\n            logf_(\"  the console variable was not found by name -- doing nothing\");\n            return;\n        }\n        obj = *slot;\n        if (!obj)\n        {\n            logf_(\"  console variable not registered yet\");\n        }\n        else\n        {\n            int *values = (int *)((BYTE *)obj + CVAR_VALUES_OFFSET);\n            logf_(\"  console variable at %p, values at +0x%X currently [%d, %d]\",\n                  obj, (unsigned)CVAR_VALUES_OFFSET, values[0], values[1]);\n            if (!opt_cvar)\n                logf_(\"    left at [%d, %d], by switch -- Electra keeps whichever \"\n                      \"output path it chooses for itself\", values[0], values[1]);\n            else if (values[0] == 0 && values[1] == 0)\n            {\n                values[0] = 1;\n                values[1] = 1;\n                cvar_ready = TRUE;\n                logf_(\"    set to 1 -- Electra takes the old CPU buffer path, \"\n                      \"which stores the sample instead of querying for a D3D \"\n                      \"resource that is not there\");\n            }\n            else\n                logf_(\"    left alone: the default for this variable is 0, so \"\n                      \"this is not the field it is thought to be\");\n        }\n    }\n\n    if (!done) logf_(\"nothing was patched\");\n}"
+        }
+      ],
+      "cause": "Electra plays the H.264 video through a Media Foundation decoder that offers no NV12 on CrossOver, so the picture never reaches the screen.",
+      "symptom": "Sound plays, picture never appears. No crash on a stock engine",
+      "fix": "NV12 put back on the menu, and one console variable found by its own name. **No addresses any more**",
+      "backend": null,
+      "crossover": "Stable 26.3, on an engine carrying **winevideo**'s `winegstreamer`. A plain 26.3 stalls after two frames",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Beast-of-Reincarnation.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "CONTROL Resonant",
+      "installer": "install-ctl-fix.sh",
+      "scope": "folder",
+      "executable": "CONTROLResonant.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "Hides the window-interior shader D3DMetal draws as flat colours.",
+      "page": "legacy/wiki/Control-Resonant.md",
+      "installs": [
+        "PxFoundation_x64-ctl.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "ctl-window-fix.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "fixes/ctl-window-fix.c",
+          "symbol": "my_gfx",
+          "note": "The pipeline whose pixel shader draws the lit rooms behind windows is created with its colour writes muted, from a copy of the game's description.",
+          "language": "c",
+          "startLine": 138,
+          "endLine": 154,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/ctl-window-fix.c#L138-L154",
+          "code": "static HRESULT WINAPI my_gfx(void *dev, const void *desc, REFIID iid, void **out)\n{\n    unsigned long long h;\n    if (desc && is_hidden(*(void *const *)((const char *)desc + 24), *(const SIZE_T *)((const char *)desc + 32), &h))\n    {\n        /* sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC) on x64: no more is read. */\n        char copy[656];\n        HRESULT hr;\n        memcpy(copy, desc, sizeof(copy));\n        mute(copy + 120);\n        hr = real_gfx(dev, copy, iid, out);\n        InterlockedIncrement(&muted);\n        logline(\"interiorPS %016llx hidden (graphics) -> %08lx\", h, (unsigned long)hr);\n        return hr;\n    }\n    return real_gfx(dev, desc, iid, out);\n}"
+        },
+        {
+          "file": "fixes/ctl-window-fix.c",
+          "symbol": "mute",
+          "note": "Zeroes the write mask of each of the eight render targets in the blend description.",
+          "language": "c",
+          "startLine": 102,
+          "endLine": 106,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/ctl-window-fix.c#L102-L106",
+          "code": "static void mute(char *blend)\n{\n    int i;\n    for (i = 0; i < 8; i++) ((unsigned char *)blend)[8 + i * 40 + 36] = 0;\n}"
+        }
+      ],
+      "symptom": "Faces and hair render as black boxes; the lit rooms behind windows show as flat violet, cyan and yellow, spreading to neighbouring windows as the camera moves",
+      "cause": "Faces: Metal 4 on. Windows: one pixel shader, `interiorPS`, whose non-uniform texture read D3DMetal runs as uniform, plus a second fault, outside the shaders, that shows up after about a minute of play",
+      "fix": "Metal 4 off for this title; the pipelines built with `interiorPS` are created writing nothing",
+      "backend": "**D3DMetal**, D3D12",
+      "crossover": "Stable 26.3 with Game Porting Toolkit 4.0b2 (2026-09-26)",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Control-Resonant.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": "4.0b3"
+    },
+    {
+      "title": "Cyberpunk 2077",
+      "installer": "install-cp2077-denoiser.sh",
+      "scope": "app",
+      "executable": "Cyberpunk2077",
+      "carrierDirectory": "Cyberpunk2077.app/Contents/MacOS",
+      "alsoRuns": [],
+      "summary": "Writes the one instruction that makes the game offer the MetalFX denoiser it ships, and signs its app again ad hoc. M3 or later.",
+      "page": null,
+      "installs": [
+        "cp2077-denoiser.recipes"
+      ],
+      "builtFrom": [
+        "cp2077-denoiser.recipes"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [
+        {
+          "name": "An anonymous community script",
+          "url": null,
+          "note": "The patch comes from it; MacGameFix writes one of its five words."
+        }
+      ],
+      "excerpts": [
+        {
+          "file": "fixes/cp2077-denoiser.recipes",
+          "symbol": null,
+          "note": "The recipe for 2.5.0: the build, the executable's hash, the offset, the four bytes there (mov w0,#0) and the four written (mov w0,#1), and the hash after.",
+          "language": "text",
+          "startLine": 19,
+          "endLine": 20,
+          "commit": "0a0322b02b63c8b5b17916d8e661db9ad24fe2e8",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/0a0322b02b63c8b5b17916d8e661db9ad24fe2e8/fixes/cp2077-denoiser.recipes#L19-L20",
+          "code": "# 2.5.0, Steam build 26133166; made and checked on 2026-10-22.\n5814786 1d3c32db2fa9150b9c164eaea1fe678b99d244e705de737999a932487a63bcee 0x1494640 00008052 20008052 c9a89e134ec00af6890609f50fe5b66d86d8ee68c1a3918085a00f8a942d3fd0"
+        }
+      ],
+      "symptom": "The MetalFX denoiser the Mac version ships (MTLFXTemporalDenoisedScaler) is never offered in the settings.",
+      "cause": "The renderer answers \"not supported\" from a method of two instructions, `mov w0,#0; ret`.",
+      "fix": "Four bytes of the executable: `mov w0,#1` over the first instruction, at the offset its build's row in `cp2077-denoiser.recipes` names, and the app signed again ad hoc. The original is kept aside.",
+      "backend": "None: the macOS version 2.5.0 runs natively, on an M3 or later.",
+      "crossover": null,
+      "pageUrl": null,
+      "graphicsBackend": null,
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "Devil May Cry 5",
+      "installer": "install-re-vc1-fix.sh",
+      "scope": "folder",
+      "executable": "DevilMayCry5.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "Crashes when a VC-1 video plays; the fix decodes it itself where the engine cannot.",
+      "page": "legacy/wiki/RE-Engine-VC1.md",
+      "installs": [
+        "amd_ags_x64-dmc5.dll",
+        "amd_ags_x64-re2.dll",
+        "mgvf-asf-reader-LICENCES.md",
+        "mgvf-asf-reader.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "mf-reader-fallback.c",
+        "asf-reader.c",
+        "wmv-dmo.c",
+        "wm-reader.c",
+        "dshow-graph.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "fixes/mf-reader-fallback.c",
+          "symbol": "my_create",
+          "note": "When Media Foundation refuses a video (VC-1 in ASF, which no CrossOver decodes), the stream is handed to the fix's own ASF reader instead.",
+          "language": "c",
+          "startLine": 109,
+          "endLine": 125,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/mf-reader-fallback.c#L109-L125",
+          "code": "static HRESULT WINAPI my_create(void *stream, void *attrs, void **reader)\n{\n    static LONG calls, ours;\n    HRESULT hr = real_create(stream, attrs, reader);\n    LONG n = InterlockedIncrement(&calls);\n    if (n == 1) logf_(\"MFCreateSourceReaderFromByteStream -> 0x%08lx (first call)\", hr);\n    if (FAILED(hr) && stream && reader && load_asf_reader_())\n    {\n        HRESULT mine = asf_reader_create(stream, attrs, reader);\n        LONG k = InterlockedIncrement(&ours);\n        if (k <= 5 || FAILED(mine))\n            logf_(\"Media Foundation refused a stream (0x%08lx); our ASF reader -> 0x%08lx (%ld so far)\",\n                  hr, mine, k);\n        if (SUCCEEDED(mine)) hr = mine;\n    }\n    return hr;\n}"
+        }
+      ],
+      "symptom": "Crashes when a particular video plays. In Devil May Cry 5 it is the skill previews on the Customize screen",
+      "cause": "The video is VC-1, and CrossOver ships no VC-1 decoder",
+      "fix": "The fix's own VC-1 reader in the game folder (`install-re-vc1-fix.sh`); the staged codec still works and is used first where present",
+      "backend": "D3DMetal, D3D12",
+      "crossover": "Stable 26.3 with the codec staged; CrossOver Preview 27 through NotProton with nothing staged (2026-10-14)",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/RE-Engine-VC1.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "DYNASTY WARRIORS: ORIGINS",
+      "installer": "install-dwo-bridge.sh",
+      "scope": "folder",
+      "executable": "DWORIGINS.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "The player needs D3D11 video interfaces D3DMetal lacks, and the decoded frame carried across to its D3D12 renderer.",
+      "page": "legacy/wiki/Dynasty-Warriors-Origins.md",
+      "installs": [
+        "libxess.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "dwo-video-bridge.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "fixes/dwo-video-bridge.c",
+          "symbol": "d3d12_open_shared_handle",
+          "note": "The D3D12 renderer opens the handle of a frame decoded on the D3D11 device; the bridge answers with a texture on the game's own device that carries the frame across.",
+          "language": "c",
+          "startLine": 2163,
+          "endLine": 2215,
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L2163-L2215",
+          "code": "static HRESULT WINAPI d3d12_open_shared_handle(void *self, HANDLE handle,\n                                               REFIID iid, void **out)\n{\n    {\n        static LONG told;\n        if (InterlockedIncrement(&told) <= 12)\n            logf_(\"D3D12 OpenSharedHandle %p %s%s\", handle, guid_text_(iid),\n                  handle == BRIDGE_HANDLE ? \"   << ours\" : \"\");\n    }\n    if (handle == BRIDGE_HANDLE)\n    {\n        HRESULT hr;\n        if (!out) return E_INVALIDARG;\n        *out = NULL;\n        if (!IsEqualGUID(iid, &IID_ID3D12Resource)) return E_NOINTERFACE;\n\n        EnterCriticalSection(&frame_lock);\n        /* A new clip of another size: the game has made a new texture and is\n         * opening it now, so this is the one moment the bridge can change size.\n         * Handing back the old one leaves the game drawing from a texture no\n         * frame of this clip can be written into. */\n        if (bridge_texture && frame_width && frame_height &&\n            (texture_width != frame_width || texture_height != frame_height))\n        {\n            logf_(\"bridge: the game opens a %ux%u clip on a %ux%u bridge; rebuilding\",\n                  frame_width, frame_height, texture_width, texture_height);\n            bridge_destroy();\n        }\n        if (!bridge_texture && frame_width && frame_height)\n        {\n            /*\n             * The size the game asked to share, when it said one.\n             *\n             * The handle it passes belongs to a texture it created itself, and\n             * what comes back has to describe that texture -- not the clip.\n             * Kingdom Hearts shares a 2048x1080 surface to carry a 1920x1080\n             * frame, so a texture built to the clip's size is the wrong\n             * resource under the same handle, and what the game copies out of\n             * it is not a picture.\n             */\n            bridge_create((ID3D12Device *)self, frame_width, frame_height);\n        }\n        hr = bridge_texture ? S_OK : E_FAIL;\n        if (bridge_texture)\n        {\n            ID3D12Resource_AddRef(bridge_texture);\n            *out = bridge_texture;\n        }\n        LeaveCriticalSection(&frame_lock);\n        return hr;\n    }\n    return real_open_shared_handle(self, handle, iid, out);\n}"
+        },
+        {
+          "file": "fixes/dwo-video-bridge.c",
+          "symbol": "res_get_shared_handle",
+          "note": "On the D3D11 side IDXGIResource::GetSharedHandle returns E_NOTIMPL; the bridge hands out a handle of its own that the D3D12 side recognises.",
+          "language": "c",
+          "startLine": 1863,
+          "endLine": 1884,
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L1863-L1884",
+          "code": "static HRESULT WINAPI res_get_shared_handle(void *self, HANDLE *handle)\n{\n    HRESULT hr = real_res_get_shared_handle(self, handle);\n    {\n        static LONG told;\n        if (InterlockedIncrement(&told) <= 12)\n            logf_(\"GetSharedHandle -> 0x%08lx%s\", (unsigned long)hr,\n                  (FAILED(hr) && d3d12_bridge_armed) ? \"   (answering BRIDGE_HANDLE)\" : \"\");\n    }\n    /*\n     * Only invent a handle if the side that can recognise it is armed.\n     *\n     * BRIDGE_HANDLE is meaningful to d3d12_open_shared_handle and to nothing\n     * else. Handing it out while that hook is missing turns a clean failure --\n     * the game learns it cannot share, and says so -- into a real D3D12 device\n     * dereferencing 0xD3D12B21D. Nioh 3 crashed exactly that way, because its\n     * D3D12 arrives through Streamline and the hook had not been placed there\n     * yet. Reporting the original failure is the safe answer.\n     */\n    if (FAILED(hr) && handle && d3d12_bridge_armed) { *handle = BRIDGE_HANDLE; return S_OK; }\n    return hr;\n}"
+        }
+      ],
+      "symptom": "Cutscenes play with sound and subtitles, and a black picture.",
+      "cause": "The cutscenes are WebM (VP9) decoded by IMFSourceReader on a separate D3D11 device and presented by a D3D12 renderer: the frame never reaches the renderer, and a stock CrossOver 26.3 ships no demuxer that opens a WebM.",
+      "fix": "A bridge in libxess.dll answers the shared handle of each decoded frame and carries it across to the D3D12 renderer. On CrossOver Preview 27 that is all it needs.",
+      "backend": "D3DMetal",
+      "crossover": "Preview 27 (2026-10-14)",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Dynasty-Warriors-Origins.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "God of War",
+      "installer": "install-gow-fix.sh",
+      "scope": "folder",
+      "executable": "GoW.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "White specks on characters in dim light: an EQUAL depth test after a prepass, which the translated shaders do not match bit for bit.",
+      "page": "legacy/wiki/God-of-War.md",
+      "installs": [
+        "libSceJobManager-gow.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "gow-depth-fix.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [
+        {
+          "name": "The author of \"God Of War 2018 White Dot Fix (through Crossover)\" on r/macgaming",
+          "url": null,
+          "note": "Found the depth test behind the white specks."
+        }
+      ],
+      "excerpts": [
+        {
+          "file": "fixes/gow-depth-fix.c",
+          "symbol": "hk_CreateDepthStencilState",
+          "note": "Every depth state that tests EQUAL is created with the replacement test read from gow-depth-fix.ini, which removes the white specks.",
+          "language": "c",
+          "startLine": 158,
+          "endLine": 177,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/gow-depth-fix.c#L158-L177",
+          "code": "static HRESULT STDMETHODCALLTYPE hk_CreateDepthStencilState(ID3D11Device *device,\n        const D3D11_DEPTH_STENCIL_DESC *desc, ID3D11DepthStencilState **state)\n{\n    HRESULT (STDMETHODCALLTYPE *orig)(ID3D11Device *, const D3D11_DEPTH_STENCIL_DESC *, ID3D11DepthStencilState **)\n            = orig_fn(device, DEV_IDX(CreateDepthStencilState));\n    D3D11_DEPTH_STENCIL_DESC changed;\n\n    if (!desc || !desc->DepthEnable || desc->DepthFunc != D3D11_COMPARISON_EQUAL)\n        return orig(device, desc, state);\n    if (InterlockedIncrement(&g_equal_seen) <= 16)\n        log_msg(\"EQUAL depth state: depth writes %s, stencil %s%s\",\n                desc->DepthWriteMask == D3D11_DEPTH_WRITE_MASK_ALL ? \"on\" : \"off\",\n                desc->StencilEnable ? \"on\" : \"off\", g_equal_to ? \", created with the replacement test\" : \"\");\n    if (!g_equal_to)\n        return orig(device, desc, state);\n    changed = *desc;\n    changed.DepthFunc = g_equal_to;\n    InterlockedIncrement(&g_changed);\n    return orig(device, &changed, state);\n}"
+        }
+      ],
+      "symptom": "White specks all over the characters, Kratos first, in dim light",
+      "cause": "The G-buffer pass tests depth with EQUAL against a depth prepass, and the translated shaders do not reproduce the prepass depth to the last bit",
+      "fix": "That depth test is created as GREATER_EQUAL",
+      "backend": "**DXMT**, D3D11",
+      "crossover": "Preview 27, through NotProton, under Rosetta and under FEX",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/God-of-War.md",
+      "graphicsBackend": "dxmt",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "KINGDOM HEARTS Dream Drop Distance",
+      "installer": "install-kh-bridge.sh",
+      "scope": "folder",
+      "executable": "KINGDOM HEARTS Dream Drop Distance.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "Cutscenes run with sound and a solid green picture: the luma and chroma planes never reach the game's own textures. The same DLL also swallows the shutdown fault that makes Wine open a crash dialog when a launcher or a title closes, so one install fixes both.",
+      "page": "legacy/wiki/Kingdom-Hearts.md",
+      "installs": [
+        "bottles.sh",
+        "dinput8-kh.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "dwo-video-bridge.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "fixes/dwo-video-bridge.c",
+          "symbol": "strip_d3d_attributes",
+          "note": "The game asks for decode into D3D video textures; the reader gets a copy of its attributes without the two that ask for it, so it decodes in software.",
+          "language": "c",
+          "startLine": 1508,
+          "endLine": 1524,
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L1508-L1524",
+          "code": "static IMFAttributes *strip_d3d_attributes(IMFAttributes *attrs)\n{\n    IMFAttributes *plain = NULL;\n    UINT32 count = 0;\n\n    if (!attrs || !real_MFCreateAttributes) return NULL;\n    IMFAttributes_GetCount(attrs, &count);\n    if (SUCCEEDED(real_MFCreateAttributes(&plain, count + 2)) && plain\n        && SUCCEEDED(IMFAttributes_CopyAllItems(attrs, plain)))\n    {\n        IMFAttributes_DeleteItem(plain, &MF_SOURCE_READER_D3D_MANAGER);\n        IMFAttributes_DeleteItem(plain, &MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS);\n        return plain;\n    }\n    if (plain) IMFAttributes_Release(plain);\n    return NULL;\n}"
+        },
+        {
+          "file": "fixes/dwo-video-bridge.c",
+          "symbol": "plane_write",
+          "note": "The decoded NV12 frame is written straight into the luma and chroma textures the game created, so its own shader has planes to convert.",
+          "language": "c",
+          "startLine": 2112,
+          "endLine": 2161,
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L2112-L2161",
+          "code": "static void plane_write(const BYTE *nv12, UINT stride, UINT width, UINT height)\n{\n    D3D12_TEXTURE_COPY_LOCATION dst = { 0 }, src = { 0 };\n    const BYTE *uv = nv12 + (size_t)stride * height;\n    BYTE *mapped = NULL;\n    UINT y;\n\n    if (!plane_ready || !bridge_list || !bridge_queue) return;\n    /*\n     * Copy the planes' geometry, not the frame's.\n     *\n     * The footprints were computed from the descriptors captured when the pair\n     * was created. If a later clip is larger and the game has not yet made a\n     * new pair, writing the frame's rows into those footprints runs off the end\n     * of the upload buffer. Refusing is the right answer: the next pair the\n     * game creates re-arms this.\n     */\n    if (width != plane_y_desc.Width || height != plane_y_desc.Height) return;\n    if (FAILED(ID3D12Resource_Map(plane_upload, 0, NULL, (void **)&mapped)) || !mapped)\n        return;\n    for (y = 0; y < height; ++y)\n        memcpy(mapped + plane_y_fp.Offset + (size_t)y * plane_y_fp.Footprint.RowPitch,\n               nv12 + (size_t)y * stride, width);\n    for (y = 0; y < height / 2; ++y)\n        memcpy(mapped + plane_uv_fp.Offset + (size_t)y * plane_uv_fp.Footprint.RowPitch,\n               uv + (size_t)y * stride, width);\n    ID3D12Resource_Unmap(plane_upload, 0, NULL);\n\n    ID3D12CommandAllocator_Reset(bridge_alloc);\n    ID3D12GraphicsCommandList_Reset(bridge_list, bridge_alloc, NULL);\n    src.pResource = plane_upload;\n    src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;\n    dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;\n    dst.pResource = plane_y;  src.PlacedFootprint = plane_y_fp;\n    ID3D12GraphicsCommandList_CopyTextureRegion(bridge_list, &dst, 0, 0, 0, &src, NULL);\n    dst.pResource = plane_uv; src.PlacedFootprint = plane_uv_fp;\n    ID3D12GraphicsCommandList_CopyTextureRegion(bridge_list, &dst, 0, 0, 0, &src, NULL);\n    ID3D12GraphicsCommandList_Close(bridge_list);\n    ID3D12CommandQueue_ExecuteCommandLists(bridge_queue, 1,\n            (ID3D12CommandList *const *)&bridge_list);\n\n    ++bridge_fence_value;\n    if (SUCCEEDED(ID3D12CommandQueue_Signal(bridge_queue, bridge_fence, bridge_fence_value))\n        && ID3D12Fence_GetCompletedValue(bridge_fence) < bridge_fence_value\n        && bridge_event)\n    {\n        ID3D12Fence_SetEventOnCompletion(bridge_fence, bridge_fence_value, bridge_event);\n        WaitForSingleObject(bridge_event, 1000);\n    }\n}"
+        }
+      ],
+      "cause": "The game opens the decoded NV12 texture in D3D12 through a shared handle and copies its two planes into textures of its own; asking D3DMetal for NV12 is fatal, and a frame in any other format leaves those planes empty, which is the solid green.",
+      "symptom": "Cutscene runs with sound, picture solid green",
+      "fix": "Software decode, and the luma and chroma planes written straight into the game's own plane textures",
+      "backend": "**D3DMetal**, D3D11 **and** D3D12",
+      "crossover": "Stable 26.3, on a copy of it carrying this project's `winegstreamer` (2026-08-31)",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Kingdom-Hearts.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "KINGDOM HEARTS HD 1.5+2.5 ReMIX",
+      "installer": "install-kh-bridge.sh",
+      "scope": "folder",
+      "executable": "KINGDOM HEARTS HD 1.5+2.5 Launcher.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "Cutscenes run with sound and a solid green picture: the luma and chroma planes never reach the game's own textures. The same DLL also swallows the shutdown fault that makes Wine open a crash dialog when a launcher or a title closes, so one install fixes both.",
+      "page": "legacy/wiki/Kingdom-Hearts.md",
+      "installs": [
+        "bottles.sh",
+        "dinput8-kh.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "dwo-video-bridge.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "fixes/dwo-video-bridge.c",
+          "symbol": "strip_d3d_attributes",
+          "note": "The game asks for decode into D3D video textures; the reader gets a copy of its attributes without the two that ask for it, so it decodes in software.",
+          "language": "c",
+          "startLine": 1508,
+          "endLine": 1524,
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L1508-L1524",
+          "code": "static IMFAttributes *strip_d3d_attributes(IMFAttributes *attrs)\n{\n    IMFAttributes *plain = NULL;\n    UINT32 count = 0;\n\n    if (!attrs || !real_MFCreateAttributes) return NULL;\n    IMFAttributes_GetCount(attrs, &count);\n    if (SUCCEEDED(real_MFCreateAttributes(&plain, count + 2)) && plain\n        && SUCCEEDED(IMFAttributes_CopyAllItems(attrs, plain)))\n    {\n        IMFAttributes_DeleteItem(plain, &MF_SOURCE_READER_D3D_MANAGER);\n        IMFAttributes_DeleteItem(plain, &MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS);\n        return plain;\n    }\n    if (plain) IMFAttributes_Release(plain);\n    return NULL;\n}"
+        },
+        {
+          "file": "fixes/dwo-video-bridge.c",
+          "symbol": "plane_write",
+          "note": "The decoded NV12 frame is written straight into the luma and chroma textures the game created, so its own shader has planes to convert.",
+          "language": "c",
+          "startLine": 2112,
+          "endLine": 2161,
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L2112-L2161",
+          "code": "static void plane_write(const BYTE *nv12, UINT stride, UINT width, UINT height)\n{\n    D3D12_TEXTURE_COPY_LOCATION dst = { 0 }, src = { 0 };\n    const BYTE *uv = nv12 + (size_t)stride * height;\n    BYTE *mapped = NULL;\n    UINT y;\n\n    if (!plane_ready || !bridge_list || !bridge_queue) return;\n    /*\n     * Copy the planes' geometry, not the frame's.\n     *\n     * The footprints were computed from the descriptors captured when the pair\n     * was created. If a later clip is larger and the game has not yet made a\n     * new pair, writing the frame's rows into those footprints runs off the end\n     * of the upload buffer. Refusing is the right answer: the next pair the\n     * game creates re-arms this.\n     */\n    if (width != plane_y_desc.Width || height != plane_y_desc.Height) return;\n    if (FAILED(ID3D12Resource_Map(plane_upload, 0, NULL, (void **)&mapped)) || !mapped)\n        return;\n    for (y = 0; y < height; ++y)\n        memcpy(mapped + plane_y_fp.Offset + (size_t)y * plane_y_fp.Footprint.RowPitch,\n               nv12 + (size_t)y * stride, width);\n    for (y = 0; y < height / 2; ++y)\n        memcpy(mapped + plane_uv_fp.Offset + (size_t)y * plane_uv_fp.Footprint.RowPitch,\n               uv + (size_t)y * stride, width);\n    ID3D12Resource_Unmap(plane_upload, 0, NULL);\n\n    ID3D12CommandAllocator_Reset(bridge_alloc);\n    ID3D12GraphicsCommandList_Reset(bridge_list, bridge_alloc, NULL);\n    src.pResource = plane_upload;\n    src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;\n    dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;\n    dst.pResource = plane_y;  src.PlacedFootprint = plane_y_fp;\n    ID3D12GraphicsCommandList_CopyTextureRegion(bridge_list, &dst, 0, 0, 0, &src, NULL);\n    dst.pResource = plane_uv; src.PlacedFootprint = plane_uv_fp;\n    ID3D12GraphicsCommandList_CopyTextureRegion(bridge_list, &dst, 0, 0, 0, &src, NULL);\n    ID3D12GraphicsCommandList_Close(bridge_list);\n    ID3D12CommandQueue_ExecuteCommandLists(bridge_queue, 1,\n            (ID3D12CommandList *const *)&bridge_list);\n\n    ++bridge_fence_value;\n    if (SUCCEEDED(ID3D12CommandQueue_Signal(bridge_queue, bridge_fence, bridge_fence_value))\n        && ID3D12Fence_GetCompletedValue(bridge_fence) < bridge_fence_value\n        && bridge_event)\n    {\n        ID3D12Fence_SetEventOnCompletion(bridge_fence, bridge_fence_value, bridge_event);\n        WaitForSingleObject(bridge_event, 1000);\n    }\n}"
+        }
+      ],
+      "cause": "The same as Dream Drop Distance: the game copies the two planes of a shared NV12 texture into its own textures, which D3DMetal cannot hand it, so the picture is solid green.",
+      "symptom": "Cutscene runs with sound, picture solid green",
+      "fix": "Software decode, and the luma and chroma planes written straight into the game's own plane textures",
+      "backend": "**D3DMetal**, D3D11 **and** D3D12",
+      "crossover": "Stable 26.3, on a copy of it carrying this project's `winegstreamer` (2026-08-31)",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Kingdom-Hearts.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "Life is Strange: Double Exposure",
+      "installer": "install-runtime-fix.sh",
+      "scope": "folder",
+      "executable": "Chronos-Win64-Shipping.exe",
+      "carrierDirectory": "Engine/Binaries/ThirdParty/Ogg/Win64",
+      "alsoRuns": [],
+      "summary": "Unreal Engine 5 titles that crash on the first cutscene. The carrier sits under a compiler-named subfolder, which the script discovers rather than assumes.",
+      "page": "legacy/wiki/Life-is-Strange-Double-Exposure.md",
+      "installs": [
+        "libogg_64.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "ue5-media-fix.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "fixes/ue5-media-fix.c",
+          "symbol": "guarded_query_vram",
+          "note": "One GPU is one node: any other node index is refused with DXGI_ERROR_INVALID_CALL, which is what Windows returns and what ends the caller's walk.",
+          "language": "c",
+          "startLine": 2297,
+          "endLine": 2315,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/ue5-media-fix.c#L2297-L2315",
+          "code": "static HRESULT WINAPI guarded_query_vram(void *self, UINT node,\n                                         DXGI_MEMORY_SEGMENT_GROUP group,\n                                         DXGI_QUERY_VIDEO_MEMORY_INFO *info)\n{\n    /* One GPU means one node, so zero is the only valid index, and\n     * DXGI_ERROR_INVALID_CALL is what Windows returns past the end. */\n    {\n        static LONG asked;\n        if (InterlockedIncrement(&asked) == 1)\n            logf_(\"node guard: the adapter was asked for video memory (node %u) -- the walk reached us\", node);\n    }\n    if (node != 0)\n    {\n        if (InterlockedIncrement(&refusals) == 1)\n            logf_(\"node %u does not exist -- refused, which ends the caller's walk\", node);\n        return DXGI_ERROR_INVALID_CALL;\n    }\n    return real_query_vram(self, node, group, info);\n}"
+        }
+      ],
+      "symptom": "Runs fine, then freezes after a while, anywhere in the game",
+      "cause": "`IDXGIAdapter3::QueryVideoMemoryInfo` succeeds for node indices the adapter does not have",
+      "fix": "Refuse them — the same DLL Reunion uses",
+      "backend": null,
+      "crossover": "Stable 26.3. **Freezes on the D3DMetal 3.0 that build ships**, with or without the fix; this title needs Game Porting Toolkit 4.0b2 — see below",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Life-is-Strange-Double-Exposure.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": "4",
+      "notNeededFromGptk": "4.0b3"
+    },
+    {
+      "title": "Life is Strange: Reunion",
+      "installer": "install-runtime-fix.sh",
+      "scope": "folder",
+      "executable": "Iris-Win64-Shipping.exe",
+      "carrierDirectory": "Engine/Binaries/ThirdParty/Ogg/Win64",
+      "alsoRuns": [],
+      "summary": "Unreal Engine 5 titles that crash on the first cutscene. The carrier sits under a compiler-named subfolder, which the script discovers rather than assumes.",
+      "page": "legacy/wiki/Life-is-Strange-Reunion.md",
+      "installs": [
+        "libogg_64.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "ue5-media-fix.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "fixes/ue5-media-fix.c",
+          "symbol": "guarded_query_vram",
+          "note": "One GPU is one node: any other node index is refused with DXGI_ERROR_INVALID_CALL, which is what Windows returns and what ends the caller's walk.",
+          "language": "c",
+          "startLine": 2297,
+          "endLine": 2315,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/ue5-media-fix.c#L2297-L2315",
+          "code": "static HRESULT WINAPI guarded_query_vram(void *self, UINT node,\n                                         DXGI_MEMORY_SEGMENT_GROUP group,\n                                         DXGI_QUERY_VIDEO_MEMORY_INFO *info)\n{\n    /* One GPU means one node, so zero is the only valid index, and\n     * DXGI_ERROR_INVALID_CALL is what Windows returns past the end. */\n    {\n        static LONG asked;\n        if (InterlockedIncrement(&asked) == 1)\n            logf_(\"node guard: the adapter was asked for video memory (node %u) -- the walk reached us\", node);\n    }\n    if (node != 0)\n    {\n        if (InterlockedIncrement(&refusals) == 1)\n            logf_(\"node %u does not exist -- refused, which ends the caller's walk\", node);\n        return DXGI_ERROR_INVALID_CALL;\n    }\n    return real_query_vram(self, node, group, info);\n}"
+        }
+      ],
+      "symptom": "Runs fine, then freezes after a while, anywhere in the game",
+      "cause": "`IDXGIAdapter3::QueryVideoMemoryInfo` succeeds for node indices the adapter does not have",
+      "fix": "Refuse them, which is what Windows does",
+      "backend": null,
+      "crossover": "Stable 26.3. **Freezes on the D3DMetal 3.0 that build ships**, with or without the fix; this title needs Game Porting Toolkit 4.0b2 — see below",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Life-is-Strange-Reunion.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": "4",
+      "notNeededFromGptk": "4.0b3"
+    },
+    {
+      "title": "Marvel's Spider-Man 2",
+      "installer": "install-sm2-fix.sh",
+      "scope": "folder",
+      "executable": "Spider-Man2.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "Characters stay in a T-pose and the symbiote breaks on M1-M4 Macs: D3DMetal reads and writes typed buffers only to element 2^28.",
+      "page": "legacy/wiki/Spider-Man-2.md",
+      "installs": [
+        "amd_ags_x64-sm2.dll",
+        "pe.pl",
+        "sm2-shadertool"
+      ],
+      "builtFrom": [
+        "sm2-tpose-fix.c",
+        "sm2fix_core.c",
+        "sm2-shadertool.c",
+        "sm2-shaderfix.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [
+        {
+          "name": "macprotips",
+          "url": "https://github.com/macprotips/SpiderMan2Fix",
+          "note": "The diagnosis, the raw views and the four rewritten shaders (public domain). MacGameFix adds a carrier that needs no DLL override and a barrier after the volumetric fog copy."
+        }
+      ],
+      "excerpts": [
+        {
+          "file": "fixes/sm2-tpose-fix.c",
+          "symbol": "hk_CreateShaderResourceView",
+          "note": "macprotips': the wide R32 views past element 2^28 are created raw, which D3DMetal reads in full.",
+          "language": "c",
+          "startLine": 496,
+          "endLine": 518,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/sm2-tpose-fix.c#L496-L518",
+          "code": "static void STDMETHODCALLTYPE hk_CreateShaderResourceView(ID3D12Device *device, ID3D12Resource *resource,\n        const D3D12_SHADER_RESOURCE_VIEW_DESC *desc, D3D12_CPU_DESCRIPTOR_HANDLE handle)\n{\n    void (STDMETHODCALLTYPE *orig)(ID3D12Device *, ID3D12Resource *, const D3D12_SHADER_RESOURCE_VIEW_DESC *,\n            D3D12_CPU_DESCRIPTOR_HANDLE) = orig_fn(device, DEV_IDX(CreateShaderResourceView));\n\n    if (desc && desc->ViewDimension == D3D12_SRV_DIMENSION_BUFFER && desc->Buffer.NumElements > WIDE_VIEW\n            && !(desc->Buffer.Flags & D3D12_BUFFER_SRV_FLAG_RAW)\n            && (desc->Format == DXGI_FORMAT_R32_UINT || desc->Format == DXGI_FORMAT_R32_SINT\n                || desc->Format == DXGI_FORMAT_R32_FLOAT))\n    {\n        D3D12_SHADER_RESOURCE_VIEW_DESC raw = *desc;\n\n        raw.Format = DXGI_FORMAT_R32_TYPELESS;\n        raw.Buffer.Flags |= D3D12_BUFFER_SRV_FLAG_RAW;\n        raw.Buffer.StructureByteStride = 0;\n        if (InterlockedIncrement(&g_views) <= 4)\n            log_msg(\"Wide typed view (%u elements) created as a raw view\", desc->Buffer.NumElements);\n        orig(device, resource, &raw, handle);\n        return;\n    }\n    orig(device, resource, desc, handle);\n}"
+        },
+        {
+          "file": "fixes/sm2-tpose-fix.c",
+          "symbol": "hk_Dispatch",
+          "note": "Ours: a UAV barrier after the volumetric fog copy, which removed the black blocks in the sandstorm stage.",
+          "language": "c",
+          "startLine": 344,
+          "endLine": 359,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/sm2-tpose-fix.c#L344-L359",
+          "code": "static void STDMETHODCALLTYPE hk_Dispatch(ID3D12GraphicsCommandList *list, UINT x, UINT y, UINT z)\n{\n    void (STDMETHODCALLTYPE *orig)(ID3D12GraphicsCommandList *, UINT, UINT, UINT) = orig_fn(list, LIST_IDX(Dispatch));\n\n    orig(list, x, y, z);\n    if (t_bound.list == list && t_bound.fog)\n    {\n        D3D12_RESOURCE_BARRIER barrier;\n\n        memset(&barrier, 0, sizeof(barrier));\n        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;\n        barrier.UAV.pResource = NULL;   /* every UAV access before, against every one after */\n        list->lpVtbl->ResourceBarrier(list, 1, &barrier);\n        InterlockedIncrement(&g_fog_barriers);\n    }\n}"
+        }
+      ],
+      "symptom": "Characters stay in a T-pose; the symbiote shows up as spikes, a flat black sheet, or not at all; brief black blocks flash in the opening sandstorm stage",
+      "cause": "On M1-M4 Macs, D3DMetal returns 0 for typed buffer reads past element 2^28 and drops typed writes past it. The black blocks come from a missing barrier after the volumetric fog copy",
+      "fix": "macprotips': the wide R32 views made raw, and four shaders rebuilt raw from your own exe. Ours: no DLL override, and a UAV barrier after `CS_VolumetricFogCopy`",
+      "backend": "**D3DMetal**, D3D12",
+      "crossover": "Preview 27, through NotProton; M5 Macs do not have the limit",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Spider-Man-2.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "Mortal Kombat 11",
+      "installer": "install-mk11-fix.sh",
+      "scope": "folder",
+      "executable": "MK11_DX12.exe",
+      "carrierDirectory": "Binaries/Retail",
+      "alsoRuns": [
+        "MK11.exe"
+      ],
+      "summary": "Has the face morph read its three-float deltas the way D3DMetal and DXMT can, which removes the dark patches, and gives the movies their colours and their frame order back. DirectX 12 and 11 alike.",
+      "page": "legacy/wiki/Mortal-Kombat-11.md",
+      "installs": [
+        "amd_ags_x64-mk11.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "mk11-face-fix.c",
+        "sm2fix_core.c",
+        "mk11-morph-shaders.h",
+        "mk11-movie.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [
+        {
+          "name": "Anton Pavliuk",
+          "url": "https://github.com/CyberDogFK/mk11-crossover-fix",
+          "note": "Found and published first that the movie frames come out in decode order, and the reordering (MIT, DirectX 11 only); mk11-movie.c is a separate implementation."
+        }
+      ],
+      "excerpts": [
+        {
+          "file": "fixes/mk11-face-fix.c",
+          "symbol": "hk_CreateShaderResourceView",
+          "note": "The faces. Every three-float buffer view is created as a one-float view three times as long, which D3DMetal and DXMT both read correctly; the rewritten morph shaders then read a delta's three floats one by one.",
+          "language": "c",
+          "startLine": 155,
+          "endLine": 172,
+          "commit": "f5d5640fdb90bfa4714baaab10c63c2d38d9353a",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f5d5640fdb90bfa4714baaab10c63c2d38d9353a/fixes/mk11-face-fix.c#L155-L172",
+          "code": "static void STDMETHODCALLTYPE hk_CreateShaderResourceView(ID3D12Device *dev, ID3D12Resource *res,\n        const D3D12_SHADER_RESOURCE_VIEW_DESC *desc, D3D12_CPU_DESCRIPTOR_HANDLE h)\n{\n    void (STDMETHODCALLTYPE *orig)(ID3D12Device *, ID3D12Resource *, const D3D12_SHADER_RESOURCE_VIEW_DESC *,\n            D3D12_CPU_DESCRIPTOR_HANDLE) = orig_fn(dev, DEV_IDX(CreateShaderResourceView));\n    if (desc && desc->ViewDimension == D3D12_SRV_DIMENSION_BUFFER && desc->Format == DXGI_FORMAT_R32G32B32_FLOAT\n            && !(desc->Buffer.Flags & D3D12_BUFFER_SRV_FLAG_RAW))\n    {\n        D3D12_SHADER_RESOURCE_VIEW_DESC one = *desc;\n        one.Format = DXGI_FORMAT_R32_FLOAT;\n        one.Buffer.FirstElement = desc->Buffer.FirstElement * 3;\n        one.Buffer.NumElements = desc->Buffer.NumElements * 3;\n        InterlockedIncrement(&views_made);\n        orig(dev, res, &one, h);\n        return;\n    }\n    orig(dev, res, desc, h);\n}"
+        },
+        {
+          "file": "fixes/mk11-movie.c",
+          "symbol": "movie_GetOutputAvailableType",
+          "note": "The colours. CrossOver's H.264 decoder leaves NV12 out of the types it offers, so the game took YV12 and drew it as NV12. NV12 is offered again, first.",
+          "language": "c",
+          "startLine": 324,
+          "endLine": 345,
+          "commit": "f5d5640fdb90bfa4714baaab10c63c2d38d9353a",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f5d5640fdb90bfa4714baaab10c63c2d38d9353a/fixes/mk11-movie.c#L324-L345",
+          "code": "static HRESULT STDMETHODCALLTYPE movie_GetOutputAvailableType(IMFTransform *t, DWORD stream, DWORD index,\n        IMFMediaType **type)\n{\n    HRESULT (STDMETHODCALLTYPE *real)(IMFTransform *, DWORD, DWORD, IMFMediaType **)\n            = orig_fn(t, MFT_IDX(GetOutputAvailableType));\n    IMFMediaType *first = NULL, *nv12 = NULL;\n    GUID sub = { 0 };\n    if (!type || FAILED(real(t, stream, 0, &first)) || !first) return real(t, stream, index, type);\n    if (SUCCEEDED(IMFMediaType_GetGUID(first, &movie_subtype, &sub)) && IsEqualGUID(&sub, &movie_nv12))\n    {\n        IMFMediaType_Release(first);\n        return real(t, stream, index, type);\n    }\n    if (index) { IMFMediaType_Release(first); return real(t, stream, index - 1, type); }\n    if (FAILED(create_media_type(&nv12)) || !nv12) { *type = first; return S_OK; }\n    IMFMediaType_CopyAllItems(first, (IMFAttributes *)nv12);\n    IMFMediaType_SetGUID(nv12, &movie_subtype, &movie_nv12);\n    IMFMediaType_Release(first);\n    if (!InterlockedExchange(&nv12_offered, 1)) log_msg(\"movie: the H.264 decoder offers no NV12; it is offered first\");\n    *type = nv12;\n    return S_OK;\n}"
+        },
+        {
+          "file": "fixes/mk11-movie.c",
+          "symbol": "hand_out",
+          "note": "The frame order. The decoder hands frames out in decode order; the fix holds them and hands out the one that comes first in display order.",
+          "language": "c",
+          "startLine": 304,
+          "endLine": 321,
+          "commit": "f5d5640fdb90bfa4714baaab10c63c2d38d9353a",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f5d5640fdb90bfa4714baaab10c63c2d38d9353a/fixes/mk11-movie.c#L304-L321",
+          "code": "static HRESULT hand_out(movie_decoder *d, MFT_OUTPUT_DATA_BUFFER *out, DWORD *status)\n{\n    int i, best = 0;\n    BOOL ok;\n    BYTE *data;\n    DWORD cap;\n    for (i = 1; i < d->nheld; i++) if (d->held[i].key < d->held[best].key) best = i;\n    ok = move_frame(out->pSample, &d->held[best].data, &d->held[best].len, &d->held[best].cap, TRUE);\n    if (best) d->moved++;\n    /* The rest stay oldest first; the emptied buffer goes to the end for reuse. */\n    data = d->held[best].data; cap = d->held[best].cap;\n    memmove(&d->held[best], &d->held[best + 1], (size_t)(d->nheld - best - 1) * sizeof(d->held[0]));\n    d->nheld--;\n    d->held[d->nheld].data = data; d->held[d->nheld].cap = cap; d->held[d->nheld].len = 0;\n    out->dwStatus = 0;\n    if (status) *status = 0;\n    return ok ? S_OK : E_FAIL;\n}"
+        }
+      ],
+      "symptom": "Bare faces -- forehead, brows, around the eyes -- turn into smeared dark patches with hard edges that follow the light and change from frame to frame. Clean right after a screen loads, broken once the face animates; barely visible in a fight, glaring in close views, the character select and the fatalities. Masked fighters never show it. It has been there since at least an M1 Pro",
+      "cause": "The face morph reads its per-vertex deltas from `DXGI_FORMAT_R32G32B32_FLOAT` buffer views, and D3DMetal serves those as two floats an element with z = 0",
+      "fix": "Every such view is created as an `R32_FLOAT` view three times as long, and the two morph shaders read a delta's three floats one by one",
+      "backend": "**D3DMetal** with D3D12 (`MK11_DX12.exe`) and **DXMT** with D3D11 (`MK11.exe`): one install covers both, whichever Steam starts",
+      "crossover": "Preview 27 through NotProton, Game Porting Toolkit 4.0b3 (2026-10-16 and 17)",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Mortal-Kombat-11.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "Mortal Shell 2",
+      "installer": "install-runtime-fix.sh",
+      "scope": "folder",
+      "executable": "MortalShell2-Win64-Shipping.exe",
+      "carrierDirectory": "Engine/Binaries/ThirdParty/Ogg/Win64",
+      "alsoRuns": [],
+      "summary": "Unreal Engine 5 titles that crash on the first cutscene. The carrier sits under a compiler-named subfolder, which the script discovers rather than assumes.",
+      "page": "legacy/wiki/Mortal-Shell-2.md",
+      "installs": [
+        "libogg_64.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "ue5-media-fix.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "fixes/ue5-media-fix.c",
+          "symbol": "force_electra_software",
+          "note": "Sets Electra.Win.H264UseOldOutputPath, found by its own name rather than by an address, so Electra takes its CPU buffer path and never the D3D one.",
+          "language": "c",
+          "startLine": 1284,
+          "endLine": 1376,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/ue5-media-fix.c#L1284-L1376",
+          "code": "static void force_electra_software(void)\n{\n    BYTE *base = (BYTE *)GetModuleHandleA(NULL);\n    int done = 0;\n    if (electra_sw_forced || !base) return;\n    electra_sw_forced = TRUE;\n\n    read_switches();\n    logf_(\"putting Electra on its old output path\");\n\n    /* The two IsSoftware call sites used to be patched here, by address.\n     *\n     * They are gone, and nothing is read off a disassembly any more. The\n     * software path comes from the engine instead: winegstreamer patch 0006,\n     * carried from winevideo, stops advertising MF_SA_D3D_AWARE on macOS, so\n     * Electra never builds a D3D11 device and answers its own IsSoftware()\n     * honestly. That is in the engine this project ships and it does not move\n     * when the game does.\n     *\n     * Those addresses broke three times in sixteen days -- 2026-08-24,\n     * 08-31 and 09-08 -- and each time they took the console variable down\n     * with them, because the check refused before reaching it. The variable is\n     * found by name and never needed the addresses at all; that coupling was\n     * the actual defect, and this is where it ends.\n     *\n     * Measured 2026-09-09 on UE5-CL-408709: with the variable set and no byte\n     * patched anywhere, the video plays. Without the variable the title\n     * crashes in the D3D path, EXCEPTION_ACCESS_VIOLATION reading 0x0 -- so\n     * patch 0006 alone is not enough and the variable below is load-bearing. */\n\n    /* The console variable is a pointer read from a fixed address and written\n     * through -- a wild write on any build but the one it was read from, and\n     * that build is gone. Left alone until it is found the same way the calls\n     * were. */\n    /* The values live at object + 0x50, and that was read off the vtable\n     * rather than guessed.\n     *\n     * What the fixed address holds in this build is an IConsoleVariable, not\n     * the two plain ints the old code wrote -- its first qword is a pointer\n     * into .rdata, so writing 1 at offset zero would destroy the vtable and\n     * produce exactly the null dereference this afternoon was spent chasing.\n     *\n     * Its vtable says where the data is. Slot 12 is `lea rax,[rcx+0x50] ; ret`\n     * -- AsVariableInt returning the embedded TConsoleVariableData<int32> --\n     * and slot 8 is `mov al,1 ; ret`, which is the \"this is an int variable\"\n     * answer. So the two int32s the old build had at offset zero are at 0x50\n     * here, and the old write is right about what to set and wrong only about\n     * where.\n     *\n     * Read before writing anyway: the default is 0, so anything else means\n     * this is not what it is thought to be, and then nothing is touched. */\n    {\n        void **slot = find_cvar_slot(base);\n        void *obj;\n        if (!slot)\n        {\n            /* There is no falling back to a remembered address any more. What\n             * made that safe was the call-site check proving this was the build\n             * the address came from, and that check is gone. A remembered\n             * address on a build it was not read from is a wild write. */\n            logf_(\"  the console variable was not found by name -- doing nothing\");\n            return;\n        }\n        obj = *slot;\n        if (!obj)\n        {\n            logf_(\"  console variable not registered yet\");\n        }\n        else\n        {\n            int *values = (int *)((BYTE *)obj + CVAR_VALUES_OFFSET);\n            logf_(\"  console variable at %p, values at +0x%X currently [%d, %d]\",\n                  obj, (unsigned)CVAR_VALUES_OFFSET, values[0], values[1]);\n            if (!opt_cvar)\n                logf_(\"    left at [%d, %d], by switch -- Electra keeps whichever \"\n                      \"output path it chooses for itself\", values[0], values[1]);\n            else if (values[0] == 0 && values[1] == 0)\n            {\n                values[0] = 1;\n                values[1] = 1;\n                cvar_ready = TRUE;\n                logf_(\"    set to 1 -- Electra takes the old CPU buffer path, \"\n                      \"which stores the sample instead of querying for a D3D \"\n                      \"resource that is not there\");\n            }\n            else\n                logf_(\"    left alone: the default for this variable is 0, so \"\n                      \"this is not the field it is thought to be\");\n        }\n    }\n\n    if (!done) logf_(\"nothing was patched\");\n}"
+        }
+      ],
+      "cause": "On a D3D12 device Electra takes its GPU output buffer path, which asks every D3D12 resource for ID3DDestructionNotifier and uses the answer without checking it; under D3DMetal there is none, and it reads address 0.",
+      "symptom": "`EXCEPTION_ACCESS_VIOLATION` reading `0x0` in `FElectraMediaDecoderOutputBufferPoolBlock_DX12::AllocateBuffer`",
+      "fix": "Runtime patch, **4 sites**, all four confirmed at runtime",
+      "backend": null,
+      "crossover": "Stable 26.3, played through both with winevideo and without",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Mortal-Shell-2.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": "4.0b3"
+    },
+    {
+      "title": "NieR Replicant ver.1.22474487139",
+      "installer": "install-nier-bridge.sh",
+      "scope": "folder",
+      "executable": "NieR Replicant ver.1.22474487139.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "Crashes when the first video starts. Its video is WMV2 with WMA v2 audio in ASF, which no CrossOver decodes; the fix decodes it itself where the engine cannot.",
+      "page": "legacy/wiki/NieR-Replicant.md",
+      "installs": [
+        "bottles.sh",
+        "dinput8-nier.dll",
+        "mgvf-asf-reader-LICENCES.md",
+        "mgvf-asf-reader.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "dwo-video-bridge.c",
+        "asf-reader.c",
+        "wmv-dmo.c",
+        "wm-reader.c",
+        "dshow-graph.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "fixes/dwo-video-bridge.c",
+          "symbol": "strip_d3d_attributes",
+          "note": "The game asks for decode into D3D video textures; the reader gets a copy of its attributes without the two that ask for it, so it decodes in software.",
+          "language": "c",
+          "startLine": 1508,
+          "endLine": 1524,
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L1508-L1524",
+          "code": "static IMFAttributes *strip_d3d_attributes(IMFAttributes *attrs)\n{\n    IMFAttributes *plain = NULL;\n    UINT32 count = 0;\n\n    if (!attrs || !real_MFCreateAttributes) return NULL;\n    IMFAttributes_GetCount(attrs, &count);\n    if (SUCCEEDED(real_MFCreateAttributes(&plain, count + 2)) && plain\n        && SUCCEEDED(IMFAttributes_CopyAllItems(attrs, plain)))\n    {\n        IMFAttributes_DeleteItem(plain, &MF_SOURCE_READER_D3D_MANAGER);\n        IMFAttributes_DeleteItem(plain, &MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS);\n        return plain;\n    }\n    if (plain) IMFAttributes_Release(plain);\n    return NULL;\n}"
+        }
+      ],
+      "cause": "The game asks Media Foundation to decode the WMV2 video into D3D video textures; under D3DMetal there is nothing to decode into, and it dies asking for NV12 output.",
+      "symptom": "Crashes when the first video starts",
+      "fix": "Software decode, and the frame converted and written into the game's own target",
+      "backend": "**D3DMetal**, D3D11",
+      "crossover": "Stable 26.3, measured on a stock one, with Game Porting Toolkit 4.0b2; CrossOver Preview 27 through NotProton with nothing staged (2026-10-14)",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/NieR-Replicant.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "NINJA GAIDEN 3: Razor's Edge",
+      "installer": "install-ng3-fix.sh",
+      "scope": "prefix",
+      "executable": "NINJA GAIDEN 3 Razor's Edge.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "Will not start at all: \"Insufficient VRAM. Please close all running applications.\" It is a Direct3D 9 title and CrossOver's DXVK cannot create a Vulkan device for it. Needs d9vk plus winevideo's DirectShow filters, applied to this executable only.",
+      "page": "legacy/wiki/Ninja-Gaiden-3-Razors-Edge.md",
+      "installs": [
+        "bottles.sh",
+        "ng3-THIRD-PARTY-LICENCES.md",
+        "ng3-d3d9.dll",
+        "ng3-qasf.dll",
+        "ng3-quartz.dll",
+        "ng3-winegstreamer.dll"
+      ],
+      "builtFrom": [],
+      "license": "GPL-3.0-or-later",
+      "credits": [
+        {
+          "name": "winevideo",
+          "url": "https://github.com/Jfishin/winevideo",
+          "note": "Found why the movies never start (Wine's ASF Reader blocks its audio behind the video) and built the patched qasf, quartz and winegstreamer the fix installs (LGPL-2.1-or-later)."
+        },
+        {
+          "name": "d9vk by Sikarugir-App",
+          "url": "https://github.com/Sikarugir-App/d9vk",
+          "note": "The Direct3D 9 the game runs on (zlib)."
+        }
+      ],
+      "excerpts": [
+        {
+          "file": "fixes/install-ng3-fix.sh",
+          "symbol": null,
+          "note": "The four DLLs go into the prefix's system32, its own copies kept aside, and Wine is told to load them for this game's executable only; each override is read back rather than assumed.",
+          "language": "bash",
+          "startLine": 483,
+          "endLine": 503,
+          "commit": "e16e2e8539fec54d65e64f2078a8f93a72647ca5",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/e16e2e8539fec54d65e64f2078a8f93a72647ca5/fixes/install-ng3-fix.sh#L483-L503",
+          "code": "for d in $DLLS; do\n  s=\"$(src_for \"$d\")\" || { echo \"error: $d is not beside this script\" >&2; exit 1; }\n  # Only the prefix's own file is kept aside: ours, from an earlier install,\n  # is not an original to put back.\n  if [ -f \"$SYS/$d\" ] && [ ! -f \"$SYS/$d.mgvf-stock\" ] && ! cmp -s \"$SYS/$d\" \"$s\"; then\n    mv \"$SYS/$d\" \"$SYS/$d.mgvf-stock\"\n  fi\n  cp \"$s\" \"$SYS/$d\"\n  echo \"  $d  <- ${s#$HOME/}\"\ndone\n\nif [ -n \"$PFX\" ]; then\n  for n in d3d9 qasf quartz winegstreamer; do\n    # Written and then read back, as below for a bottle.\n    if ! user_reg_edit \"$PFX\" set \"$REG_KEY\" \"*$n\" \"native,builtin\" \\\n       || ! user_reg_has_value \"$PFX\" \"$REG_KEY\" \"*$n\"; then\n      echo \"error: could not write the override for $n into $PFX/user.reg\" >&2\n      exit 1\n    fi\n  done\n  echo \"  overrides written for this executable only, into the prefix's user.reg\""
+        }
+      ],
+      "symptom": "Will not start: \"Insufficient VRAM. Please close all running applications.\"",
+      "cause": "It is Direct3D 9 only, and CrossOver's DXVK cannot create a Vulkan device on MoltenVK, which offers neither transformFeedback nor timelineSemaphore. Its ASF movies never start because Wine's ASF Reader blocks the audio behind the video.",
+      "fix": "Four DLLs in the prefix's system32 for this executable only: d9vk for Direct3D 9, and winevideo's qasf, quartz and winegstreamer for the movies. The prefix's own copies are kept aside.",
+      "backend": "DXVK (d9vk), in a prefix",
+      "crossover": "A patched CrossOver Preview 27 (27.0.0.40921), 2026-08-28",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Ninja-Gaiden-3-Razors-Edge.md",
+      "graphicsBackend": "dxvk",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "NINJA GAIDEN 4",
+      "installer": "install-ng4-fix.sh",
+      "scope": "folder",
+      "executable": "NINJAGAIDEN4-Steam.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "The game asks Media Foundation whether anything decodes VP9 and quits if the answer is zero; on D3DMetal 4 its fences are repaired so it presents at all. Needs the staged Matroska demuxer too, except on CrossOver Preview 27, which ships it.",
+      "page": "legacy/wiki/Ninja-Gaiden-4.md",
+      "installs": [
+        "dstorage-ng4.dll"
+      ],
+      "builtFrom": [
+        "../tools/ng4-observe.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "tools/ng4-observe.c",
+          "symbol": "my_MFTEnumEx",
+          "note": "When the engine finds no VP9 decoder, the gate the game asks Media Foundation is answered with the H.264 decoder's entry, so the game goes on and decodes in software.",
+          "language": "c",
+          "startLine": 1195,
+          "endLine": 1291,
+          "commit": "ff8741000f7884aea39d9b098a17a520db4d5df9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/ff8741000f7884aea39d9b098a17a520db4d5df9/tools/ng4-observe.c#L1195-L1291",
+          "code": "static HRESULT WINAPI my_MFTEnumEx(GUID category, UINT32 flags,\n                                   const REG_TYPE_INFO *in,\n                                   const REG_TYPE_INFO *out,\n                                   void ***mfts, UINT32 *count)\n{\n    HRESULT hr = real_MFTEnumEx(category, flags, in, out, mfts, count);\n\n    /* The engine's own answer, captured before the substitution below can\n     * overwrite it. */\n    BOOL engine_answered_vp9 = SUCCEEDED(hr) && in && count && *count > 0\n                               && IsEqualGUID(&in->guidSubtype, &guid_VP90);\n\n    if (answer_mft_gate && in && count && *count == 0\n        && IsEqualGUID(&in->guidSubtype, &guid_VP90))\n    {\n        REG_TYPE_INFO substitute = *in;\n        static LONG said;\n        const char *how = \"H264\";\n\n        substitute.guidSubtype = guid_H264;\n        hr = real_MFTEnumEx(category, flags, &substitute, out, mfts, count);\n\n        /* H.264 is the first choice and not the only one.\n         *\n         * Borrowing one named format's list assumed that format is registered,\n         * and on a CrossOver that offers no H.264 decoder at all the fallback\n         * had nothing to hand back: the gate still saw zero and the game still\n         * quit, on an engine where everything else about the fix was working.\n         * Measured on a patched Preview 27, where MFTEnumEx offers zero H.264\n         * MFTs while 26.3 offers some -- so the answer was engine-dependent\n         * through no property of this title.\n         *\n         * Asking with no input type at all means \"every video decoder you\n         * have\", whatever this engine happens to register. It keeps the reason\n         * the substitution is done this way -- these are real MFTs with real\n         * lifetimes, not an array we fabricated for the game to free -- while\n         * depending on nothing being present by name. */\n        if (SUCCEEDED(hr) && *count == 0)\n        {\n            hr = real_MFTEnumEx(category, flags, NULL, out, mfts, count);\n            how = \"any video decoder\";\n        }\n        if (InterlockedIncrement(&said) == 1)\n            logf_(\"VP90 had no decoder; asked again for %s and got %u. On 26.3 \"\n                  \"the game only counts these and never activates them -- if \"\n                  \"an IMFActivate::ActivateObject line follows on this engine, \"\n                  \"that assumption does not hold here and this answer is \"\n                  \"hiding a legible error behind a later one\",\n                  how, count ? *count : 0);\n        if (count && *count == 0)\n            logf_(\"  and this engine registers NO video decoder of any kind, so \"\n                  \"the gate cannot be answered from what is here\");\n    }\n    logf_(\"MFTEnumEx flags=0x%lx -> 0x%08lx, %u decoder(s) offered\",\n          flags, hr, count ? *count : 0);\n    /* Whether this engine registers a VP9 decoder -- measured, not obeyed.\n     *\n     * This fix pushes decoding to software by refusing the game a D3D device\n     * manager. 5f781eb stood that down when the engine offers a decoder of its\n     * own, reasoning that an engine which can decode VP9 needs no push. Both\n     * halves of that were wrong, and each was wrong in its own way:\n     *\n     *   - It read *count after the substitution block below had run. That\n     *     block is the workaround -- when the VP9 ask comes back empty we hand\n     *     the game an H264 list so its gate passes -- so the count was ours.\n     *     Fixed by capturing the game's typed ask first.\n     *   - The idea itself does not hold. Measured 27 Aug on an engine that\n     *     does register VP9 (winevideo's vpx plugin under our winegstreamer):\n     *     the enumeration answers 1 on the first ask, the stand-down fires\n     *     exactly as designed, and the title dies on its first video anyway --\n     *     six access violations, the same ones it dies with everywhere else.\n     *     On stock 26.3, where the ask returns 0 and the refusal stands, the\n     *     videos play through to the menu.\n     *\n     * So a decoder existing does not make the hardware path work here. What\n     * the title needs is the software path, on every engine, which is what\n     * shipped on 25 Aug. The flag stays because the log is more legible for\n     * having it -- it says which kind of engine this is -- and nothing reads\n     * it.\n     */\n    if (engine_answered_vp9)\n        engine_offers_decoder = TRUE;\n    (void)engine_offers_decoder;\n    if (in)  describe_subtype(\"wants to decode\", &in->guidSubtype);\n    /* Watch the promised decoder actually be created. */\n    if (SUCCEEDED(hr) && mfts && *mfts && count && *count > 0)\n    {\n        static void *ao;\n        if (patch_slot(\"ActivateObject\", (*mfts)[0], SLOT_ACTIVATE_OBJECT, (void *)my_ActivateObject, &ao))\n            real_ActivateObject = (HRESULT (WINAPI *)(void *, REFIID, void **))ao;\n    }\n    if (out) describe_subtype(\"wants out as  \", &out->guidSubtype);\n    if (count && *count == 0)\n        logf_(\"  NOTHING can decode that here -- this is the failure, if the \"\n              \"picture is missing and the sound is not\");\n    return hr;\n}"
+        },
+        {
+          "file": "tools/ng4-observe.c",
+          "symbol": "my_QWaitF",
+          "note": "On D3DMetal 4: a fence wait for a value no one has signalled yet is bridged through the CPU instead of being handed to the GPU.",
+          "language": "c",
+          "startLine": 4053,
+          "endLine": 4087,
+          "commit": "ff8741000f7884aea39d9b098a17a520db4d5df9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/ff8741000f7884aea39d9b098a17a520db4d5df9/tools/ng4-observe.c#L4053-L4087",
+          "code": "static HRESULT WINAPI my_QWaitF(void *q, void *f, UINT64 v)\n{\n    int i, j;\n    HRESULT hr;\n    UINT64 done = real_FGetCompletedF ? real_FGetCompletedF(f) : 0, a = v;\n    LONG k = InterlockedIncrement(&fence_ops);\n    AcquireSRWLockExclusive(&fence_lock);\n    i = q_index(q); j = f_index(f, FALSE);\n    if (i >= 0) { fq[i].wf = f; fq[i].wv = v; fq[i].wt = GetTickCount(); }\n    if (j >= 0) ff[j].waits++;\n    if (mono_fences && j >= 0 && ff[j].nbase) { a = mono_wait_(j, v); done = mono_back_(j, done); }\n    if (i >= 0) fq[i].wv = a;\n    {\n        /* Early: no signal of at least this value issued yet, by anyone. */\n        BOOL early = bridge_waits && mono_fences && i >= 0 && j >= 0 && ff[j].nbase && a > ff[j].top;\n        ReleaseSRWLockExclusive(&fence_lock);\n        if (!early && bridge_all && mono_fences && i >= 0 && j >= 0 && real_FGetCompletedF(f) < a)\n            early = TRUE;\n        if (early && bridge_wait_(i, q, f, a, &hr))\n        {\n            if (k <= 200000) flog_(\"Q%d(%s) Wait F%d >= %llu [actual %llu] BRIDGED -> 0x%08lx\", i,\n                                   qtype(fq[i].type), j, (unsigned long long)v, (unsigned long long)a, hr);\n            return hr;\n        }\n    }\n    hr = real_QWaitF(q, f, a);\n    if (k <= 200000 || done < v)\n        flog_(\"Q%d(%s) Wait F%d >= %llu [actual %llu] (completed %llu, asked %llu by %s%d)%s -> 0x%08lx\",\n              i, i >= 0 ? qtype(fq[i].type) : \"?\", j, (unsigned long long)v, (unsigned long long)a,\n              (unsigned long long)done,\n              j >= 0 ? (unsigned long long)ff[j].asked : 0ULL,\n              j >= 0 && ff[j].who == -1 ? \"CPU\" : \"Q\", j >= 0 ? ff[j].who : -9,\n              done < v ? \" NOT YET MET\" : \"\", hr);\n    return hr;\n}"
+        }
+      ],
+      "symptom": "*\"Windows is missing required components… install Windows Media Foundation and the VP9 Codec. The game will now exit\"* -- and it exits",
+      "cause": "CrossOver ships no Matroska demuxer, so a WebM is recognised and then has nothing to hand off to",
+      "fix": "Stage `libgstmatroska` beside the decoder; answer the VP9 MFT gate and decode in software",
+      "backend": "**D3DMetal**, D3D12",
+      "crossover": "Stable 26.3.0.39832, measured on a stock install as well as on this project's patched engine; CrossOver Preview 27 through NotProton, with nothing staged (2026-10-14)",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Ninja-Gaiden-4.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": "3",
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "Nioh 2",
+      "installer": "install-nioh-bridge.sh",
+      "scope": "folder",
+      "executable": "nioh2.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "Cutscene runs with sound and no picture. Its video is WMV3, which the fix decodes itself where the engine cannot. Runs on DXMT only.",
+      "page": "legacy/wiki/Nioh-2.md",
+      "installs": [
+        "GfeSDK.dll",
+        "mgvf-asf-reader-LICENCES.md",
+        "mgvf-asf-reader.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "p5s-video-bridge.c",
+        "asf-reader.c",
+        "wmv-dmo.c",
+        "wm-reader.c",
+        "dshow-graph.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [
+        {
+          "name": "winevideo",
+          "url": "https://github.com/Jfishin/winevideo",
+          "note": "Independent confirmation of the shared-texture cutscene path, which winevideo repairs inside a patched Wine d3d9.dll."
+        }
+      ],
+      "excerpts": [
+        {
+          "file": "fixes/p5s-video-bridge.c",
+          "symbol": "my_CreateRenderTarget",
+          "note": "Wine's d3d9 answers a shared render target with S_OK and a null handle; where it leaves that hole, the bridge hands the game a real shared handle.",
+          "language": "c",
+          "startLine": 1437,
+          "endLine": 1466,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/p5s-video-bridge.c#L1437-L1466",
+          "code": "static HRESULT WINAPI my_CreateRenderTarget(void *self, UINT w, UINT h, DWORD fmt,\n                                            DWORD ms, DWORD msq, BOOL lockable,\n                                            void **surface, HANDLE *shared)\n{\n    HRESULT hr = real_CreateRenderTarget(self, w, h, fmt, ms, msq, lockable, surface, shared);\n    note_shared(\"CreateRenderTarget\", w, h, fmt, hr, shared);\n    /* Only where Wine left a hole: it succeeded and shared nothing. */\n    if (SUCCEEDED(hr) && shared && !*shared && make_sidecar(w, h))\n    {\n        static LONG said;\n        *shared = sidecar_handle;\n        sidecar_w = w; sidecar_h = h;\n        if (surface && *surface)\n        {\n            static void *su;\n            void **vt;\n            shared_surface = *surface;\n            vt = *(void ***)shared_surface;\n            real_SurfUnlock = (HRESULT (WINAPI *)(void *))vt[SLOT_SURF_UNLOCKRECT];\n            if (!watch_write_path || !patch_slot(\"surface UnlockRect\", shared_surface,\n                    SLOT_SURF_UNLOCKRECT, (void *)my_SurfUnlock, &su))\n                real_SurfUnlock = NULL;\n        }\n        if (InterlockedIncrement(&said) == 1)\n            logf_(\"  handed the game a real shared handle %p instead of null -- \"\n                  \"nothing copies into it yet; this only asks whether the game \"\n                  \"then carries on\", sidecar_handle);\n    }\n    return hr;\n}"
+        }
+      ],
+      "cause": "As in Nioh: no WMV3 decoder in CrossOver, and the shared D3D9 surface the cutscene is presented onto comes back with a null share handle.",
+      "symptom": "The cutscene refuses to play, then the game crashes",
+      "fix": "The fix's own WMV3 reader (or a staged decoder), then hand the game a share handle that exists",
+      "backend": "**DXMT only.** The sidecar needs `GetSharedHandle`, `E_NOTIMPL` under D3DMetal",
+      "crossover": "Stable 26.3, on a copy of it carrying this project's `winegstreamer` (2026-08-31); CrossOver Preview 27 through NotProton with nothing staged (2026-10-14)",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Nioh-2.md",
+      "graphicsBackend": "dxmt",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "Nioh 3",
+      "installer": "install-nioh3-bridge.sh",
+      "scope": "folder",
+      "executable": "Nioh3.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "Cutscene runs with sound, picture black. Same bridge as DYNASTY WARRIORS on a different carrier; its VP9 is decoded by the fix's own reader, since Preview's decoder draws magenta blocks into it.",
+      "page": "legacy/wiki/Nioh-3.md",
+      "installs": [
+        "amd_ags_x64-nioh3.dll",
+        "mgvf-asf-reader-LICENCES.md",
+        "mgvf-asf-reader.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "dwo-video-bridge.c",
+        "asf-reader.c",
+        "wmv-dmo.c",
+        "wm-reader.c",
+        "dshow-graph.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "fixes/dwo-video-bridge.c",
+          "symbol": "d3d12_open_shared_handle",
+          "note": "The D3D12 renderer opens the handle of a frame decoded on the D3D11 device; the bridge answers with a texture on the game's own device that carries the frame across.",
+          "language": "c",
+          "startLine": 2163,
+          "endLine": 2215,
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L2163-L2215",
+          "code": "static HRESULT WINAPI d3d12_open_shared_handle(void *self, HANDLE handle,\n                                               REFIID iid, void **out)\n{\n    {\n        static LONG told;\n        if (InterlockedIncrement(&told) <= 12)\n            logf_(\"D3D12 OpenSharedHandle %p %s%s\", handle, guid_text_(iid),\n                  handle == BRIDGE_HANDLE ? \"   << ours\" : \"\");\n    }\n    if (handle == BRIDGE_HANDLE)\n    {\n        HRESULT hr;\n        if (!out) return E_INVALIDARG;\n        *out = NULL;\n        if (!IsEqualGUID(iid, &IID_ID3D12Resource)) return E_NOINTERFACE;\n\n        EnterCriticalSection(&frame_lock);\n        /* A new clip of another size: the game has made a new texture and is\n         * opening it now, so this is the one moment the bridge can change size.\n         * Handing back the old one leaves the game drawing from a texture no\n         * frame of this clip can be written into. */\n        if (bridge_texture && frame_width && frame_height &&\n            (texture_width != frame_width || texture_height != frame_height))\n        {\n            logf_(\"bridge: the game opens a %ux%u clip on a %ux%u bridge; rebuilding\",\n                  frame_width, frame_height, texture_width, texture_height);\n            bridge_destroy();\n        }\n        if (!bridge_texture && frame_width && frame_height)\n        {\n            /*\n             * The size the game asked to share, when it said one.\n             *\n             * The handle it passes belongs to a texture it created itself, and\n             * what comes back has to describe that texture -- not the clip.\n             * Kingdom Hearts shares a 2048x1080 surface to carry a 1920x1080\n             * frame, so a texture built to the clip's size is the wrong\n             * resource under the same handle, and what the game copies out of\n             * it is not a picture.\n             */\n            bridge_create((ID3D12Device *)self, frame_width, frame_height);\n        }\n        hr = bridge_texture ? S_OK : E_FAIL;\n        if (bridge_texture)\n        {\n            ID3D12Resource_AddRef(bridge_texture);\n            *out = bridge_texture;\n        }\n        LeaveCriticalSection(&frame_lock);\n        return hr;\n    }\n    return real_open_shared_handle(self, handle, iid, out);\n}"
+        },
+        {
+          "file": "fixes/dwo-video-bridge.c",
+          "symbol": "res_get_shared_handle",
+          "note": "On the D3D11 side IDXGIResource::GetSharedHandle returns E_NOTIMPL; the bridge hands out a handle of its own that the D3D12 side recognises.",
+          "language": "c",
+          "startLine": 1863,
+          "endLine": 1884,
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L1863-L1884",
+          "code": "static HRESULT WINAPI res_get_shared_handle(void *self, HANDLE *handle)\n{\n    HRESULT hr = real_res_get_shared_handle(self, handle);\n    {\n        static LONG told;\n        if (InterlockedIncrement(&told) <= 12)\n            logf_(\"GetSharedHandle -> 0x%08lx%s\", (unsigned long)hr,\n                  (FAILED(hr) && d3d12_bridge_armed) ? \"   (answering BRIDGE_HANDLE)\" : \"\");\n    }\n    /*\n     * Only invent a handle if the side that can recognise it is armed.\n     *\n     * BRIDGE_HANDLE is meaningful to d3d12_open_shared_handle and to nothing\n     * else. Handing it out while that hook is missing turns a clean failure --\n     * the game learns it cannot share, and says so -- into a real D3D12 device\n     * dereferencing 0xD3D12B21D. Nioh 3 crashed exactly that way, because its\n     * D3D12 arrives through Streamline and the hook had not been placed there\n     * yet. Reporting the original failure is the safe answer.\n     */\n    if (FAILED(hr) && handle && d3d12_bridge_armed) { *handle = BRIDGE_HANDLE; return S_OK; }\n    return hr;\n}"
+        }
+      ],
+      "cause": "The game asks for D3D-backed decode on a D3D12 renderer; the frames the D3D11 decoder produces never reach the renderer.",
+      "symptom": "`Failed to play movie.`",
+      "fix": "The DYNASTY WARRIORS video bridge, on `amd_ags_x64.dll`",
+      "backend": "**D3DMetal**, D3D12 — the opposite of Nioh and Nioh 2",
+      "crossover": "Stable 26.3, on an engine carrying this project's `winegstreamer`; CrossOver Preview 27 through NotProton, with its VP9 decoded by the fix (2026-10-14)",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Nioh-3.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "Nioh",
+      "installer": "install-nioh-bridge.sh",
+      "scope": "folder",
+      "executable": "nioh.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "Cutscene runs with sound and no picture. Its video is WMV3, which the fix decodes itself where the engine cannot. Runs on DXMT only.",
+      "page": "legacy/wiki/Nioh.md",
+      "installs": [
+        "GfeSDK.dll",
+        "mgvf-asf-reader-LICENCES.md",
+        "mgvf-asf-reader.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "p5s-video-bridge.c",
+        "asf-reader.c",
+        "wmv-dmo.c",
+        "wm-reader.c",
+        "dshow-graph.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [
+        {
+          "name": "winevideo",
+          "url": "https://github.com/Jfishin/winevideo",
+          "note": "Independent confirmation of the shared-texture cutscene path, which winevideo repairs inside a patched Wine d3d9.dll."
+        }
+      ],
+      "excerpts": [
+        {
+          "file": "fixes/p5s-video-bridge.c",
+          "symbol": "my_CreateRenderTarget",
+          "note": "Wine's d3d9 answers a shared render target with S_OK and a null handle; where it leaves that hole, the bridge hands the game a real shared handle.",
+          "language": "c",
+          "startLine": 1437,
+          "endLine": 1466,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/p5s-video-bridge.c#L1437-L1466",
+          "code": "static HRESULT WINAPI my_CreateRenderTarget(void *self, UINT w, UINT h, DWORD fmt,\n                                            DWORD ms, DWORD msq, BOOL lockable,\n                                            void **surface, HANDLE *shared)\n{\n    HRESULT hr = real_CreateRenderTarget(self, w, h, fmt, ms, msq, lockable, surface, shared);\n    note_shared(\"CreateRenderTarget\", w, h, fmt, hr, shared);\n    /* Only where Wine left a hole: it succeeded and shared nothing. */\n    if (SUCCEEDED(hr) && shared && !*shared && make_sidecar(w, h))\n    {\n        static LONG said;\n        *shared = sidecar_handle;\n        sidecar_w = w; sidecar_h = h;\n        if (surface && *surface)\n        {\n            static void *su;\n            void **vt;\n            shared_surface = *surface;\n            vt = *(void ***)shared_surface;\n            real_SurfUnlock = (HRESULT (WINAPI *)(void *))vt[SLOT_SURF_UNLOCKRECT];\n            if (!watch_write_path || !patch_slot(\"surface UnlockRect\", shared_surface,\n                    SLOT_SURF_UNLOCKRECT, (void *)my_SurfUnlock, &su))\n                real_SurfUnlock = NULL;\n        }\n        if (InterlockedIncrement(&said) == 1)\n            logf_(\"  handed the game a real shared handle %p instead of null -- \"\n                  \"nothing copies into it yet; this only asks whether the game \"\n                  \"then carries on\", sidecar_handle);\n    }\n    return hr;\n}"
+        }
+      ],
+      "cause": "Two faults, the first hiding the second: no CrossOver ships a WMV3 decoder, so the DirectShow graph never builds; and the D3D9 render target the game asks to share comes back with a null share handle.",
+      "symptom": "`Failure to play movie. (RTM_ID_EV0001)`, then a crash",
+      "fix": "The fix's own WMV3 reader (or a staged decoder), then hand the game a share handle that exists",
+      "backend": "**DXMT only.** The sidecar needs `GetSharedHandle`, `E_NOTIMPL` under D3DMetal",
+      "crossover": "Stable 26.3 (`cxoffice-26.3.0rc2`), with winevideo 0.5 in the bottle — 27 Aug 2026; CrossOver Preview 27 through NotProton with nothing staged (2026-10-14)",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Nioh.md",
+      "graphicsBackend": "dxmt",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "Persona 5 Strikers",
+      "installer": "install-p5s-bridge.sh",
+      "scope": "folder",
+      "executable": "game.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "Cutscene runs with sound and no picture. Its video is VC-1 with WMA Pro audio, which the fix decodes itself where the engine cannot. Runs on DXMT only.",
+      "page": "legacy/wiki/Persona-5-Strikers.md",
+      "installs": [
+        "amd_ags_x64.dll",
+        "mgvf-asf-reader-LICENCES.md",
+        "mgvf-asf-reader.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "p5s-video-bridge.c",
+        "asf-reader.c",
+        "wmv-dmo.c",
+        "wm-reader.c",
+        "dshow-graph.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [
+        {
+          "name": "winevideo",
+          "url": "https://github.com/Jfishin/winevideo",
+          "note": "Independent confirmation of the shared-texture cutscene path, which winevideo repairs inside a patched Wine d3d9.dll."
+        }
+      ],
+      "excerpts": [
+        {
+          "file": "fixes/p5s-video-bridge.c",
+          "symbol": "my_CreateRenderTarget",
+          "note": "Wine's d3d9 answers a shared render target with S_OK and a null handle; where it leaves that hole, the bridge hands the game a real shared handle.",
+          "language": "c",
+          "startLine": 1437,
+          "endLine": 1466,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/p5s-video-bridge.c#L1437-L1466",
+          "code": "static HRESULT WINAPI my_CreateRenderTarget(void *self, UINT w, UINT h, DWORD fmt,\n                                            DWORD ms, DWORD msq, BOOL lockable,\n                                            void **surface, HANDLE *shared)\n{\n    HRESULT hr = real_CreateRenderTarget(self, w, h, fmt, ms, msq, lockable, surface, shared);\n    note_shared(\"CreateRenderTarget\", w, h, fmt, hr, shared);\n    /* Only where Wine left a hole: it succeeded and shared nothing. */\n    if (SUCCEEDED(hr) && shared && !*shared && make_sidecar(w, h))\n    {\n        static LONG said;\n        *shared = sidecar_handle;\n        sidecar_w = w; sidecar_h = h;\n        if (surface && *surface)\n        {\n            static void *su;\n            void **vt;\n            shared_surface = *surface;\n            vt = *(void ***)shared_surface;\n            real_SurfUnlock = (HRESULT (WINAPI *)(void *))vt[SLOT_SURF_UNLOCKRECT];\n            if (!watch_write_path || !patch_slot(\"surface UnlockRect\", shared_surface,\n                    SLOT_SURF_UNLOCKRECT, (void *)my_SurfUnlock, &su))\n                real_SurfUnlock = NULL;\n        }\n        if (InterlockedIncrement(&said) == 1)\n            logf_(\"  handed the game a real shared handle %p instead of null -- \"\n                  \"nothing copies into it yet; this only asks whether the game \"\n                  \"then carries on\", sidecar_handle);\n    }\n    return hr;\n}"
+        }
+      ],
+      "cause": "No CrossOver ships a VC-1 decoder, and with one staged the reader still never reads a sample, because the shared D3D9 render target it is given has a null handle.",
+      "symptom": "Sound plays, the picture never appears",
+      "fix": "The fix's own VC-1 and WMA Pro reader (or a staged VC-1 decoder), then bridge D3D9 to D3D11",
+      "backend": "**DXMT only.** D3DMetal cannot produce a shared handle at all",
+      "crossover": "Plays on stable 26.3 with the codec staged, and on CrossOver Preview 27 through NotProton with nothing staged (2026-10-14)",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Persona-5-Strikers.md",
+      "graphicsBackend": "dxmt",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "RESIDENT EVIL 2",
+      "installer": "install-re-vc1-fix.sh",
+      "scope": "folder",
+      "executable": "re2.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "Crashes when a VC-1 video plays; the fix decodes it itself where the engine cannot.",
+      "page": "legacy/wiki/RE-Engine-VC1.md",
+      "installs": [
+        "amd_ags_x64-dmc5.dll",
+        "amd_ags_x64-re2.dll",
+        "mgvf-asf-reader-LICENCES.md",
+        "mgvf-asf-reader.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "mf-reader-fallback.c",
+        "asf-reader.c",
+        "wmv-dmo.c",
+        "wm-reader.c",
+        "dshow-graph.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "fixes/mf-reader-fallback.c",
+          "symbol": "my_create",
+          "note": "When Media Foundation refuses a video (VC-1 in ASF, which no CrossOver decodes), the stream is handed to the fix's own ASF reader instead.",
+          "language": "c",
+          "startLine": 109,
+          "endLine": 125,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/mf-reader-fallback.c#L109-L125",
+          "code": "static HRESULT WINAPI my_create(void *stream, void *attrs, void **reader)\n{\n    static LONG calls, ours;\n    HRESULT hr = real_create(stream, attrs, reader);\n    LONG n = InterlockedIncrement(&calls);\n    if (n == 1) logf_(\"MFCreateSourceReaderFromByteStream -> 0x%08lx (first call)\", hr);\n    if (FAILED(hr) && stream && reader && load_asf_reader_())\n    {\n        HRESULT mine = asf_reader_create(stream, attrs, reader);\n        LONG k = InterlockedIncrement(&ours);\n        if (k <= 5 || FAILED(mine))\n            logf_(\"Media Foundation refused a stream (0x%08lx); our ASF reader -> 0x%08lx (%ld so far)\",\n                  hr, mine, k);\n        if (SUCCEEDED(mine)) hr = mine;\n    }\n    return hr;\n}"
+        }
+      ],
+      "symptom": "Crashes when a particular video plays. In Devil May Cry 5 it is the skill previews on the Customize screen",
+      "cause": "The video is VC-1, and CrossOver ships no VC-1 decoder",
+      "fix": "The fix's own VC-1 reader in the game folder (`install-re-vc1-fix.sh`); the staged codec still works and is used first where present",
+      "backend": "D3DMetal, D3D12",
+      "crossover": "Stable 26.3 with the codec staged; CrossOver Preview 27 through NotProton with nothing staged (2026-10-14)",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/RE-Engine-VC1.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "RESIDENT EVIL 3",
+      "installer": "install-re-vc1-fix.sh",
+      "scope": "folder",
+      "executable": "re3.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "Crashes when a VC-1 video plays; the fix decodes it itself where the engine cannot.",
+      "page": "legacy/wiki/RE-Engine-VC1.md",
+      "installs": [
+        "amd_ags_x64-dmc5.dll",
+        "amd_ags_x64-re2.dll",
+        "mgvf-asf-reader-LICENCES.md",
+        "mgvf-asf-reader.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "mf-reader-fallback.c",
+        "asf-reader.c",
+        "wmv-dmo.c",
+        "wm-reader.c",
+        "dshow-graph.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "fixes/mf-reader-fallback.c",
+          "symbol": "my_create",
+          "note": "When Media Foundation refuses a video (VC-1 in ASF, which no CrossOver decodes), the stream is handed to the fix's own ASF reader instead.",
+          "language": "c",
+          "startLine": 109,
+          "endLine": 125,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/mf-reader-fallback.c#L109-L125",
+          "code": "static HRESULT WINAPI my_create(void *stream, void *attrs, void **reader)\n{\n    static LONG calls, ours;\n    HRESULT hr = real_create(stream, attrs, reader);\n    LONG n = InterlockedIncrement(&calls);\n    if (n == 1) logf_(\"MFCreateSourceReaderFromByteStream -> 0x%08lx (first call)\", hr);\n    if (FAILED(hr) && stream && reader && load_asf_reader_())\n    {\n        HRESULT mine = asf_reader_create(stream, attrs, reader);\n        LONG k = InterlockedIncrement(&ours);\n        if (k <= 5 || FAILED(mine))\n            logf_(\"Media Foundation refused a stream (0x%08lx); our ASF reader -> 0x%08lx (%ld so far)\",\n                  hr, mine, k);\n        if (SUCCEEDED(mine)) hr = mine;\n    }\n    return hr;\n}"
+        }
+      ],
+      "symptom": "Crashes when a particular video plays. In Devil May Cry 5 it is the skill previews on the Customize screen",
+      "cause": "The video is VC-1, and CrossOver ships no VC-1 decoder",
+      "fix": "The fix's own VC-1 reader in the game folder (`install-re-vc1-fix.sh`); the staged codec still works and is used first where present",
+      "backend": "D3DMetal, D3D12",
+      "crossover": "Stable 26.3 with the codec staged; CrossOver Preview 27 through NotProton with nothing staged (2026-10-14)",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/RE-Engine-VC1.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "RESONANCE: A PLAGUE TALE LEGACY",
+      "installer": "install-resonance-fix.sh",
+      "scope": "folder",
+      "executable": "Resonance.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "Refuses to start: \"Shader Model 6.7 is not supported by this device\". It also turns HDR10 on by itself on a display it reads as HDR and starts to a black screen, so HDR10 0 goes into its ENGINESETTINGS file.",
+      "page": "legacy/wiki/Resonance-A-Plague-Tale-Legacy.md",
+      "installs": [
+        "NvCloth_x64-resonance.dll"
+      ],
+      "builtFrom": [
+        "shader-floor-fix.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "fixes/shader-floor-fix.c",
+          "symbol": "lower_the_floor",
+          "note": "Finds the one `cmp eax, 67h` that compares the shader model with 6.7 and makes it 6.6, in memory only; with any other number of matches it touches nothing.",
+          "language": "c",
+          "startLine": 74,
+          "endLine": 120,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/shader-floor-fix.c#L74-L120",
+          "code": "static void lower_the_floor(void)\n{\n    HMODULE base = GetModuleHandleA(NULL);\n    IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)base;\n    IMAGE_NT_HEADERS *nt;\n    IMAGE_SECTION_HEADER *sec;\n    BYTE *found = NULL;\n    int hits = 0;\n    unsigned i;\n\n    if (!base || dos->e_magic != IMAGE_DOS_SIGNATURE) return;\n    nt = (IMAGE_NT_HEADERS *)((BYTE *)base + dos->e_lfanew);\n    if (nt->Signature != IMAGE_NT_SIGNATURE) return;\n    sec = IMAGE_FIRST_SECTION(nt);\n\n    for (i = 0; i < nt->FileHeader.NumberOfSections; i++, sec++)\n    {\n        BYTE *p, *end;\n        if (memcmp(sec->Name, \".text\", 5) != 0) continue;\n        p   = (BYTE *)base + sec->VirtualAddress;\n        end = p + sec->Misc.VirtualSize - sizeof(SM_FLOOR);\n        for (; p < end; p++)\n        {\n            if (p[0] != SM_FLOOR[0] || memcmp(p, SM_FLOOR, sizeof(SM_FLOOR)) != 0) continue;\n            if (++hits == 1) found = p;\n        }\n    }\n\n    if (hits != 1)\n    {\n        logf_(\"%d places match the pattern -- leaving all of them alone\", hits);\n        return;\n    }\n    {\n        DWORD old;\n        if (!VirtualProtect(found + 2, 1, PAGE_EXECUTE_READWRITE, &old))\n        {\n            logf_(\"VirtualProtect refused (err %lu)\", GetLastError());\n            return;\n        }\n        found[2] = 0x66;\n        VirtualProtect(found + 2, 1, old, &old);\n        logf_(\"shader model floor 6.7 -> 6.6 at +0x%lX, in memory only%s\",\n              (unsigned long)(found - (BYTE *)base),\n              found[2] == 0x66 ? \"\" : \" -- but the write did not stick\");\n    }\n}"
+        }
+      ],
+      "cause": "D3DMetal reports Shader Model 6.6, because that is what it has, and the game refuses to start below 6.7.",
+      "symptom": "`Fatal error — Shader Model 6.7 is not supported by this device!`",
+      "fix": "Lower the shader model floor to 6.6, in memory",
+      "backend": "D3DMetal, D3D12",
+      "crossover": "Stable 26.3 (`cxoffice-26.3.0rc2`), Game Porting Toolkit 3.0 and 4.0b2 alike",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Resonance-A-Plague-Tale-Legacy.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": "4.0b3"
+    },
+    {
+      "title": "The Witcher 3: Wild Hunt",
+      "installer": "install-w3-fix.sh",
+      "scope": "folder",
+      "executable": "witcher3.exe",
+      "carrierDirectory": "bin/x64_dx12",
+      "alsoRuns": [],
+      "summary": "Refuses the stream-output pipeline that crashes D3DMetal's shader converter, and lets the game offer DLSS.",
+      "page": "legacy/wiki/The-Witcher-3.md",
+      "installs": [
+        "amd_fidelityfx_loader_dx12-w3.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "w3-streamout-fix.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [
+        {
+          "name": "tholtman1-del",
+          "url": "https://github.com/tholtman1-del/witcher3-crossover-fix",
+          "note": "The diagnosis of the black screen and the rule that refuses the pipeline (MIT)."
+        }
+      ],
+      "excerpts": [
+        {
+          "file": "fixes/w3-streamout-fix.c",
+          "symbol": "refuse",
+          "note": "tholtman1-del's rule: a geometry-shader pipeline that streams out, or has no pixel shader, is refused.",
+          "language": "c",
+          "startLine": 101,
+          "endLine": 112,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/w3-streamout-fix.c#L101-L112",
+          "code": "static BOOL refuse(BOOL gs, BOOL ps, UINT so_entries)\n{\n#ifdef W3_RTPROBE\n    if (allow_gs_without_ps && gs && !so_entries && !ps)\n    {\n        logline(\"let through geometry-shader pipeline %ld with no pixel shader and no stream output\",\n                InterlockedIncrement(&let_through));\n        return FALSE;\n    }\n#endif\n    return gs && (so_entries || !ps);\n}"
+        },
+        {
+          "file": "fixes/w3-streamout-fix.c",
+          "symbol": "my_gfx",
+          "note": "The refusal: E_INVALIDARG before the pipeline reaches Apple's shader converter, which crashed on it and left the game deadlocked on a black screen.",
+          "language": "c",
+          "startLine": 119,
+          "endLine": 139,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/w3-streamout-fix.c#L119-L139",
+          "code": "static HRESULT WINAPI my_gfx(void *dev, const void *desc, REFIID iid, void **out)\n{\n    const char *d = desc;\n    InterlockedIncrement(&seen_gfx);\n    if (d && refuse(has_shader(d + 72), has_shader(d + 24), *(const UINT *)(d + 96)))\n    {\n        LONG n = InterlockedIncrement(&refused);\n        logline(\"refused stream-output pipeline %ld (graphics desc, %u entries)\", n, *(const UINT *)(d + 96));\n        if (out) *out = NULL;\n        return E_INVALIDARG;\n    }\n#ifdef W3_RTPROBE\n    {\n        HRESULT hr = real_gfx(dev, desc, iid, out);\n        if (FAILED(hr)) logline(\"CreateGraphicsPipelineState failed: %08lx\", (unsigned long)hr);\n        return hr;\n    }\n#else\n    return real_gfx(dev, desc, iid, out);\n#endif\n}"
+        }
+      ],
+      "symptom": "A black window at full CPU on every launch; once past it, DLSS listed as not supported",
+      "cause": "One stream-output pipeline crashes D3DMetal's shader converter; the game switches NVIDIA Streamline off when it finds Wine",
+      "fix": "Refuse that pipeline; tell the one Streamline check that there is no Wine",
+      "backend": "**D3DMetal**, D3D12, Metal 4 on",
+      "crossover": "Stable 26.3 with Game Porting Toolkit 4.0b2 (2026-09-30)",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/The-Witcher-3.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "TMNT: Splintered Fate",
+      "installer": "install-tmnt-fix.sh",
+      "scope": "folder",
+      "executable": "TMNTSF.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "Not about video: it guards one D3D12 call that ends the process instead of returning an error.",
+      "page": "legacy/wiki/TMNT-Splintered-Fate.md",
+      "installs": [
+        "fmod-tmnt.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "d3d12-guards.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "fixes/d3d12-guards.c",
+          "symbol": "my_deserialize",
+          "note": "A shader container with no root signature is answered E_INVALIDARG, as Windows does, instead of letting D3DMetal read past the part it did not find.",
+          "language": "c",
+          "startLine": 207,
+          "endLine": 220,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/d3d12-guards.c#L207-L220",
+          "code": "static HRESULT WINAPI my_deserialize(const void *blob, SIZE_T len, REFIID iid, void **out)\n{\n    if (!has_root_signature(blob, len))\n    {\n        if (InterlockedIncrement(&refused) <= 8)\n            logf_(\"no RTS0 in a %llu byte container -- answering E_INVALIDARG \"\n                  \"instead of letting it be dereferenced\",\n                  (unsigned long long)len);\n        if (out) *out = NULL;\n        return E_INVALIDARG;\n    }\n    InterlockedIncrement(&passed);\n    return real_deserialize(blob, len, iid, out);\n}"
+        }
+      ],
+      "symptom": "Opens a window, then closes about three seconds later. No dialog, no error, nothing in any log",
+      "cause": "`D3D12CreateRootSignatureDeserializer` ends the process instead of returning an error",
+      "fix": "Look in the container first, and answer for it when there is nothing to find",
+      "backend": "**D3DMetal**, D3D12",
+      "crossover": "Stable 26.3, on a copy of it carrying this project's `winegstreamer` (2026-08-31)",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/TMNT-Splintered-Fate.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "Tormented Souls 2",
+      "installer": "install-tormented-fix.sh",
+      "scope": "folder",
+      "executable": "TormentedSouls2.exe",
+      "carrierDirectory": "TormentedSouls2/Binaries/Win64",
+      "alsoRuns": [],
+      "summary": "The same D3D12 guards on the colour-management library the game imports.",
+      "page": "legacy/wiki/Tormented-Souls-2.md",
+      "installs": [
+        "OpenColorIO_2_3-tormented.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "d3d12-guards.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "fixes/d3d12-guards.c",
+          "symbol": "my_modelist",
+          "note": "Puts 16:9 modes into the display mode list the game reads, since it keeps only 16:9 ones and has no fallback when there are none.",
+          "language": "c",
+          "startLine": 422,
+          "endLine": 507,
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/d3d12-guards.c#L422-L507",
+          "code": "static HRESULT WINAPI my_modelist(void *self, UINT fmt, UINT flags, UINT *count, void *modes)\n{\n    HRESULT hr;\n    UINT w = 0, h = 0, hz = 0, i, have, room, added = 0, big_w = 0, big_h = 0;\n\n    if (!desktop_size(&w, &h, &hz)) return real_modelist(self, fmt, flags, count, modes);\n\n    if (!modes)                                   /* the counting call */\n    {\n        hr = real_modelist(self, fmt, flags, count, NULL);\n        if (SUCCEEDED(hr) && count) *count += ladder_fits(w, h);  /* room for ours */\n        return hr;\n    }\n\n    /* The filling call. Hold back the slots we may need, fill the rest normally. */\n    room = ladder_fits(w, h);\n    have = *count;\n    /* Never write past what the caller allocated. It asked for a count first\n     * and this said \"that many plus room\", but a caller is free to hand back a\n     * smaller buffer than it was told about, and appending into one would be a\n     * far worse bug than the crash being repaired. */\n    if (room > have) room = have;\n    *count = have - room;\n    hr = real_modelist(self, fmt, flags, count, modes);\n    if (FAILED(hr)) { *count = have; return hr; }\n\n    {\n        /* Say what is actually on offer, with the right stride. A mode list\n         * read at the wrong stride reports resolutions nobody offered, and a\n         * conclusion drawn from it is worse than no conclusion. */\n        static LONG told;\n        UINT tallest = 0, widest = 0;\n        for (i = 0; i < *count; ++i)\n        {\n            const unsigned char *m = (const unsigned char *)modes + (size_t)i * MODE_DESC_SIZE;\n            UINT mw = *(const UINT *)(m + 0), mh = *(const UINT *)(m + 4);\n            if (mh > tallest) tallest = mh;\n            if (mw > widest) widest = mw;\n        }\n        if (InterlockedIncrement(&told) <= 4)\n            logf_(\"mode list for format %u: %u modes, largest %ux%u; the screen is %ux%u\",\n                  fmt, *count, widest, tallest, w, h);\n    }\n    for (i = 0; i < *count; ++i)\n    {\n        const unsigned char *m = (const unsigned char *)modes + (size_t)i * MODE_DESC_SIZE;\n        UINT mw = *(const UINT *)(m + 0), mh = *(const UINT *)(m + 4);\n        double aspect;\n        if (!mh) continue;\n        aspect = (double)mw / (double)mh;\n        if (aspect > ASPECT_LOW && aspect < ASPECT_HIGH)\n        {\n            static LONG said;\n            if (InterlockedIncrement(&said) <= 4)\n                logf_(\"        a 16:9 mode is already on offer (%ux%u), adding nothing\",\n                      mw, mh);\n            return hr;\n        }\n    }\n    /* Nothing on offer is 16:9 and this game keeps nothing else, so the array\n     * it is about to build would come out empty. Give it the whole ladder that\n     * fits, not just enough to survive: the player gets a resolution menu, not\n     * a single forced entry. */\n    for (i = 0; i < LADDER_N && added < room; ++i)\n    {\n        unsigned char *m;\n        if ((ladder[i].w > w || ladder[i].h > h) && !(added == 0 && i + 1 == LADDER_N))\n            continue;\n        m = (unsigned char *)modes + (size_t)(*count) * MODE_DESC_SIZE;\n        if (*count) memcpy(m, modes, MODE_DESC_SIZE);  /* inherit format and scaling */\n        else memset(m, 0, MODE_DESC_SIZE);\n        *(UINT *)(m + 0)  = ladder[i].w;\n        *(UINT *)(m + 4)  = ladder[i].h;\n        *(UINT *)(m + 8)  = hz;\n        *(UINT *)(m + 12) = 1;\n        *(UINT *)(m + 16) = fmt;\n        *count += 1;\n        if (!added) { big_w = ladder[i].w; big_h = ladder[i].h; }  /* largest first */\n        ++added;\n    }\n    if (InterlockedIncrement(&modes_added) <= 8)\n        logf_(\"not one of the %u modes on offer is 16:9, and this game keeps \"\n              \"nothing else -- added %u of them, largest %ux%u @ %u Hz\",\n              *count - added, added, big_w, big_h, hz);\n    return hr;\n}"
+        }
+      ],
+      "symptom": "`Fatal error! Unhandled Exception: EXCEPTION_ACCESS_VIOLATION reading address 0xfffffffffffffff8` before the first frame",
+      "cause": "The game keeps only 16:9 resolutions and has no fallback when none exist",
+      "fix": "Put 16:9 modes in the list the game reads",
+      "backend": "**D3DMetal**, D3D12 (and D3D11 — it fails identically either way)",
+      "crossover": "Stable 26.3 with Game Porting Toolkit 4.0b2 (2026-08-31). The measurements below were made on `crossover-preview-arm64-20260821`, which is no longer a supported engine",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Tormented-Souls-2.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
+      "title": "Wo Long: Fallen Dynasty",
+      "installer": "install-dwo-bridge.sh",
+      "scope": "folder",
+      "executable": "WoLong.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "The player needs D3D11 video interfaces D3DMetal lacks, and the decoded frame carried across to its D3D12 renderer.",
+      "page": "legacy/wiki/Wo-Long-Fallen-Dynasty.md",
+      "installs": [
+        "libxess.dll",
+        "pe.pl"
+      ],
+      "builtFrom": [
+        "dwo-video-bridge.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [],
+      "excerpts": [
+        {
+          "file": "fixes/dwo-video-bridge.c",
+          "symbol": "d3d12_open_shared_handle",
+          "note": "The D3D12 renderer opens the handle of a frame decoded on the D3D11 device; the bridge answers with a texture on the game's own device that carries the frame across.",
+          "language": "c",
+          "startLine": 2163,
+          "endLine": 2215,
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L2163-L2215",
+          "code": "static HRESULT WINAPI d3d12_open_shared_handle(void *self, HANDLE handle,\n                                               REFIID iid, void **out)\n{\n    {\n        static LONG told;\n        if (InterlockedIncrement(&told) <= 12)\n            logf_(\"D3D12 OpenSharedHandle %p %s%s\", handle, guid_text_(iid),\n                  handle == BRIDGE_HANDLE ? \"   << ours\" : \"\");\n    }\n    if (handle == BRIDGE_HANDLE)\n    {\n        HRESULT hr;\n        if (!out) return E_INVALIDARG;\n        *out = NULL;\n        if (!IsEqualGUID(iid, &IID_ID3D12Resource)) return E_NOINTERFACE;\n\n        EnterCriticalSection(&frame_lock);\n        /* A new clip of another size: the game has made a new texture and is\n         * opening it now, so this is the one moment the bridge can change size.\n         * Handing back the old one leaves the game drawing from a texture no\n         * frame of this clip can be written into. */\n        if (bridge_texture && frame_width && frame_height &&\n            (texture_width != frame_width || texture_height != frame_height))\n        {\n            logf_(\"bridge: the game opens a %ux%u clip on a %ux%u bridge; rebuilding\",\n                  frame_width, frame_height, texture_width, texture_height);\n            bridge_destroy();\n        }\n        if (!bridge_texture && frame_width && frame_height)\n        {\n            /*\n             * The size the game asked to share, when it said one.\n             *\n             * The handle it passes belongs to a texture it created itself, and\n             * what comes back has to describe that texture -- not the clip.\n             * Kingdom Hearts shares a 2048x1080 surface to carry a 1920x1080\n             * frame, so a texture built to the clip's size is the wrong\n             * resource under the same handle, and what the game copies out of\n             * it is not a picture.\n             */\n            bridge_create((ID3D12Device *)self, frame_width, frame_height);\n        }\n        hr = bridge_texture ? S_OK : E_FAIL;\n        if (bridge_texture)\n        {\n            ID3D12Resource_AddRef(bridge_texture);\n            *out = bridge_texture;\n        }\n        LeaveCriticalSection(&frame_lock);\n        return hr;\n    }\n    return real_open_shared_handle(self, handle, iid, out);\n}"
+        },
+        {
+          "file": "fixes/dwo-video-bridge.c",
+          "symbol": "res_get_shared_handle",
+          "note": "On the D3D11 side IDXGIResource::GetSharedHandle returns E_NOTIMPL; the bridge hands out a handle of its own that the D3D12 side recognises.",
+          "language": "c",
+          "startLine": 1863,
+          "endLine": 1884,
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L1863-L1884",
+          "code": "static HRESULT WINAPI res_get_shared_handle(void *self, HANDLE *handle)\n{\n    HRESULT hr = real_res_get_shared_handle(self, handle);\n    {\n        static LONG told;\n        if (InterlockedIncrement(&told) <= 12)\n            logf_(\"GetSharedHandle -> 0x%08lx%s\", (unsigned long)hr,\n                  (FAILED(hr) && d3d12_bridge_armed) ? \"   (answering BRIDGE_HANDLE)\" : \"\");\n    }\n    /*\n     * Only invent a handle if the side that can recognise it is armed.\n     *\n     * BRIDGE_HANDLE is meaningful to d3d12_open_shared_handle and to nothing\n     * else. Handing it out while that hook is missing turns a clean failure --\n     * the game learns it cannot share, and says so -- into a real D3D12 device\n     * dereferencing 0xD3D12B21D. Nioh 3 crashed exactly that way, because its\n     * D3D12 arrives through Streamline and the hook had not been placed there\n     * yet. Reporting the original failure is the safe answer.\n     */\n    if (FAILED(hr) && handle && d3d12_bridge_armed) { *handle = BRIDGE_HANDLE; return S_OK; }\n    return hr;\n}"
+        }
+      ],
+      "cause": "The video is decoded on a D3D11 device and presented by a D3D12 renderer; the game negotiates a player, is told yes and tears it down, never reading a sample, because the frame has no way across.",
+      "symptom": "The cutscene runs with sound and no picture",
+      "fix": "The DYNASTY WARRIORS bridge, on `libxess.dll`",
+      "backend": "**D3DMetal**, D3D12",
+      "crossover": "Stable 26.3, on a copy of it carrying this project's `winegstreamer` (2026-08-31)",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Wo-Long-Fallen-Dynasty.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    }
+  ]
+}

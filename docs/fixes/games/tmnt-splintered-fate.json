@@ -1,0 +1,26 @@
+{
+  "title": "TMNT: Splintered Fate",
+  "installer": "install-tmnt-fix.sh",
+  "scope": "folder",
+  "executable": "TMNTSF.exe",
+  "carrierDirectory": null,
+  "alsoRuns": [],
+  "summary": "Not about video: it guards one D3D12 call that ends the process instead of returning an error.",
+  "page": "legacy/wiki/TMNT-Splintered-Fate.md",
+  "installs": [
+    "fmod-tmnt.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "d3d12-guards.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [],
+  "excerpts": [
+    {
+      "file": "d3d12-guards.c",
+      "symbol": "my_deserialize",
+      "note": "A shader container with no root signature is answered E_INVALIDARG, as Windows does, instead of letting D3DMetal read past the part it did not find."
+    }
+  ]
+}

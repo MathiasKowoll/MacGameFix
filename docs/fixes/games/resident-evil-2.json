@@ -1,0 +1,33 @@
+{
+  "title": "RESIDENT EVIL 2",
+  "installer": "install-re-vc1-fix.sh",
+  "scope": "folder",
+  "executable": "re2.exe",
+  "carrierDirectory": null,
+  "alsoRuns": [],
+  "summary": "Crashes when a VC-1 video plays; the fix decodes it itself where the engine cannot.",
+  "page": "legacy/wiki/RE-Engine-VC1.md",
+  "installs": [
+    "amd_ags_x64-dmc5.dll",
+    "amd_ags_x64-re2.dll",
+    "mgvf-asf-reader-LICENCES.md",
+    "mgvf-asf-reader.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "mf-reader-fallback.c",
+    "asf-reader.c",
+    "wmv-dmo.c",
+    "wm-reader.c",
+    "dshow-graph.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [],
+  "excerpts": [
+    {
+      "file": "mf-reader-fallback.c",
+      "symbol": "my_create",
+      "note": "When Media Foundation refuses a video (VC-1 in ASF, which no CrossOver decodes), the stream is handed to the fix's own ASF reader instead."
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "title": "NieR Replicant ver.1.22474487139",
+  "installer": "install-nier-bridge.sh",
+  "scope": "folder",
+  "executable": "NieR Replicant ver.1.22474487139.exe",
+  "carrierDirectory": null,
+  "alsoRuns": [],
+  "summary": "Crashes when the first video starts. Its video is WMV2 with WMA v2 audio in ASF, which no CrossOver decodes; the fix decodes it itself where the engine cannot.",
+  "page": "legacy/wiki/NieR-Replicant.md",
+  "installs": [
+    "bottles.sh",
+    "dinput8-nier.dll",
+    "mgvf-asf-reader-LICENCES.md",
+    "mgvf-asf-reader.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "dwo-video-bridge.c",
+    "asf-reader.c",
+    "wmv-dmo.c",
+    "wm-reader.c",
+    "dshow-graph.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [],
+  "excerpts": [
+    {
+      "file": "dwo-video-bridge.c",
+      "symbol": "strip_d3d_attributes",
+      "note": "The game asks for decode into D3D video textures; the reader gets a copy of its attributes without the two that ask for it, so it decodes in software."
+    }
+  ],
+  "cause": "The game asks Media Foundation to decode the WMV2 video into D3D video textures; under D3DMetal there is nothing to decode into, and it dies asking for NV12 output."
+}
