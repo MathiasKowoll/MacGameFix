@@ -374,7 +374,7 @@ static void attach(void)
     slash[1 + i] = 0;
     g_log = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
                         OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    logline("==== gowr-triggers (built " __DATE__ " " __TIME__ "), pid %lu", GetCurrentProcessId());
+    logline("==== gowr-triggers, pid %lu", GetCurrentProcessId());
     if (!(at = find_wrapper(why, sizeof(why))))
     {
         logline("the game's scePadSetTriggerEffect wrapper was not found (%s): nothing changed", why);
