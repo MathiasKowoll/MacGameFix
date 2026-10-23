@@ -26,7 +26,9 @@
 #     engine_not_needed_on, a CrossOver where it was measured needing none
 #
 # So a fix that later stops needing the engine arrives here on its own, and one
-# that starts needing it leaves.
+# that starts needing it leaves. An installer's MGVF-LOG line, when it has one,
+# names the logs its DLL writes beside itself while the game runs; games.json
+# carries them as "logs", for the report It Works… saves.
 #
 # WHO SIGNS IT. MACGAMEFIX_CODESIGN_IDENTITY, a Developer ID Application identity
 # codesign knows by its name or SHA-1; else the keychain's first one (security
@@ -93,6 +95,9 @@ for script in sorted((root / "fixes").glob("install-*.sh")):
     text = script.read_text()
     scope = re.search(r"^# MGVF-SCOPE: (\S+)", text, re.M)
     why = re.search(r"^# MGVF-WHY: (.*)$", text, re.M)
+    # The logs the fix's DLL writes beside itself while the game runs, by name:
+    # a fix's report (It Works… in Games) carries their last lines.
+    logs = re.search(r"^# MGVF-LOG: (.*)$", text, re.M)
     for m in re.finditer(r"^# MGVF-GAME: (.*?) \| (.*?) \|(.*)$", text, re.M):
         # An optional fourth field names the other executables the title runs as
         # (MK11.exe beside MK11_DX12.exe), so the app knows it is running either way.
@@ -115,6 +120,7 @@ for script in sorted((root / "fixes").glob("install-*.sh")):
             "name": name,
             "exe": exe,
             "alsoRuns": also,
+            "logs": logs.group(1).split() if logs else [],
             "carrierDir": carrier,
             "script": script.name,
             # folder, prefix or app: the app then says where the fix goes.

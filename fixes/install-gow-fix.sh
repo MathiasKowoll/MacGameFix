@@ -25,6 +25,7 @@
 # MGVF-SCOPE: folder
 # MGVF-GAME: God of War | GoW.exe |
 # MGVF-WHY: White specks on characters in dim light: an EQUAL depth test after a prepass, which the translated shaders do not match bit for bit.
+# MGVF-LOG: gow-depth-fix.log
 
 set -euo pipefail
 

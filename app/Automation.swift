@@ -605,6 +605,8 @@ enum Updater {
 
 enum Report {
     static let newIssue = "https://github.com/MathiasKowoll/MacGameFix/issues/new"
+    /// The most text, in UTF-8 bytes, a filled-in issue's address carries in one field.
+    static let longest = 5000
 
     /// GitHub's new-issue page for a fix that failed, filled in. Nothing is sent
     /// until the user, signed in to GitHub, reads it and presses Submit.
@@ -629,7 +631,7 @@ enum Report {
         }
         compose()
         // GitHub reads a long address badly: keep the newest lines that fit.
-        while body.utf8.count > 5000 && !tail.isEmpty {
+        while body.utf8.count > longest && !tail.isEmpty {
             tail.removeFirst()
             compose()
         }

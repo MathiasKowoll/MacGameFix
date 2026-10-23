@@ -677,9 +677,14 @@ enum Issue {
     /// A new issue on GitHub with one of the repository's forms, the given fields
     /// filled in by their ids.
     static func new(template: String, _ fields: KeyValuePairs<String, String>) -> URL? {
+        new(template: template, fields: fields.map { ($0.key, $0.value) })
+    }
+
+    /// The same, from fields gathered as they are known, so one left unset is not sent.
+    static func new(template: String, fields: [(String, String)]) -> URL? {
         var issue = URLComponents(string: "https://github.com/MathiasKowoll/MacGameFix/issues/new")!
         issue.queryItems = [URLQueryItem(name: "template", value: template)]
-            + fields.map { URLQueryItem(name: $0.key, value: $0.value) }
+            + fields.map { URLQueryItem(name: $0.0, value: $0.1) }
         // URLComponents leaves a plus as it is, and GitHub reads it as a space ("1.5+2.5").
         issue.percentEncodedQuery = issue.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         return issue.url

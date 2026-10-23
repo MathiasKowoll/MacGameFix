@@ -28,6 +28,7 @@
 # MGVF-SCOPE: folder
 # MGVF-GAME: Marvel's Spider-Man 2 | Spider-Man2.exe |
 # MGVF-WHY: Characters stay in a T-pose and the symbiote breaks on M1-M4 Macs: D3DMetal reads and writes typed buffers only to element 2^28.
+# MGVF-LOG: sm2-tpose-fix.log
 
 set -euo pipefail
 

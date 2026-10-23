@@ -10,7 +10,9 @@ body:
         a report count is that someone else could check it: the versions, what was played, and the report
         file. **How to report** on [macgamefix.app](https://macgamefix.app/docs/reporting) walks you through it.
 
-        Until the app has a button for this, attach the report the **Report** tab saves for the game
+        In MacGameFix's **Games** tab, select the game and click **It Works…**, under the table: it saves the
+        game's fix report and opens this form with the game, the versions and the fix's own log filled in.
+        Attach the report it saved. An app without that button: attach the report the **Report** tab saves
         (**Save the Report and Open an Issue…**) and copy the lines about the game from **Settings › Log**.
   - type: input
     id: game
@@ -76,7 +78,7 @@ body:
     id: log
     attributes:
       label: MacGameFix's log
-      description: The lines about this game from Settings › Log (copy them while the app is open), from the install to after you played, and the fix's own log from the game's folder if it writes one, such as mk11-face-fix.log.
+      description: It Works… fills this in with the fix's own log from the game's folder, such as mk11-face-fix.log, and the app's lines about the game from Settings › Log, as far as a link carries them; the rest is in the report. Without that button, copy the lines about this game from Settings › Log while the app is open, from the install to after you played, and the fix's own log if it writes one.
       render: text
     validations:
       required: true

@@ -8,7 +8,9 @@ body:
       value: |
         This is how a game gets "Fixed by D3DMetal from GPTK …" on its page. It counts only if the fix was
         removed first: a game that works with its fix still installed shows nothing about the fix.
-        Remove it from the **Games** tab (**Remove Selected**), play, and report what happened.
+        Remove it from the **Games** tab (**Remove Selected**) and play. Then select the game and click
+        **Works Without the Fix…**, under the table: it saves the report and opens this form with the game
+        and the versions filled in.
   - type: input
     id: game
     attributes:
@@ -49,7 +51,7 @@ body:
     id: report
     attributes:
       label: The report
-      description: Attach the file the Report tab saves for the game, made after playing without the fix.
+      description: Attach the file Works Without the Fix… saved (MacGameFix report without the fix - <game> - <date>.md), made after playing without the fix. An app without that button - the file the Report tab saves for the game.
     validations:
       required: true
   - type: textarea

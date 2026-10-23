@@ -1,7 +1,9 @@
 // The Report tab's probe: what a game is made of, read from its folder alone, and
-// the report a user attaches to an issue about a game that does not work.
-// Nothing here writes into a game, its prefix or its bottle.
+// the report a user attaches to an issue about a game that does not work; and a
+// fix's report, which Games saves for a fix that works or a game that works
+// without it. Nothing here writes into a game, its prefix or its bottle.
 import Foundation
+import CryptoKit
 
 // MARK: - The games on this Mac
 
@@ -407,9 +409,12 @@ enum Probe {
 
     /// The report for an issue about this game: what it is made of, where it can
     /// run, what MacGameFix has for it, and the logs about it. Only this game; the
-    /// home folder is written ~ and the Mac's name is left out.
-    static func report(_ game: ProbeGame, symptom: String, findings f: ProbeFindings, fix: String?,
+    /// home folder is written ~ and the Mac's name is left out. A fix's report
+    /// (FixReport) is this one with no symptom, its own title, the prefixes its
+    /// fix was given named, and its section on the fix after the first lines.
+    static func report(_ game: ProbeGame, symptom: String?, findings f: ProbeFindings, fix: String?,
                        engines: [(name: String, build: String, state: String)], padLines: [String],
+                       title: String = "game report", given: [Prefix] = [], section: String = "",
                        now: Date = Date()) -> String {
         func shell(_ args: [String]) -> String {
             let p = Process(), pipe = Pipe()
@@ -422,21 +427,25 @@ enum Probe {
             return String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        var out = "# MacGameFix game report: \(game.name)\n\n"
+        var out = "# MacGameFix \(title): \(game.name)\n\n"
         out += "- Made: \(ISO8601DateFormatter().string(from: now))\n"
         out += "- MacGameFix \(Catalog.appVersion); macOS \(ProcessInfo.processInfo.operatingSystemVersionString); "
             + "\(shell(["/usr/sbin/sysctl", "-n", "hw.model"]))\n"
-        out += "- Game: \(game.name), Steam app \(game.appid)\n"
-        out += "- What goes wrong: \(symptom)\n"
+        // A folder the user added holds no appmanifest, and so no app id.
+        out += "- Game: \(game.name)" + (game.appid.isEmpty ? "" : ", Steam app \(game.appid)") + "\n"
+        if let symptom { out += "- What goes wrong: \(symptom)\n" }
         out += "- Folder: \(game.folder.path)\n"
+        let found = places(for: game.folder, given: given)
         var prefixes: [String] = []
-        for p in Libraries.prefixes(for: game.folder) {
+        for p in found.named {
             let words = (p.kind == .bottle ? "the CrossOver bottle \"\(p.path.lastPathComponent)\"" : "a Steam Play prefix")
                 + " (\(p.path.path))"
             if !prefixes.contains(words) { prefixes.append(words) }
         }
+        if let others = others(found.others.count) { prefixes.append(others) }
         out += "- Runs in: " + (prefixes.isEmpty ? "no prefix or bottle found beside its library" : prefixes.joined(separator: "; ")) + "\n"
         out += "- MacGameFix: " + (fix.map { "has a fix for it (\($0))" } ?? "has no fix for it") + "\n"
+        out += section
 
         out += "\n## What the game is made of\n\n"
         for (label, value) in f.summary { out += "- \(label): \(value)\n" }
@@ -465,10 +474,35 @@ enum Probe {
         return redact(out)
     }
 
+    /// The prefixes and bottles a report names for a game: its own Steam Play
+    /// prefix, a bottle that holds its folder, and those its fix was given in
+    /// Games. Any other bottle whose Steam lists the game's library is counted,
+    /// not named: a bottle is often named after another game, and a report names
+    /// its own game alone.
+    static func places(for folder: URL, given: [Prefix] = []) -> (named: [Prefix], others: [Prefix]) {
+        let game = folder.resolvingSymlinksInPath().standardizedFileURL.path
+        var named: [Prefix] = [], others: [Prefix] = []
+        for p in Libraries.prefixes(for: folder) + given where !named.contains(p) && !others.contains(p) {
+            let root = p.path.resolvingSymlinksInPath().standardizedFileURL.path
+            if p.kind == .steamPlay || given.contains(p) || game.hasPrefix(root + "/") { named.append(p) } else { others.append(p) }
+        }
+        return (named, others)
+    }
+
+    /// The bottles places(for:) counts and does not name, in words; nil for none.
+    static func others(_ count: Int) -> String? {
+        count == 0 ? nil : count == 1 ? "another CrossOver bottle whose Steam lists its library, not named here"
+            : "\(count) other CrossOver bottles whose Steam lists its library, not named here"
+    }
+
     /// The home folder as ~, and neither the account's name nor the Mac's.
     static func redact(_ text: String) -> String {
         var out = text
-        for home in [Paths.home.path, NSHomeDirectory()] where home.count > 1 {
+        // The home as realpath gives it first: a folder found under a home in /var is named
+        // from /private/var, and was written "/private~" (seen in the tests, 2026-10-23).
+        var homes = [Paths.home.path, NSHomeDirectory()]
+        if let real = realpath(Paths.home.path, nil) { homes.insert(String(cString: real), at: 0); free(real) }
+        for home in homes where home.count > 1 {
             out = out.replacingOccurrences(of: home, with: "~")
         }
         var host = [CChar](repeating: 0, count: 256)
@@ -529,5 +563,487 @@ enum ProbeSymptom: String, CaseIterable, Identifiable, Sendable {
         case .other:
             return ["Play to the moment, note where it is, close the game and come back here."]
         }
+    }
+}
+
+// MARK: - A fix's report
+
+/// What It Works… and Works Without the Fix… in Games save and fill in: the Report
+/// tab's report for the game, with a section on its fix after its first lines, and
+/// the form for a fix that works (fix-works.yml) or for a game that works without
+/// its fix (works-without-fix.yml). A field of the form is filled in only from what
+/// is read here; one that is not read is left to the player.
+enum FixReport {
+    enum Kind: String, Sendable {
+        case works, without
+
+        /// The state the row must be in: its fix installed, or not installed.
+        var state: FixState { self == .works ? .installed : .absent }
+        var button: String { self == .works ? "It Works…" : "Works Without the Fix…" }
+        /// What the save panel's name starts with.
+        var file: String { self == .works ? "MacGameFix fix report" : "MacGameFix report without the fix" }
+        var template: String { self == .works ? "fix-works.yml" : "works-without-fix.yml" }
+        var title: String { self == .works ? "[Works] " : "[No longer needed] " }
+    }
+
+    /// How much of the end of each of the fix's own logs a report carries.
+    static let logLines = 200
+    /// How much of a log's end is read: two hundred lines of the longest a report
+    /// keeps, and never the whole of a log a fix let grow.
+    static let logTail = 256 * 1024
+    /// The longest line of a log a report keeps; a longer one is cut, and says so.
+    static let lineLength = 1000
+
+    /// A log the fix writes beside its DLL, as found in the game folder.
+    struct OwnLog: Sendable {
+        let name: String
+        /// Where it was found, from the game folder.
+        let path: String
+        var modified: Date?
+        /// Its last lines, logLines at most, of `total`; nil when only its end was read.
+        var lines: [String] = []
+        var total: Int?
+        var size = 0
+        /// Why it could not be read, when it is there and could not be.
+        var error: String?
+    }
+
+    /// A CrossOver app or a NotProton runner, as Engine finds it, with the D3DMetal
+    /// builds it carries.
+    struct Runner: Sendable {
+        let name: String
+        let build: String
+        let d3dmetal: [(folder: String, version: String)]
+    }
+
+    /// What the report and the form say, read for one row of Games.
+    struct Facts: Sendable {
+        var kind: Kind
+        var game: Game
+        var folder: URL
+        var appid = ""
+        /// The installer's --status: once, or once for each prefix the fix was given.
+        var status: [(place: String?, lines: [String], state: FixState)] = []
+        var state = FixState.unknown
+        /// The game's build, as an installer made for each build of the game names it.
+        var build: String?
+        var steamBuild: String?
+        var matches: [(file: String, catalog: String)] = []
+        var catalogVersion = 0
+        /// The prefixes and bottles the fix was given, or else those the game can run in
+        /// that a report names (Probe.places).
+        var places: [Prefix] = []
+        /// The bottles whose Steam lists the game's library, counted and not named.
+        var otherBottles = 0
+        /// The CrossOver apps or NotProton runners of the kind those places are.
+        var runners: [Runner] = []
+        var ownLogs: [OwnLog] = []
+        /// This window's Settings › Log lines for the game.
+        var session: [String] = []
+        var model = ""
+        var chip = ""
+    }
+
+    /// The report and the form's address, for a row of Games, and the state its
+    /// installer gives now, which the row may no longer show.
+    static func make(_ hit: Hit, kind: Kind, catalog: URL, session: [String],
+                     engines: [(name: String, build: String, state: String)],
+                     now: Date = Date()) async -> (text: String, issue: URL?, state: FixState) {
+        let f = await facts(hit, kind: kind, catalog: catalog, session: session)
+        let game = ProbeGame(appid: f.appid, name: hit.game.name, folder: hit.folder, places: f.places.map(\.label))
+        // The Wine modules' lines for the game, as the Report tab takes them: by its app id.
+        let log = f.appid.isEmpty ? "" : (try? String(contentsOf: PadStore.log, encoding: .utf8)) ?? ""
+        let padLines = log.split(separator: "\n").map(String.init).filter { $0.contains(" game=\(f.appid) ") }
+        let text = Probe.report(game, symptom: nil, findings: Probe.look(game), fix: hit.game.name, engines: engines,
+                                padLines: padLines, title: "fix report", given: given(hit), section: section(f), now: now)
+        return (text, issue(f), f.state)
+    }
+
+    /// The prefixes the fix was given in Games: a fix that needs one goes into those chosen.
+    static func given(_ hit: Hit) -> [Prefix] { hit.game.needsPrefix ? hit.chosen : [] }
+
+    /// The row, read: its installer asked as the window asks it, the files that match
+    /// the catalog, where the game runs, the fix's own logs and this Mac.
+    static func facts(_ hit: Hit, kind: Kind, catalog: URL, session: [String]) async -> Facts {
+        var f = Facts(kind: kind, game: hit.game, folder: hit.folder)
+        let steam = SteamApp.of(folder: hit.folder)
+        f.appid = steam?.appid ?? ""
+        f.steamBuild = steam.flatMap { $0.buildid.isEmpty ? nil : $0.buildid }
+        let prefixes: [Prefix?] = hit.game.needsPrefix ? hit.chosen : [nil]
+        for prefix in prefixes {
+            let run = await Fixer.statusRun(hit.game, folder: hit.folder, prefix: prefix?.path.path, catalog: catalog)
+            f.status.append((prefix?.label, run.lines, run.look.state))
+            f.build = f.build ?? run.look.build
+        }
+        f.state = Fixer.combined(f.status.map(\.state))
+        let manifest = Catalog.manifest(in: catalog)
+        f.catalogVersion = manifest?.version ?? 0
+        f.matches = matches(hit, catalog: catalog, files: manifest?.files ?? [:])
+        if given(hit).isEmpty {
+            let found = Probe.places(for: hit.folder)
+            (f.places, f.otherBottles) = (found.named, found.others.count)
+        } else {
+            f.places = given(hit)
+        }
+        if !hit.game.inApp {
+            // A game in Steam Play prefixes alone runs from a runner; in bottles alone, from a CrossOver app.
+            let kinds = kinds(f)
+            f.runners = Engine.targets()
+                .filter { kinds == [.steamPlay] ? $0.app == nil : kinds == [.bottle] ? $0.app != nil : true }
+                .map { Runner(name: $0.name, build: $0.build, d3dmetal: Engine.d3dmetal(in: $0.root)) }
+        }
+        f.ownLogs = ownLogs(hit.game, folder: hit.folder)
+        f.session = session
+        f.model = sysctl("hw.model")
+        f.chip = sysctl("machdep.cpu.brand_string")
+        return f
+    }
+
+    /// The row a button acts on, of those selected in Games: exactly one, in the
+    /// state the button needs. The window and the command line both ask this.
+    static func target(_ selected: [Hit], kind: Kind) -> Hit? {
+        selected.count == 1 && refusal(selected[0].game.name, state: selected[0].state, kind: kind) == nil ? selected[0] : nil
+    }
+
+    /// Why a button does not act on a game in this state, as the command line
+    /// prints it and the window's status line says it; nil when it does.
+    static func refusal(_ name: String, state: FixState, kind: Kind) -> String? {
+        state == kind.state ? nil : "\(name): \(state.label); \(kind.button) needs \(kind.state.label)"
+    }
+
+    /// For the command line: the row of Games for a game, by its name, probed as the
+    /// window probes it; or, when there is none this button may act on, why.
+    static func row(_ name: String, kind: Kind, catalog: URL) async -> (hit: Hit?, why: String) {
+        guard var hit = Libraries.find(Catalog.games(in: catalog), extra: []).hits.first(where: { $0.game.name == name })
+        else { return (nil, "no such game here: \(name)") }
+        if hit.game.needsPrefix && hit.chosen.isEmpty {
+            hit.state = .unknown
+        } else {
+            hit.state = await Fixer.status(hit.game, folder: hit.folder, prefixes: hit.chosen.map(\.path.path), catalog: catalog)
+        }
+        guard let target = target([hit], kind: kind) else { return (nil, refusal(name, state: hit.state, kind: kind) ?? "") }
+        return (target, "")
+    }
+
+    /// The files where the fix goes whose SHA-256 is that of a file of the catalog,
+    /// each with that file's name: in the game folder itself and its carrier's
+    /// folder, and, for a fix whose DLLs go into the prefix, in the system32 of each
+    /// prefix it was given. None of them is looked into further. Only a file of the
+    /// size of one of the catalog's is read, so a game's large archives are not.
+    static func matches(_ hit: Hit, catalog: URL, files: [String: String]) -> [(file: String, catalog: String)] {
+        let fm = FileManager.default
+        func size(_ url: URL) -> Int? {
+            guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
+                  values.isRegularFile == true else { return nil }
+            return values.fileSize
+        }
+        var byHash: [String: String] = [:]
+        var sizes = Set<Int>()
+        for (name, hash) in files.sorted(by: { $0.key < $1.key }) {
+            if byHash[hash] == nil { byHash[hash] = name }
+            if let s = size(catalog.appendingPathComponent(name)) { sizes.insert(s) }
+        }
+        var places: [(dir: URL, shown: String)] = [(hit.folder, "")]
+        if !hit.game.carrierDir.isEmpty {
+            places.append((hit.folder.appendingPathComponent(hit.game.carrierDir), hit.game.carrierDir + "/"))
+        }
+        if hit.game.inPrefix {
+            for p in hit.chosen {
+                places.append((p.path.appendingPathComponent("drive_c/windows/system32"), "\(p.label): windows/system32/"))
+            }
+        }
+        var found: [(file: String, catalog: String)] = []
+        for (dir, shown) in places {
+            let urls = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey])) ?? []
+            for url in urls.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+                guard let s = size(url), sizes.contains(s), let hash = sha256(url), let name = byHash[hash] else { continue }
+                found.append((shown + url.lastPathComponent, name))
+            }
+        }
+        return found
+    }
+
+    static func sha256(_ url: URL) -> String? {
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Each log the fix writes beside its DLL (Game.logs) that is in the carrier's
+    /// folder or the game folder itself, with its last lines; one that is there and
+    /// cannot be read, with why.
+    static func ownLogs(_ game: Game, folder: URL, lines: Int = logLines) -> [OwnLog] {
+        var found: [OwnLog] = []
+        for name in game.logs ?? [] {
+            for dir in game.carrierDir.isEmpty ? [""] : [game.carrierDir, ""] {
+                let path = dir.isEmpty ? name : dir + "/" + name
+                let url = folder.appendingPathComponent(path)
+                guard FileManager.default.fileExists(atPath: url.path) else { continue }
+                found.append(ownLog(url, name: name, path: path, lines: lines))
+                break
+            }
+        }
+        return found
+    }
+
+    /// A log's last lines, read from its end alone (logTail), each cut at lineLength
+    /// and with its control characters but the tab shown as U+FFFD, so that neither
+    /// a log a fix let grow nor one with binary in it reaches the report or the link
+    /// as it is.
+    static func ownLog(_ url: URL, name: String, path: String, lines: Int) -> OwnLog {
+        var log = OwnLog(name: name, path: path)
+        let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey])
+        log.modified = values?.contentModificationDate
+        guard values?.isRegularFile == true else { log.error = "it is not a file"; return log }
+        // open(2) for the reason in its own words: Foundation's for a read refused is about saving.
+        let fd = open(url.path, O_RDONLY)
+        guard fd >= 0 else { log.error = String(cString: strerror(errno)); return log }
+        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+        let data: Data
+        do {
+            let size = try handle.seekToEnd()
+            log.size = Int(size)
+            try handle.seek(toOffset: size > UInt64(logTail) ? size - UInt64(logTail) : 0)
+            data = try handle.readToEnd() ?? Data()
+        } catch {
+            log.error = error.localizedDescription
+            return log
+        }
+        var all = String(decoding: data, as: UTF8.self)
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).map(String.init)
+        if all.last == "" { all.removeLast() }
+        // Read from inside the file, the first line is the end of one.
+        if log.size > logTail, !all.isEmpty { all.removeFirst() } else { log.total = all.count }
+        log.lines = all.suffix(lines).map { line in
+            let shown = String(String.UnicodeScalarView(line.unicodeScalars.map {
+                $0 != "\t" && $0.properties.generalCategory == .control ? "\u{FFFD}" : $0
+            }))
+            return shown.count > lineLength ? shown.prefix(lineLength) + " [cut: \(shown.count) characters]" : shown
+        }
+        return log
+    }
+
+    /// This window's Settings › Log lines for the game: each block an install or a
+    /// removal wrote, from its "▸ <game> — <folder>" line through the indented lines
+    /// under it. The log is the window's alone, kept in memory. The folder is
+    /// compared as gameKey compares it, /var and /private/var as one.
+    static func session(_ log: [String], game: String, folder: URL) -> [String] {
+        let head = "▸ \(game) — ", key = gameKey(folder, game)
+        var out: [String] = []
+        var inside = false
+        for line in log {
+            if line.hasPrefix(head) {
+                inside = gameKey(URL(fileURLWithPath: String(line.dropFirst(head.count))), game) == key
+            } else if !(inside && line.hasPrefix("  ")) {
+                inside = false
+            }
+            if inside { out.append(line) }
+        }
+        return out
+    }
+
+    static func sysctl(_ name: String) -> String {
+        var size = 0
+        guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return "" }
+        var value = [CChar](repeating: 0, count: size)
+        guard sysctlbyname(name, &value, &size, nil, 0) == 0 else { return "" }
+        return String(cString: value)
+    }
+
+    /// macOS's version, as the forms ask for it: "27.0".
+    static var macOS: String {
+        let v = ProcessInfo.processInfo.operatingSystemVersion
+        return "\(v.majorVersion).\(v.minorVersion)" + (v.patchVersion > 0 ? ".\(v.patchVersion)" : "")
+    }
+
+    // MARK: The form's fields
+
+    /// "Where it runs", one of the form's options exactly; nil, for the player,
+    /// unless the folder says it: a macOS game; Steam Play prefixes alone, with a
+    /// NotProton runner on this Mac; CrossOver bottles alone.
+    static func runs(_ f: Facts) -> String? {
+        if f.game.inApp { return "Native macOS (no Wine)" }
+        let kinds = kinds(f)
+        if kinds == [.steamPlay] && !f.runners.isEmpty { return "A NotProton runner" }
+        if kinds == [.bottle] { return "A CrossOver bottle" }
+        return nil
+    }
+
+    /// The kinds of place the game runs in: those the report names, or, when it
+    /// names none, the bottles it only counts.
+    static func kinds(_ f: Facts) -> Set<Prefix.Kind> {
+        f.places.isEmpty && f.otherBottles > 0 ? [.bottle] : Set(f.places.map(\.kind))
+    }
+
+    /// "Graphics backend", one of the form's options exactly, for a macOS game
+    /// alone: which backend ran a Windows game is not read, and the one the
+    /// catalog names is what the fix was made for, not what was played. Mortal
+    /// Kombat 11's names D3DMetal, and its fix works on DXMT as well.
+    static func backend(_ game: Game) -> String? {
+        game.inApp ? "None (a macOS game)" : nil
+    }
+
+    /// The backend the catalog says the fix is made for (games.json's backend),
+    /// by the form's names, for the report.
+    static func madeFor(_ game: Game) -> String? {
+        switch game.backend {
+        case "d3dmetal": return "D3DMetal"
+        case "dxmt": return "DXMT"
+        case "dxvk": return "DXVK / MoltenVK"
+        default: return nil
+        }
+    }
+
+    /// "Versions": MacGameFix and its catalog, the CrossOver apps or runners of the
+    /// kind the game runs in with the D3DMetal builds each carries, macOS and the chip.
+    static func versions(_ f: Facts) -> String {
+        var parts = ["MacGameFix \(Catalog.appVersion), catalog \(f.catalogVersion)"]
+        if !f.runners.isEmpty {
+            parts.append(f.runners.map { r in
+                let d3dmetal = Set(r.d3dmetal.map(\.version)).sorted()
+                return "\(r.name) (\(r.build)" + (d3dmetal.isEmpty ? "" : ", D3DMetal " + d3dmetal.joined(separator: " and ")) + ")"
+            }.joined(separator: " or "))
+        }
+        parts.append("macOS \(macOS)")
+        if !f.chip.isEmpty { parts.append(f.chip) }
+        return parts.joined(separator: "; ")
+    }
+
+    /// "Game Porting Toolkit (D3DMetal)": the one D3DMetal the places the game runs
+    /// from carry, when they carry only one; which of several ran it is not read.
+    static func toolkit(_ f: Facts) -> String? {
+        let all = Set(f.runners.flatMap { $0.d3dmetal.map(\.version) })
+        return all.count == 1 ? all.first : nil
+    }
+
+    /// "The game's version": the build its installer names, or Steam's build id.
+    static func gameVersion(_ f: Facts) -> String? {
+        f.build ?? f.steamBuild.map { "Steam build \($0)" }
+    }
+
+    /// "MacGameFix's log": the fix's own log, then this window's Settings › Log lines
+    /// for the game, each while the field stays within what an issue's address
+    /// carries (Report.longest). What does not fit is in the report, and the field
+    /// says so; with no Settings › Log lines, the field says that instead.
+    static func logField(_ f: Facts) -> String {
+        let names = (f.game.logs ?? []).joined(separator: ", ")
+        let none = "Settings › Log: nothing this window ran for this game."
+        let elsewhere = "Settings › Log's lines for this game are in the attached report: more than this link carries."
+        // The own log fits beside the least the session's part says: none, or where its lines are.
+        let least = f.session.isEmpty ? none : elsewhere
+        var own: String
+        if names.isEmpty {
+            own = "The fix writes no log of its own."
+        } else if f.ownLogs.isEmpty {
+            own = "No \(names) in the game's folder."
+        } else {
+            own = Probe.redact(f.ownLogs.map { log in
+                log.error.map { "\(log.path) is there and could not be read (\($0))." }
+                    ?? "\(log.path), \(written(log)):\n" + log.lines.joined(separator: "\n")
+            }.joined(separator: "\n\n"))
+            if own.utf8.count + 2 + least.utf8.count > Report.longest {
+                own = "The fix's own log, \(names), is in the attached report: more than this link carries."
+            }
+        }
+        let lines = Probe.redact(f.session.joined(separator: "\n"))
+        let session = f.session.isEmpty ? none : own.utf8.count + 2 + lines.utf8.count > Report.longest ? elsewhere : lines
+        return own + "\n\n" + session
+    }
+
+    /// The form, filled in: fields left out are the player's to fill.
+    static func issue(_ f: Facts) -> URL? {
+        var fields = [("title", f.kind.title + f.game.name),
+                      ("game", f.game.name + (f.appid.isEmpty ? "" : " (Steam app \(f.appid))"))]
+        switch f.kind {
+        case .works:
+            if let runs = runs(f) { fields.append(("runs", runs)) }
+            if let backend = backend(f.game) { fields.append(("backend", backend)) }
+            fields.append(("versions", versions(f)))
+            if let version = gameVersion(f) { fields.append(("game-version", version)) }
+            fields.append(("log", logField(f)))
+        case .without:
+            if let toolkit = toolkit(f) { fields.append(("toolkit", toolkit)) }
+            fields.append(("versions", versions(f)))
+        }
+        return Issue.new(template: f.kind.template, fields: fields.map { ($0.0, Probe.redact($0.1)) })
+    }
+
+    // MARK: The report's section
+
+    private static func written(_ log: OwnLog) -> String {
+        log.modified.map { "last written \(ISO8601DateFormatter().string(from: $0))" } ?? "its time not read"
+    }
+
+    /// The section on the fix, after the report's first lines: blocks of Markdown,
+    /// a blank line between each.
+    static func section(_ f: Facts) -> String {
+        func fenced(_ lines: [String]) -> String { "```\n" + (lines.isEmpty ? "(nothing)" : lines.joined(separator: "\n")) + "\n```" }
+        func list(_ items: [String]) -> String { items.map { "- " + $0 }.joined(separator: "\n") }
+        var blocks = ["## The fix"]
+        var about = ["State: \(f.state.label), as its installer says below",
+                     "Installer: \(f.game.script), of catalog \(f.catalogVersion)"]
+        if let build = f.build { about.append("The game's build: \(build), as its installer reads it") }
+        if let build = f.steamBuild { about.append("Steam's build: \(build), from the game's appmanifest") }
+        blocks.append(list(about))
+
+        blocks.append("### What its installer says (--status)")
+        if f.status.isEmpty { blocks.append("Not asked: no prefix is chosen for it in Games.") }
+        for s in f.status {
+            if let place = s.place { blocks.append("Into the \(place): \(s.state.label)") }
+            blocks.append(fenced(s.lines))
+        }
+
+        blocks.append("### Files that match the catalog")
+        blocks.append(f.matches.isEmpty
+            ? "None: no file in the game folder" + (f.game.carrierDir.isEmpty ? "" : " or in \(f.game.carrierDir)")
+                + " matches a file of catalog \(f.catalogVersion)."
+            : list(f.matches.map { "`\($0.file)` is the catalog's `\($0.catalog)`" }))
+
+        blocks.append("### Where it runs")
+        var places: [String] = []
+        if f.game.inApp {
+            places.append("A macOS game: no Wine runs it")
+        } else {
+            let named = f.places.map(\.label) + [Probe.others(f.otherBottles)].compactMap { $0 }
+            places.append(named.isEmpty ? "No prefix or bottle found beside its library" : "In: " + named.joined(separator: ", "))
+            for r in f.runners {
+                places.append("\(r.name), build \(r.build): " + (r.d3dmetal.isEmpty ? "no D3DMetal found"
+                    : r.d3dmetal.map { "D3DMetal \($0.version) (\($0.folder))" }.joined(separator: ", ")))
+            }
+            if f.runners.isEmpty { places.append("No CrossOver app or NotProton runner found of the kind it runs in") }
+            if f.runners.count > 1 || f.runners.contains(where: { $0.d3dmetal.count > 1 }) {
+                places.append("Which of these ran the game is not read")
+            }
+            if let backend = madeFor(f.game) { places.append("Graphics backend: not read; the fix is made for \(backend)") }
+        }
+        places.append("This Mac: " + ([f.model, f.chip].filter { !$0.isEmpty } + ["macOS \(macOS)"]).joined(separator: ", "))
+        blocks.append(list(places))
+
+        blocks.append("### The fix's own log")
+        let names = f.game.logs ?? []
+        if names.isEmpty { blocks.append("The fix writes no log of its own beside its DLL.") }
+        for name in names {
+            guard let log = f.ownLogs.first(where: { $0.name == name }) else {
+                blocks.append("\(name): not in the game's folder. The fix writes it beside its DLL while the game runs.")
+                continue
+            }
+            if let error = log.error {
+                blocks.append("\(log.path) is there and could not be read (\(error)).")
+                continue
+            }
+            blocks.append("#### \(log.path), \(written(log)): its last \(log.lines.count) "
+                + (log.total.map { "of \($0) lines" } ?? "lines, read from the end of its \(log.size) bytes"))
+            if f.kind == .without { blocks.append("Written while the fix was in place: it is not installed now.") }
+            blocks.append(fenced(log.lines))
+        }
+
+        blocks.append("### Settings › Log")
+        blocks.append(f.session.isEmpty
+            ? "None. Settings › Log is kept in memory only and holds what this window ran since it opened; "
+                + "it ran nothing for \(f.game.name)."
+            : fenced(f.session))
+
+        let report = f.kind == .works ? "its fix works, played with the fix installed"
+                                      : "it works without its fix, played with the fix removed"
+        return "- Report: \(report)\n\n" + blocks.joined(separator: "\n\n") + "\n"
     }
 }

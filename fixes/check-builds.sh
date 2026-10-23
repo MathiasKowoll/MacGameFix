@@ -33,10 +33,11 @@
 # scripts. Without one it says so and stops rather than reporting everything
 # clean, because "no compiler" and "no drift" must never look the same.
 #
-# After those, four checks that need no compiler: no bottle name of this Mac in
+# After those, five checks that need no compiler: no bottle name of this Mac in
 # anything published, the MGVF-GAME lines against process-features.json, the
-# copies inside a built MacGameFix.app against fixes/, and the signature of every
-# Mach-O file the app carries from fixes/ and engine/modules/.
+# MGVF-LOG lines against the DLLs, the copies inside a built MacGameFix.app
+# against fixes/ and its games.json's logs against the MGVF-LOG lines, and the
+# signature of every Mach-O file the app carries from fixes/ and engine/modules/.
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -260,6 +261,51 @@ else
   decl_drift=1
 fi
 
+# The MGVF-LOG lines against the DLLs. Each names a log an installer's DLL writes
+# beside itself while the game runs, and the app's fix report (It Works… in
+# Games) looks for it in the game folder: a name that no source here writes, or
+# that none of the installer's DLLs carries, would have the report look for a
+# file nothing makes. The other way round, a log name a DLL of ours carries with
+# no folder in front of it (not C:\...) must be on its installer's line, or the
+# report would leave out a log the fix does write. The third-party DLLs are left
+# out of that: their names are not ours to declare.
+echo
+log_drift=0
+if python3 - "$ROOT" <<'PY'
+import re, sys, pathlib
+root = pathlib.Path(sys.argv[1])
+sources = [p.read_bytes() for d in ("fixes", "tools") for p in sorted((root/d).glob("*.c"))]
+bare = re.compile(rb'(?:^|[^\\A-Za-z0-9_.-])([A-Za-z0-9_-]+\.log)(?=\x00)')
+# The same name as a wide string (L"x.log"), as a DLL that builds its path in WCHARs carries it.
+wide = re.compile(rb'(?:^|[^\\A-Za-z0-9_.-]\x00)((?:[A-Za-z0-9_-]\x00)+\.\x00l\x00o\x00g\x00)(?=\x00\x00)')
+def logs(b):
+    return {x.decode() for x in bare.findall(b)} | {x.decode("utf-16-le") for x in wide.findall(b)}
+bad, named = [], 0
+for f in sorted((root/"fixes").glob("install-*.sh")):
+    text = f.read_text()
+    m = re.search(r"^# MGVF-LOG: (.*)$", text, re.M)
+    names = m.group(1).split() if m else []
+    dlls = sorted(set(re.findall(r"\$HERE/([A-Za-z0-9._-]+\.dll)", text)))
+    data = {d: (root/"fixes"/d).read_bytes() for d in dlls if (root/"fixes"/d).exists()}
+    for name in names:
+        named += 1
+        if not any(b'"' + name.encode() + b'"' in s for s in sources):
+            bad.append(f"{f.name} names {name}, and no source in fixes/ or tools/ writes it")
+        if not any(name.encode() in b for b in data.values()):
+            bad.append(f"{f.name} names {name}, and none of its DLLs ({', '.join(dlls) or 'none'}) carries it")
+    for d, b in data.items():
+        if d.startswith("ng3-") or d == "mgvf-asf-reader.dll":
+            continue
+        for found in sorted(logs(b) - set(names)):
+            bad.append(f"{d} writes {found} beside itself, and {f.name} has no MGVF-LOG for it")
+for b in bad:
+    print(f"  log: {b}")
+if not bad:
+    print(f"  logs: {named} MGVF-LOG name(s), each written by a source here and carried by its installer's DLL; no DLL writes another")
+sys.exit(1 if bad else 0)
+PY
+then :; else log_drift=1; fi
+
 # The other copy of every one of these: the app runs the copies in its bundle
 # (or in a newer signed catalog), not these. A copy that differs from fixes/
 # is an app built before the last change here.
@@ -277,6 +323,26 @@ if [ -d "$bundle" ]; then
     cmp -s "$f" "$b" || { echo "  bundle stale: $(basename "$f")"; bundle_drift=$((bundle_drift + 1)); }
   done
   [ "$bundle_drift" = 0 ] && echo "  bundle: all $compared copies in MacGameFix.app match fixes/"
+  # games.json's logs, which build-app.sh carries from the MGVF-LOG lines: a row
+  # without them would have It Works… say the fix writes no log of its own.
+  if [ -f "$bundle/games.json" ]; then
+    python3 - "$HERE" "$bundle/games.json" <<'PY' || bundle_drift=$((bundle_drift + 1))
+import json, re, sys, pathlib
+here, rows = pathlib.Path(sys.argv[1]), json.load(open(sys.argv[2]))["games"]
+bad, named = [], 0
+for row in rows:
+    script = here / row["script"]
+    if not script.exists():
+        continue
+    m = re.search(r"^# MGVF-LOG: (.*)$", script.read_text(), re.M)
+    want = m.group(1).split() if m else []
+    named += len(want)
+    if row.get("logs") != want:
+        bad.append(f"  bundle stale: games.json gives {row['name']} the logs {row.get('logs')}, and {row['script']} names {want}")
+print("\n".join(bad) if bad else f"  bundle: games.json carries the {named} MGVF-LOG name(s) of its {len(rows)} rows' installers")
+sys.exit(1 if bad else 0)
+PY
+  fi
 else
   echo "  bundle: app/MacGameFix.app is not built, so there is nothing to compare"
 fi
@@ -303,5 +369,5 @@ done
 echo
 echo "  $checked rebuilt and compared, $drifted drifted, $missing_source unattributed"
 [ "$drifted" = 0 ] && [ "$bundle_drift" = 0 ] && [ "$missing_source" = 0 ] \
-  && [ "$decl_drift" = 0 ] && [ "$name_leak" = 0 ] && [ "$sig_drift" = 0 ] || exit 1
+  && [ "$decl_drift" = 0 ] && [ "$log_drift" = 0 ] && [ "$name_leak" = 0 ] && [ "$sig_drift" = 0 ] || exit 1
 exit 0

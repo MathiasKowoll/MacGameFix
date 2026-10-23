@@ -25,7 +25,7 @@ archived repository.
 
 | Folder | What it holds |
 | --- | --- |
-| `app/` | The application: `Core.swift` (installers, games, libraries), `Engine.swift` (the Wine modules), `Pad.swift` (the Game Feel tab's options and what it writes for the modules), `Probe.swift` (the Report tab: what a game is made of, and its report), `pad-presets.json` (options measured per title), `Automation.swift` (the background agent, signed catalog updates, reports), `MenuBar.swift` (the agent's menu bar item), `MacGameFix.swift` (the window), `AppIcon.icon` (the icon); `build-app.sh`, `test-automation.sh`, `notarize.sh` (Apple's notarisation and the release's app zip) and `test-notarize.sh`. |
+| `app/` | The application: `Core.swift` (installers, games, libraries), `Engine.swift` (the Wine modules), `Pad.swift` (the Game Feel tab's options and what it writes for the modules), `Probe.swift` (the Report tab: what a game is made of, and its report; and a fix's report, which Games saves), `pad-presets.json` (options measured per title), `Automation.swift` (the background agent, signed catalog updates, reports), `MenuBar.swift` (the agent's menu bar item), `MacGameFix.swift` (the window), `AppIcon.icon` (the icon); `build-app.sh`, `test-automation.sh`, `notarize.sh` (Apple's notarisation and the release's app zip) and `test-notarize.sh`. |
 | `fixes/` | One installer per fix (`install-*.sh`), the DLLs they put in place, Cyberpunk 2077's recipe for each build of the game (`cp2077-denoiser.recipes`), the C source of each DLL and the scripts that build them (`build-proxy.sh`, `build-asf-reader.sh`, `check-builds.sh`), and the third-party notices. |
 | `process-features.json` | The table: per game executable, its symptom, backend, toolkit, codec and engine needs. The app is built from it. |
 | `tools/` | The probes and capture scripts the fixes were found with: video and Media Foundation observers, HID traces, a game survey; `vibration-md.py`, which writes the list of games played for vibration from its JSON; and `sign-payload.sh` and `check-signatures.sh`, which sign the Mach-O files the app carries with its Developer ID and check them. |
@@ -48,7 +48,9 @@ Quit a game before installing or removing its fix.
 The window has four tabs, and a fifth once the Wine modules are in a CrossOver:
 **Games**, the fixes above, in a table: each game's symptom, what its fix requires, its state, *Keep*
 and where a fix that writes registry keys goes, shown *All* (every supported game on this Mac),
-*Fixed*, *Not fixed*, or *All fixes*, which adds the fixes for games that are not on this Mac;
+*Fixed*, *Not fixed*, or *All fixes*, which adds the fixes for games that are not on this Mac; under
+the table, **It Works…** and **Works Without the Fix…** report a game you played, one selected at a
+time (see [Reporting a problem](#reporting-a-problem));
 **Wine Modules**, the one part that changes CrossOver
 itself (patched Wine modules for a DualSense's haptics on a cable and over Bluetooth, the pad on
 Bluetooth as if on a cable, XInput, trigger effects for a game that sets none, the pad's audio output
@@ -497,7 +499,8 @@ run from MacGameFix, where macOS may ask for App Management.
   for what goes wrong, then click **Save the Report and Open an Issue…** and attach the file to the form
   that opens. The report adds the game's own log when it writes one (Unreal's `Saved/Logs`, Unity's
   `Player.log`) and what the Wine modules saw of it. It names that game alone, writes your home folder as
-  `~` and leaves your Mac's name out.
+  `~` and leaves your Mac's name out: of the CrossOver bottles whose Steam lists the game's library, it
+  names only one that holds the game, and counts the others.
 - **Controller, haptics or triggers.** In **Game Feel**, click the game, turn on **Diagnose this game**,
   play the moment that goes wrong, close the game, and click **Make a Report…**. It saves a file and opens
   the form; attach the file there. The report has MacGameFix's and macOS's versions, the Wine modules in
@@ -516,12 +519,27 @@ run from MacGameFix, where macOS may ask for App Management.
   one connection: played on a cable and over Bluetooth, send two. Reports like this make the
   [list of games played for vibration](docs/vibration.md).
 - **A game fix does not work.** Copy the lines about the game from **Settings › Log** into the form.
-- **A game fix works.** For the list of verified games: say the versions and what you played, whether it
-  was tried without the fix, and attach the report the **Report** tab saves for the game with the lines
-  about it from **Settings › Log**. A game is verified from what was played, not from what should work.
+- **A game fix works**, for the list of verified games. Play the moment the fix is for with the fix
+  installed and close the game. In **Games**, select the game (its state *Installed*) and click **It
+  Works…**, under the table. It saves the game's fix report and opens the form with the game, the
+  versions and the fix's own log filled in, where it runs when the game's folder shows it (a Steam Play
+  prefix of its own with a NotProton runner on the Mac, CrossOver bottles alone, or a macOS game), and the
+  game's build when it is known. Choose the graphics backend the game ran on, which MacGameFix does not
+  read, say what you played and whether it was tried without the fix, and attach the file. The fix's own
+  log and the **Settings › Log** lines each go into the form when they fit in the link; what does not fit
+  is in the report, and the form says so. The report is the **Report** tab's for the game with a section
+  on the fix: what its installer's `--status` says, the files where it goes that are the catalog's by
+  their SHA-256, the CrossOver apps or NotProton runners of the kind the game runs in with the D3DMetal
+  builds each carries, this Mac's model, chip and macOS, the last 200 lines of the log the fix writes
+  beside its DLL (Mortal Kombat 11's, Marvel's Spider-Man 2's and God of War's write one), and the
+  window's **Settings › Log** lines for the game, which it keeps only while it is open. It writes your
+  home folder as `~`, leaves your Mac's name out, and names no CrossOver bottle but one that holds the
+  game or that the fix went into. A game is verified from what was played, not from what should work.
 - **A game works without its fix**, on a newer Game Porting Toolkit or CrossOver. Remove the fix first
-  (**Remove Selected** in **Games**), play the moment it was for, and send the report made after that.
-  Reports like this are what mark a fix as no longer needed from a toolkit on.
+  (**Remove Selected** in **Games**), play the moment it was for, close the game, then select it (now
+  *Not installed*) and click **Works Without the Fix…**. It saves the same report and opens the form with
+  the game and the versions filled in, and the Game Porting Toolkit when the places it runs from carry one
+  D3DMetal only. Reports like this are what mark a fix as no longer needed from a toolkit on.
 
 ## Opening it the first time
 
@@ -663,8 +681,8 @@ removal, and another app's stay.
 toolchain). Users never run them: the built DLLs are in `fixes/` and ship in the
 app. `fixes/check-builds.sh` rebuilds each DLL from its source and compares the
 two, checks the third-party ones against their recorded sha256, and compares
-the MGVF-GAME lines with `process-features.json` and a built app's copies with
-`fixes/`. It also checks that `sm2-shadertool` and the Wine modules' unix
+the MGVF-GAME lines with `process-features.json`, the MGVF-LOG lines with the
+DLLs, and a built app's copies with `fixes/`. It also checks that `sm2-shadertool` and the Wine modules' unix
 halves carry MacGameFix's Developer ID, a secure timestamp and the hardened
 runtime.
 
@@ -676,7 +694,9 @@ executable instead, from a recipe. A proxy DLL takes the name of a DLL the
 game already loads, keeps the game's own as `<name>_real.dll`, and forwards
 every export to it; the source named below is the code that runs inside it.
 The source of each shipped DLL is the one that writes the log name the DLL
-carries, which is how `fixes/check-builds.sh` finds it. What was found, and
+carries, which is how `fixes/check-builds.sh` finds it. A DLL that writes its log
+beside itself, in the game folder, has it named on its installer's MGVF-LOG line,
+so that a fix's report carries it. What was found, and
 how, is in the game's page under `legacy/wiki/`.
 
 | Installer | Games | What goes in the game folder | Built from | Findings |
