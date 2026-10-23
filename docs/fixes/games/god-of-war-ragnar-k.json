@@ -1,0 +1,40 @@
+{
+  "title": "God of War Ragnarök",
+  "installer": "install-gowr-triggers.sh",
+  "scope": "folder",
+  "executable": "GoWR.exe",
+  "carrierDirectory": null,
+  "alsoRuns": [],
+  "summary": "Adaptive triggers never reach the pad: told it runs on a Steam Deck, the game never loads Sony's library and drops every trigger effect.",
+  "page": null,
+  "installs": [
+    "bink2w64-gowr.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "gowr-triggers.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [],
+  "excerpts": [
+    {
+      "file": "gowr-triggers.c",
+      "symbol": "find_wrapper",
+      "note": "The game's scePadSetTriggerEffect wrapper is found by the name it hands on, not by an address."
+    },
+    {
+      "file": "gowr-triggers.c",
+      "symbol": "convert",
+      "note": "Sony's trigger effect modes become the DualSense's own trigger effect bytes."
+    },
+    {
+      "file": "gowr-triggers.c",
+      "symbol": "triggers_SetTriggerEffect",
+      "note": "Each effect the game builds goes to the pad, only when it changes, and the game gets the answer it always got."
+    }
+  ],
+  "symptom": "No adaptive trigger effect on a DualSense, while the game plays its rumble and, with Steam Input on, shows PlayStation buttons.",
+  "cause": "Steam answers that the game runs on a Steam Deck under Wine, so the game never loads Sony's library, and its scePadSetTriggerEffect wrapper drops every effect it builds.",
+  "fix": "A jump at that wrapper sends each effect to the pad as the DualSense's own trigger effect, in an output report that carries only the trigger fields.",
+  "backend": "D3DMetal, through NotProton; the fix does not depend on the backend."
+}
