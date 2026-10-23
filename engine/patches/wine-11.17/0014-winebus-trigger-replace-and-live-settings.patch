@@ -1,0 +1,277 @@
+--- a/dlls/winebus.sys/bus_iohid.c
++++ b/dlls/winebus.sys/bus_iohid.c
+@@ -136,6 +136,11 @@
+     BYTE trigger_kind[2], trigger_strength[2], trigger_step[2]; /* R2, L2: see pad_triggers */
+     BYTE trigger_kind2[2], trigger_strength2[2];                 /* while the other is pressed */
+     BOOL trigger_game[2], trigger_held[2], trigger_pressed[2];
++    BOOL trigger_replace[2];   /* the chosen effect takes the place of the game's, on its timing */
++    BOOL trigger_following[2]; /* the game has set its own effect on a side that replaces it */
++    BOOL trigger_game_on[2];   /* and that effect of the game's is on now */
++    UInt64 settings_checked;   /* when pad.conf and the game's file were last looked at */
++    long long settings_stamp;  /* their modification times then */
+     UInt64 trigger_at[2];
+     const char *model;
+     UINT32 powers_told[8], features_told[8];
+@@ -361,40 +366,71 @@
+ static char pad_lines[32][96];
+ static int pad_count = -1, pad_game_count;
+ 
+-static const char *pad_value(const char *key)
++/* The two files, the game's first: pad.d/<app id>.conf (empty without a game
++ * id) and pad.conf. */
++static void pad_paths(char game_path[1024], char every_path[1024], char game[24])
++{
++    const char *home = getenv("HOME");
++
++    game_path[0] = every_path[0] = 0;
++    pad_game(game, 24);
++    if (!home) return;
++    if (game[0]) snprintf(game_path, 1024, "%s/Library/Application Support/MacGameFix/pad.d/%s.conf", home, game);
++    snprintf(every_path, 1024, "%s/Library/Application Support/MacGameFix/pad.conf", home);
++}
++
++/* Reads both files into `lines`, the game's own first. */
++static int pad_load(char lines[32][96], int *game_count, BOOL *from_game, char game[24])
+ {
+-    char path[1024], line[128], game[24];
+-    const char *home;
+-    size_t n, length = strlen(key);
+-    BOOL from_game = FALSE;
++    char paths[2][1024], line[128];
++    int count = 0, pass;
++    size_t n;
+     FILE *f;
+-    int i, pass;
+ 
+-    if (pad_count < 0)
++    pad_paths(paths[0], paths[1], game);
++    *game_count = 0;
++    *from_game = FALSE;
++    for (pass = 0; pass < 2; pass++)
+     {
+-        pad_count = 0;
+-        pad_game(game, sizeof(game));
+-        if ((home = getenv("HOME")))
++        if (!paths[pass][0] || !(f = fopen(paths[pass], "r"))) continue;
++        if (pass == 0) *from_game = TRUE;
++        while (count < 32 && fgets(line, sizeof(line), f))
+         {
+-            for (pass = 0; pass < 2; pass++)
+-            {
+-                if (pass == 0 && !game[0]) continue;
+-                if (pass == 0)
+-                    snprintf(path, sizeof(path), "%s/Library/Application Support/MacGameFix/pad.d/%s.conf", home, game);
+-                else
+-                    snprintf(path, sizeof(path), "%s/Library/Application Support/MacGameFix/pad.conf", home);
+-                if (!(f = fopen(path, "r"))) continue;
+-                if (pass == 0) from_game = TRUE;
+-                while (pad_count < 32 && fgets(line, sizeof(line), f))
+-                {
+-                    n = strcspn(line, "\r\n");
+-                    line[n] = 0;
+-                    if (n) snprintf(pad_lines[pad_count++], sizeof(pad_lines[0]), "%s", line);
+-                    if (pass == 0) pad_game_count = pad_count;
+-                }
+-                fclose(f);
+-            }
++            n = strcspn(line, "\r\n");
++            line[n] = 0;
++            if (n) snprintf(lines[count++], 96, "%s", line);
++            if (pass == 0) *game_count = count;
+         }
++        fclose(f);
++    }
++    return count;
++}
++
++/* The two files' modification times together, to tell when Game Feel wrote them. */
++static long long pad_settings_stamp(void)
++{
++    char paths[2][1024], game[24];
++    long long stamp = 0;
++    struct stat st;
++    int i;
++
++    pad_paths(paths[0], paths[1], game);
++    for (i = 0; i < 2; i++)
++        if (paths[i][0] && !stat(paths[i], &st))
++            stamp += (long long)st.st_mtimespec.tv_sec * 1000000000LL + st.st_mtimespec.tv_nsec;
++    return stamp;
++}
++
++static const char *pad_value(const char *key)
++{
++    size_t length = strlen(key);
++    BOOL from_game;
++    char game[24];
++    int i;
++
++    if (pad_count < 0)
++    {
++        pad_count = pad_load(pad_lines, &pad_game_count, &from_game, game);
+         pad_log("settings: %s%s\n", game[0] ? "game " : "no game id, ", game[0] ? game : "every game's");
+         if (from_game) pad_log("settings: pad.d/%s.conf read before pad.conf\n", game);
+     }
+@@ -403,6 +439,22 @@
+     return "";
+ }
+ 
++/* Game Feel's settings as they are now: read again into a copy, then put in
++ * place, so a reader on another thread sees the old lines or the new ones. */
++static void pad_reload(void)
++{
++    static char lines[32][96];
++    int count, game_count;
++    BOOL from_game;
++    char game[24];
++
++    count = pad_load(lines, &game_count, &from_game, game);
++    pad_count = min(pad_count, count);
++    memcpy(pad_lines, lines, sizeof(lines));
++    pad_game_count = game_count;
++    pad_count = count;
++}
++
+ /* Whether the game's own settings, pad.d/<app id>.conf, say "key=value";
+  * every game's pad.conf does not count. */
+ static BOOL pad_game_option(const char *option)
+@@ -989,6 +1041,7 @@
+ }
+ 
+ static void pad_triggers_follow(struct iohid_device *impl, const BYTE *input, UINT length);
++static void pad_settings_follow(struct iohid_device *impl);
+ static BOOL trigger_chosen(const struct iohid_device *impl, unsigned int side);
+ 
+ /* With diagnostics=on, every 2 s: how many input reports the pad sent and the
+@@ -1340,10 +1393,13 @@
+     unsigned int side, set = 0;
+     FILE *f;
+ 
++    impl->settings_stamp = pad_settings_stamp();
++    impl->settings_checked = mach_absolute_time();
+     for (side = 0; side < 2; side++)
+     {
+         pad_trigger_choice(keys[side], &impl->trigger_kind[side], &impl->trigger_strength[side]);
+         pad_trigger_choice(keys2[side], &impl->trigger_kind2[side], &impl->trigger_strength2[side]);
++        impl->trigger_replace[side] = !strcmp(pad_value(side ? "trigger_l2_replace" : "trigger_r2_replace"), "on");
+         if (!trigger_chosen(impl, side)) continue;
+         set |= 4 << side;
+         if (impl->trigger_kind[side] == TRIGGER_OFF) continue;
+@@ -1370,11 +1426,71 @@
+         fprintf(f, "%u\n", set);
+         fclose(f);
+     }
+-    pad_log("trigger effects chosen for the %s: R2 %s (with L2 %s), L2 %s (with R2 %s)\n", impl->model,
++    pad_log("trigger effects chosen for the %s: R2 %s (with L2 %s)%s, L2 %s (with R2 %s)%s\n", impl->model,
+             pad_value("trigger_r2")[0] ? pad_value("trigger_r2") : "off",
+             pad_value("trigger_r2_with_l2")[0] ? pad_value("trigger_r2_with_l2") : "the same",
++            impl->trigger_replace[0] ? " in place of the game's" : "",
+             pad_value("trigger_l2")[0] ? pad_value("trigger_l2") : "off",
+-            pad_value("trigger_l2_with_r2")[0] ? pad_value("trigger_l2_with_r2") : "the same");
++            pad_value("trigger_l2_with_r2")[0] ? pad_value("trigger_l2_with_r2") : "the same",
++            impl->trigger_replace[1] ? " in place of the game's" : "");
++}
++
++/* Game Feel written while the game runs: once a second the two files are
++ * looked at, and when they changed the chosen effects are read again and put
++ * on the pad, releasing a side whose effect was ours and has none now. A side
++ * the game had taken follows the new choice until the game sets one again.
++ * The other settings read on each report (motor_power, for one) follow by
++ * themselves once the lines are read again; the ones that shape the device,
++ * xinput, pad_as, bluetooth, wait for the next start. */
++static void pad_settings_follow(struct iohid_device *impl)
++{
++    static const char *const keys[2] = {"trigger_r2", "trigger_l2"};
++    static const char *const keys2[2] = {"trigger_r2_with_l2", "trigger_l2_with_r2"};
++    BYTE report[64] = {0x02};
++    UInt64 now = mach_absolute_time();
++    unsigned int side, set = 0;
++    long long stamp;
++    BOOL ours;
++    char path[64];
++    FILE *f;
++
++    if (!impl->settings_checked || now - impl->settings_checked < bt_ticks(1.0)) return;
++    impl->settings_checked = now;
++    if ((stamp = pad_settings_stamp()) == impl->settings_stamp) return;
++    impl->settings_stamp = stamp;
++    pad_reload();
++    for (side = 0; side < 2; side++)
++    {
++        ours = trigger_chosen(impl, side) && !impl->trigger_game[side] && impl->trigger_kind[side] != TRIGGER_OFF;
++        pad_trigger_choice(keys[side], &impl->trigger_kind[side], &impl->trigger_strength[side]);
++        pad_trigger_choice(keys2[side], &impl->trigger_kind2[side], &impl->trigger_strength2[side]);
++        impl->trigger_replace[side] = !strcmp(pad_value(side ? "trigger_l2_replace" : "trigger_r2_replace"), "on");
++        impl->trigger_game[side] = impl->trigger_following[side] = impl->trigger_game_on[side] = FALSE;
++        impl->trigger_held[side] = FALSE;
++        impl->trigger_step[side] = 0;
++        if (trigger_chosen(impl, side)) set |= 4 << side;
++        if (trigger_chosen(impl, side) && impl->trigger_kind[side] != TRIGGER_OFF)
++        {
++            report[1] |= 4 << side;
++            trigger_effect(impl->trigger_kind[side], impl->trigger_strength[side], 0, report + 11 + 11 * side);
++        }
++        else if (ours)
++        {
++            report[1] |= 4 << side;
++            report[11 + 11 * side] = 0x05;
++        }
++    }
++    if (report[1]) pad_write_output(impl, report);
++    trigger_marker(impl, path, sizeof(path));
++    if (!set) unlink(path);
++    else if ((f = fopen(path, "w")))
++    {
++        fprintf(f, "%u\n", set);
++        fclose(f);
++    }
++    pad_log("settings changed while the game runs: R2 %s%s, L2 %s%s\n",
++            pad_value("trigger_r2")[0] ? pad_value("trigger_r2") : "off", impl->trigger_replace[0] ? " in place of the game's" : "",
++            pad_value("trigger_l2")[0] ? pad_value("trigger_l2") : "off", impl->trigger_replace[1] ? " in place of the game's" : "");
+ }
+ 
+ /* From the pad's input report 0x01 (L2 at byte 5, R2 at byte 6): a side with a
+@@ -1386,10 +1502,13 @@
+     unsigned int side;
+     BOOL held, pressed;
+ 
++    pad_settings_follow(impl);
+     if (length < 7 || input[0] != 0x01) return;
+     for (side = 0; side < 2; side++)
+     {
+         if (!trigger_chosen(impl, side) || impl->trigger_game[side]) continue;
++        /* On the game's timing: nothing of the chosen effect while the game's is off. */
++        if (impl->trigger_following[side] && !impl->trigger_game_on[side]) continue;
+         own = input[side ? 5 : 6];
+         pressed = impl->trigger_pressed[side] ? own >= 20 : own >= 40;
+         if (pressed != impl->trigger_pressed[side] && (impl->trigger_pressed[side] = pressed))
+@@ -1426,6 +1545,29 @@
+         trigger_active(impl, side, &kind, &strength);
+         field = report + 11 + 11 * side;
+         mode = field[0];
++        if (from_game && (report[1] & (4 << side)) && impl->trigger_replace[side])
++        {
++            /* The game says when, the choice says what: its effect on is the
++             * chosen one on, its effect off is off. */
++            if (!impl->trigger_following[side])
++            {
++                impl->trigger_following[side] = TRUE;
++                pad_log("observed: the game sets its own %s effect on the %s; the chosen one takes its place, "
++                        "on the game's timing\n", side ? "L2" : "R2", impl->model);
++            }
++            impl->trigger_game_on[side] = mode && mode != 0x05;
++            if (report != copy) memcpy(copy, report, length);
++            report = copy;
++            if (impl->trigger_game_on[side] && kind != TRIGGER_OFF)
++                trigger_effect(kind, strength, impl->trigger_step[side], report + 11 + 11 * side);
++            else
++            {
++                memset(report + 11 + 11 * side, 0, 11);
++                report[11 + 11 * side] = 0x05;
++            }
++            continue;
++        }
++        if (impl->trigger_following[side] && !impl->trigger_game_on[side]) continue;
+         if (from_game && (report[1] & (4 << side)) && mode && mode != 0x05)
+         {
+             impl->trigger_game[side] = TRUE;

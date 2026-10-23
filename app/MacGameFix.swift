@@ -1667,9 +1667,10 @@ private struct PadTriggerGuide: View {
 
 /// Trigger effects for a game that sets none of its own, an XInput title above
 /// all: an effect and a strength per trigger. A game that sets an effect of its
-/// own takes that trigger over.
+/// own takes that trigger over, unless the trigger replaces the game's effect.
 struct PadTriggersSection<Footer: View>: View {
     let spec: (WritableKeyPath<PadOptions, String?>) -> Binding<String>
+    let flag: (WritableKeyPath<PadOptions, Bool?>) -> Binding<Bool>
     let own: (PartialKeyPath<PadOptions>) -> Bool
     @ViewBuilder let footer: () -> Footer
     @State private var guide = false
@@ -1726,6 +1727,20 @@ struct PadTriggersSection<Footer: View>: View {
                 row("L2", \.triggerL2)
                 row("  while R2 is pressed", \.triggerL2WithR2, second: "L2")
             }
+            ForEach([("R2", \PadOptions.triggerR2, \PadOptions.triggerR2Replace),
+                     ("L2", \PadOptions.triggerL2, \PadOptions.triggerL2Replace)], id: \.0) { label, key, replace in
+                Toggle(isOn: flag(replace)) {
+                    HStack(spacing: 6) {
+                        Text("\(label): replace the game's own effect")
+                        Image(systemName: "circle.fill").font(.system(size: 6)).foregroundStyle(Color.accentColor)
+                            .opacity(own(replace) ? 1 : 0)
+                    }
+                }
+                .disabled(effect(key).wrappedValue == "off")
+                .help("When the game sets an effect of its own on \(label), the pad gets the one chosen above instead: "
+                      + "on while the game's is on, off while it is off. A game that sets none keeps the chosen one "
+                      + "throughout, as with this off.")
+            }
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 3) {
                     ForEach([("R2", \PadOptions.triggerR2), ("L2", \PadOptions.triggerL2)], id: \.0) { label, key in
@@ -1742,7 +1757,8 @@ struct PadTriggersSection<Footer: View>: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Trigger effects")
                 Text("For a game that sets none of its own, such as an XInput title. A game that sets one takes "
-                     + "that trigger over.")
+                     + "that trigger over, unless the trigger replaces the game's own effect. A change reaches a game "
+                     + "that is running within a second.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         } footer: {
@@ -1911,7 +1927,7 @@ struct PadGlobalSheet: View {
                 PadHapticsSection(gain: gain, own: { _ in false }) {
                     PadTryRow(tester: model.padTester, kind: .haptics, options: model.pad.defaults)
                 }
-                PadTriggersSection(spec: text, own: { _ in false }) {
+                PadTriggersSection(spec: text, flag: flag, own: { _ in false }) {
                     VStack(alignment: .leading, spacing: 6) {
                         PadTryRow(tester: model.padTester, kind: .triggers, options: model.pad.defaults)
                         Text("Measured with NOTPROTON_RAW_CONTROLLERS=1 in the game's launch options and Steam Input off.")
@@ -1982,8 +1998,9 @@ struct PadGameSheet: View {
                             Text("In blue, or marked with a dot, what is this game's own; the rest follows "
                                  + (preset == nil ? "every game's." : "the suggested settings, then every game's."))
                                 .font(.caption).foregroundStyle(.secondary)
-                            Text("They apply under NotProton, from the game's next start. A CrossOver bottle does not "
-                                 + "tell the modules which game runs, so there every game's settings apply.")
+                            Text("They apply under NotProton, from the game's next start; the trigger effects while it "
+                                 + "runs. A CrossOver bottle does not tell the modules which game runs, so there every "
+                                 + "game's settings apply.")
                                 .font(.caption).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -1993,7 +2010,7 @@ struct PadGameSheet: View {
                 PadHapticsSection(gain: gain, own: isOwn) {
                     PadTryRow(tester: model.padTester, kind: .haptics, options: effective)
                 }
-                PadTriggersSection(spec: trigger, own: isOwn) {
+                PadTriggersSection(spec: trigger, flag: flag, own: isOwn) {
                     PadTryRow(tester: model.padTester, kind: .triggers, options: effective)
                 }
                 Section("About this game") {
