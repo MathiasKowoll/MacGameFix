@@ -119,3 +119,12 @@ body:
       description: Drag the .md file It Vibrates… saved into this box, or paste its contents.
     validations:
       required: true
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before you send it
+      description: One report is one controller on one connection. Played on a cable and over Bluetooth, send two.
+      options:
+        - label: This report is one controller on one connection, played by me.
+          required: true
+        - label: Diagnose this game was on while I played, so the report has what the Wine modules logged.
