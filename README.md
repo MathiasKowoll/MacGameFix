@@ -207,7 +207,7 @@ open Steam there (engine/README.md, "The options").
 | Life is Strange: Double Exposure | Freezes after a while | D3DMetal 4 |
 | Life is Strange: Reunion | Freezes after a while | D3DMetal 4 |
 | Marvel's Spider-Man 2 | T-pose, a broken symbiote, black blocks in the sandstorm | D3DMetal |
-| Mortal Kombat 11 | Dark smeared patches on bare faces once they animate | D3DMetal (DirectX 12) or DXMT (DirectX 11) |
+| Mortal Kombat 11 | Dark smeared patches on bare faces once they animate; movies grey with purple and green bands, and choppy | D3DMetal (DirectX 12) or DXMT (DirectX 11) |
 | Mortal Shell 2 | Crash on the first cutscene | D3DMetal |
 | NieR Replicant ver.1.22474487139 | Crashes when the first video starts | D3DMetal, a prefix |
 | NINJA GAIDEN 3: Razor's Edge | Will not start: "Insufficient VRAM" | DXVK, a prefix |
@@ -657,7 +657,7 @@ how, is in the game's page under `legacy/wiki/`.
 | `install-gow-fix.sh` | God of War | `libSceJobManager.dll` (from `libSceJobManager-gow.dll`) and `gow-depth-fix.ini` | `gow-depth-fix.c` | [God of War](legacy/wiki/God-of-War.md) |
 | `install-kh-bridge.sh` | KINGDOM HEARTS Dream Drop Distance, KINGDOM HEARTS HD 1.5+2.5 ReMIX | `dinput8.dll` (from `dinput8-kh.dll`); the original is the bottle's or prefix's own `dinput8`, copied beside it | `dwo-video-bridge.c` | [KINGDOM HEARTS](legacy/wiki/Kingdom-Hearts.md) |
 | `install-sm2-fix.sh` | Marvel's Spider-Man 2 | `amd_ags_x64.dll` (from `amd_ags_x64-sm2.dll`), and shaders rewritten from the game's own executable by `sm2-shadertool` | `sm2-tpose-fix.c` with `sm2fix_core.c`; the tool from `sm2-shadertool.c` and `sm2-shaderfix.c` | [Spider-Man 2](legacy/wiki/Spider-Man-2.md) |
-| `install-mk11-fix.sh` | Mortal Kombat 11 | `amd_ags_x64.dll` under `Binaries/Retail` (from `amd_ags_x64-mk11.dll`) | `mk11-face-fix.c` with `sm2fix_core.c` and `mk11-morph-shaders.h` (from `mk11-morph/`) | [Mortal Kombat 11](legacy/wiki/Mortal-Kombat-11.md) |
+| `install-mk11-fix.sh` | Mortal Kombat 11 | `amd_ags_x64.dll` under `Binaries/Retail` (from `amd_ags_x64-mk11.dll`) | `mk11-face-fix.c` with `sm2fix_core.c`, `mk11-morph-shaders.h` (from `mk11-morph/`) and `mk11-movie.c` | [Mortal Kombat 11](legacy/wiki/Mortal-Kombat-11.md) |
 | `install-nier-bridge.sh` | NieR Replicant ver.1.22474487139 | `dinput8.dll` (from `dinput8-nier.dll`), the original copied from the bottle or prefix, and the reader | `dwo-video-bridge.c` | [NieR Replicant](legacy/wiki/NieR-Replicant.md) |
 | `install-ng3-fix.sh` | NINJA GAIDEN 3: Razor's Edge | Nothing: `d3d9.dll`, `qasf.dll`, `quartz.dll` and `winegstreamer.dll` (from `ng3-*.dll`) go into the prefix's `system32`, the prefix's own kept aside, with overrides for the game's executable | Not built here: d9vk v1.10.3-20250511 and winevideo 0.5's Wine builds, checked by their hashes in `ng3-THIRD-PARTY-LICENCES.md` | [NINJA GAIDEN 3](legacy/wiki/Ninja-Gaiden-3-Razors-Edge.md) |
 | `install-ng4-fix.sh` | NINJA GAIDEN 4 | `dstorage.dll` (from `dstorage-ng4.dll`); `dstoragecore.dll` renamed aside | `tools/ng4-observe.c`, built with `-DNG4_FIX` | [NINJA GAIDEN 4](legacy/wiki/Ninja-Gaiden-4.md) |
