@@ -10,9 +10,12 @@
  *   sm2-shadertool rewrite <in.ll> <space> <reg> <out.ll>   typed SRV -> raw, values named
  *   sm2-shadertool rewrite-uav <in.ll> <space> <reg> <out.ll>   typed RWBuffer UAV -> raw
  *
- * Built for Apple Silicon only (M5 Macs do not have the bug):
- *   clang -O2 -arch arm64 -mmacosx-version-min=13.0 -o runtime/sm2-shadertool \
- *       runtime/sm2-shadertool.c runtime/sm2-shaderfix.c
+ * Built for Apple Silicon only (M5 Macs do not have the bug), then signed with
+ * MacGameFix's Developer ID by tools/sign-payload.sh, which the app's
+ * notarisation needs (the shipped one's otool -t matched this build on 2026-10-22):
+ *   clang -O2 -arch arm64 -mmacosx-version-min=13.0 -o fixes/sm2-shadertool \
+ *       fixes/sm2-shadertool.c fixes/sm2-shaderfix.c
+ *   tools/sign-payload.sh
  *
  * SPDX-License-Identifier: GPL-3.0-or-later (the rewriter itself is public domain)
  */

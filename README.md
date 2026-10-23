@@ -25,10 +25,10 @@ archived repository.
 
 | Folder | What it holds |
 | --- | --- |
-| `app/` | The application: `Core.swift` (installers, games, libraries), `Engine.swift` (the Wine modules), `Pad.swift` (the Game Feel tab's options and what it writes for the modules), `Probe.swift` (the Report tab: what a game is made of, and its report), `pad-presets.json` (options measured per title), `Automation.swift` (the background agent, signed catalog updates, reports), `MenuBar.swift` (the agent's menu bar item), `MacGameFix.swift` (the window), `AppIcon.icon` (the icon); `build-app.sh` and `test-automation.sh`. |
+| `app/` | The application: `Core.swift` (installers, games, libraries), `Engine.swift` (the Wine modules), `Pad.swift` (the Game Feel tab's options and what it writes for the modules), `Probe.swift` (the Report tab: what a game is made of, and its report), `pad-presets.json` (options measured per title), `Automation.swift` (the background agent, signed catalog updates, reports), `MenuBar.swift` (the agent's menu bar item), `MacGameFix.swift` (the window), `AppIcon.icon` (the icon); `build-app.sh`, `test-automation.sh`, `notarize.sh` (Apple's notarisation and the release's app zip) and `test-notarize.sh`. |
 | `fixes/` | One installer per fix (`install-*.sh`), the DLLs they put in place, Cyberpunk 2077's recipe for each build of the game (`cp2077-denoiser.recipes`), the C source of each DLL and the scripts that build them (`build-proxy.sh`, `build-asf-reader.sh`, `check-builds.sh`), and the third-party notices. |
 | `process-features.json` | The table: per game executable, its symptom, backend, toolkit, codec and engine needs. The app is built from it. |
-| `tools/` | The probes and capture scripts the fixes were found with: video and Media Foundation observers, HID traces, a game survey; and `vibration-md.py`, which writes the list of games played for vibration from its JSON. |
+| `tools/` | The probes and capture scripts the fixes were found with: video and Media Foundation observers, HID traces, a game survey; `vibration-md.py`, which writes the list of games played for vibration from its JSON; and `sign-payload.sh` and `check-signatures.sh`, which sign the Mach-O files the app carries with its Developer ID and check them. |
 | `docs/` | The [list of games played for vibration](docs/vibration.md): `vibration.json`, its source, and `vibration.md`, made from it by `tools/vibration-md.py`. Also the inventory of what the app shows (`ui-inventory.md`) and the documentation's screenshots (`images/`). |
 | `engine/` | Not a game fix: patched Wine modules that go into CrossOver itself, for a DualSense or DualSense Edge: its haptics on a cable and over Bluetooth, the pad on Bluetooth as the same pad on a cable, XInput (its rumble on the motors, or the pad as an XInput controller), trigger effects for a game that sets none, the pad's audio output for games that find it through SetupAPI and XAudio2, and the Edge shown as a standard DualSense or the pad as a DualShock 4. The built modules per CrossOver build, their installer (`engine-modules.sh`), the patches and `build.sh`; see [`engine/README.md`](engine/README.md). The app's Wine Modules tab installs them. |
 | `legacy/` | What MacGameVideoFix's wiki and notes found, per game and in general (`legacy/wiki/Findings.md`, `legacy/wiki/Diagnosing-a-new-game.md`). Kept as written; some pages describe the engine work that stayed behind. |
@@ -519,8 +519,15 @@ run from MacGameFix, where macOS may ask for App Management.
 
 ## Opening it the first time
 
-The application is signed ad hoc, so macOS blocks the first launch of a
-downloaded copy. **Right click > Open** once, and confirm.
+A download that Apple has notarised is expected to open as any app from the
+internet does: macOS asks once, and *Open* opens it. That is not measured yet:
+no MacGameFix build has been notarised so far. One that is not notarised is
+blocked on its first launch: the releases signed ad hoc, before the Developer
+ID, and an app built without one (see below). For those, on macOS 14, **Right
+click > Open** once, and confirm. On macOS 15 and later Apple's notes say that
+no longer opens it: open it once, then click **Open Anyway** in System Settings
+› Privacy & Security, and confirm. That is Apple's word; it has not been tried
+with MacGameFix.
 
 ## Building it
 
@@ -531,6 +538,53 @@ app/build-app.sh
 It compiles the app, chooses the games as described above, copies the
 installers and every file they name from `fixes/` unchanged, and fails if the
 bundle differs from `fixes/` in a single byte.
+
+**Signing.**
+- **The identity:** `MACGAMEFIX_CODESIGN_IDENTITY` (a Developer ID Application
+  identity's name or SHA-1), else the keychain's first "Developer ID
+  Application" identity (`security find-identity -v -p codesigning`), else ad
+  hoc, which the build says. `MACGAMEFIX_CODESIGN_IDENTITY=-` asks for ad hoc.
+  With an identity the app is signed with the hardened runtime and a secure
+  timestamp, and the build checks that every Mach-O in the bundle carries the
+  same team's Developer ID, a timestamp and the runtime
+  (`tools/check-signatures.sh`). The app has no entitlements: read from the
+  code, it does nothing the hardened runtime asks one for (`build-app.sh` says
+  what it does), and the agent's paths in `app/test-automation.sh` run under
+  it; the window and the pad test have not been run under it yet.
+- **The Mach-O files it carries:** `fixes/sm2-shadertool` and each
+  `engine/modules/<build>/<arch>-unix/*.so` are signed in the repository, not
+  in the app, since the bundle's copies must stay byte for byte what `fixes/`
+  and each `built-for.json` hold. `tools/sign-payload.sh` signs them with the
+  same identity, keeps each file's identifier and code (`otool -t` the same
+  before and after) and writes the new hashes into `built-for.json`. Run it
+  after `engine/build.sh` writes modules without `MACGAMEFIX_CODESIGN_IDENTITY`,
+  or after `sm2-shadertool` is built again, and before committing them. A file
+  already signed with this team's Developer ID, a secure timestamp and the
+  runtime is left alone, so running it again changes nothing.
+  `fixes/check-builds.sh` checks those signatures on any Mac, with an identity
+  or without, so a file signed ad hoc again does not pass unseen where the
+  build signs ad hoc.
+
+**Notarising it.** `app/notarize.sh` sends the built app to Apple's notary
+service and waits for the answer, with the notarytool keychain profile
+`$MACGAMEFIX_NOTARY_PROFILE` (`itsomax-desktop-notary` unless set, made once
+with `xcrun notarytool store-credentials`).
+- **Accepted:** it staples the ticket to the app, checks it with `xcrun stapler
+  validate` and `spctl`, and writes `app/dist/MacGameFix-<version>.zip` and its
+  `.sha256`, the app assets of the release. Run it after `build-app.sh`, which
+  empties `app/dist` when it writes the catalogs there.
+- **Refused:** it saves Apple's log in `app/dist` and fails. When Apple answers
+  that a required agreement is missing, the team's account holder has to accept
+  it at developer.apple.com first, and it says so.
+- **Before sending:** it refuses an app signed ad hoc, or one with a Mach-O
+  that lacks the Developer ID or the secure timestamp, which Apple asks of every
+  Mach-O, or the runtime, which Apple asks of the executables and MacGameFix
+  puts on every Mach-O so that all are signed one way. `--dry-run` checks and
+  zips the app and sends nothing. `app/test-notarize.sh` takes it through every
+  answer with a fake `xcrun`, `spctl` and `ditto`, offline.
+- **The assets:** they are written and checked in a temporary folder first,
+  and replace the ones in `app/dist` only once the copy in the zip validates;
+  any failure leaves `app/dist` as it was.
 
 **The release's catalog.**
 - **When it is written:** when the signing key is at
@@ -578,7 +632,9 @@ toolchain). Users never run them: the built DLLs are in `fixes/` and ship in the
 app. `fixes/check-builds.sh` rebuilds each DLL from its source and compares the
 two, checks the third-party ones against their recorded sha256, and compares
 the MGVF-GAME lines with `process-features.json` and a built app's copies with
-`fixes/`.
+`fixes/`. It also checks that `sm2-shadertool` and the Wine modules' unix
+halves carry MacGameFix's Developer ID, a secure timestamp and the hardened
+runtime.
 
 ## How each fix is made
 

@@ -361,6 +361,16 @@ do it.
    minimum macOS version and the second rpath that CodeWeavers' own
    `winecoreaudio.so` has.
 
+   The unix halves are signed with `MACGAMEFIX_CODESIGN_IDENTITY` when it is set
+   (a Developer ID with a secure timestamp, which notarising the app asks of
+   every Mach-O in it, and the hardened runtime, which it asks of executables
+   and MacGameFix puts on every Mach-O so that all are signed one way), and ad
+   hoc otherwise, and `build.sh` says which. Modules built ad hoc are signed with
+   `tools/sign-payload.sh` before they are committed; it keeps their code and
+   identifier and writes the new hashes into `built-for.json`.
+   `tests/build-signing/run.sh` runs `build.sh` itself on a fake tree, its tools
+   stubbed, both ways.
+
    `PATCHES=none ./build.sh …` builds the same modules unpatched, into `.build/`,
    to compare them with CodeWeavers' own. For 20261006 they match in exports,
    imports and linked libraries.
@@ -415,11 +425,21 @@ them in the CrossOver installs that are on (the top-level README says how).
 What else each kind of CrossOver needs:
 
 - **NotProton runner:** nothing else. The PE files carry no macOS signature,
-  and `winebus.so` and `winecoreaudio.so` are signed by `build.sh`.
+  and `winebus.so` and `winecoreaudio.so` carry MacGameFix's Developer ID
+  (`tools/sign-payload.sh`). The eight Wine loaders of the CrossOver apps and
+  runners on the test Mac (2026-10-22, both sides) all have
+  `com.apple.security.cs.disable-library-validation`, so they may load a library
+  of another team, ad hoc or Developer ID alike. A test library signed as the
+  modules are loaded into a host signed that way, on both sides, and a host with
+  the hardened runtime and without that entitlement refused it. In a game, the
+  Developer ID modules have not been played yet.
 - **CrossOver app:** macOS asks to allow MacGameFix under App Management.
   Changing files inside the app breaks CodeWeavers' signature, so the app is
   signed again ad hoc and its quarantine attribute cleared; this has not been
-  tried on a CrossOver app yet. A CrossOver update puts its own files back.
+  tried on a CrossOver app yet. That signature does not reach the modules under
+  `lib/wine`: on a fake app (2026-10-22) `codesign --force --deep --sign -` left
+  their sha256 and their Developer ID as they were, so the status check still
+  finds them. A CrossOver update puts its own files back.
 - **NotProton:** "Update" or "Reinstall" may put the runner's own files back.
   NotProton builds that carry PR #203 replace `mmdevapi.dll` with its wrapper.
 

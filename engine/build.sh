@@ -18,6 +18,9 @@
 # winebus.so is built with SDL, as CodeWeavers build theirs (it opens libSDL2 when it
 # runs): SDL2's headers must be installed (brew install sdl2).
 # modules/<id>/built-for.json lists every file built so far.
+# MACGAMEFIX_CODESIGN_IDENTITY="Developer ID Application: …" signs the unix half with that
+# identity; without it, it is signed ad hoc, and tools/sign-payload.sh signs it before
+# it is committed.
 # The copied tree, made again when its series changes, and the build directories go under
 # .build/, which git ignores.
 # winebus.sys, mmdevapi.dll, hidclass.sys, setupapi.dll, xaudio2_9.dll and xinput are PE (llvm-mingw); winecoreaudio.so is the unix half
@@ -117,17 +120,36 @@ XINPUT="xinput1_1 xinput1_2 xinput1_3 xinput1_4 xinput9_1_0 xinputuap"
 
 # The shape the engine's own files have: PE files stripped (winebuild already wrote the
 # 32-byte builtin signature), the unix half with CrossOver's second rpath and signed.
+#
+# Signed with MACGAMEFIX_CODESIGN_IDENTITY when it is set: a Developer ID with a secure
+# timestamp, which notarising the app asks of every Mach-O in it, and the hardened
+# runtime, which it asks of executables and MacGameFix puts on every Mach-O so that all
+# are signed one way (tools/sign-payload.sh says why it is done here and not in the
+# app). The identifier stays the one the ad hoc signature gives, as tools/sign-payload.sh
+# keeps it. Without it, ad hoc as before, and tools/sign-payload.sh signs them before
+# they are committed.
 rm -rf "${OUT:?}/$PE" "${OUT:?}/$UNIX" && mkdir -p "$OUT/$PE" "$OUT/$UNIX"
 for f in dlls/winebus.sys/$PE/winebus.sys dlls/mmdevapi/$PE/mmdevapi.dll dlls/hidclass.sys/$PE/hidclass.sys dlls/setupapi/$PE/setupapi.dll dlls/xaudio2_9/$PE/xaudio2_9.dll \
          $(for x in $XINPUT; do printf 'dlls/%s/%s/%s.dll ' "$x" "$PE" "$x"; done); do
   llvm-strip -o "$OUT/$PE/$(basename "$f")" "$BUILD/$f"
 done
+IDENTITY="${MACGAMEFIX_CODESIGN_IDENTITY:-}"
+if [ -n "$IDENTITY" ] && [ "$IDENTITY" != - ]; then
+  echo "==> signing $UNIX with $IDENTITY, a secure timestamp and the hardened runtime"
+else
+  IDENTITY=""
+  echo "==> signing $UNIX ad hoc (MACGAMEFIX_CODESIGN_IDENTITY is not set): run tools/sign-payload.sh before committing them"
+fi
 for f in dlls/winebus.sys/winebus.so dlls/winecoreaudio.drv/winecoreaudio.so; do
   so="$OUT/$UNIX/$(basename "$f")"
   cp "$BUILD/$f" "$so"
   strip -x "$so"
   install_name_tool -add_rpath "$RPATH2" "$so" 2>/dev/null
   codesign -f -s - "$so"
+  if [ -n "$IDENTITY" ]; then
+    ident="$(codesign -dv "$so" 2>&1 | sed -n 's/^Identifier=//p')"
+    codesign -f -s "$IDENTITY" --timestamp --options runtime -i "$ident" "$so"
+  fi
 done
 
 # CROSSOVER names the release for people ("CrossOver Preview 20261006"); a rebuild keeps

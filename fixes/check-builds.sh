@@ -33,9 +33,10 @@
 # scripts. Without one it says so and stops rather than reporting everything
 # clean, because "no compiler" and "no drift" must never look the same.
 #
-# After those, three checks that need no compiler: no bottle name of this Mac in
-# anything published, the MGVF-GAME lines against process-features.json, and
-# the copies inside a built MacGameFix.app against fixes/.
+# After those, four checks that need no compiler: no bottle name of this Mac in
+# anything published, the MGVF-GAME lines against process-features.json, the
+# copies inside a built MacGameFix.app against fixes/, and the signature of every
+# Mach-O file the app carries from fixes/ and engine/modules/.
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -280,8 +281,27 @@ else
   echo "  bundle: app/MacGameFix.app is not built, so there is nothing to compare"
 fi
 
+# The Mach-O files the app carries unchanged, sm2-shadertool and the Wine
+# modules' unix halves, signed as tools/sign-payload.sh signs them: MacGameFix's
+# Developer ID, a secure timestamp and the hardened runtime. build-app.sh checks
+# the bundle only when it signs with a Developer ID, so without this a file
+# signed ad hoc again would pass on every Mac that has none. The signatures are
+# committed, so this needs no identity.
+echo
+PAYLOAD_TEAM=8S57F2XC5G   # the team of MacGameFix's Developer ID
+sig_drift=0
+for d in fixes engine/modules; do
+  "$ROOT/tools/check-signatures.sh" "$ROOT/$d" "$PAYLOAD_TEAM" > "$TMP/signatures" 2>&1
+  case $? in
+    0) echo "  signatures: $(tail -1 "$TMP/signatures" | sed 's/^ *//')" ;;
+    2) echo "  signatures: no Mach-O file in $d" ;;
+    *) /usr/bin/grep '^  FAIL ' "$TMP/signatures"; echo "  signatures: $(tail -1 "$TMP/signatures" | sed 's/^ *//'); tools/sign-payload.sh signs them"
+       sig_drift=1 ;;
+  esac
+done
+
 echo
 echo "  $checked rebuilt and compared, $drifted drifted, $missing_source unattributed"
 [ "$drifted" = 0 ] && [ "$bundle_drift" = 0 ] && [ "$missing_source" = 0 ] \
-  && [ "$decl_drift" = 0 ] && [ "$name_leak" = 0 ] || exit 1
+  && [ "$decl_drift" = 0 ] && [ "$name_leak" = 0 ] && [ "$sig_drift" = 0 ] || exit 1
 exit 0

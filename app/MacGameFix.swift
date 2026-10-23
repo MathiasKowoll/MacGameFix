@@ -1091,8 +1091,8 @@ struct EngineView: View {
                         Label("macOS does not let MacGameFix change "
                               + ListFormatter.localizedString(byJoining: model.appManagementBlocked) + ".",
                               systemImage: "lock.shield")
-                        Text("Turn MacGameFix on in System Settings › Privacy & Security › App Management, then "
-                             + "check again. A new build of MacGameFix may need it turned on again.")
+                        Text("Turn MacGameFix on in System Settings › Privacy & Security › App Management, then check again. "
+                             + "Releases signed with MacGameFix's Developer ID are expected to keep this permission across updates; the first update from a release made before the Developer ID, or a build not signed with it, may need it turned on again.")
                             .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                         HStack {
                             Spacer()

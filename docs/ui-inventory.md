@@ -152,7 +152,7 @@ Wherever a quoted string is built from a value, `<…>` stands for that value.
 
 **1. App Management notice.** This section only appears while macOS has refused a write to a CrossOver app (1088-1105).
 - A lock-shield label: "macOS does not let MacGameFix change <app names>."
-- Caption: "Turn MacGameFix on in System Settings › Privacy & Security › App Management, then check again. A new build of MacGameFix may need it turned on again."
+- Caption: "Turn MacGameFix on in System Settings › Privacy & Security › App Management, then check again. Releases signed with MacGameFix's Developer ID are expected to keep this permission across updates; the first update from a release made before the Developer ID, or a build not signed with it, may need it turned on again." Expected, not measured: macOS keeps the permission for the app's designated requirement, which with the Developer ID is the bundle identifier and the team, the same in every release; signed ad hoc, it is the build's own hash, so the first update from an ad hoc release to a Developer ID one changes it.
 - **"Check Again"**: tries the write again on each CrossOver app that is on or was refused (526-530).
 - **"Open App Management…"** (Return): opens `x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles` (532-536).
 - How the refusal happens: the app creates and deletes `lib/wine/.macgamefix-access` inside the app (507-513). This runs once per launch for CrossOver apps that are on (787-791), and before every install or removal in a CrossOver app (541).
@@ -546,7 +546,7 @@ The "Control-Command-F" in the Game Mode footer is advice for full screen in gam
   - Installing or removing Cyberpunk 2077's fix writes into the game's app and may meet the same refusal. The app does not probe for it; the installer says "macOS did not let MacGameFix change <app>." and points to App Management, in Settings › Log.
 - **Notifications**: the agent asks for alert permission when it starts (Automation.swift:676). The prompt is macOS's standard one.
 - **Game Mode helper apps**: they declare microphone and camera usage texts, which a game running from them could trigger: "This game would like to access your microphone." and "This game would like to access your camera." (GameMode.swift:110-111).
-- **First launch**: Gatekeeper blocks the ad-hoc-signed app. The README says "Right click > Open" once (README:520-523).
+- **First launch**: a notarised download is expected to open after macOS's usual question for an app from the internet; not measured, since no MacGameFix build has been notarised so far. One that is not notarised (the releases signed ad hoc, before the Developer ID, or a build without one) is blocked by Gatekeeper. The README says "Right click > Open" once on macOS 14 and, from Apple's notes, "Open Anyway" in System Settings › Privacy & Security on macOS 15 and later, which has not been tried with MacGameFix (README:520-530).
 - Not requested in the code: Input Monitoring, Bluetooth, or folder access. The pad tries use IOHID and CoreAudio directly. I can't tell from the code whether macOS asks for anything for those, so check it on a real Mac.
 
 ---
@@ -603,7 +603,7 @@ The "Control-Command-F" in the Game Mode footer is advice for full screen in gam
 32. Icons: the plain raccoon; the raccoon with its dot; each of "Raccoon and gamepad", "Gamepad" and "Battery only" with a pad connected.
 33. Menu: click the menu bar icon with kept games and a pad connected.
 34. Notifications: the permission prompt the first time the agent starts, and a failure notification with "Report on GitHub…".
-35. First launch: the Gatekeeper dialog and "Right click > Open".
+35. First launch: a notarised download's question ("downloaded from the Internet"); for an app that is not notarised, the Gatekeeper dialog, "Right click > Open" on macOS 14, and "Open Anyway" in System Settings › Privacy & Security on macOS 15 and later.
 
 ---
 
