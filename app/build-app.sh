@@ -28,6 +28,19 @@
 # So a fix that later stops needing the engine arrives here on its own, and one
 # that starts needing it leaves.
 #
+# WHO SIGNS IT. MACGAMEFIX_CODESIGN_IDENTITY, a Developer ID Application identity
+# codesign knows by its name or SHA-1; else the keychain's first one (security
+# find-identity -v -p codesigning); else ad hoc, as every release before the
+# Developer ID was, and the build says so. MACGAMEFIX_CODESIGN_IDENTITY=- asks for
+# ad hoc. With an identity the app is signed with the hardened runtime and a
+# secure timestamp, so that app/notarize.sh can have Apple notarise it, and every
+# Mach-O in it must carry the same team's Developer ID (tools/check-signatures.sh):
+# the ones it does not build, sm2-shadertool and the Wine modules' unix halves,
+# are signed in the repository by tools/sign-payload.sh, since the bundle's
+# copies must stay byte for byte what fixes/ and each built-for.json hold.
+# fixes/check-builds.sh checks those signatures on any Mac, with an identity or
+# without.
+#
 # SPDX-License-Identifier: GPL-3.0-or-later
 set -euo pipefail
 
@@ -46,6 +59,23 @@ MODULES_MIN_APP="1.5.0"
 # The private half of the key whose public half Automation.swift carries. It
 # never enters the repository; without it the build writes no release catalog.
 SIGNING_KEY="${MACGAMEFIX_SIGNING_KEY:-$HOME/.config/macgamefix/catalog-signing.key}"
+
+SIGN_ID="${MACGAMEFIX_CODESIGN_IDENTITY:-}"
+SIGN_WHY=""
+IDENTITIES="$(security find-identity -v -p codesigning 2>/dev/null || true)"
+if [ -z "$SIGN_ID" ]; then
+  SIGN_ID="$(printf '%s\n' "$IDENTITIES" | sed -n 's/^ *[0-9]*) \([0-9A-F]\{40\}\) "Developer ID Application: .*"$/\1/p')"
+  SIGN_ID="${SIGN_ID%%$'\n'*}"
+  [ -n "$SIGN_ID" ] || { SIGN_ID=-; SIGN_WHY="there is no Developer ID Application identity in the keychain"; }
+elif [ "$SIGN_ID" = - ]; then
+  SIGN_WHY="MACGAMEFIX_CODESIGN_IDENTITY is -"
+fi
+if [ "$SIGN_ID" != - ]; then
+  SIGN_NAME="$(printf '%s\n' "$IDENTITIES" | /usr/bin/grep -F -- "$SIGN_ID" | sed -n 's/^.*"\(.*\)"$/\1/p' || true)"
+  SIGN_NAME="${SIGN_NAME%%$'\n'*}"
+  SIGN_TEAM="$(printf '%s\n' "$SIGN_NAME" | sed -n 's/^Developer ID Application: .*(\([A-Z0-9]\{10\}\))$/\1/p')"
+  [ -n "$SIGN_TEAM" ] || { echo "error: '$SIGN_ID' is not a valid Developer ID Application identity in the keychain" >&2; exit 1; }
+fi
 
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
@@ -220,9 +250,32 @@ PY
 manifest catalog.json "$CATALOG_MIN_APP" games.json "${PAYLOAD[@]}"
 manifest modules.json "$MODULES_MIN_APP" "${ENGINE[@]}"
 
-echo "==> signing (ad-hoc)"
-codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || \
-  echo "    note: ad-hoc signing failed; the app still runs after Right click > Open"
+# No entitlements. Read from the code, the hardened runtime asks for one only
+# for what the app does not do: it compiles no code at run time (no JIT), loads
+# no library of its own (no dlopen; only the system's frameworks), sends no Apple
+# Events, and records nothing (the pad test plays to the pad's audio output,
+# never from an input). The agent's paths in test-automation.sh run under it;
+# the window and the pad test have not been run under it yet.
+# What it does run is other programs, each under its own signature: /bin/bash
+# for the installers, codesign, ditto, ps, launchctl and lsregister; it downloads
+# with URLSession and opens links and System Settings with NSWorkspace.
+# No --deep either: the Mach-O files it carries are signed already, and signing
+# them here would change the bundle's copies (WHO SIGNS IT, above).
+if [ "$SIGN_ID" != - ]; then
+  echo "==> signing with $SIGN_NAME: hardened runtime, secure timestamp"
+  codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$APP"
+  codesign --verify --deep --strict --verbose=2 "$APP" 2>&1 | sed 's/^/    /'
+  "$ROOT/tools/check-signatures.sh" "$APP" "$SIGN_TEAM" > "$STAGE/signatures" || {
+    cat "$STAGE/signatures" >&2
+    echo "error: a Mach-O in the app is not signed with $SIGN_NAME; tools/sign-payload.sh signs the payload" >&2
+    exit 1
+  }
+  tail -1 "$STAGE/signatures"
+else
+  echo "==> signing ad hoc: $SIGN_WHY. A download of this build is blocked on its first launch (README: Opening it the first time), and app/notarize.sh refuses it"
+  codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || \
+    echo "    note: ad-hoc signing failed"
+fi
 
 # The payload must be byte for byte what fixes/ holds, for the reason the other
 # two apps check it: a copy taken from a build outlives the build it came from.
@@ -245,3 +298,4 @@ else
 fi
 echo
 echo "built: $APP"
+[ "$SIGN_ID" = - ] || echo "to notarise it and write the release's app zip: app/notarize.sh (app/notarize.sh --dry-run stops before sending anything)"
