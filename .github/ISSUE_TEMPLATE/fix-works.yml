@@ -76,7 +76,7 @@ body:
     id: log
     attributes:
       label: MacGameFix's log
-      description: The lines about this game from Settings › Log, from the install to after you played.
+      description: The lines about this game from Settings › Log (copy them while the app is open), from the install to after you played, and the fix's own log from the game's folder if it writes one, such as mk11-face-fix.log.
       render: text
     validations:
       required: true
