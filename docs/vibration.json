@@ -1,6 +1,6 @@
 {
   "about": "The games played for vibration with a DualSense or DualSense Edge on a Mac. A game is added after a session, from what was felt and what the Wine modules logged, never from what it should do. Each test names its controller and its connection. docs/vibration.md is made from this file by tools/vibration-md.py.",
-  "updated": "2026-10-22",
+  "updated": "2026-10-23",
   "stack": "MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 27), Steam Input off for the game, unless a result says otherwise.",
   "results": {
     "works": "Works",
@@ -776,7 +776,7 @@
         "PlayStation button prompts"
       ],
       "description": "With the pad shown as a DualShock 4 the game's Sony library opens it and the game rumbles it, on a cable and over Bluetooth. Shown as a DualSense it plays with the right controls and PlayStation prompts but never vibrates.",
-      "settings": "Game Feel: the pad shown as a DualShock 4 (patch 0013, not released yet). Steam Input off.",
+      "settings": "Game Feel: the pad shown as a DualShock 4 (patch 0013, in MacGameFix 1.5.6 and later). Steam Input off.",
       "details": [
         "Shown as a DualShock 4, the game's library read the pad's reports 0x12, 0xa3 and 0x02 and set 0x14, all answered by the modules, then wrote the DualShock 4's output 0x05 with its motors; the modules turned it into the DualSense's.",
         "With the Edge shown as a DualSense, XInput off, on the motors or as a controller, the game sent no vibration request at all.",
@@ -832,6 +832,122 @@
           "notes": "Vibrated (the user); 40 motor rises in the log, up to 0xff."
         }
       ]
+    },
+    {
+      "name": "Crash Bandicoot 4: It's About Time",
+      "steamAppId": "1378990",
+      "status": "works",
+      "technology": "Unreal Engine 4.24. It reads an XInput controller, and a DualShock 4 with its own code over HID: shown as one, the game reads the pad's DualShock 4 reports itself and rumbles it.",
+      "library": "Raw HID",
+      "vibration": "Motors",
+      "features": [
+        "Motors",
+        "PlayStation button prompts"
+      ],
+      "description": "Shown as a DualShock 4 it shows PlayStation buttons and rumbles the motors. As an XInput controller it rumbles too, with Xbox buttons; the game lets you choose its button prompts in its own settings.",
+      "settings": "Game Feel: the pad shown as a DualShock 4, XInput off. Steam Input off.",
+      "details": [
+        "Shown as a DualShock 4, the game read the DualShock 4's feature reports 0x12 and 0xa3, answered by the modules, then wrote its motors itself: 16 rises in two and a half minutes, up to 0xe6.",
+        "As an XInput controller it rumbled through XInput, with Xbox button prompts: 41 rises in four minutes."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "date": "2026-10-23",
+          "notes": "As an XInput controller: vibrates (the user), Xbox prompts; 41 motor rises through XInput."
+        },
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "shownAs": "DualShock 4",
+          "date": "2026-10-23",
+          "notes": "PlayStation prompts and vibration (the user); 16 motor rises, written by the game to the DualShock 4."
+        }
+      ]
+    },
+    {
+      "name": "Crash Bandicoot N. Sane Trilogy",
+      "steamAppId": "731490",
+      "status": "works",
+      "technology": "Vicarious Visions' engine. It reads XInput and DirectInput, and rumbles only an XInput controller. A DualShock 4 seen through DirectInput is its PS4 controller type, with PlayStation prompts, but it never rumbles one.",
+      "library": "XInput",
+      "vibration": "XInput",
+      "features": [
+        "XInput rumble"
+      ],
+      "description": "As an XInput controller it rumbles, with Xbox button prompts; the game has no setting for its prompts. Shown as a DualShock 4 it shows PlayStation buttons and does not vibrate. Which one is the player's choice: vibration as an XInput controller (the setting kept here), or PlayStation buttons as a DualShock 4.",
+      "settings": "Game Feel: the pad as an XInput controller (by the store's rule). Steam Input off. For PlayStation buttons without vibration: the pad shown as a DualShock 4.",
+      "details": [
+        "Shown as a DualShock 4 the controls and the PlayStation prompts were right, and the game sent no vibration at all: none to the pad, and none to XInput's rumble on the motors, which the modules had ready beside it.",
+        "Its executable classifies controllers (ECONTROLLERTYPE_PS4) and imports only XInputGetState and XInputSetState from XInput, so it cannot see a Sony pad behind XInput."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "date": "2026-10-23",
+          "notes": "As an XInput controller: vibrates (the user), Xbox prompts; 834 motor rises in five minutes through XInput."
+        },
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "no-vibration",
+          "shownAs": "DualShock 4",
+          "date": "2026-10-23",
+          "notes": "XInput off: PlayStation prompts, no vibration request in the log."
+        },
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "no-vibration",
+          "shownAs": "DualShock 4",
+          "date": "2026-10-23",
+          "notes": "XInput's rumble on the motors beside it: PlayStation prompts, and still no vibration request."
+        }
+      ]
+    },
+    {
+      "name": "God of War Ragnar\u00f6k",
+      "steamAppId": "2322010",
+      "status": "works",
+      "technology": "Its executable carries Sony's library (libScePad: adaptive triggers, haptics) and loads it through the PlayStation PC SDK, but under Wine Steam answers that it runs on a Steam Deck, and the game never loads the SDK. It then reads the controller as Steam presents it: with Steam Input on, through Steam's own XInput controller and Steam Input's controller type, which names a DualSense; with Steam Input off, through XInput alone.",
+      "library": "XInput",
+      "vibration": "XInput",
+      "features": [
+        "XInput rumble",
+        "PlayStation button prompts"
+      ],
+      "description": "With Steam Input on for the game, it shows PlayStation buttons and vibrates: Steam reads the pad, gives the game its controller and sends the game's rumble back to the pad's motors. With Steam Input off, as an XInput controller, it vibrates with Xbox buttons. No adaptive triggers or haptics either way: those come from Sony's SDK, which does not run under Wine.",
+      "settings": "Steam Input ON for this game (an exception to Steam Input off): Game Feel with the Edge shown as a standard DualSense and XInput's rumble (the store's rule). Without Steam Input: the pad as an XInput controller, with Xbox buttons.",
+      "details": [
+        "Steam Input on: the input came through Steam's controller (130 reports a second reached the pad's HID device), and the game's rumble came back through XInput to the pad's motors: 232 rises in four and a half minutes, given the improved rumble emulation by the modules.",
+        "Steam Input off, XInput's rumble only: the game had no controls, since it reads XInput and XInput then has only the motors.",
+        "Steam Input off, the pad as an XInput controller: 347 motor rises in three minutes, Xbox buttons.",
+        "With Wine's hidraw off (NotProton's Disable hidraw) the pad reached the game through SDL as an XInput controller, with Xbox buttons; the Wine modules took no part.",
+        "Under NotProton, Steam's IsSteamRunningOnSteamDeck answers yes, so the game skips PsPcSdk and libScePad; told no, the SDK's initialisation fails (0x8a800111) and the game exits (measured 2026-10-16)."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "date": "2026-10-23",
+          "notes": "Steam Input off, the pad as an XInput controller: vibrates well (the user), Xbox prompts, no adaptive triggers."
+        },
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "shownAs": "DualSense",
+          "date": "2026-10-23",
+          "notes": "Steam Input on: PlayStation prompts and vibration (the user); 232 motor rises through Steam's controller."
+        }
+      ],
+      "libraryNote": "With Steam Input on, Steam reads the pad and gives the game its controller and button type."
     }
   ],
   "controllers": [
