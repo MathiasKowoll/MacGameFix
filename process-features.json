@@ -77,6 +77,14 @@
       "env": {},
       "symptom": "White specks on characters in dim light"
     },
+    "GoWR.exe": {
+      "title": "God of War Ragnarök",
+      "backend": "d3dmetal",
+      "codec": "",
+      "gptk": "",
+      "env": {},
+      "symptom": "Adaptive triggers never reach the pad"
+    },
     "Iris-Win64-Shipping.exe": {
       "title": "Life is Strange: Reunion",
       "backend": "d3dmetal",

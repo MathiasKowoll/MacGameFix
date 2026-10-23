@@ -109,6 +109,10 @@ g="$W/gow"; mkdir -p "$g"; touch "$g/GoW.exe"
 fake "$FIX/libSceJobManager-gow.dll" "$g/libSceJobManager.dll" gow-depth-fix.log
 cycle gow install-gow-fix.sh "$g" "$g/libSceJobManager.dll" "$FIX/libSceJobManager-gow.dll"
 
+g="$W/gowr"; mkdir -p "$g"; touch "$g/GoWR.exe"
+fake "$FIX/bink2w64-gowr.dll" "$g/bink2w64.dll" gowr-triggers.log
+cycle gowr install-gowr-triggers.sh "$g" "$g/bink2w64.dll" "$FIX/bink2w64-gowr.dll"
+
 g="$W/mk11"; b="$g/Binaries/Retail"; mkdir -p "$b"; touch "$b/MK11_DX12.exe"
 fake "$FIX/amd_ags_x64-mk11.dll" "$b/amd_ags_x64.dll" mk11-face-fix.log
 cycle mk11 install-mk11-fix.sh "$g" "$b/amd_ags_x64.dll" "$FIX/amd_ags_x64-mk11.dll"
