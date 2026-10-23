@@ -53,6 +53,11 @@ struct PadOptions: Codable, Equatable, Hashable {
     /// A second effect for while the other trigger is pressed; "off" keeps the first.
     var triggerR2WithL2: String?
     var triggerL2WithR2: String?
+    /// The chosen effect in place of the game's own, on the game's timing: on
+    /// while the game's is on, off while it is off. A game that sets none of its
+    /// own keeps the chosen one throughout, as without this.
+    var triggerR2Replace: Bool?
+    var triggerL2Replace: Bool?
 
     /// What the user starts with: everything the modules do turned on, and the
     /// haptics at the game's own strength on both pads. A game that wants more gets
@@ -61,7 +66,8 @@ struct PadOptions: Codable, Equatable, Hashable {
                                      hapticsGainCable: 1, edgeHapticsGainCable: 1,
                                      hapticsGainBluetooth: 1, edgeHapticsGainBluetooth: 1,
                                      xinput: "rumble", rumbleHaptics: false, triggerR2: "off", triggerL2: "off",
-                                     triggerR2WithL2: "off", triggerL2WithR2: "off")
+                                     triggerR2WithL2: "off", triggerL2WithR2: "off",
+                                     triggerR2Replace: false, triggerL2Replace: false)
 
     /// These over `base`: each option this one sets, else base's.
     func over(_ base: PadOptions) -> PadOptions {
@@ -79,7 +85,9 @@ struct PadOptions: Codable, Equatable, Hashable {
                    triggerR2: triggerR2 ?? base.triggerR2,
                    triggerL2: triggerL2 ?? base.triggerL2,
                    triggerR2WithL2: triggerR2WithL2 ?? base.triggerR2WithL2,
-                   triggerL2WithR2: triggerL2WithR2 ?? base.triggerL2WithR2)
+                   triggerL2WithR2: triggerL2WithR2 ?? base.triggerL2WithR2,
+                   triggerR2Replace: triggerR2Replace ?? base.triggerR2Replace,
+                   triggerL2Replace: triggerL2Replace ?? base.triggerL2Replace)
     }
 
     var isEmpty: Bool { self == PadOptions() }
@@ -101,7 +109,9 @@ struct PadOptions: Codable, Equatable, Hashable {
                    triggerR2: triggerR2 == base.triggerR2 ? nil : triggerR2,
                    triggerL2: triggerL2 == base.triggerL2 ? nil : triggerL2,
                    triggerR2WithL2: triggerR2WithL2 == base.triggerR2WithL2 ? nil : triggerR2WithL2,
-                   triggerL2WithR2: triggerL2WithR2 == base.triggerL2WithR2 ? nil : triggerL2WithR2)
+                   triggerL2WithR2: triggerL2WithR2 == base.triggerL2WithR2 ? nil : triggerL2WithR2,
+                   triggerR2Replace: triggerR2Replace == base.triggerR2Replace ? nil : triggerR2Replace,
+                   triggerL2Replace: triggerL2Replace == base.triggerL2Replace ? nil : triggerL2Replace)
     }
 
     /// The lines the modules read, as engine/README.md lists them. Numbers with a
@@ -144,6 +154,8 @@ struct PadOptions: Codable, Equatable, Hashable {
         if let v = triggerL2, PadTrigger(v) != nil { out.append("trigger_l2=" + v) }
         if let v = triggerR2WithL2, PadTrigger(v) != nil { out.append("trigger_r2_with_l2=" + v) }
         if let v = triggerL2WithR2, PadTrigger(v) != nil { out.append("trigger_l2_with_r2=" + v) }
+        if let v = triggerR2Replace { out.append("trigger_r2_replace=" + (v ? "on" : "off")) }
+        if let v = triggerL2Replace { out.append("trigger_l2_replace=" + (v ? "on" : "off")) }
         return out
     }
 
@@ -176,6 +188,8 @@ struct PadOptions: Codable, Equatable, Hashable {
         if let v = triggerL2, let t = PadTrigger(v) { out.append("L2 \(t.words)") }
         if let v = triggerR2WithL2, let t = PadTrigger(v), t.effect != "off" { out.append("R2 \(t.words) while L2 is pressed") }
         if let v = triggerL2WithR2, let t = PadTrigger(v), t.effect != "off" { out.append("L2 \(t.words) while R2 is pressed") }
+        if let v = triggerR2Replace { out.append(v ? "R2's effect in place of the game's" : "R2's effect only where the game sets none") }
+        if let v = triggerL2Replace { out.append(v ? "L2's effect in place of the game's" : "L2's effect only where the game sets none") }
         return out
     }
 
@@ -189,6 +203,7 @@ extension PadOptions {
         case bluetoothAsCable, fullMotorPower, edgeAsDualSense, asDualShock4, ds4XInputRumble
         case hapticsGainCable, edgeHapticsGainCable, hapticsGainBluetooth, edgeHapticsGainBluetooth
         case xinput, rumbleHaptics, triggerR2, triggerL2, triggerR2WithL2, triggerL2WithR2
+        case triggerR2Replace, triggerL2Replace
         /// Before the three modes: XInput's rumble on or off.
         case xinputRumble
         /// Before the two connections had their own: one gain per pad, for both.
@@ -215,7 +230,9 @@ extension PadOptions {
                   triggerR2: try c.decodeIfPresent(String.self, forKey: .triggerR2),
                   triggerL2: try c.decodeIfPresent(String.self, forKey: .triggerL2),
                   triggerR2WithL2: try c.decodeIfPresent(String.self, forKey: .triggerR2WithL2),
-                  triggerL2WithR2: try c.decodeIfPresent(String.self, forKey: .triggerL2WithR2))
+                  triggerL2WithR2: try c.decodeIfPresent(String.self, forKey: .triggerL2WithR2),
+                  triggerR2Replace: try c.decodeIfPresent(Bool.self, forKey: .triggerR2Replace),
+                  triggerL2Replace: try c.decodeIfPresent(Bool.self, forKey: .triggerL2Replace))
     }
 
     func encode(to encoder: Encoder) throws {
@@ -235,6 +252,8 @@ extension PadOptions {
         try c.encodeIfPresent(triggerL2, forKey: .triggerL2)
         try c.encodeIfPresent(triggerR2WithL2, forKey: .triggerR2WithL2)
         try c.encodeIfPresent(triggerL2WithR2, forKey: .triggerL2WithR2)
+        try c.encodeIfPresent(triggerR2Replace, forKey: .triggerR2Replace)
+        try c.encodeIfPresent(triggerL2Replace, forKey: .triggerL2Replace)
     }
 }
 
