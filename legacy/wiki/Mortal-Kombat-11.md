@@ -1,8 +1,9 @@
 # Mortal Kombat 11
 
-One fault, fixed at its cause: D3DMetal reads a three-float buffer view as if it
-held two floats, DXMT as if it held one, and the face morph reads its deltas
-from one.
+Two faults, both fixed at their cause. The faces: D3DMetal reads a three-float
+buffer view as if it held two floats, DXMT as if it held one, and the face morph
+reads its deltas from one. The movies: CrossOver's H.264 decoder offers no NV12
+and hands frames out in decode order. See [Movies](#movies) for the second.
 
 | | |
 | --- | --- |
@@ -91,6 +92,53 @@ patches:
   (Metal rounds such a texture buffer down, measured): none in this game;
 - the CPU translation: AVX advertised or not. FEX would not start the game.
 
+## Movies
+
+| | |
+| --- | --- |
+| Symptom | Movies -- the character select's scene previews, cutscenes, endings -- come out mostly grey with purple bands in the upper half and green ones in the lower, and the motion is choppy |
+| Cause | CrossOver's H.264 decoder offers no NV12, so the game takes YV12 and draws it as NV12; and it hands frames out in decode order, because the game's samples carry no usable time |
+| Fix | NV12 is offered again, and each frame's picture order count is read from its slice header so the frames go to the game in display order |
+| Measured | Smooth and in colour with `MK11_DX12.exe` on D3DMetal (2026-10-22). `MK11.exe` creates the decoder the same way; not yet played on DXMT |
+
+The movies are the `.scx` files in `Movies`: MP4, H.264 High 1080p at 29.97
+frames a second with B-frame pyramids, AAC in up to six languages. The game
+demuxes them itself (`NRSMoviePlayer_MP4Codec`), creates Media Foundation's H.264
+decoder with `CoCreateInstance(CLSID_CMSH264DecoderMFT)`, feeds it one access
+unit a sample and draws what comes out as NV12 with its own shader. No device
+manager, so the frames are in system memory.
+
+**The colours.** CrossOver's winegstreamer leaves NV12 out of the decoder's
+`GetOutputAvailableType` on macOS (as it does for UE5's Electra, see
+`electra-h264-fix.c`), so the first type offered is YV12 and the game sets it.
+A decoded frame saved from the game reads as a clean picture when taken as YV12
+and as exactly the broken one when taken as NV12. `SetOutputType` still accepts
+NV12; offered first, the same frame comes out as a clean NV12 picture.
+
+**The motion.** Every frame the decoder hands out carries the same time
+(measured); that the game sends its samples with time 0 is what mk11-crossover-fix
+reports. The movies' decode order is 0 4 2 1 3 8 6 5 7 ... (`has_b_frames` 2).
+Windows' decoder hands frames out in display order whatever the times;
+CrossOver's goes by the times, so it hands them out as decoded and the picture
+jumps back and forth. The decoder itself keeps up: 30 frames a second, a third of
+a millisecond a call. The fix reads each access unit's picture order count (type
+0; type 2 is display order already), holds three decoded frames and gives the
+game the earliest. Tried outside the game on all 207 movies, the first 600
+access units of each: every one read, none out of order. In the game the first
+movie moved 152 of 210 frames. Type 1, field coding or a sample that is not
+Annex B is left as decoded, and the log says so.
+
+That the frames come out in decode order, and the reordering, were found and
+published first by Anton Pavliuk
+([mk11-crossover-fix](https://github.com/CyberDogFK/mk11-crossover-fix), MIT,
+DirectX 11 only); `mk11-movie.c` is a separate implementation.
+
+**Story cutscenes above 1080p.** The same project reports that above 1080p the
+game looks for story cutscenes in a `Movies_4k` folder and skips them when it is
+missing, and links it to `Movies`. The executable does name `Movies_4k`; it has
+not been checked here whether the cutscenes are skipped, and the fix does not
+create the link.
+
 ## The fix
 
 `install-mk11-fix.sh` puts `amd_ags_x64.dll`, built from `mk11-face-fix.c`, in
@@ -113,5 +161,11 @@ The rewrites' arithmetic is the game's. A game update that changes a morph
 shader makes the DirectX 12 rewrite match nothing, and the log says no morph
 pipeline was replaced.
 
+The movie part hooks the executable's import of `CoCreateInstance` and, on the
+H.264 decoder, `GetOutputAvailableType`, `ProcessInput`, `ProcessOutput` and
+`ProcessMessage` (`mk11-movie.c`). It holds three frames, about a tenth of a
+second, before a movie's first picture.
+
 The log is `mk11-face-fix.log` beside the DLL; after the first minute it says
-how many morph pipelines were replaced and how many views were converted.
+how many morph pipelines were replaced and how many views were converted, and
+after each movie how many of its frames were put back in order.

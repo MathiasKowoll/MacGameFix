@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Install the MORTAL KOMBAT 11 face fix.
+# Install the MORTAL KOMBAT 11 face and movie fix.
 #
 #     install-mk11-fix.sh <game folder>            install
 #     install-mk11-fix.sh <game folder> --status   report
@@ -24,6 +24,12 @@
 # legacy/wiki/Mortal-Kombat-11.md has the measurements. A game update that
 # changes either morph shader makes the rewrite match nothing; the log says so.
 #
+# The movies (MP4, H.264) came out grey with a purple top and a green bottom,
+# and choppy. CrossOver's H.264 decoder does not offer NV12 on macOS, so the
+# game takes YV12 and draws it as NV12; and it hands frames out in decode order,
+# because the game's samples carry no usable time. The fix offers NV12
+# again and puts the frames back in display order (mk11-movie.c).
+#
 # One install covers both executables, whichever Steam starts: MK11_DX12.exe on
 # D3DMetal and MK11.exe (DirectX 11) on DXMT load the same amd_ags_x64.dll, and
 # the fix sees which API the executable imports.
@@ -40,11 +46,11 @@
 #
 # MGVF-SCOPE: folder
 # MGVF-GAME: Mortal Kombat 11 | MK11_DX12.exe | Binaries/Retail | MK11.exe
-# MGVF-WHY: Has the face morph read its three-float deltas the way D3DMetal and DXMT can, which removes the dark patches. DirectX 12 and 11 alike.
+# MGVF-WHY: Has the face morph read its three-float deltas the way D3DMetal and DXMT can, which removes the dark patches, and gives the movies their colours and their frame order back. DirectX 12 and 11 alike.
 
 set -euo pipefail
 
-usage() { sed -n '3,36p' "$0" >&2; exit 1; }
+usage() { sed -n '3,42p' "$0" >&2; exit 1; }
 [ $# -ge 1 ] || usage
 
 GAME="$1"

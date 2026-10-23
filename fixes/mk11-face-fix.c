@@ -34,6 +34,10 @@
  * rewritten. A game update that changes either morph shader makes the
  * replacement match nothing; the log then says no morph pipeline was replaced.
  *
+ * THE MOVIES ride along: grey pictures with purple and green bands, and choppy
+ * motion, from CrossOver's H.264 decoder. mk11-movie.c, included below, has why
+ * and what it does; it hooks the executable's import of CoCreateInstance.
+ *
  * WHERE IT HOOKS. MK11_DX12.exe imports d3d12.dll's D3D12CreateDevice by ordinal
  * (101), MK11.exe d3d11.dll's D3D11CreateDevice by name, and the executable's
  * import slot is pointed here. AMD's library can also create the DirectX 11
@@ -490,6 +494,8 @@ static DWORD WINAPI watcher(void *unused)
     return 0;
 }
 
+#include "mk11-movie.c"
+
 BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
 {
     char path[MAX_PATH], *slash;
@@ -513,6 +519,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
     log_msg("MK11 face fix: three-float buffer views become one-float views and the face morph reads them; "
             "D3D12CreateDevice import: %d slot(s), D3D11CreateDevice import: %d slot(s) redirected",
             imports12, imports11);
+    log_msg("MK11 movies: NV12 offered and frames handed out in display order; CoCreateInstance import: %d slot(s) "
+            "redirected", redirect_cocreate());
     CloseHandle(CreateThread(NULL, 0, watcher, NULL, 0, NULL));
     return TRUE;
 }
