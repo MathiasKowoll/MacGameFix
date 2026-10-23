@@ -1,0 +1,45 @@
+{
+  "title": "NINJA GAIDEN 3: Razor's Edge",
+  "installer": "install-ng3-fix.sh",
+  "scope": "prefix",
+  "executable": "NINJA GAIDEN 3 Razor's Edge.exe",
+  "carrierDirectory": null,
+  "alsoRuns": [],
+  "summary": "Will not start at all: \"Insufficient VRAM. Please close all running applications.\" It is a Direct3D 9 title and CrossOver's DXVK cannot create a Vulkan device for it. Needs d9vk plus winevideo's DirectShow filters, applied to this executable only.",
+  "page": "legacy/wiki/Ninja-Gaiden-3-Razors-Edge.md",
+  "installs": [
+    "bottles.sh",
+    "ng3-THIRD-PARTY-LICENCES.md",
+    "ng3-d3d9.dll",
+    "ng3-qasf.dll",
+    "ng3-quartz.dll",
+    "ng3-winegstreamer.dll"
+  ],
+  "builtFrom": [],
+  "license": "GPL-3.0-or-later",
+  "credits": [
+    {
+      "name": "winevideo",
+      "url": "https://github.com/Jfishin/winevideo",
+      "note": "Found why the movies never start (Wine's ASF Reader blocks its audio behind the video) and built the patched qasf, quartz and winegstreamer the fix installs (LGPL-2.1-or-later)."
+    },
+    {
+      "name": "d9vk by Sikarugir-App",
+      "url": "https://github.com/Sikarugir-App/d9vk",
+      "note": "The Direct3D 9 the game runs on (zlib)."
+    }
+  ],
+  "excerpts": [
+    {
+      "file": "install-ng3-fix.sh",
+      "from": "^for d in \\$DLLS; do",
+      "to": "^  echo \\\"  overrides written for this executable only, into the prefix's user.reg\\\"",
+      "note": "The four DLLs go into the prefix's system32, its own copies kept aside, and Wine is told to load them for this game's executable only; each override is read back rather than assumed."
+    }
+  ],
+  "symptom": "Will not start: \"Insufficient VRAM. Please close all running applications.\"",
+  "cause": "It is Direct3D 9 only, and CrossOver's DXVK cannot create a Vulkan device on MoltenVK, which offers neither transformFeedback nor timelineSemaphore. Its ASF movies never start because Wine's ASF Reader blocks the audio behind the video.",
+  "fix": "Four DLLs in the prefix's system32 for this executable only: d9vk for Direct3D 9, and winevideo's qasf, quartz and winegstreamer for the movies. The prefix's own copies are kept aside.",
+  "backend": "DXVK (d9vk), in a prefix",
+  "crossover": "A patched CrossOver Preview 27 (27.0.0.40921), 2026-08-28"
+}

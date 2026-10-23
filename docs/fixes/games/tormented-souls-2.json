@@ -1,0 +1,26 @@
+{
+  "title": "Tormented Souls 2",
+  "installer": "install-tormented-fix.sh",
+  "scope": "folder",
+  "executable": "TormentedSouls2.exe",
+  "carrierDirectory": "TormentedSouls2/Binaries/Win64",
+  "alsoRuns": [],
+  "summary": "The same D3D12 guards on the colour-management library the game imports.",
+  "page": "legacy/wiki/Tormented-Souls-2.md",
+  "installs": [
+    "OpenColorIO_2_3-tormented.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "d3d12-guards.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [],
+  "excerpts": [
+    {
+      "file": "d3d12-guards.c",
+      "symbol": "my_modelist",
+      "note": "Puts 16:9 modes into the display mode list the game reads, since it keeps only 16:9 ones and has no fallback when there are none."
+    }
+  ]
+}

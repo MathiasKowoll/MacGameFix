@@ -1,0 +1,26 @@
+{
+  "title": "Life is Strange: Double Exposure",
+  "installer": "install-runtime-fix.sh",
+  "scope": "folder",
+  "executable": "Chronos-Win64-Shipping.exe",
+  "carrierDirectory": "Engine/Binaries/ThirdParty/Ogg/Win64",
+  "alsoRuns": [],
+  "summary": "Unreal Engine 5 titles that crash on the first cutscene. The carrier sits under a compiler-named subfolder, which the script discovers rather than assumes.",
+  "page": "legacy/wiki/Life-is-Strange-Double-Exposure.md",
+  "installs": [
+    "libogg_64.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "ue5-media-fix.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [],
+  "excerpts": [
+    {
+      "file": "ue5-media-fix.c",
+      "symbol": "guarded_query_vram",
+      "note": "One GPU is one node: any other node index is refused with DXGI_ERROR_INVALID_CALL, which is what Windows returns and what ends the caller's walk."
+    }
+  ]
+}
