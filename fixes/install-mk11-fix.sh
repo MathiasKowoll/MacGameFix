@@ -47,6 +47,7 @@
 # MGVF-SCOPE: folder
 # MGVF-GAME: Mortal Kombat 11 | MK11_DX12.exe | Binaries/Retail | MK11.exe
 # MGVF-WHY: Has the face morph read its three-float deltas the way D3DMetal and DXMT can, which removes the dark patches, and gives the movies their colours and their frame order back. DirectX 12 and 11 alike.
+# MGVF-LOG: mk11-face-fix.log
 
 set -euo pipefail
 

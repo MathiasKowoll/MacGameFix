@@ -77,15 +77,29 @@ func runStreaming(_ executable: String, _ arguments: [String],
         proc.standardOutput = pipe
         proc.standardError = pipe
         let buffer = LineBuffer()
+        // The process can end before its last lines are read from the pipe, and
+        // ending the run there lost them: with a game running on the Mac, 11
+        // runs in 200 of a two-line script, and 9 --status runs in 30 of an
+        // installed fix, read as "Cannot be fixed here" (measured 2026-10-23).
+        // The run ends once the process has exited and the pipe is read to its
+        // end, or a second after the exit, for a program the installer started
+        // that keeps the pipe open.
+        let end = RunEnd()
+        @Sendable func finish() {
+            guard let code = end.finished() else { return }
+            pipe.fileHandleForReading.readabilityHandler = nil
+            if let tail = buffer.flush(), !tail.isEmpty { onLine(tail) }
+            cont.resume(returning: code)
+        }
         pipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
-            guard !chunk.isEmpty else { return }
+            guard !chunk.isEmpty else { handle.readabilityHandler = nil; end.read(); finish(); return }
             for line in buffer.take(chunk) { onLine(line) }
         }
         proc.terminationHandler = { finished in
-            pipe.fileHandleForReading.readabilityHandler = nil
-            if let tail = buffer.flush(), !tail.isEmpty { onLine(tail) }
-            cont.resume(returning: finished.terminationStatus)
+            end.exited(finished.terminationStatus)
+            finish()
+            DispatchQueue.global().asyncAfter(deadline: .now() + 1) { end.read(); finish() }
         }
         do {
             try proc.run()
@@ -95,6 +109,24 @@ func runStreaming(_ executable: String, _ arguments: [String],
             onLine("could not start \(executable): \(error.localizedDescription)")
             cont.resume(returning: -1)
         }
+    }
+}
+
+/// Whether a run is over: its process exited and its output read, in either
+/// order, from the pipe's thread and the process's.
+final class RunEnd: @unchecked Sendable {
+    private let lock = NSLock()
+    private var code: Int32?
+    private var isRead = false
+    private var done = false
+    func exited(_ status: Int32) { lock.lock(); code = status; lock.unlock() }
+    func read() { lock.lock(); isRead = true; lock.unlock() }
+    /// The exit status, once, when both have come.
+    func finished() -> Int32? {
+        lock.lock(); defer { lock.unlock() }
+        guard !done, isRead, let code else { return nil }
+        done = true
+        return code
     }
 }
 
@@ -115,6 +147,9 @@ struct Game: Decodable, Identifiable, Hashable {
     /// Other executables the title runs as (Mortal Kombat 11's DirectX 11 one);
     /// absent from catalogs older than the field.
     let alsoRuns: [String]?
+    /// The logs the fix's DLL writes beside itself while the game runs, by name
+    /// (an installer's MGVF-LOG line); absent from catalogs older than the field.
+    let logs: [String]?
     let carrierDir: String
     let script: String
     let needsPrefix: Bool
@@ -595,13 +630,23 @@ enum Fixer {
         var note: String? = nil
     }
 
+    static func look(_ game: Game, folder: URL, prefix: String?, catalog: URL) async -> Look {
+        await statusRun(game, folder: folder, prefix: prefix, catalog: catalog).look
+    }
+
+    /// --status as it ran, every line it wrote, and what look makes of them: for
+    /// a fix's report, which carries the installer's whole answer.
+    static func statusRun(_ game: Game, folder: URL, prefix: String?, catalog: URL) async -> (lines: [String], look: Look) {
+        let out = Collected()
+        let code = await run(game, folder: folder, prefix: prefix, catalog: catalog, ["--status"]) { out.add($0) }
+        return (out.all, look(of: out.all, code: code))
+    }
+
     /// "norecipe" is the word of an installer made for each build of the game
     /// for a build it has no recipe for yet; "blocked", of one that will not
     /// install here, with its reason on the "Why:" line.
-    static func look(_ game: Game, folder: URL, prefix: String?, catalog: URL) async -> Look {
-        let out = Collected()
-        let code = await run(game, folder: folder, prefix: prefix, catalog: catalog, ["--status"]) { out.add($0) }
-        let lines = out.all.map { $0.trimmingCharacters(in: .whitespaces) }
+    private static func look(of output: [String], code: Int32) -> Look {
+        let lines = output.map { $0.trimmingCharacters(in: .whitespaces) }
         let word = lines.first { ["installed", "outdated", "broken", "half", "absent", "norecipe", "blocked"].contains($0) }
         func after(_ prefix: String) -> String? {
             lines.first { $0.hasPrefix(prefix) }.map { String($0.dropFirst(prefix.count)) }

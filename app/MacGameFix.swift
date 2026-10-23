@@ -733,6 +733,43 @@ extension Model {
         }
     }
 
+    // MARK: A fix's report, from Games
+
+    /// The row It Works… or Works Without the Fix… acts on: one game selected in
+    /// Games, its fix installed, or not installed, as the row last read it.
+    func fixReportHit(_ kind: FixReport.Kind) -> Hit? {
+        FixReport.target(selected, kind: kind)
+    }
+
+    /// The game's fix report, saved where the user chooses, and the form for a fix
+    /// that works, or for a game that works without it, opened with what the report
+    /// read filled in. Its installer is asked again first: a game update that took
+    /// the fix away, or the agent putting it back, does not show in the row until
+    /// the next scan, and the report and the form would then say the other state.
+    func fixReport(_ kind: FixReport.Kind) {
+        guard !busy, let hit = fixReportHit(kind) else { return }
+        busy = true
+        status = "Making \(hit.game.name)'s fix report…"
+        let session = FixReport.session(log, game: hit.game.name, folder: hit.folder)
+        let engines = engineRows.map { ($0.target.name, $0.target.build, $0.state.label) }
+        let catalog = resources
+        Task {
+            let made = await FixReport.make(hit, kind: kind, catalog: catalog, session: session, engines: engines)
+            busy = false
+            status = ""
+            if let why = FixReport.refusal(hit.game.name, state: made.state, kind: kind) {
+                if let i = hits.firstIndex(where: { $0.id == hit.id }) {
+                    hits[i].state = made.state
+                    if !hits[i].selectable { hits[i].selected = false }
+                }
+                status = why
+                return
+            }
+            guard saveReport(made.text, as: kind.file, for: hit.game.name) else { return }
+            if let link = made.issue { NSWorkspace.shared.open(link) }
+        }
+    }
+
     /// A game's own options; a game left with none and nothing seen is forgotten.
     func setPadGame(_ game: InstalledGame, _ change: (inout PadOptions) -> Void) {
         setPad { store in
@@ -1005,6 +1042,25 @@ struct GamesView: View {
                     .width(min: 110, ideal: 140)
                 }
                 .frame(minHeight: 260)
+            }
+
+            // Under the table, not in the toolbar above: with these two its seven buttons come to about
+            // 790 pt (AppKit's push buttons of those titles, measured 2026-10-23), and the window's least
+            // width leaves 688.
+            HStack {
+                Text("Played a game? Select it to report that its fix works, or that it works without it.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button("It Works…") { model.fixReport(.works) }
+                    .disabled(model.busy || model.fixReportHit(.works) == nil)
+                    .help("For one selected game whose fix is installed: saves its fix report and opens a new issue "
+                          + "on GitHub that says the fix works, for the list of verified games, with the game, the "
+                          + "versions and the fix's own log filled in, and where it runs when its folder shows it.")
+                Button("Works Without the Fix…") { model.fixReport(.without) }
+                    .disabled(model.busy || model.fixReportHit(.without) == nil)
+                    .help("For one selected game whose fix is not installed: saves its fix report and opens a new "
+                          + "issue on GitHub that says the game works without the fix, with the game and the versions "
+                          + "filled in. Remove the fix and play the moment it was for first.")
             }
         }
     }
@@ -2201,8 +2257,9 @@ struct MacGameFixApp: App {
 /// One binary, several ways to run: the window; --agent, which the LaunchAgent
 /// starts and which lives in the menu bar; and, for the tests and the release,
 /// --agent-once, --menu-report, --games-report, --engine-report,
-/// --engine-install, --engine-remove, --update-from, --make-catalog and
-/// --new-signing-key, which do one thing and exit.
+/// --engine-install, --engine-remove, --update-from, --make-catalog,
+/// --new-signing-key, and the reports' --probe-report, --fix-report,
+/// --fix-works-url and --works-without-url, which do one thing and exit.
 @main
 enum Entry {
     static func main() {
@@ -2339,6 +2396,40 @@ enum Entry {
             // The Report tab's games, for the tests.
             for game in ProbeGames.all() { print("\(game.appid) | \(game.name) | \(game.places.joined(separator: ", "))") }
             exit(0)
+        }
+        // Settings › Log lives in the window's memory; for the reports' flags, MACGAMEFIX_SESSION_LOG
+        // names a file that stands for it, and the game's blocks are taken from it as the buttons take them.
+        let sessionLog = ProcessInfo.processInfo.environment["MACGAMEFIX_SESSION_LOG"]
+            .flatMap { try? String(contentsOfFile: $0, encoding: .utf8) }?.components(separatedBy: "\n") ?? []
+        if let i = args.firstIndex(of: "--fix-report"), i + 2 < args.count {
+            // The report It Works… or Works Without the Fix… saves for a game of Games, for the
+            // tests: --fix-report <game name> <path> [works|without]. Refused, with why, as the
+            // button is, for a game whose fix is not in the state it needs.
+            let name = args[i + 1], path = args[i + 2]
+            let kind = i + 3 < args.count ? FixReport.Kind(rawValue: args[i + 3]) ?? .works : .works
+            let (dir, _) = Catalog.active(), (modules, _) = Catalog.active(.modules)
+            wait {
+                let row = await FixReport.row(name, kind: kind, catalog: dir)
+                guard let hit = row.hit else { print(row.why); return 1 }
+                var engines: [(name: String, build: String, state: String)] = []
+                for t in Engine.targets() { engines.append((t.name, t.build, await Engine.status(t, catalog: modules).label)) }
+                let session = FixReport.session(sessionLog, game: hit.game.name, folder: hit.folder)
+                let made = await FixReport.make(hit, kind: kind, catalog: dir, session: session, engines: engines)
+                try? made.text.write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
+                return 0
+            }
+        }
+        if let name = value("--fix-works-url") ?? value("--works-without-url") {
+            // The form It Works… or Works Without the Fix… opens for a game, for the tests; refused as above.
+            let kind: FixReport.Kind = value("--fix-works-url") != nil ? .works : .without
+            let (dir, _) = Catalog.active()
+            wait {
+                let row = await FixReport.row(name, kind: kind, catalog: dir)
+                guard let hit = row.hit else { print(row.why); return 1 }
+                let session = FixReport.session(sessionLog, game: hit.game.name, folder: hit.folder)
+                print(FixReport.issue(await FixReport.facts(hit, kind: kind, catalog: dir, session: session))?.absoluteString ?? "")
+                return 0
+            }
         }
         if let appid = value("--pad-share-url") {
             // The settings form Share These Settings opens for a game, for the tests.

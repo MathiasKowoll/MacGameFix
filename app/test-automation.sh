@@ -4,7 +4,8 @@
 # keeping a marked fix applied across game updates, while Steam writes the game,
 # while the game runs, and when the installer fails, waiting for a recipe for a
 # macOS game's new build until a catalog brings one, and left alone where that
-# game's installer refuses. Nothing here touches the
+# game's installer refuses; and a fix's report, with the two forms Games opens
+# with it. Nothing here touches the
 # real Steam libraries or GitHub: MACGAMEFIX_HOME points everything at a
 # throwaway home, and the fixes catalog is a fake one signed with a test key.
 #
@@ -151,9 +152,27 @@ esac
 touch "$dir/fixed.marker"
 SH
 printf '1\n' > "$RES/fakeapp.recipes"
+# A fix with a DLL of its own, in its carrier's folder Bin, and a log it writes there
+# (games.json's logs, an installer's MGVF-LOG line): what a fix's report reads.
+cat > "$RES/install-fakedll.sh" <<'SH'
+#!/bin/bash
+dir="$1"; HERE="$(cd "$(dirname "$0")" && pwd)"
+case "${2:-}" in
+  --status)
+    echo "looking at $dir/Bin/fake.dll"
+    if [ ! -f "$dir/Bin/fake.dll" ]; then echo absent
+    elif cmp -s "$dir/Bin/fake.dll" "$HERE/fakefix.dll"; then echo installed
+    else echo outdated; fi
+    exit 0 ;;
+  --restore) rm -f "$dir/Bin/fake.dll"; exit 0 ;;
+esac
+cp "$HERE/fakefix.dll" "$dir/Bin/fake.dll"
+SH
+printf 'MZ the fake fix, build 1\n' > "$RES/fakefix.dll"
 # Made for DXMT, with a codec only CrossOver Preview 27 ships; a second game
 # whose fix writes registry keys; a third whose DLLs go into the prefix, as
-# NINJA GAIDEN 3's do; and a macOS game whose app its fix changes.
+# NINJA GAIDEN 3's do; a macOS game whose app its fix changes; and the fix above
+# with a DLL and a log of its own.
 cat > "$RES/games.json" <<'JSON'
 {"games": [{"name": "Fake Game", "exe": "FakeGame.exe", "carrierDir": "", "script": "install-fake.sh",
   "needsPrefix": false, "symptom": "test", "backend": "dxmt", "gptk": "", "gptkAlso": "",
@@ -166,12 +185,15 @@ cat > "$RES/games.json" <<'JSON'
   "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "", "why": ""},
  {"name": "Fake Native", "exe": "FakeNative", "carrierDir": "FakeNative.app/Contents/MacOS", "script": "install-fakeapp.sh",
   "needsPrefix": false, "scope": "app", "symptom": "test", "backend": "", "gptk": "", "gptkAlso": "",
-  "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "", "why": ""}]}
+  "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "", "why": ""},
+ {"name": "Fake Fixed", "exe": "FakeFixed.exe", "alsoRuns": [], "logs": ["fake-fix.log"], "carrierDir": "Bin",
+  "script": "install-fakedll.sh", "needsPrefix": false, "scope": "folder", "symptom": "test", "backend": "d3dmetal",
+  "gptk": "", "gptkAlso": "", "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "", "why": ""}]}
 JSON
 /usr/bin/python3 - "$RES" <<'PY'
 import hashlib, json, pathlib, sys
 res = pathlib.Path(sys.argv[1])
-files = {n: hashlib.sha256((res / n).read_bytes()).hexdigest() for n in ("install-fake.sh", "install-fakekeys.sh", "install-fakeapp.sh", "fakeapp.recipes", "games.json")}
+files = {n: hashlib.sha256((res / n).read_bytes()).hexdigest() for n in ("install-fake.sh", "install-fakekeys.sh", "install-fakeapp.sh", "fakeapp.recipes", "install-fakedll.sh", "fakefix.dll", "games.json")}
 json.dump({"version": 4000000000, "minimumApp": "1.4.0", "files": files}, open(res / "catalog.json", "w"))
 PY
 PUB="$("$BIN" --new-signing-key "$T/test.key")"
@@ -529,6 +551,149 @@ rm "$PG/ProbeGame/Binaries/Win64/libScePad.dll"
 check 'has "$(MACGAMEFIX_PAD_LOG="$T/pad.log" vibratesform 4949)" "library: DirectInput"' "and one whose only way to the pad is DirectInput 8 as DirectInput"
 rm -rf "$PG" "$SUPPORT/Steam/steamapps/compatdata/4949" "$SUPPORT/Steam/steamapps/appmanifest_4949.acf"
 
+echo "== a fix's report: It Works… and Works Without the Fix…"
+# Fake Fixed in a Steam Play prefix of its own, its fix installed: the catalog's DLL in Bin, beside the
+# original it forwards to, a file of the same size that is not the catalog's, and the log the DLL writes.
+# A NotProton runner carrying one D3DMetal, and the modules' log with a line for the game and one for another.
+FX="$SUPPORT/Steam/steamapps/common/Fake Fixed"
+mkdir -p "$FX/Bin" "$SUPPORT/Steam/steamapps/compatdata/5151/pfx"
+touch "$FX/Bin/FakeFixed.exe" "$SUPPORT/Steam/steamapps/compatdata/5151/pfx/user.reg"
+printf '"AppState"\n{\n\t"appid"\t\t"5151"\n\t"name"\t\t"Fake Fixed"\n\t"StateFlags"\t\t"4"\n\t"installdir"\t\t"Fake Fixed"\n\t"buildid"\t\t"77"\n}\n' \
+  > "$SUPPORT/Steam/steamapps/appmanifest_5151.acf"
+cp "$SUPPORT/MacGameFix/catalog/current/fakefix.dll" "$FX/Bin/fake.dll"
+printf 'MZ the game own library, b1\n' > "$FX/Bin/fake_real.dll"
+printf 'MZ not the fix, build 1!\n' > "$FX/decoy.dll"
+fixlog() { # fixlog <text before each number>: 250 lines, one naming the home folder and this Mac
+  for n in $(seq 1 250); do
+    if [ "$n" = 249 ]; then printf 'loaded from Z:%s/Library on %s\n' "$MACGAMEFIX_HOME" "$(printf '%s' "$HOST_NAME" | tr '[:lower:]' '[:upper:]')"
+    else printf '%s %04d\n' "$1" "$n"; fi
+  done > "$FX/Bin/fake-fix.log"
+}
+fixlog "fake fix line"
+FR="$SUPPORT/notproton/runners/crossover-27.0.0.41069-fex/CrossOver"
+mkdir -p "$FR/lib/wine/x86_64-unix" "$FR/etc" "$FR/lib/apple_gptk/external/D3DMetal.framework/Resources"
+printf 'x wine-11.17-8909 x' > "$FR/lib/wine/x86_64-unix/ntdll.so"
+printf '"BuildTag" = "cxpreview-20261006-rc2"\n' > "$FR/etc/CrossOver.conf"
+/usr/libexec/PlistBuddy -c 'Add :CFBundleShortVersionString string 4.0b3' \
+  "$FR/lib/apple_gptk/external/D3DMetal.framework/Resources/Info.plist" >/dev/null
+export MACGAMEFIX_PAD_LOG="$T/pad-fix.log"
+printf '10:00:00 [1] game=5151 observed: the game rumbles the DualSense%ss motors\n10:00:01 [2] game=999 observed: the game plays haptics\n' "'" \
+  > "$MACGAMEFIX_PAD_LOG"
+# The form's fields as GitHub reads them, and BAD for a field the form does not have, a dropdown value it does not
+# offer, a field longer than an issue link carries (Report.longest), or a control character other than a line's end.
+fixform() { # fixform <flag> <game>
+  /usr/bin/python3 - "$("$BIN" "$1" "$2")" "$HERE/../.github/ISSUE_TEMPLATE" <<'PY5'
+import re, sys, urllib.parse
+fields = urllib.parse.parse_qsl(urllib.parse.urlsplit(sys.argv[1]).query)
+form = dict(fields).get("template", "")
+ids, options, cur, listing = set(), {}, None, False
+for line in open(sys.argv[2] + "/" + form).read().split("\n") if form else []:
+    m = re.match(r"^    id: (\S+)$", line)
+    if m: cur = m.group(1); ids.add(cur)
+    if re.match(r"^      options:$", line): options[cur] = []; listing = True; continue
+    m = re.match(r"^        - (.+)$", line)
+    if listing and m: options[cur].append(m.group(1)); continue
+    listing = False
+for k, v in fields:
+    print(k + ": " + v.replace("\n", " | "))
+    if k not in ids | {"template", "title"}: print("BAD field " + k)
+    if k in options and v not in options[k]: print("BAD option " + k + ": " + v)
+    if len(v.encode()) > 5000: print("BAD long " + k + ": " + str(len(v.encode())))
+    if any(ord(c) < 32 and c not in "\t\n" for c in v): print("BAD control character in " + k)
+PY5
+}
+# Everything under the home, by name, time and size: making a report or a form writes nothing there.
+homestat() { find "$MACGAMEFIX_HOME" -exec stat -f '%N %m %z' {} + | sort; }
+BEFORE="$(homestat)"
+# A refusal exits 1, and what it says is what is checked: no call here stops the suite.
+"$BIN" --fix-report "Fake Fixed" "$T/fix.md" works || true
+FXR="$(cat "$T/fix.md" 2>/dev/null || true)"
+check 'has "$FXR" "# MacGameFix fix report: Fake Fixed" && has "$FXR" "- Report: its fix works, played with the fix installed" && has "$FXR" "## What the game is made of" && ! has "$FXR" "What goes wrong"' "a fix report is the Report tab's report for the game, with no symptom"
+check 'has "$FXR" "## The fix" && has "$FXR" "- State: Installed" && has "$FXR" "- Installer: install-fakedll.sh, of catalog 4000000002" && has "$FXR" "$(printf "\`\`\`\nlooking at ~/Library/Application Support/Steam/steamapps/common/Fake Fixed/Bin/fake.dll\ninstalled\n\`\`\`")" && has "$FXR" "- Steam'"'"'s build: 77"' "the fix's section: its state, its installer and catalog, the installer's whole --status, and Steam's build"
+check '[ "$(wc -c < "$FX/decoy.dll")" = "$(wc -c < "$FX/Bin/fake.dll")" ] && has "$FXR" "- \`Bin/fake.dll\` is the catalog'"'"'s \`fakefix.dll\`" && ! has "$FXR" "decoy.dll" && ! has "$FXR" "fake_real.dll"' "the file that is the catalog's by its SHA-256, and not one of the same size that is not"
+check 'has "$FXR" "- In: Steam Play prefix (5151)" && has "$FXR" "- NotProton runner · CrossOver Preview 20261006, build 27.0.0.41069: D3DMetal 4.0b3 (lib/apple_gptk)" && has "$FXR" "- Graphics backend: not read; the fix is made for D3DMetal" && has "$FXR" "- This Mac: " && has "$FXR" ", macOS "' "where it runs: the prefix, the runner with its D3DMetal, the backend the fix is made for, and this Mac"
+check 'has "$FXR" "#### Bin/fake-fix.log, last written 20" && has "$FXR" "its last 200 of 250 lines" && has "$FXR" "fake fix line 0250" && ! has "$FXR" "fake fix line 0050"' "the fix's own log, with when it was written, its last 200 lines"
+check 'has "$FXR" "game=5151 observed: the game rumbles" && ! has "$FXR" "game=999" && has "$FXR" "None. Settings › Log is kept in memory only"' "the modules' lines for the game alone, and Settings › Log said to have none"
+check '! has "$FXR" "$MACGAMEFIX_HOME" && ! has "$FXR" "$HOST_NAME" && ! has "$FXR" "$(printf '"'"'%s'"'"' "$HOST_NAME" | tr "[:lower:]" "[:upper:]")" && has "$FXR" "loaded from Z:~/Library on <this Mac>"' "the report writes the home folder as ~ and leaves this Mac's name out"
+OUT="$(fixform --fix-works-url "Fake Fixed")"
+"$BIN" --works-without-url "Fake Fixed" >/dev/null 2>&1 || true
+check '[ "$BEFORE" = "$(homestat)" ]' "making the report and the forms writes nothing under the home: not in the game folder, its prefix or MacGameFix's own"
+check 'has "$OUT" "template: fix-works.yml" && has "$OUT" "title: [Works] Fake Fixed" && has "$OUT" "game: Fake Fixed (Steam app 5151)" && has "$OUT" "runs: A NotProton runner" && has "$OUT" "game-version: Steam build 77" && ! has "$OUT" "backend:"' "It Works… opens the form with the game, where it runs and the game's build, and leaves the backend, which is not read, to the player"
+check 'has "$OUT" "versions: MacGameFix " && has "$OUT" ", catalog 4000000002; NotProton runner · CrossOver Preview 20261006 (27.0.0.41069, D3DMetal 4.0b3); macOS "' "and the versions: MacGameFix and its catalog, the runner and its D3DMetal, macOS"
+check 'has "$OUT" "log: Bin/fake-fix.log, last written 20" && has "$OUT" " | fake fix line 0250 | " && ! has "$OUT" "fake fix line 0050" && has "$OUT" "Settings › Log: nothing this window ran for this game." && ! has "$OUT" "BAD" && ! has "$OUT" "$MACGAMEFIX_HOME" && ! has "$OUT" "$HOST_NAME"' "the fix's own log goes into the log field when it fits, and every field and option is the form's own"
+# Settings › Log, which the window keeps in memory, from a file standing for it: the game's own block, and not another
+# game's or the Wine modules', in the report and in the field.
+SESSION="$T/session.log"
+printf '\n▸ Fake Fixed — %s\n  installed fake.dll into %s/Bin\n\n▸ Fake Game — %s\n  another game%ss line\n\n▸ Wine modules — NotProton runner — %s\n  a modules line\n' \
+  "$FX" "$FX" "$GAME" "'" "$FR" > "$SESSION"
+MACGAMEFIX_SESSION_LOG="$SESSION" "$BIN" --fix-report "Fake Fixed" "$T/fix-session.md" works || true
+FXS="$(cat "$T/fix-session.md" 2>/dev/null || true)"
+OUT="$(MACGAMEFIX_SESSION_LOG="$SESSION" fixform --fix-works-url "Fake Fixed")"
+FXDIR="~/Library/Application Support/Steam/steamapps/common/Fake Fixed"
+check 'has "$FXS" "$(printf "### Settings › Log\n\n\`\`\`\n▸ Fake Fixed — %s\n  installed fake.dll into %s/Bin\n\`\`\`" "$FXDIR" "$FXDIR")" && ! has "$FXS" "another game" && ! has "$FXS" "a modules line"' "the report carries this window's Settings › Log block for the game, and not another game's or the Wine modules'"
+check 'has "$OUT" " | fake fix line 0250 |  | ▸ Fake Fixed — $FXDIR |   installed fake.dll into $FXDIR/Bin" && ! has "$OUT" "another game" && ! has "$OUT" "a modules line" && ! has "$OUT" "BAD"' "and the log field, after the fix's own log, when both fit"
+{ printf '▸ Fake Fixed — %s\n' "$FX"; for n in $(seq 1 40); do printf '  a line the installer wrote, number %04d, long enough to count\n' "$n"; done; } > "$SESSION"
+MACGAMEFIX_SESSION_LOG="$SESSION" "$BIN" --fix-report "Fake Fixed" "$T/fix-session.md" works || true
+OUT="$(MACGAMEFIX_SESSION_LOG="$SESSION" fixform --fix-works-url "Fake Fixed")"
+check 'has "$OUT" " | fake fix line 0250 |  | Settings › Log'"'"'s lines for this game are in the attached report: more than this link carries." && ! has "$OUT" "number 0040" && ! has "$OUT" "BAD" && has "$(cat "$T/fix-session.md")" "  a line the installer wrote, number 0040"' "Settings › Log lines that do not fit beside the fix's own log are left to the report, and the field says so"
+# An own log that fits the link alone, and not with the line that says Settings › Log has nothing: 4980 bytes in
+# the field, its 53-byte heading, 200 lines of 23 and 24 characters and the line ends between them.
+/usr/bin/python3 -c 'import sys; open(sys.argv[1], "w").write("".join(("edge line %04d" % n).ljust(24 if n > 122 else 23, ".") + "\n" for n in range(1, 251)))' "$FX/Bin/fake-fix.log"
+OUT="$(fixform --fix-works-url "Fake Fixed")"
+check 'has "$OUT" "log: The fix'"'"'s own log, fake-fix.log, is in the attached report: more than this link carries. |  | Settings › Log: nothing this window ran for this game." && ! has "$OUT" "Settings › Log'"'"'s lines" && ! has "$OUT" "BAD"' "with no Settings › Log lines, the field never says they are in the report, and stays within the link"
+# A log that is there and cannot be read is said to be so, not missing.
+chmod 000 "$FX/Bin/fake-fix.log"
+"$BIN" --fix-report "Fake Fixed" "$T/fix-unread.md" works || true
+OUT="$(fixform --fix-works-url "Fake Fixed")"
+chmod 644 "$FX/Bin/fake-fix.log"
+check 'has "$(cat "$T/fix-unread.md")" "Bin/fake-fix.log is there and could not be read (Permission denied)." && ! has "$(cat "$T/fix-unread.md")" "not in the game'"'"'s folder" && has "$OUT" "log: Bin/fake-fix.log is there and could not be read (Permission denied)."' "a log that cannot be read is said to be there and unreadable, in the report and the field"
+# A log a fix let grow, with binary in it: only its end is read, a long line is cut, and no control character goes on.
+/usr/bin/python3 -c 'import sys; open(sys.argv[1], "wb").write(b"x" * 290000 + b"\na line with a NUL \x00 and a \xff byte\n" + b"y" * 3000 + b"\nthe last line\n")' "$FX/Bin/fake-fix.log"
+"$BIN" --fix-report "Fake Fixed" "$T/fix-big.md" works || true
+BIG="$(cat "$T/fix-big.md" 2>/dev/null || true)"
+OUT="$(fixform --fix-works-url "Fake Fixed")"
+check '[ "$(wc -c < "$T/fix-big.md")" -lt 50000 ] && [ "$(tr -cd "\000" < "$T/fix-big.md" | wc -c | tr -d " ")" = 0 ] && has "$BIG" "lines, read from the end of its 293" && has "$BIG" "a line with a NUL � and a � byte" && has "$BIG" " [cut: 3000 characters]" && has "$BIG" "the last line" && ! has "$BIG" "xxxxxxxxxxxxxxxxxxxx"' "a large log is read from its end alone, its long line cut and its control characters replaced"
+check 'has "$OUT" " | the last line |  | " && ! has "$OUT" "BAD"' "and the field carries no control character"
+# A bottle whose Steam lists the game's library, named after another game: counted, never named, and it changes
+# neither where the game runs nor the versions.
+OB="$SUPPORT/CrossOver/Bottles/Other Title"
+mkdir -p "$OB/drive_c/windows/system32" "$OB/drive_c/Program Files (x86)/Steam/config" "$OB/dosdevices"
+touch "$OB/drive_c/windows/system32/dinput8.dll"
+ln -s / "$OB/dosdevices/z:"
+printf '"libraryfolders"\n{\n\t"0"\n\t{\n\t\t"path"\t\t"Z:%s"\n\t}\n}\n' "$(printf '%s' "$SUPPORT/Steam" | sed 's#/#\\\\#g')" \
+  > "$OB/drive_c/Program Files (x86)/Steam/config/libraryfolders.vdf"
+fixlog "fake fix line"
+"$BIN" --fix-report "Fake Fixed" "$T/fix-bottle.md" works || true
+FXB="$(cat "$T/fix-bottle.md" 2>/dev/null || true)"
+OUT="$(fixform --fix-works-url "Fake Fixed")"
+check 'has "$FXB" "- Runs in: a Steam Play prefix (~/Library/Application Support/Steam/steamapps/compatdata/5151/pfx); another CrossOver bottle whose Steam lists its library, not named here" && has "$FXB" "- In: Steam Play prefix (5151), another CrossOver bottle whose Steam lists its library, not named here" && ! has "$FXB" "Other Title"' "a bottle whose Steam lists the game's library, and holds another game, is counted in the report and not named"
+check '! has "$OUT" "Other Title" && has "$OUT" "runs: A NotProton runner" && has "$OUT" ", catalog 4000000002; NotProton runner · CrossOver Preview 20261006 (27.0.0.41069, D3DMetal 4.0b3); macOS "' "and it changes neither where the form says the game runs nor the versions"
+rm -rf "$OB"
+fixlog "a fix log line long enough that two hundred of them are more than an issue link carries"
+OUT="$(fixform --fix-works-url "Fake Fixed")"
+check 'has "$OUT" "log: The fix'"'"'s own log, fake-fix.log, is in the attached report: more than this link carries." && ! has "$OUT" "long enough"' "a log too long for the link is left to the report, and the field says so"
+check 'has "$("$BIN" --works-without-url "Fake Fixed" 2>&1)" "Fake Fixed: Installed; Works Without the Fix… needs Not installed" && ! "$BIN" --works-without-url "Fake Fixed" >/dev/null 2>&1' "Works Without the Fix… is refused while the fix is installed"
+rm "$FX/Bin/fake.dll"
+OUT="$(fixform --works-without-url "Fake Fixed")"
+check 'has "$OUT" "template: works-without-fix.yml" && has "$OUT" "title: [No longer needed] Fake Fixed" && has "$OUT" "game: Fake Fixed (Steam app 5151)" && has "$OUT" "toolkit: 4.0b3" && has "$OUT" "versions: MacGameFix " && [ "$(printf "%s\n" "$OUT" | cut -d: -f1 | tr "\n" " ")" = "template title game toolkit versions " ]' "with the fix removed, Works Without the Fix… opens its form with the game, the one D3DMetal there and the versions, and nothing else"
+check 'has "$("$BIN" --fix-works-url "Fake Fixed" 2>&1)" "Fake Fixed: Not installed; It Works… needs Installed" && ! "$BIN" --fix-report "Fake Fixed" "$T/refused.md" >/dev/null 2>&1 && [ ! -e "$T/refused.md" ]' "and It Works… is refused, its report not written"
+"$BIN" --fix-report "Fake Fixed" "$T/fix-without.md" without || true
+check 'has "$(cat "$T/fix-without.md")" "- Report: it works without its fix, played with the fix removed" && has "$(cat "$T/fix-without.md")" "- State: Not installed" && has "$(cat "$T/fix-without.md")" "Written while the fix was in place: it is not installed now."' "the report without the fix says so, and that its log was written while the fix was in place"
+rm "$FX/Bin/fake-fix.log"
+"$BIN" --fix-report "Fake Fixed" "$T/fix-nolog.md" without || true
+check 'has "$(cat "$T/fix-nolog.md")" "fake-fix.log: not in the game'"'"'s folder. The fix writes it beside its DLL while the game runs."' "a log the fix writes and is not there is said to be missing"
+"$BIN" --fix-report "Fake Game" "$T/fix-game.md" || true
+OUT="$(fixform --fix-works-url "Fake Game")"
+check 'has "$(cat "$T/fix-game.md")" "The fix writes no log of its own beside its DLL." && has "$OUT" "log: The fix writes no log of its own. | " && ! has "$OUT" "backend:" && ! has "$OUT" "runs:" && ! has "$OUT" "BAD"' "a fix that writes no log says so, in the report and the form, and where it runs and the backend are left to the player"
+# A macOS game, its fix in place: no Wine runs it, so where it runs and the backend are read from the folder.
+mkdir -p "$FN/FakeNative.app/Contents/MacOS"; touch "$FN/FakeNative.app/Contents/MacOS/FakeNative" "$FN/fixed.marker"
+native 1
+OUT="$(fixform --fix-works-url "Fake Native")"
+check 'has "$OUT" "runs: Native macOS (no Wine)" && has "$OUT" "backend: None (a macOS game)" && ! has "$OUT" "BAD"' "a macOS game's form says it runs natively, with no graphics backend"
+unset MACGAMEFIX_PAD_LOG
+rm -rf "$FX" "$FN" "$SUPPORT/Steam/steamapps/compatdata/5151" "$SUPPORT/Steam/steamapps/appmanifest_5151.acf" \
+  "$SUPPORT/Steam/steamapps/appmanifest_4545.acf" "$SUPPORT/notproton"
+
 echo "== new fixes, asked first"
 # A newer release of the same fake catalog, and the agent pointed at it.
 cp -R "$RES" "$T/res2"
@@ -681,4 +846,4 @@ printf '{"kept":[],"updates":false,"modulesUpdates":false}' > "$SUPPORT/MacGameF
 check '[ ! -e "$WT/ModeGame.exe" ]' "with it off, the agent does nothing"
 unset MACGAMEFIX_TEMP_DIR
 
-[ "$fail" = 0 ] && echo "==> MacGameFix automation: the Wine modules and their own updates, signed catalogs taken automatically or asked first, what each game runs on, the agent's updates, waits and reports, a macOS game waiting for a recipe or refused by its installer, the menu bar's summary" || exit 1
+[ "$fail" = 0 ] && echo "==> MacGameFix automation: the Wine modules and their own updates, signed catalogs taken automatically or asked first, what each game runs on, the agent's updates, waits and reports, a macOS game waiting for a recipe or refused by its installer, the menu bar's summary, a fix's report and its forms" || exit 1

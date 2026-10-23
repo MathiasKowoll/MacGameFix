@@ -247,5 +247,24 @@ enum Engine {
         }
         return events
     }
+
+    /// The D3DMetal builds a CrossOver carries, by the folder each sits in and the
+    /// version its framework's Info.plist gives: lib64/apple_gptk and
+    /// lib64/apple_gptk_4 in stable 26.3, lib/apple_gptk and lib/apple_gptk3 in
+    /// Preview 27 (read 2026-10-23). Which one a game ran on is not read here.
+    static func d3dmetal(in root: URL) -> [(folder: String, version: String)] {
+        let fm = FileManager.default
+        var found: [(folder: String, version: String)] = []
+        for lib in ((try? fm.contentsOfDirectory(atPath: root.path)) ?? []).sorted() where lib.hasPrefix("lib") {
+            for gptk in ((try? fm.contentsOfDirectory(atPath: root.appendingPathComponent(lib).path)) ?? []).sorted()
+            where gptk.hasPrefix("apple_gptk") {
+                let plist = root.appendingPathComponent("\(lib)/\(gptk)/external/D3DMetal.framework/Resources/Info.plist")
+                if let version = NSDictionary(contentsOf: plist)?["CFBundleShortVersionString"] as? String {
+                    found.append(("\(lib)/\(gptk)", version))
+                }
+            }
+        }
+        return found
+    }
 }
 
