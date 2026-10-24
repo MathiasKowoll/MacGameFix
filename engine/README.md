@@ -77,6 +77,14 @@ changes reach a game that is running:
 |---|---|---|
 | `0014-winebus-trigger-replace-and-live-settings.patch` | `winebus.so` | With `trigger_r2_replace=on` or `trigger_l2_replace=on` and an effect chosen for that trigger, the game's effects on it are rewritten: an effect the game turns on becomes the chosen one (or its second, while the other trigger is held), and one it turns off stays off; a `rumble` or `recoil` effect follows the motors while the game's is on. Until the game writes an effect on that trigger the chosen one applies as without the option, so a game that sets none is not changed. While a pad sends input, `pad.d/<game>.conf` and `pad.conf` are looked at once a second (their modification times), and when either changed every line is read again: the trigger effects are put on the pad at once, a trigger whose effect was ours and is now off is released, a trigger the game had taken follows the new choice until the game writes again, and the marker file follows. |
 
+With `diagnostics=on` the input rate filled most of the log: a line every 2 s
+for each pad, 9,589 of 21,889 lines on 2026-10-23. One more patch says it once a
+minute:
+
+| Patch | Module | Change |
+|---|---|---|
+| `0015-winebus-input-rate-once-a-minute.patch` | `winebus.so` | The pad's input reports are still counted in windows of 2 s, but said once a minute: the reports, the average rate, the lowest and highest window, and the longest gap between two. A window is still said at once when it is the pad's first (the app reads a session's connection from it) or when it has a gap of 100 ms or more. |
+
 With `xinput=pad`, `0006` puts the two haptics collections inside the pad's own
 top-level collection instead, so `0007` offers the pad itself to `xinput`, which
 reads it with `0008` and drives its motors through the same reports. The pad
@@ -205,7 +213,7 @@ read from their code, not played).
 | `rumble=haptics` | Over Bluetooth, the game's motor values played on the actuators while it plays no haptics of its own: the heavy motor a 65 Hz tone on the left, the light one 160 Hz on the right, ramped per 64-frame block, at the haptics' strength over Bluetooth (`haptics_gain_bluetooth`, `edge_haptics_gain_bluetooth`) up to full scale; at 1× NotProton's bridge synthesizer, sample for sample in a host test. On a cable the pad's own rumble plays. Off (`motors`) by default. |
 | `trigger_r2_with_l2=<effect>[@1-8]`, `trigger_l2_with_r2=<effect>[@1-8]` | A second effect for a trigger while the other is pressed (from 40 of 255, released under 20, read from the pad's input): a weapon on R2 while L2 aims. `off`, the default, keeps the first. |
 | `trigger_r2_replace=on`, `trigger_l2_replace=on` | The chosen effect in place of the game's own, on the game's timing: on while the game's is on, off while it is off (`0014`). Without an effect chosen for that trigger the game's own goes through. `off`, the default, leaves a trigger to a game that sets an effect. |
-| `diagnostics=on` | What a game writes to the pad and reads from it, and a level meter of its haptics, in the log. |
+| `diagnostics=on` | What a game writes to the pad and reads from it, and a level meter of its haptics, in the log; the pad's input rate once a minute, and at once for a gap of 100 ms or more (`0015`). |
 
 The modules log to `/tmp/macgamefix-<uid>/pad.log`, each line naming its game;
 what a game was seen to do (haptics, motors, trigger effects, motor power,
