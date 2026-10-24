@@ -50,6 +50,7 @@ plays its haptics as audio on the pad's output, whatever its library.
 | [Crash Bandicoot 4: It's About Time](#1378990) | Motors | Raw HID | Not played yet | DualSense Edge: Works (2026-10-23); DualSense Edge shown as a DualShock 4: Works (2026-10-23) |
 | [Crash Bandicoot N. Sane Trilogy](#731490) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-23); DualSense Edge shown as a DualShock 4: Does not vibrate (2026-10-23); DualSense Edge shown as a DualShock 4: Does not vibrate (2026-10-23) |
 | [God of War Ragnarök](#2322010) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-23); DualSense Edge shown as a DualSense: Works (2026-10-23) |
+| [Persona 5 Strikers](#1382330) | XInput | XInput | Not played yet | DualSense Edge shown as a DualShock 4: Does not vibrate (2026-10-23); DualSense Edge shown as a DualShock 4: Works (2026-10-23) |
 
 <a id="2651280"></a>
 ## Marvel's Spider-Man 2
@@ -635,6 +636,28 @@ What was measured:
 - Steam Input off, the pad as an XInput controller: 347 motor rises in three minutes, Xbox buttons.
 - With Wine's hidraw off (NotProton's Disable hidraw) the pad reached the game through SDL as an XInput controller, with Xbox buttons; the Wine modules took no part.
 - Under NotProton, Steam's IsSteamRunningOnSteamDeck answers yes, so the game skips PsPcSdk and libScePad; told no, the SDK's initialisation fails (0x8a800111) and the game exits (measured 2026-10-16).
+
+<a id="1382330"></a>
+## Persona 5 Strikers
+
+Shown as a DualShock 4 with XInput's rumble on the motors beside it, it shows PlayStation buttons and vibrates. Shown as a DualShock 4 with XInput off it shows PlayStation buttons and does not vibrate: its rumble has nowhere to go.
+
+- **Status:** Works
+- **Library:** XInput
+- **Technology:** Koei Tecmo's engine (ktgl). It reads XInput and DirectInput and rumbles only through XInput (XInputSetState); it has no HID code of its own. A DualShock 4 seen through DirectInput gets PlayStation prompts.
+- **Features:** XInput rumble, PlayStation button prompts
+- **Settings:** Game Feel: the pad shown as a DualShock 4, XInput set to its rumble on the motors. Steam Input off. Its movies need the fix in the catalog.
+- **Steam app:** 1382330
+
+Tested:
+
+- DualSense Edge shown as a DualShock 4, Bluetooth: Does not vibrate (2026-10-23). XInput off: PlayStation prompts, no vibration request in four and a half minutes.
+- DualSense Edge shown as a DualShock 4, Bluetooth: Works (2026-10-23). XInput's rumble on the motors beside it: PlayStation prompts and vibration (the user); 11 motor rises through XInput.
+
+What was measured:
+
+- Shown as a DualShock 4 the game never read the DualShock 4's feature reports and never wrote to it: it reads the pad through DirectInput and rumbles only through XInput.
+- With XInput's rumble on the motors beside the DualShock 4, the game rumbled through XInput: 11 motor rises in under a minute of play, up to 0xc8 heavy and 0xff light.
 
 ## Adding a game
 

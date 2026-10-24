@@ -948,6 +948,42 @@
         }
       ],
       "libraryNote": "With Steam Input on, Steam reads the pad and gives the game its controller and button type."
+    },
+    {
+      "name": "Persona 5 Strikers",
+      "steamAppId": "1382330",
+      "status": "works",
+      "technology": "Koei Tecmo's engine (ktgl). It reads XInput and DirectInput and rumbles only through XInput (XInputSetState); it has no HID code of its own. A DualShock 4 seen through DirectInput gets PlayStation prompts.",
+      "library": "XInput",
+      "vibration": "XInput",
+      "features": [
+        "XInput rumble",
+        "PlayStation button prompts"
+      ],
+      "description": "Shown as a DualShock 4 with XInput's rumble on the motors beside it, it shows PlayStation buttons and vibrates. Shown as a DualShock 4 with XInput off it shows PlayStation buttons and does not vibrate: its rumble has nowhere to go.",
+      "settings": "Game Feel: the pad shown as a DualShock 4, XInput set to its rumble on the motors. Steam Input off. Its movies need the fix in the catalog.",
+      "details": [
+        "Shown as a DualShock 4 the game never read the DualShock 4's feature reports and never wrote to it: it reads the pad through DirectInput and rumbles only through XInput.",
+        "With XInput's rumble on the motors beside the DualShock 4, the game rumbled through XInput: 11 motor rises in under a minute of play, up to 0xc8 heavy and 0xff light."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "no-vibration",
+          "shownAs": "DualShock 4",
+          "date": "2026-10-23",
+          "notes": "XInput off: PlayStation prompts, no vibration request in four and a half minutes."
+        },
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "shownAs": "DualShock 4",
+          "date": "2026-10-23",
+          "notes": "XInput's rumble on the motors beside it: PlayStation prompts and vibration (the user); 11 motor rises through XInput."
+        }
+      ]
     }
   ],
   "controllers": [
