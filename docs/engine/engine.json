@@ -1,0 +1,278 @@
+{
+  "schema": 1,
+  "repository": "MathiasKowoll/MacGameFix",
+  "builds": [
+    {
+      "wine": "11.0",
+      "patches": [
+        {
+          "name": "0001-winebus.patch",
+          "file": "engine/patches/wine-11.0/0001-winebus.patch",
+          "subject": "A USB pad's container comes from its location ID, so a game can pair it with its audio",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "9ec59e2d6a58cd0f24483a0299b7e29993056644",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/9ec59e2d6a58cd0f24483a0299b7e29993056644/engine/patches/wine-11.0/0001-winebus.patch"
+        },
+        {
+          "name": "0002-winecoreaudio.patch",
+          "file": "engine/patches/wine-11.0/0002-winecoreaudio.patch",
+          "subject": "The pad's audio endpoints answer DEVPKEY_Device_ContainerId with the pad's container",
+          "modules": [
+            "winecoreaudio.drv"
+          ],
+          "commit": "9ec59e2d6a58cd0f24483a0299b7e29993056644",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/9ec59e2d6a58cd0f24483a0299b7e29993056644/engine/patches/wine-11.0/0002-winecoreaudio.patch"
+        },
+        {
+          "name": "0003-mmdevapi.patch",
+          "file": "engine/patches/wine-11.0/0003-mmdevapi.patch",
+          "subject": "An active endpoint's container is asked of the driver, not read from the registry",
+          "modules": [
+            "mmdevapi"
+          ],
+          "commit": "9ec59e2d6a58cd0f24483a0299b7e29993056644",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/9ec59e2d6a58cd0f24483a0299b7e29993056644/engine/patches/wine-11.0/0003-mmdevapi.patch"
+        }
+      ]
+    },
+    {
+      "wine": "11.17",
+      "patches": [
+        {
+          "name": "0001-winebus.patch",
+          "file": "engine/patches/wine-11.17/0001-winebus.patch",
+          "subject": "A USB pad's container comes from its location ID, so a game can pair it with its audio",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "9ec59e2d6a58cd0f24483a0299b7e29993056644",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/9ec59e2d6a58cd0f24483a0299b7e29993056644/engine/patches/wine-11.17/0001-winebus.patch"
+        },
+        {
+          "name": "0002-winecoreaudio.patch",
+          "file": "engine/patches/wine-11.17/0002-winecoreaudio.patch",
+          "subject": "The pad's audio endpoints answer DEVPKEY_Device_ContainerId with the pad's container",
+          "modules": [
+            "winecoreaudio.drv"
+          ],
+          "commit": "9ec59e2d6a58cd0f24483a0299b7e29993056644",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/9ec59e2d6a58cd0f24483a0299b7e29993056644/engine/patches/wine-11.17/0002-winecoreaudio.patch"
+        },
+        {
+          "name": "0003-mmdevapi.patch",
+          "file": "engine/patches/wine-11.17/0003-mmdevapi.patch",
+          "subject": "An active endpoint's container is asked of the driver, not read from the registry",
+          "modules": [
+            "mmdevapi"
+          ],
+          "commit": "9ec59e2d6a58cd0f24483a0299b7e29993056644",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/9ec59e2d6a58cd0f24483a0299b7e29993056644/engine/patches/wine-11.17/0003-mmdevapi.patch"
+        },
+        {
+          "name": "0004-winebus-bluetooth.patch",
+          "file": "engine/patches/wine-11.17/0004-winebus-bluetooth.patch",
+          "subject": "A Bluetooth DualSense or Edge is shown to the game as the same pad on a cable",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "c4a022ff0d81f1cdbbfca512b5058ad2bd1b4672",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/c4a022ff0d81f1cdbbfca512b5058ad2bd1b4672/engine/patches/wine-11.17/0004-winebus-bluetooth.patch"
+        },
+        {
+          "name": "0005-winecoreaudio-bluetooth.patch",
+          "file": "engine/patches/wine-11.17/0005-winecoreaudio-bluetooth.patch",
+          "subject": "A Bluetooth pad gets the audio output its wired self would have, for its haptics",
+          "modules": [
+            "winecoreaudio.drv"
+          ],
+          "commit": "5295b1bc6047f47c81059a01f9e4b5709fca60a2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/5295b1bc6047f47c81059a01f9e4b5709fca60a2/engine/patches/wine-11.17/0005-winecoreaudio-bluetooth.patch"
+        },
+        {
+          "name": "0006-winebus-xinput-and-triggers.patch",
+          "file": "engine/patches/wine-11.17/0006-winebus-xinput-and-triggers.patch",
+          "subject": "XInput's rumble on the pad's motors, trigger effects chosen in Game Feel, a steadier Bluetooth stream",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "da52127317df9958ff60856a06dee621cff900ba",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/da52127317df9958ff60856a06dee621cff900ba/engine/patches/wine-11.17/0006-winebus-xinput-and-triggers.patch"
+        },
+        {
+          "name": "0007-hidclass-xinput.patch",
+          "file": "engine/patches/wine-11.17/0007-hidclass-xinput.patch",
+          "subject": "A pad with a haptics collection is also offered to XInput",
+          "modules": [
+            "hidclass.sys"
+          ],
+          "commit": "c2e5c0d2b1018a24447aa183846aa68e4a539dd8",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/c2e5c0d2b1018a24447aa183846aa68e4a539dd8/engine/patches/wine-11.17/0007-hidclass-xinput.patch"
+        },
+        {
+          "name": "0008-xinput-sony-order.patch",
+          "file": "engine/patches/wine-11.17/0008-xinput-sony-order.patch",
+          "subject": "XInput reads a Sony pad's own descriptor in Sony's order",
+          "modules": [
+            "xinput1_3"
+          ],
+          "commit": "c2e5c0d2b1018a24447aa183846aa68e4a539dd8",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/c2e5c0d2b1018a24447aa183846aa68e4a539dd8/engine/patches/wine-11.17/0008-xinput-sony-order.patch"
+        },
+        {
+          "name": "0009-mmdevapi-setupapi-endpoints.patch",
+          "file": "engine/patches/wine-11.17/0009-mmdevapi-setupapi-endpoints.patch",
+          "subject": "Audio endpoints are listed through SetupAPI as Windows lists them, with the pad's container",
+          "modules": [
+            "mmdevapi"
+          ],
+          "commit": "6cb1ebf2d00af6311cf359c4df3b7ba175a29b07",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/6cb1ebf2d00af6311cf359c4df3b7ba175a29b07/engine/patches/wine-11.17/0009-mmdevapi-setupapi-endpoints.patch"
+        },
+        {
+          "name": "0010-setupapi-base-containerid-wchar.patch",
+          "file": "engine/patches/wine-11.17/0010-setupapi-base-containerid-wchar.patch",
+          "subject": "SetupDiGetDeviceRegistryPropertyA returns SPDRP_BASE_CONTAINERID as a WCHAR string, as Windows does",
+          "modules": [
+            "setupapi"
+          ],
+          "commit": "6cb1ebf2d00af6311cf359c4df3b7ba175a29b07",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/6cb1ebf2d00af6311cf359c4df3b7ba175a29b07/engine/patches/wine-11.17/0010-setupapi-base-containerid-wchar.patch"
+        },
+        {
+          "name": "0011-xaudio2-mastering-voice-device.patch",
+          "file": "engine/patches/wine-11.17/0011-xaudio2-mastering-voice-device.patch",
+          "subject": "An XAudio2 mastering voice opens the device the game names, not the default one",
+          "modules": [
+            "xaudio2_7"
+          ],
+          "commit": "6cb1ebf2d00af6311cf359c4df3b7ba175a29b07",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/6cb1ebf2d00af6311cf359c4df3b7ba175a29b07/engine/patches/wine-11.17/0011-xaudio2-mastering-voice-device.patch"
+        },
+        {
+          "name": "0012-winecoreaudio-edge-output-name.patch",
+          "file": "engine/patches/wine-11.17/0012-winecoreaudio-edge-output-name.patch",
+          "subject": "An Edge shown as a DualSense has the DualSense's audio device on a cable too",
+          "modules": [
+            "winecoreaudio.drv"
+          ],
+          "commit": "dd89e0689152679f2f46c284eb11dd41ca93da13",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dd89e0689152679f2f46c284eb11dd41ca93da13/engine/patches/wine-11.17/0012-winecoreaudio-edge-output-name.patch"
+        },
+        {
+          "name": "0013-winebus-dualshock4.patch",
+          "file": "engine/patches/wine-11.17/0013-winebus-dualshock4.patch",
+          "subject": "The pad shown to a game as a USB DualShock 4 (pad_as=dualshock4)",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "2453f0ab264153df3d4ef9e20da23dd77d67346a",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2453f0ab264153df3d4ef9e20da23dd77d67346a/engine/patches/wine-11.17/0013-winebus-dualshock4.patch"
+        },
+        {
+          "name": "0014-winebus-trigger-replace-and-live-settings.patch",
+          "file": "engine/patches/wine-11.17/0014-winebus-trigger-replace-and-live-settings.patch",
+          "subject": "A chosen trigger effect can replace the game's own, and Game Feel's changes reach a running game",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "fd79bb301f9a8e3a88f1dc7327f8baddfbd7ff32",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd79bb301f9a8e3a88f1dc7327f8baddfbd7ff32/engine/patches/wine-11.17/0014-winebus-trigger-replace-and-live-settings.patch"
+        },
+        {
+          "name": "0015-winebus-input-rate-once-a-minute.patch",
+          "file": "engine/patches/wine-11.17/0015-winebus-input-rate-once-a-minute.patch",
+          "subject": "With diagnostics on, the pad's input rate is logged once a minute, not every 2 s",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "7fb27d8aa233ecea6c45e592980faea9b6cf0b90",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/7fb27d8aa233ecea6c45e592980faea9b6cf0b90/engine/patches/wine-11.17/0015-winebus-input-rate-once-a-minute.patch"
+        }
+      ]
+    }
+  ],
+  "excerpts": {
+    "container": {
+      "file": "engine/patches/wine-11.17/0001-winebus.patch",
+      "symbol": "get_usb_container_id",
+      "language": "c",
+      "startLine": 9,
+      "endLine": 21,
+      "commit": "9ec59e2d6a58cd0f24483a0299b7e29993056644",
+      "url": "https://github.com/MathiasKowoll/MacGameFix/blob/9ec59e2d6a58cd0f24483a0299b7e29993056644/engine/patches/wine-11.17/0001-winebus.patch#L9-L21",
+      "code": "/* On macOS a USB device's uid is its location ID, which names the port it is plugged\n * into and is shared by all of its functions. winecoreaudio derives the same container\n * from it for the device's audio endpoints, so that games can pair a controller with\n * its audio output through DEVPKEY_Device_ContainerId, as they do on Windows. */\nstatic BOOL get_usb_container_id(const struct device_desc *desc, GUID *guid)\n{\n    static const GUID usb_location_base = {0, 0x27f2, 0x4948, {0x96, 0x54, 0x15, 0x28, 0x04, 0xaf, 0x63, 0x78}};\n\n    if (desc->bus_type != BUS_TYPE_USB || !desc->uid) return FALSE;\n    *guid = usb_location_base;\n    guid->Data1 = desc->uid;\n    return TRUE;\n}"
+    },
+    "bluetooth": {
+      "file": "engine/patches/wine-11.17/0004-winebus-bluetooth.patch",
+      "symbol": "bt_control",
+      "language": "c",
+      "startLine": 358,
+      "endLine": 386,
+      "commit": "c4a022ff0d81f1cdbbfca512b5058ad2bd1b4672",
+      "url": "https://github.com/MathiasKowoll/MacGameFix/blob/c4a022ff0d81f1cdbbfca512b5058ad2bd1b4672/engine/patches/wine-11.17/0004-winebus-bluetooth.patch#L358-L386",
+      "code": "/* Report 0x31. In audio mode the rumble bits are the writer's to clear, so that\n * a game's rumble or reset command cannot stop the haptics; out of it the pad\n * rumbles with the game's last motor values. */\nstatic void bt_control(struct bt_pad *pad, const BYTE *payload, BOOL audio)\n{\n    BYTE report[78] = {0x31};\n\n    report[1] = (pad->seq++ & 15) << 4;\n    report[2] = 0x10;\n    if (payload) memcpy(report + 3, payload, 47);\n    if (pad_option(\"motor_power=full\"))\n    {\n        report[4] |= 0x40;\n        report[39] = 0;\n    }\n    if (audio)\n    {\n        report[3] &= ~3;\n        report[5] = report[6] = 0;\n    }\n    else\n    {\n        report[3] |= 3;\n        report[5] = pad->motors[0];\n        report[6] = pad->motors[1];\n    }\n    report[41] &= ~4;\n    bt_write(pad, report, sizeof(report));\n}"
+    },
+    "motors": {
+      "file": "engine/patches/wine-11.17/0006-winebus-xinput-and-triggers.patch",
+      "symbol": "bt_synth",
+      "language": "c",
+      "startLine": 132,
+      "endLine": 160,
+      "commit": "da52127317df9958ff60856a06dee621cff900ba",
+      "url": "https://github.com/MathiasKowoll/MacGameFix/blob/da52127317df9958ff60856a06dee621cff900ba/engine/patches/wine-11.17/0006-winebus-xinput-and-triggers.patch#L132-L160",
+      "code": "/* rumble=haptics: the game's motor values played on the actuators instead of\n * the motors, for a game that rumbles and plays no haptics of its own (an XInput\n * title). The heavy motor becomes a 65 Hz tone on the left actuator and the\n * light one a 160 Hz tone on the right, 64 frames a block, the amplitude ramped\n * across the block from the last so a step does not click; as NotProton's\n * controller bridge did (fork/controllers, PCM.h DSBRumbleSynthBlock). A motor\n * value under 4 of 255 renders nothing. Real haptics from the game win. */\nstatic void bt_synth(struct bt_pad *pad, BYTE heavy, BYTE light, signed char out[128])\n{\n    static const double hz[2] = {65.0, 160.0};\n    /* The haptics' strength over Bluetooth applies to the tone as to the game's own haptics, up to full scale. */\n    const float target[2] = {heavy < 4 ? 0 : fminf(1, heavy / 255.f * pad->synth_gain),\n                             light < 4 ? 0 : fminf(1, light / 255.f * pad->synth_gain)};\n    unsigned int i, ch;\n    float amplitude;\n    double v;\n\n    for (i = 0; i < 64; i++)\n        for (ch = 0; ch < 2; ch++)\n        {\n            amplitude = pad->synth_level[ch] + (target[ch] - pad->synth_level[ch]) * (i + 1) / 64.f;\n            v = sin(pad->synth_phase[ch]) * amplitude * 127;\n            out[2 * i + ch] = (signed char)lrint(fmax(-127, fmin(127, v)));\n            pad->synth_phase[ch] += 2 * M_PI * hz[ch] / 3000;\n            if (pad->synth_phase[ch] >= 2 * M_PI) pad->synth_phase[ch] -= 2 * M_PI;\n        }\n    pad->synth_level[0] = target[0];\n    pad->synth_level[1] = target[1];\n}"
+    },
+    "dualshock4": {
+      "file": "engine/patches/wine-11.17/0013-winebus-dualshock4.patch",
+      "symbol": "ds4_input_from_dualsense",
+      "language": "c",
+      "startLine": 729,
+      "endLine": 811,
+      "commit": "2453f0ab264153df3d4ef9e20da23dd77d67346a",
+      "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2453f0ab264153df3d4ef9e20da23dd77d67346a/engine/patches/wine-11.17/0013-winebus-dualshock4.patch#L729-L811",
+      "code": "/* The pad's input report 0x01 (64 bytes: on a cable as it comes, over\n * Bluetooth as patch 0004 makes it of 0x31) as a DualShock 4's 0x01 (64).\n * `counter` counts the reports; its low 6 bits are the DualShock 4's own\n * counter, under the PS and touchpad buttons.\n *\n *   DualSense                         DualShock 4\n *   1-4 LX LY RX RY                   1-4 the same\n *   5, 6 L2, R2 (analog)              8, 9\n *   8 hat and face buttons            5, the same bits\n *   9 L1 R1 L2 R2 Create Options L3 R3   6, the same bits (Create is Share)\n *   10 bit 0 PS, bit 1 touchpad       7, with the counter in bits 2-7; mute and\n *                                     the Edge's Fn and back buttons have nowhere to go\n *   16-21 gyro, 22-27 accelerometer   13-18, 19-24, the raw values unscaled\n *   28-31 timestamp, le32, 1/3 us     10-11, le16, 16/3 us: divided by 16\n *   32 (SDL: temperature)             12, sensor temperature\n *   33-36, 37-40 two touch points     33 one touch report, 34 its stamp, 35-42 the\n *                                     points, Y scaled from 1080 to 942\n *   53 battery level, charge state    30 level, bit 4 the cable\n *\n * The gyro and accelerometer values are copied as the sensors give them, not\n * rescaled. A reader turns them into degrees a second and g with the pad's\n * calibration, and the DualShock 4's feature report 0x02 carries the\n * DualSense's own 0x05 (see ds4_feature_reply), which Linux parses at the same\n * offsets for both pads (dualshock4_get_calibration_data,\n * dualsense_get_calibration_data). When that read failed, ViGEmBus's\n * DualShock 4 calibration stands in, and the raw DualSense values are read\n * with it.\n */\nstatic inline void ds4_input_from_dualsense(const uint8_t ds[64], uint8_t ds4[64], uint8_t counter)\n{\n    uint8_t level = ds[53] & 0x0f, charge = ds[53] >> 4;\n    uint32_t stamp;\n    unsigned int i, y;\n\n    memset(ds4, 0, DS4_INPUT_SIZE);\n    ds4[0] = DS4_INPUT_ID;\n    memcpy(ds4 + 1, ds + 1, 4);\n    ds4[5] = ds[8];\n    ds4[6] = ds[9];\n    ds4[7] = (ds[10] & 0x03) | (uint8_t)((counter & 0x3f) << 2);\n    ds4[8] = ds[5];\n    ds4[9] = ds[6];\n    stamp = (ds[28] | (ds[29] << 8) | (ds[30] << 16) | ((uint32_t)ds[31] << 24)) / 16;\n    ds4[10] = stamp & 0xff;\n    ds4[11] = (stamp >> 8) & 0xff;\n    ds4[12] = ds[32];\n    memcpy(ds4 + 13, ds + 16, 12);\n\n    /* The DualSense's charge state (hid-playstation.c, dualsense_parse_report):\n     * 0 on battery, 1 charging, 2 full, 0xa and 0xb a voltage or temperature\n     * error, 0xf a charge error. The DualShock 4's (dualshock4_parse_report):\n     * the level 0-10 alone on battery; with the cable bit, 0-10 charging, 11\n     * full, 14 not charging for voltage or temperature, 15 a charge error. */\n    if (level > 10) level = 10;\n    switch (charge)\n    {\n    case 0x0: ds4[30] = level; break;\n    case 0x1: ds4[30] = 0x10 | level; break;\n    case 0x2: ds4[30] = 0x10 | 11; break;\n    case 0xa:\n    case 0xb: ds4[30] = 0x10 | 14; break;\n    default:  ds4[30] = 0x10 | 15; break;\n    }\n    /* Byte 31 stays 0: its bit 2 says a wireless adapter lost its pad, and SDL\n     * drops a report that has it. */\n\n    ds4[33] = 1;\n    ds4[34] = counter;\n    for (i = 0; i < 2; i++)\n    {\n        const uint8_t *from = ds + 33 + 4 * i;\n        uint8_t *to = ds4 + 35 + 4 * i;\n\n        y = ((from[2] >> 4) | (from[3] << 4)) * DS4_TOUCHPAD_HEIGHT / DS_TOUCHPAD_HEIGHT;\n        to[0] = from[0];  /* the contact: bit 7 set when the finger is up, on both pads */\n        to[1] = from[1];\n        to[2] = (from[2] & 0x0f) | (uint8_t)((y & 0x0f) << 4);\n        to[3] = (uint8_t)(y >> 4);\n    }\n    /* The two touch reports not sent, their contacts up, as ViGEmBus's own\n     * empty report has them. */\n    ds4[44] = ds4[48] = ds4[53] = ds4[57] = 0x80;\n}"
+    },
+    "cap-haptics": {
+      "file": "engine/patches/wine-11.17/0002-winecoreaudio.patch",
+      "symbol": "get_usb_container_id",
+      "language": "c",
+      "startLine": 9,
+      "endLine": 32,
+      "commit": "9ec59e2d6a58cd0f24483a0299b7e29993056644",
+      "url": "https://github.com/MathiasKowoll/MacGameFix/blob/9ec59e2d6a58cd0f24483a0299b7e29993056644/engine/patches/wine-11.17/0002-winecoreaudio.patch#L9-L32",
+      "code": "/* Apple's USB audio driver puts the device's location ID in the endpoint's UID:\n * \"AppleUSBAudioEngine:<manufacturer>:<product>:<location ID in hex>:<interface>\".\n * winebus.sys builds the same container from that location ID for the device's HID\n * functions, so that games can pair a controller with its audio output; keep the\n * two in sync. */\nstatic BOOL get_usb_container_id(const char *device, GUID *guid)\n{\n    static const GUID usb_location_base = {0, 0x27f2, 0x4948, {0x96, 0x54, 0x15, 0x28, 0x04, 0xaf, 0x63, 0x78}};\n    static const char prefix[] = \"AppleUSBAudioEngine:\";\n    const char *start, *end;\n    unsigned long location;\n    char *parsed;\n\n    if(strncmp(device, prefix, strlen(prefix)) || !(end = strrchr(device, ':')))\n        return FALSE;\n    for(start = end; start > device && start[-1] != ':'; start--);\n    location = strtoul(start, &parsed, 16);\n    if(parsed != end || !location || location > 0xffffffff)\n        return FALSE;\n\n    *guid = usb_location_base;\n    guid->Data1 = location;\n    return TRUE;\n}"
+    },
+    "cap-bluetooth": {
+      "file": "engine/patches/wine-11.17/0004-winebus-bluetooth.patch",
+      "symbol": "bt_receiver",
+      "language": "c",
+      "startLine": 424,
+      "endLine": 454,
+      "commit": "c4a022ff0d81f1cdbbfca512b5058ad2bd1b4672",
+      "url": "https://github.com/MathiasKowoll/MacGameFix/blob/c4a022ff0d81f1cdbbfca512b5058ad2bd1b4672/engine/patches/wine-11.17/0004-winebus-bluetooth.patch#L424-L454",
+      "code": "static void *bt_receiver(void *arg)\n{\n    struct bt_pad *pad = arg;\n    struct { char magic[4]; signed char samples[2 * 256]; } packet;\n    ssize_t got;\n    unsigned int i, n;\n    BOOL nonzero;\n\n    while (!pad->quit)\n    {\n        if ((got = recv(pad->sock, &packet, sizeof(packet), 0)) < 6 || memcmp(packet.magic, \"MGFH\", 4)) continue;\n        n = (got - 4) / 2;\n        nonzero = FALSE;\n        pthread_mutex_lock(&pad->lock);\n        for (i = 0; i < n; i++)\n        {\n            if (pad->fifo_count == ARRAY_SIZE(pad->fifo))\n            {\n                pad->fifo_head = (pad->fifo_head + 1) % ARRAY_SIZE(pad->fifo);\n                pad->fifo_count--;\n            }\n            memcpy(pad->fifo[(pad->fifo_head + pad->fifo_count++) % ARRAY_SIZE(pad->fifo)], packet.samples + 2 * i, 2);\n            nonzero |= packet.samples[2 * i] || packet.samples[2 * i + 1];\n        }\n        pad->audio_at = mach_absolute_time();\n        if (nonzero) pad->nonzero_at = pad->audio_at;\n        pthread_mutex_unlock(&pad->lock);\n        semaphore_signal(pad->wake);\n    }\n    return NULL;\n}"
+    },
+    "cap-xinput": {
+      "file": "engine/patches/wine-11.17/0008-xinput-sony-order.patch",
+      "symbol": null,
+      "language": "diff",
+      "startLine": 14,
+      "endLine": 38,
+      "commit": "c2e5c0d2b1018a24447aa183846aa68e4a539dd8",
+      "url": "https://github.com/MathiasKowoll/MacGameFix/blob/c2e5c0d2b1018a24447aa183846aa68e4a539dd8/engine/patches/wine-11.17/0008-xinput-sony-order.patch#L14-L38",
+      "code": "@@ -123,10 +127,23 @@\n \n static void check_value_caps(struct xinput_controller *controller, USHORT usage, HIDP_VALUE_CAPS *caps)\n {\n-    switch (usage)\n+    if (usage == HID_USAGE_GENERIC_HATSWITCH) controller->hid.hat_caps = *caps;\n+    /* A Sony pad's own descriptor puts the right stick on Z and Rz and the\n+     * triggers on Rx and Ry, where this file's order, winexinput's, has the\n+     * triggers on Z and Rz. */\n+    if (controller->hid.sony_layout) switch (usage)\n     {\n     case HID_USAGE_GENERIC_X: controller->hid.lx_caps = *caps; break;\n     case HID_USAGE_GENERIC_Y: controller->hid.ly_caps = *caps; break;\n+    case HID_USAGE_GENERIC_Z: controller->hid.rx_caps = *caps; break;\n+    case HID_USAGE_GENERIC_RZ: controller->hid.ry_caps = *caps; break;\n+    case HID_USAGE_GENERIC_RX: controller->hid.lt_caps = *caps; break;\n+    case HID_USAGE_GENERIC_RY: controller->hid.rt_caps = *caps; break;\n+    }\n+    else switch (usage)\n+    {\n+    case HID_USAGE_GENERIC_X: controller->hid.lx_caps = *caps; break;\n+    case HID_USAGE_GENERIC_Y: controller->hid.ly_caps = *caps; break;\n     case HID_USAGE_GENERIC_Z: controller->hid.lt_caps = *caps; break;\n     case HID_USAGE_GENERIC_RX: controller->hid.rx_caps = *caps; break;\n     case HID_USAGE_GENERIC_RY: controller->hid.ry_caps = *caps; break;"
+    },
+    "cap-triggers": {
+      "file": "engine/patches/wine-11.17/0006-winebus-xinput-and-triggers.patch",
+      "symbol": "trigger_effect",
+      "language": "c",
+      "startLine": 549,
+      "endLine": 593,
+      "commit": "da52127317df9958ff60856a06dee621cff900ba",
+      "url": "https://github.com/MathiasKowoll/MacGameFix/blob/da52127317df9958ff60856a06dee621cff900ba/engine/patches/wine-11.17/0006-winebus-xinput-and-triggers.patch#L549-L593",
+      "code": "/* The 11 bytes of a trigger's effect; for rumble, at a step of 0 to 8. */\nstatic void trigger_effect(BYTE kind, BYTE strength, BYTE step, BYTE out[11])\n{\n    BYTE strengths[10] = {0};\n    unsigned int zone, top;\n\n    switch (kind)\n    {\n    case TRIGGER_RESIST:\n        for (zone = 3; zone < 10; zone++) strengths[zone] = strength ? strength : 4;\n        trigger_zones(strengths, out);\n        return;\n    case TRIGGER_WEAPON:\n        memset(out, 0, 11);\n        out[0] = 0x25;\n        out[1] = ((1u << 3) | (1u << 6)) & 0xff;\n        out[2] = ((1u << 3) | (1u << 6)) >> 8;\n        out[3] = (strength ? strength : 7) - 1;\n        return;\n    case TRIGGER_SLOPE:\n        top = strength ? strength : 8;\n        for (zone = 2; zone < 10; zone++) strengths[zone] = 1 + (top - 1) * (zone - 2) / 7;\n        trigger_zones(strengths, out);\n        return;\n    case TRIGGER_RECOIL:\n        top = (step * (strength ? strength : 8) + 7) / 8;\n        for (zone = 2; zone < 10 && top; zone++) strengths[zone] = top;\n        trigger_zones(strengths, out);\n        return;\n    case TRIGGER_VIBRATE:\n    case TRIGGER_RUMBLE:\n        top = kind == TRIGGER_VIBRATE ? (strength ? strength : 3) : (step * (strength ? strength : 8) + 7) / 8;\n        for (zone = 2; zone < 10 && top; zone++) strengths[zone] = top;\n        trigger_zones(strengths, out);\n        if (out[0] == 0x21)\n        {\n            out[0] = 0x26;\n            out[9] = kind == TRIGGER_VIBRATE ? 25 : 40;\n        }\n        return;\n    default:\n        memset(out, 0, 11);\n        out[0] = 0x05;\n    }\n}"
+    }
+  }
+}
