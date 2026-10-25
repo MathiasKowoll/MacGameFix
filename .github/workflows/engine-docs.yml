@@ -1,0 +1,28 @@
+# docs/engine/engine.json is what the site's /wine page shows of the Wine modules: every patch
+# and the code cut from them. A change to engine/ that leaves it behind fails here, so no version
+# ships with /wine out of date. Run tools/export-engine-docs.py after committing the change, and
+# commit what it writes.
+name: Engine docs
+on:
+  pull_request:
+    paths:
+      - 'engine/**'
+      - 'docs/engine/**'
+      - 'tools/export-engine-docs.py'
+      - '.github/workflows/engine-docs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'engine/**'
+      - 'docs/engine/**'
+      - 'tools/export-engine-docs.py'
+      - '.github/workflows/engine-docs.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Each excerpt is pinned to the last commit that changed its file: that takes the history.
+          fetch-depth: 0
+      - run: python3 tools/export-engine-docs.py --check

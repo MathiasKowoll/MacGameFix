@@ -1,0 +1,20 @@
+{
+  "wine-11.0/0001-winebus.patch": "A USB pad's container comes from its location ID, so a game can pair it with its audio",
+  "wine-11.0/0002-winecoreaudio.patch": "The pad's audio endpoints answer DEVPKEY_Device_ContainerId with the pad's container",
+  "wine-11.0/0003-mmdevapi.patch": "An active endpoint's container is asked of the driver, not read from the registry",
+  "wine-11.17/0001-winebus.patch": "A USB pad's container comes from its location ID, so a game can pair it with its audio",
+  "wine-11.17/0002-winecoreaudio.patch": "The pad's audio endpoints answer DEVPKEY_Device_ContainerId with the pad's container",
+  "wine-11.17/0003-mmdevapi.patch": "An active endpoint's container is asked of the driver, not read from the registry",
+  "wine-11.17/0004-winebus-bluetooth.patch": "A Bluetooth DualSense or Edge is shown to the game as the same pad on a cable",
+  "wine-11.17/0005-winecoreaudio-bluetooth.patch": "A Bluetooth pad gets the audio output its wired self would have, for its haptics",
+  "wine-11.17/0006-winebus-xinput-and-triggers.patch": "XInput's rumble on the pad's motors, trigger effects chosen in Game Feel, a steadier Bluetooth stream",
+  "wine-11.17/0007-hidclass-xinput.patch": "A pad with a haptics collection is also offered to XInput",
+  "wine-11.17/0008-xinput-sony-order.patch": "XInput reads a Sony pad's own descriptor in Sony's order",
+  "wine-11.17/0009-mmdevapi-setupapi-endpoints.patch": "Audio endpoints are listed through SetupAPI as Windows lists them, with the pad's container",
+  "wine-11.17/0010-setupapi-base-containerid-wchar.patch": "SetupDiGetDeviceRegistryPropertyA returns SPDRP_BASE_CONTAINERID as a WCHAR string, as Windows does",
+  "wine-11.17/0011-xaudio2-mastering-voice-device.patch": "An XAudio2 mastering voice opens the device the game names, not the default one",
+  "wine-11.17/0012-winecoreaudio-edge-output-name.patch": "An Edge shown as a DualSense has the DualSense's audio device on a cable too",
+  "wine-11.17/0013-winebus-dualshock4.patch": "The pad shown to a game as a USB DualShock 4 (pad_as=dualshock4)",
+  "wine-11.17/0014-winebus-trigger-replace-and-live-settings.patch": "A chosen trigger effect can replace the game's own, and Game Feel's changes reach a running game",
+  "wine-11.17/0015-winebus-input-rate-once-a-minute.patch": "With diagnostics on, the pad's input rate is logged once a minute, not every 2 s"
+}

@@ -1,0 +1,34 @@
+{
+  "container": {
+    "file": "engine/patches/wine-11.17/0001-winebus.patch",
+    "symbol": "get_usb_container_id"
+  },
+  "bluetooth": {
+    "file": "engine/patches/wine-11.17/0004-winebus-bluetooth.patch",
+    "symbol": "bt_control"
+  },
+  "motors": {
+    "file": "engine/patches/wine-11.17/0006-winebus-xinput-and-triggers.patch",
+    "symbol": "bt_synth"
+  },
+  "dualshock4": {
+    "file": "engine/patches/wine-11.17/0013-winebus-dualshock4.patch",
+    "symbol": "ds4_input_from_dualsense"
+  },
+  "cap-haptics": {
+    "file": "engine/patches/wine-11.17/0002-winecoreaudio.patch",
+    "symbol": "get_usb_container_id"
+  },
+  "cap-bluetooth": {
+    "file": "engine/patches/wine-11.17/0004-winebus-bluetooth.patch",
+    "symbol": "bt_receiver"
+  },
+  "cap-xinput": {
+    "file": "engine/patches/wine-11.17/0008-xinput-sony-order.patch",
+    "hunk": "if \\(controller->hid.sony_layout\\) switch \\(usage\\)"
+  },
+  "cap-triggers": {
+    "file": "engine/patches/wine-11.17/0006-winebus-xinput-and-triggers.patch",
+    "symbol": "trigger_effect"
+  }
+}

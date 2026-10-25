@@ -168,6 +168,16 @@ suggested settings): with the Edge shown as an Edge, or with XInput's motors dev
 (`&Col01` in the pad's id), it found the output and never created the voice. In Functional mode, and
 without the patches, it never sends a motor value.
 
+### What the site shows of them
+
+`docs/engine/engine.json` is what the site's /wine page reads from main: every series in
+`engine/patches/` with its patches, the modules each changes and a permalink to the last commit
+that changed it, and the code the page shows, cut from the patches. `tools/export-engine-docs.py`
+writes it from two hand-written files: `docs/engine/patches.json`, one line per patch saying what
+it does (a patch without one fails), and `docs/engine/excerpts.json`, which function to cut, or
+which hunk. After committing a change to a patch, run the script and commit what it writes; the
+Engine docs check (`--check`) fails a pull request that leaves it behind.
+
 ### The options
 
 The modules read their options from MacGameFix's support folder, written by its
