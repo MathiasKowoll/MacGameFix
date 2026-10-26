@@ -321,7 +321,7 @@
       "executable": "GoW.exe",
       "carrierDirectory": null,
       "alsoRuns": [],
-      "summary": "White specks on characters in dim light: an EQUAL depth test after a prepass, which the translated shaders do not match bit for bit. Recommended instead of the fix: DXMT with DXMT_CONFIG=\"d3d11.defuseFma=True\" in the game's launch options removes them with nothing installed (2026-10-26); the fix draws nearby grass and branches as solid shapes in some scenes.",
+      "summary": "White specks on characters in dim light: an EQUAL depth test after a prepass, which the translated shaders do not match bit for bit. The fix removes them but draws nearby grass and branches as solid shapes in some scenes; DXMT's d3d11.defuseFma with no fix draws nothing wrong but leaves the specks (2026-10-26).",
       "page": "legacy/wiki/God-of-War.md",
       "installs": [
         "libSceJobManager-gow.dll",
