@@ -379,6 +379,14 @@ with Microsoft's shader tools taken from the release of
 once, cached in `~/Library/Caches/MacGameVideoFix`, and checked against the
 verified result before anything is installed.
 
+On CrossOver 26.3 with D3DMetal 3, D3DMetal keeps its D3D12 tables in memory
+Wine cannot change, so the fix gives the device a copy of its table and hooks
+that ([#28](https://github.com/MathiasKowoll/MacGameFix/issues/28)). The command
+lists cannot take a copy, because the game crashed within a minute when they did.
+So there the fix corrects the T-pose but adds no fog barrier, and the black blocks
+in volumetric fog remain; `sm2-tpose-fix.log` says so. Played on 2026-10-25: four
+minutes, characters right, no crash. With D3DMetal 4 the fix works as before.
+
 ### God of War Ragnarök sends its trigger effects to the pad
 
 Under Wine, Steam tells Ragnarök it runs on a Steam Deck, and on a Steam Deck the
