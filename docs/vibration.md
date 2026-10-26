@@ -4,7 +4,7 @@
 
 The games played for vibration with a DualSense or DualSense Edge on a Mac. A game is added after a session, from what was felt and what the Wine modules logged, never from what it should do. Each test names its controller and its connection.
 
-Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 27), Steam Input off for the game, unless a result says otherwise. Updated 2026-10-25.
+Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 27), Steam Input off for the game, unless a result says otherwise. Updated 2026-10-26.
 
 **How a game vibrates** decides what Game Feel needs to give it:
 
@@ -52,6 +52,7 @@ plays its haptics as audio on the pad's output, whatever its library.
 | [God of War Ragnarök](#2322010) | XInput | XInput | Not played yet | DualSense Edge: Works (2026-10-23); DualSense Edge shown as a DualSense: Works (2026-10-23) |
 | [Persona 5 Strikers](#1382330) | XInput | XInput | Not played yet | DualSense Edge shown as a DualShock 4: Does not vibrate (2026-10-23); DualSense Edge shown as a DualShock 4: Works (2026-10-23) |
 | [The Last of Us Part I](#1888930) | Haptics | Raw HID | Not played yet | DualSense Edge: Works (2026-10-25) |
+| [Horizon Zero Dawn Remastered](#2561580) | Haptics | Raw HID | Controller not recorded: Works | DualSense Edge: Works (2026-10-26) |
 
 <a id="2651280"></a>
 ## Marvel's Spider-Man 2
@@ -679,6 +680,27 @@ Tested:
 What was measured:
 
 - The game read the pad's feature reports 0x09, 0x20 and 0x05, opened the Bluetooth haptics output (48000 Hz, a 10 ms period) and played haptics on it, set trigger effects, and wrote the motors itself, up to 0xff on the heavy one.
+
+<a id="2561580"></a>
+## Horizon Zero Dawn Remastered
+
+Haptics and trigger effects, on a cable and over Bluetooth.
+
+- **Status:** Works
+- **Library:** Raw HID
+- **Technology:** Nixxes' port, with its own DualSense code over HID: it reads the pad's feature reports itself, writes its output report, and plays its haptics as audio on the pad's output.
+- **Features:** Haptics, Trigger effects
+- **Settings:** Game Feel: every game's settings. Steam Input off.
+- **Steam app:** 2561580
+
+Tested:
+
+- Controller not recorded, Cable: Works. Vibrated on a cable before it did over Bluetooth (the user); the date and the controller were not recorded.
+- DualSense Edge, Bluetooth: Works (2026-10-26). Vibrates perfectly (the user): haptics on the pad's output and trigger effects, seen in the modules' log.
+
+What was measured:
+
+- Over Bluetooth the game read the pad's feature reports 0x09, 0x20 and 0x05, opened the Bluetooth haptics output (48000 Hz, a 10 ms period) and played haptics on it, keeping 0 to 30 ms waiting, set trigger effects, and claimed the Edge's motor power: seven minutes, a healthy session.
 
 ## Adding a game
 
