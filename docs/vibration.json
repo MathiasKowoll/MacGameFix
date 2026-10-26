@@ -1,6 +1,6 @@
 {
   "about": "The games played for vibration with a DualSense or DualSense Edge on a Mac. A game is added after a session, from what was felt and what the Wine modules logged, never from what it should do. Each test names its controller and its connection. docs/vibration.md is made from this file by tools/vibration-md.py.",
-  "updated": "2026-10-25",
+  "updated": "2026-10-26",
   "stack": "MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 27), Steam Input off for the game, unless a result says otherwise.",
   "results": {
     "works": "Works",
@@ -1009,6 +1009,38 @@
           "result": "works",
           "date": "2026-10-25",
           "notes": "Works perfectly (the user): haptics on the pad's output, trigger effects and motors, all seen in the modules' log."
+        }
+      ]
+    },
+    {
+      "name": "Horizon Zero Dawn Remastered",
+      "steamAppId": "2561580",
+      "status": "works",
+      "technology": "Nixxes' port, with its own DualSense code over HID: it reads the pad's feature reports itself, writes its output report, and plays its haptics as audio on the pad's output.",
+      "library": "Raw HID",
+      "vibration": "Haptics",
+      "features": [
+        "Haptics",
+        "Trigger effects"
+      ],
+      "description": "Haptics and trigger effects, on a cable and over Bluetooth.",
+      "settings": "Game Feel: every game's settings. Steam Input off.",
+      "details": [
+        "Over Bluetooth the game read the pad's feature reports 0x09, 0x20 and 0x05, opened the Bluetooth haptics output (48000 Hz, a 10 ms period) and played haptics on it, keeping 0 to 30 ms waiting, set trigger effects, and claimed the Edge's motor power: seven minutes, a healthy session."
+      ],
+      "tests": [
+        {
+          "controller": "not recorded",
+          "connection": "cable",
+          "result": "works",
+          "notes": "Vibrated on a cable before it did over Bluetooth (the user); the date and the controller were not recorded."
+        },
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "date": "2026-10-26",
+          "notes": "Vibrates perfectly (the user): haptics on the pad's output and trigger effects, seen in the modules' log."
         }
       ]
     }
