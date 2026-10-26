@@ -62,7 +62,7 @@
 #include "sm2fix_core.h"
 #include "sm2fix_core.c"
 
-#define FIX_VERSION "1.2"
+#define FIX_VERSION "1.3"
 /* A plain string, so runtime/check-builds.sh can tie this DLL to this source. */
 #define LOG_NAME "sm2-tpose-fix.log"
 #define WIDE_VIEW (1u << 28)          /* D3DMetal's typed buffer limit on M1-M4 */
@@ -89,6 +89,24 @@ static volatile LONG g_fog_pso_count, g_fog_barriers;
 static _Thread_local struct { void *list; BOOL fog; } t_bound;
 static struct { void **vtbl; unsigned int index; void *orig; } g_hooks[32];
 static unsigned int g_hook_count;
+/* D3DMetal 3 (CrossOver 26.3) keeps its vtables in macOS memory that Wine does not
+ * manage, where VirtualProtect fails (issue #28): such an object is given a copy of
+ * its vtable, made once per vtable and shared by every object that has it. 128 slots
+ * hold ID3D12Device14's and ID3D12GraphicsCommandList10's, the largest there are.
+ * D3DMetal is C++ built for macOS, whose vtables carry two words before the first
+ * method (the offset to the object's top and its type info): the copy keeps them,
+ * in case something reads them.
+ *
+ * Only the device is given a copy. Measured on 2026-10-25 with CrossOver 26.3 and
+ * D3DMetal 3: the device's copy alone played six and a half minutes, characters
+ * right; the command lists' copy as well crashed the game within a minute, twice
+ * without the two words and once with them, and no fog barrier was ever counted. So where
+ * the command lists' vtable cannot be written, the fog barrier is off. */
+#define VT_SLOTS 128
+#define VT_PREFIX 2
+static struct { void **orig, **copy; } g_copies[16];
+static unsigned int g_copy_count;
+static volatile LONG g_hook_failure_told, g_list_failure_told;
 
 static void log_msg(const char *fmt, ...)
 {
@@ -268,9 +286,33 @@ static void *orig_fn(void *obj, unsigned int index)
     return fn;
 }
 
-static void hook_slot(void *obj, unsigned int index, void *hook)
+/* The copy of a vtable, made the first time it is needed; with g_lock held. */
+static void **vt_copy_for(void **vtbl, BOOL *made)
 {
-    void **vtbl = *(void ***)obj;
+    unsigned int i;
+    void **copy;
+
+    *made = FALSE;
+    for (i = 0; i < g_copy_count; i++)
+        if (g_copies[i].orig == vtbl || g_copies[i].copy == vtbl)
+            return g_copies[i].copy;
+    if (g_copy_count == ARRAYSIZE(g_copies)
+            || !(copy = VirtualAlloc(NULL, (VT_PREFIX + VT_SLOTS) * sizeof(void *), MEM_COMMIT | MEM_RESERVE,
+                                     PAGE_READWRITE)))
+        return NULL;
+    memcpy(copy, vtbl - VT_PREFIX, (VT_PREFIX + VT_SLOTS) * sizeof(void *));
+    copy += VT_PREFIX;
+    g_copies[g_copy_count].orig = vtbl;
+    g_copies[g_copy_count].copy = copy;
+    g_copy_count++;
+    *made = TRUE;
+    return copy;
+}
+
+static void hook_slot(void *obj, unsigned int index, void *hook, BOOL may_copy)
+{
+    void **vtbl = *(void ***)obj, **copy = NULL;
+    BOOL made = FALSE, failed = FALSE;
     DWORD old;
     unsigned int i;
 
@@ -278,9 +320,26 @@ static void hook_slot(void *obj, unsigned int index, void *hook)
     for (i = 0; i < g_hook_count; i++)
         if (g_hooks[i].vtbl == vtbl && g_hooks[i].index == index)
             goto done;
-    if (g_hook_count == ARRAYSIZE(g_hooks) || !vtbl[index] || vtbl[index] == hook
-            || !VirtualProtect(&vtbl[index], sizeof(void *), PAGE_READWRITE, &old))
+    if (g_hook_count == ARRAYSIZE(g_hooks) || !vtbl[index] || vtbl[index] == hook)
         goto done;
+    if (!VirtualProtect(&vtbl[index], sizeof(void *), PAGE_READWRITE, &old))
+    {
+        if (!may_copy || !(copy = vt_copy_for(vtbl, &made)))
+        {
+            failed = TRUE;
+            goto done;
+        }
+        *(void ***)obj = copy;
+        for (i = 0; i < g_hook_count; i++)
+            if (g_hooks[i].vtbl == copy && g_hooks[i].index == index)
+                goto done;
+        g_hooks[g_hook_count].vtbl = copy;
+        g_hooks[g_hook_count].index = index;
+        g_hooks[g_hook_count].orig = copy[index];
+        g_hook_count++;
+        copy[index] = hook;
+        goto done;
+    }
     g_hooks[g_hook_count].vtbl = vtbl;
     g_hooks[g_hook_count].index = index;
     g_hooks[g_hook_count].orig = vtbl[index];
@@ -289,6 +348,14 @@ static void hook_slot(void *obj, unsigned int index, void *hook)
     VirtualProtect(&vtbl[index], sizeof(void *), old, &old);
 done:
     ReleaseSRWLockExclusive(&g_lock);
+    /* log_msg takes g_lock itself. */
+    if (made)
+        log_msg("The vtable at %p cannot be written (the backend keeps it outside Wine's memory): "
+                "its objects call through a copy", vtbl);
+    if (failed && !may_copy && !InterlockedExchange(&g_list_failure_told, 1))
+        log_msg("The command lists' vtable at %p cannot be written: no fog barrier this session", vtbl);
+    else if (failed && may_copy && !InterlockedExchange(&g_hook_failure_told, 1))
+        log_msg("Could not hook slot %u of the vtable at %p: the fix does nothing for it", index, vtbl);
 }
 
 /* ------------------------------------------------------------ fog barrier (MGVF) */
@@ -360,9 +427,11 @@ static void STDMETHODCALLTYPE hk_Dispatch(ID3D12GraphicsCommandList *list, UINT 
 
 static void hook_list(void *list)
 {
-    hook_slot(list, LIST_IDX(SetPipelineState), (void *)hk_SetPipelineState);
-    hook_slot(list, LIST_IDX(Reset), (void *)hk_Reset);
-    hook_slot(list, LIST_IDX(Dispatch), (void *)hk_Dispatch);
+    if (g_list_failure_told)   /* their vtable cannot be written: see VT_SLOTS */
+        return;
+    hook_slot(list, LIST_IDX(SetPipelineState), (void *)hk_SetPipelineState, FALSE);
+    hook_slot(list, LIST_IDX(Reset), (void *)hk_Reset, FALSE);
+    hook_slot(list, LIST_IDX(Dispatch), (void *)hk_Dispatch, FALSE);
 }
 
 static HRESULT STDMETHODCALLTYPE hk_CreateCommandList(ID3D12Device *device, UINT mask, D3D12_COMMAND_LIST_TYPE type,
@@ -559,18 +628,18 @@ static void hook_device(IUnknown *device)
 
         if (FAILED(device->lpVtbl->QueryInterface(device, ifaces[i].iid, (void **)&iface)) || !iface)
             continue;
-        hook_slot(iface, DEV_IDX(CreateComputePipelineState), (void *)hk_CreateComputePipelineState);
-        hook_slot(iface, DEV_IDX(CreateShaderResourceView), (void *)hk_CreateShaderResourceView);
-        hook_slot(iface, DEV_IDX(CreateUnorderedAccessView), (void *)hk_CreateUnorderedAccessView);
+        hook_slot(iface, DEV_IDX(CreateComputePipelineState), (void *)hk_CreateComputePipelineState, TRUE);
+        hook_slot(iface, DEV_IDX(CreateShaderResourceView), (void *)hk_CreateShaderResourceView, TRUE);
+        hook_slot(iface, DEV_IDX(CreateUnorderedAccessView), (void *)hk_CreateUnorderedAccessView, TRUE);
         if (ifaces[i].has_stream)
-            hook_slot(iface, DEV_IDX(CreatePipelineState), (void *)hk_CreatePipelineState);
+            hook_slot(iface, DEV_IDX(CreatePipelineState), (void *)hk_CreatePipelineState, TRUE);
         if (g_fog_barrier)
         {
-            hook_slot(iface, DEV_IDX(CreateCommandList), (void *)hk_CreateCommandList);
+            hook_slot(iface, DEV_IDX(CreateCommandList), (void *)hk_CreateCommandList, TRUE);
             if (ifaces[i].iid != &IID_ID3D12Device && ifaces[i].iid != &IID_ID3D12Device1
                     && ifaces[i].iid != &IID_ID3D12Device2 && ifaces[i].iid != &IID_ID3D12Device3)
                 hook_slot(iface, offsetof(ID3D12Device4Vtbl, CreateCommandList1) / sizeof(void *),
-                        (void *)hk_CreateCommandList1);
+                        (void *)hk_CreateCommandList1, TRUE);
         }
         iface->lpVtbl->Release(iface);
     }

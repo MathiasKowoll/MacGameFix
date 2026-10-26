@@ -62,7 +62,7 @@ SHADER_LIST="3d50acdb571dce22 14902794dd7134e4 9538ca33c087a84c 125a4957ab64d24d
 # Microsoft's DirectX Shader Compiler (dxc, dxa, dxv), arm64, built at DXC commit
 # 6e0fab36 -- the build the verified shaders came from, so ours come out identical.
 TOOLS_URL="https://github.com/macprotips/SpiderMan2Fix/releases/download/v1.0.1/Spider-Man-2-T-Pose-Fix.zip"
-TOOLS_SHA256="e837fd62332f239b1b1f7d83be313e4392b646ca640057495c6384a1cef287c0"
+TOOLS_SHA256="cd0d8edeffdf79e3bd4976ba6f06a20834404f60151973d7aedaa2bb0202c348"
 TOOLS_COMMIT="6e0fab36"
 TOOLS="${MGVF_SM2_TOOLS:-$HOME/Library/Caches/MacGameVideoFix/sm2-dxc-$TOOLS_COMMIT}"
 
