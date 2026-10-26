@@ -1043,6 +1043,41 @@
           "notes": "Vibrates perfectly (the user): haptics on the pad's output and trigger effects, seen in the modules' log."
         }
       ]
+    },
+    {
+      "name": "Grand Theft Auto V Enhanced",
+      "steamAppId": "3240220",
+      "status": "works",
+      "technology": "Rockstar's own DualSense code over HID: it reads the pad's feature reports itself and writes its output report, rumble and trigger effects, with PlayStation prompts.",
+      "library": "Raw HID",
+      "vibration": "Motors",
+      "features": [
+        "Motors",
+        "Trigger effects",
+        "PlayStation button prompts"
+      ],
+      "description": "Rumble and trigger effects, on a cable and over Bluetooth, with PlayStation prompts. Over Bluetooth it needs the Wine modules of 2026-10-26 (patch 0016).",
+      "settings": "Game Feel: every game's settings. Steam Input off.",
+      "details": [
+        "The game rumbles with flags 0x03 and updates its lights and triggers with 0x02 alone and the motors at 0. The pad keeps rumbling through those, so on a cable it vibrated. Over Bluetooth the modules took them as the motors stopping until patch 0016: 1,200 rises in a session, each stopped within milliseconds, and nothing felt.",
+        "With patch 0016, over Bluetooth: 262 rises in 14 minutes, each held 20 ms to 2 s (median 117 ms)."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "cable",
+          "result": "works",
+          "date": "2026-10-26",
+          "notes": "Vibrates perfectly (the user); trigger effects and PlayStation prompts."
+        },
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "date": "2026-10-26",
+          "notes": "Vibrates perfectly (the user) with patch 0016; trigger effects and PlayStation prompts."
+        }
+      ]
     }
   ],
   "controllers": [

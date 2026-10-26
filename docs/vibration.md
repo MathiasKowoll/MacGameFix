@@ -53,6 +53,7 @@ plays its haptics as audio on the pad's output, whatever its library.
 | [Persona 5 Strikers](#1382330) | XInput | XInput | Not played yet | DualSense Edge shown as a DualShock 4: Does not vibrate (2026-10-23); DualSense Edge shown as a DualShock 4: Works (2026-10-23) |
 | [The Last of Us Part I](#1888930) | Haptics | Raw HID | Not played yet | DualSense Edge: Works (2026-10-25) |
 | [Horizon Zero Dawn Remastered](#2561580) | Haptics | Raw HID | Controller not recorded: Works | DualSense Edge: Works (2026-10-26) |
+| [Grand Theft Auto V Enhanced](#3240220) | Motors | Raw HID | DualSense Edge: Works (2026-10-26) | DualSense Edge: Works (2026-10-26) |
 
 <a id="2651280"></a>
 ## Marvel's Spider-Man 2
@@ -701,6 +702,28 @@ Tested:
 What was measured:
 
 - Over Bluetooth the game read the pad's feature reports 0x09, 0x20 and 0x05, opened the Bluetooth haptics output (48000 Hz, a 10 ms period) and played haptics on it, keeping 0 to 30 ms waiting, set trigger effects, and claimed the Edge's motor power: seven minutes, a healthy session.
+
+<a id="3240220"></a>
+## Grand Theft Auto V Enhanced
+
+Rumble and trigger effects, on a cable and over Bluetooth, with PlayStation prompts. Over Bluetooth it needs the Wine modules of 2026-10-26 (patch 0016).
+
+- **Status:** Works
+- **Library:** Raw HID
+- **Technology:** Rockstar's own DualSense code over HID: it reads the pad's feature reports itself and writes its output report, rumble and trigger effects, with PlayStation prompts.
+- **Features:** Motors, Trigger effects, PlayStation button prompts
+- **Settings:** Game Feel: every game's settings. Steam Input off.
+- **Steam app:** 3240220
+
+Tested:
+
+- DualSense Edge, Cable: Works (2026-10-26). Vibrates perfectly (the user); trigger effects and PlayStation prompts.
+- DualSense Edge, Bluetooth: Works (2026-10-26). Vibrates perfectly (the user) with patch 0016; trigger effects and PlayStation prompts.
+
+What was measured:
+
+- The game rumbles with flags 0x03 and updates its lights and triggers with 0x02 alone and the motors at 0. The pad keeps rumbling through those, so on a cable it vibrated. Over Bluetooth the modules took them as the motors stopping until patch 0016: 1,200 rises in a session, each stopped within milliseconds, and nothing felt.
+- With patch 0016, over Bluetooth: 262 rises in 14 minutes, each held 20 ms to 2 s (median 117 ms).
 
 ## Adding a game
 
