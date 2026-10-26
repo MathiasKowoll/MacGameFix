@@ -1,0 +1,3 @@
+# Every change is reviewed by the owner before it reaches main: the ruleset on main asks
+# for a code owner's approval, and the owner, as admin, merges directly.
+* @MathiasKowoll
