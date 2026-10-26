@@ -8,23 +8,23 @@
 | Backend | **DXMT**, D3D11 |
 | CrossOver | Preview 27, through NotProton, under Rosetta and under FEX |
 
-## First, try DXMT's own setting
+## DXMT's own setting, partly
 
-DXMT can remove the specks itself, with no fix installed. Its setting
-`d3d11.defuseFma` keeps Metal from fusing a multiply and an add into one
-instruction differently in the two passes, so both compute the same depth and the
-game's EQUAL test passes as it does on Windows. In NotProton, put this in the
-game's launch options in Steam:
+DXMT has a setting, `d3d11.defuseFma`, that keeps Metal from fusing a multiply and
+an add into one instruction differently in the two passes, which should let both
+compute the same depth so the game's EQUAL test passes as on Windows. DXMT uses it
+by default for Shadow of the Tomb Raider. In NotProton it goes in the game's
+launch options in Steam:
 
     CX_GRAPHICS_BACKEND=dxmt DXMT_CONFIG="d3d11.defuseFma=True" %command%
 
-Played on 2026-10-26, DXMT in CrossOver Preview 27 through NotProton: no specks,
-and with no fix installed nothing else is drawn wrong. This is the recommended way.
-DXMT already uses the same setting by default for Shadow of the Tomb Raider. For
-D3DMetal, `D3DM_POSITION_INVARIANCE=1` should do the same job; that has not been
-tried here.
+Played on 2026-10-26 with no fix installed: nothing else is drawn wrong, but the
+specks are still seen. A first session showed none; a later one did. So it
+is not a full answer.
+For D3DMetal, `D3DM_POSITION_INVARIANCE=1` should do the same job; that has not
+been tried here.
 
-The fix below stays for anyone who wants it, but it has a cost. On 2026-10-22 a
+The fix below removes the specks, but it has a cost. On 2026-10-22 a
 player reported grass, leaves and branches near the camera drawn as solid
 triangles and rectangles with it installed, on D3DMetal and on DXMT. Those are
 alpha-tested cards: the prepass writes depth only where their silhouette is,
