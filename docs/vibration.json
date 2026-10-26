@@ -1078,6 +1078,32 @@
           "notes": "Vibrates perfectly (the user) with patch 0016; trigger effects and PlayStation prompts."
         }
       ]
+    },
+    {
+      "name": "The Last of Us Part II Remastered",
+      "steamAppId": "2531310",
+      "status": "works",
+      "technology": "Naughty Dog's engine (Nixxes' port), with its own DualSense code over HID: it reads the pad's feature reports itself, writes its output report, and plays its haptics as audio on the pad's output.",
+      "library": "Raw HID",
+      "vibration": "Haptics",
+      "features": [
+        "Haptics",
+        "Trigger effects"
+      ],
+      "description": "Haptics and trigger effects, as on a PS5.",
+      "settings": "Game Feel: every game's settings. Steam Input off.",
+      "details": [
+        "The game read the pad's feature reports 0x09, 0x20 and 0x05, opened the Bluetooth haptics output (48000 Hz, a 10 ms period) and played haptics on it, keeping 0 to 30 ms waiting, and set trigger effects."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "date": "2026-10-26",
+          "notes": "Vibrated very well (the user): haptics on the pad's output and trigger effects, seen in the modules' log."
+        }
+      ]
     }
   ],
   "controllers": [

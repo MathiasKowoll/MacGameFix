@@ -54,6 +54,7 @@ plays its haptics as audio on the pad's output, whatever its library.
 | [The Last of Us Part I](#1888930) | Haptics | Raw HID | Not played yet | DualSense Edge: Works (2026-10-25) |
 | [Horizon Zero Dawn Remastered](#2561580) | Haptics | Raw HID | Controller not recorded: Works | DualSense Edge: Works (2026-10-26) |
 | [Grand Theft Auto V Enhanced](#3240220) | Motors | Raw HID | DualSense Edge: Works (2026-10-26) | DualSense Edge: Works (2026-10-26) |
+| [The Last of Us Part II Remastered](#2531310) | Haptics | Raw HID | Not played yet | DualSense Edge: Works (2026-10-26) |
 
 <a id="2651280"></a>
 ## Marvel's Spider-Man 2
@@ -724,6 +725,26 @@ What was measured:
 
 - The game rumbles with flags 0x03 and updates its lights and triggers with 0x02 alone and the motors at 0. The pad keeps rumbling through those, so on a cable it vibrated. Over Bluetooth the modules took them as the motors stopping until patch 0016: 1,200 rises in a session, each stopped within milliseconds, and nothing felt.
 - With patch 0016, over Bluetooth: 262 rises in 14 minutes, each held 20 ms to 2 s (median 117 ms).
+
+<a id="2531310"></a>
+## The Last of Us Part II Remastered
+
+Haptics and trigger effects, as on a PS5.
+
+- **Status:** Works
+- **Library:** Raw HID
+- **Technology:** Naughty Dog's engine (Nixxes' port), with its own DualSense code over HID: it reads the pad's feature reports itself, writes its output report, and plays its haptics as audio on the pad's output.
+- **Features:** Haptics, Trigger effects
+- **Settings:** Game Feel: every game's settings. Steam Input off.
+- **Steam app:** 2531310
+
+Tested:
+
+- DualSense Edge, Bluetooth: Works (2026-10-26). Vibrated very well (the user): haptics on the pad's output and trigger effects, seen in the modules' log.
+
+What was measured:
+
+- The game read the pad's feature reports 0x09, 0x20 and 0x05, opened the Bluetooth haptics output (48000 Hz, a 10 ms period) and played haptics on it, keeping 0 to 30 ms waiting, and set trigger effects.
 
 ## Adding a game
 
