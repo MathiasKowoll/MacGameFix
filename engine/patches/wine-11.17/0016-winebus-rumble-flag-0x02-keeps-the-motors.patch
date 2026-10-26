@@ -1,0 +1,62 @@
+--- a/dlls/winebus.sys/bus_iohid.c
++++ b/dlls/winebus.sys/bus_iohid.c
+@@ -892,18 +892,22 @@
+             memcpy(merged + bt_fields[i].offset, pad->pending + bt_fields[i].offset, bt_fields[i].length);
+         }
+     }
+-    /* A report with a rumble bit (0x01 or 0x02 of the first flag byte, or the
+-     * improved emulation's 0x04 of byte 39) sets the motors; one with none ends the
+-     * emulated rumble, as the pad itself does on a cable, where such a report puts
+-     * it back to audio haptics. SDL stops a rumble that way, never with motors at
+-     * 0: the writer kept rumbling with the last values over Bluetooth, through a
+-     * whole fight of Mortal Kombat 1. */
+-    if ((update[0] & 3) || (update[38] & 4))
++    /* A report with 0x01 of the first flag byte (or the improved emulation's 0x04
++     * of byte 39) sets the motors. One with 0x02 alone keeps the pad rumbling with
++     * the values it has, as the pad itself does on a cable: Grand Theft Auto V
++     * Enhanced rumbles with 0x03 and updates its lights and triggers with 0x02 and
++     * the motors at 0, and on a cable it vibrates (2026-10-26); taking those as the
++     * motors stopped every rumble within a few milliseconds over Bluetooth. One
++     * with neither ends the emulated rumble, as the pad does on a cable, where such
++     * a report puts it back to audio haptics. SDL stops a rumble that way, never
++     * with motors at 0: the writer kept rumbling with the last values over
++     * Bluetooth, through a whole fight of Mortal Kombat 1. */
++    if ((update[0] & 1) || (update[38] & 4))
+     {
+         pad->motors[0] = update[2];
+         pad->motors[1] = update[3];
+     }
+-    else pad->motors[0] = pad->motors[1] = 0;
++    else if (!(update[0] & 2)) pad->motors[0] = pad->motors[1] = 0;
+     memcpy(pad->pending, merged, sizeof(merged));
+     pad->dirty = TRUE;
+     pthread_mutex_unlock(&pad->lock);
+@@ -1600,7 +1604,8 @@
+         if (kind == TRIGGER_OFF) continue;
+         if (kind == TRIGGER_RUMBLE || kind == TRIGGER_RECOIL)
+         {
+-            if (!(report[1] & 0x03)) continue;
++            /* The motors' values only where the report sets them (see bt_queue_output). */
++            if (!(report[1] & 0x01) && !(report[39] & 0x04)) continue;
+             motor = kind == TRIGGER_RECOIL ? max(report[3], report[4]) : report[side ? 4 : 3];
+             step = motor < 4 ? 0 : 1 + (motor - 4) * 8 / 252;
+             if (step == impl->trigger_step[side] ||
+@@ -1926,12 +1931,14 @@
+     /* Said before any copy is made: whether the game wrote it, or XInput did. */
+     from_game = report != motors;
+ 
+-    /* The motors' values, whenever the game writes: with a rumble bit they are its
+-     * motors, without one the emulated rumble is off (see bt_queue_output). */
++    /* The motors' values, whenever the game writes: with 0x01 (or the improved
++     * emulation's bit) they are its motors, with 0x02 alone they stay as they were,
++     * and with neither the emulated rumble is off (see bt_queue_output). */
+     if (output)
+     {
+-        BOOL rumble = (report[1] & 0x03) || (length > 39 && (report[39] & 0x04));
+-        pad_motors_told(impl, rumble ? report[4] : 0, rumble ? report[3] : 0);
++        BOOL rumble = (report[1] & 0x01) || (length > 39 && (report[39] & 0x04));
++        if (rumble) pad_motors_told(impl, report[4], report[3]);
++        else if (!(report[1] & 0x02)) pad_motors_told(impl, 0, 0);
+     }
+ 
+     /* How the game drives the pad, said once each, for MacGameFix's list of what

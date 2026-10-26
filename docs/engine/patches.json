@@ -16,5 +16,6 @@
   "wine-11.17/0012-winecoreaudio-edge-output-name.patch": "An Edge shown as a DualSense has the DualSense's audio device on a cable too",
   "wine-11.17/0013-winebus-dualshock4.patch": "The pad shown to a game as a USB DualShock 4 (pad_as=dualshock4)",
   "wine-11.17/0014-winebus-trigger-replace-and-live-settings.patch": "A chosen trigger effect can replace the game's own, and Game Feel's changes reach a running game",
-  "wine-11.17/0015-winebus-input-rate-once-a-minute.patch": "With diagnostics on, the pad's input rate is logged once a minute, not every 2 s"
+  "wine-11.17/0015-winebus-input-rate-once-a-minute.patch": "With diagnostics on, the pad's input rate is logged once a minute, not every 2 s",
+  "wine-11.17/0016-winebus-rumble-flag-0x02-keeps-the-motors.patch": "Over Bluetooth a game report with the rumble flag 0x02 alone keeps the motors, as the pad does on a cable"
 }

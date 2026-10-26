@@ -85,6 +85,14 @@ minute:
 |---|---|---|
 | `0015-winebus-input-rate-once-a-minute.patch` | `winebus.so` | The pad's input reports are still counted in windows of 2 s, but said once a minute: the reports, the average rate, the lowest and highest window, and the longest gap between two. A window is still said at once when it is the pad's first (the app reads a session's connection from it) or when it has a gap of 100 ms or more. |
 
+Over Bluetooth the writer took the motors from any game report with a rumble flag,
+and a report with 0x02 alone (stay in the rumble mode) carries no motor values.
+One more patch reads the flags the way the pad does on a cable:
+
+| Patch | Module | Change |
+|---|---|---|
+| `0016-winebus-rumble-flag-0x02-keeps-the-motors.patch` | `winebus.so` | A game report sets the motors over Bluetooth only with 0x01 of the first flag byte (or the improved emulation's 0x04 of byte 39); with 0x02 alone the pad keeps rumbling with the values it has; with neither the emulated rumble ends, as before. Grand Theft Auto V Enhanced rumbles with 0x03 and updates its lights and triggers with 0x02 and the motors at 0: on a cable it vibrates, and over Bluetooth every rumble stopped within a few milliseconds (2026-10-26). The log's motor rises and falls, and the trigger effects that follow the motors, read the flags the same way. |
+
 With `xinput=pad`, `0006` puts the two haptics collections inside the pad's own
 top-level collection instead, so `0007` offers the pad itself to `xinput`, which
 reads it with `0008` and drives its motors through the same reports. The pad
