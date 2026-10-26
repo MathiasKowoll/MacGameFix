@@ -189,6 +189,16 @@
           ],
           "commit": "7fb27d8aa233ecea6c45e592980faea9b6cf0b90",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/7fb27d8aa233ecea6c45e592980faea9b6cf0b90/engine/patches/wine-11.17/0015-winebus-input-rate-once-a-minute.patch"
+        },
+        {
+          "name": "0016-winebus-rumble-flag-0x02-keeps-the-motors.patch",
+          "file": "engine/patches/wine-11.17/0016-winebus-rumble-flag-0x02-keeps-the-motors.patch",
+          "subject": "Over Bluetooth a game report with the rumble flag 0x02 alone keeps the motors, as the pad does on a cable",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "92ac862b9c77b24f5d2b792edd8060a0f5d53ff8",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/92ac862b9c77b24f5d2b792edd8060a0f5d53ff8/engine/patches/wine-11.17/0016-winebus-rumble-flag-0x02-keeps-the-motors.patch"
         }
       ]
     }
