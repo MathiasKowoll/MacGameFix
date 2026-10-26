@@ -8,6 +8,29 @@
 | Backend | **DXMT**, D3D11 |
 | CrossOver | Preview 27, through NotProton, under Rosetta and under FEX |
 
+## First, try DXMT's own setting
+
+DXMT can remove the specks itself, with no fix installed. Its setting
+`d3d11.defuseFma` keeps Metal from fusing a multiply and an add into one
+instruction differently in the two passes, so both compute the same depth and the
+game's EQUAL test passes as it does on Windows. In NotProton, put this in the
+game's launch options in Steam:
+
+    CX_GRAPHICS_BACKEND=dxmt DXMT_CONFIG="d3d11.defuseFma=True" %command%
+
+Played on 2026-10-26, DXMT in CrossOver Preview 27 through NotProton: no specks,
+and with no fix installed nothing else is drawn wrong. This is the recommended way.
+DXMT already uses the same setting by default for Shadow of the Tomb Raider. For
+D3DMetal, `D3DM_POSITION_INVARIANCE=1` should do the same job; that has not been
+tried here.
+
+The fix below stays for anyone who wants it, but it has a cost. On 2026-10-22 a
+player reported grass, leaves and branches near the camera drawn as solid
+triangles and rectangles with it installed, on D3DMetal and on DXMT. Those are
+alpha-tested cards: the prepass writes depth only where their silhouette is,
+and GREATER_EQUAL lets the second pass paint the rest of each card over the
+background behind it.
+
 ## The specks
 
 The game draws a depth-only prepass and then draws the same geometry again into
@@ -38,8 +61,8 @@ off, stencil on), and the log counts them. D3DMetal is said to show the same
 specks; that has not been measured here.
 
 The risk, as the poster says: something drawn after the prepass that was not in
-it, in front of a character, would now draw through. Nothing like that has been
-seen.
+it would now draw through. It was seen on 2026-10-22: alpha-tested grass and
+branches near the camera drawn as solid shapes (see above).
 
 `gow-depth-fix.ini` beside the game sets what an EQUAL test becomes:
 `greater_equal` (the default), `less_equal` or `off`.

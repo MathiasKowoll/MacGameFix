@@ -387,6 +387,17 @@ So there the fix corrects the T-pose but adds no fog barrier, and the black bloc
 in volumetric fog remain; `sm2-tpose-fix.log` says so. Played on 2026-10-25: four
 minutes, characters right, no crash. With D3DMetal 4 the fix works as before.
 
+### God of War: a DXMT setting first
+
+God of War's white specks go away with no fix installed when DXMT runs with
+`d3d11.defuseFma`. In NotProton, put this in the game's launch options in Steam:
+`CX_GRAPHICS_BACKEND=dxmt DXMT_CONFIG="d3d11.defuseFma=True" %command%`. Played
+on 2026-10-26 with no specks and nothing else drawn wrong; this is the recommended
+way. The fix in the catalog stays for anyone who wants it. It removes the specks
+by loosening the depth test, and that loosening draws nearby grass and branches
+as solid shapes in some scenes (reported 2026-10-22). See
+[God of War](legacy/wiki/God-of-War.md).
+
 ### God of War Ragnarök sends its trigger effects to the pad
 
 Under Wine, Steam tells Ragnarök it runs on a Steam Deck, and on a Steam Deck the

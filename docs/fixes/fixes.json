@@ -321,7 +321,7 @@
       "executable": "GoW.exe",
       "carrierDirectory": null,
       "alsoRuns": [],
-      "summary": "White specks on characters in dim light: an EQUAL depth test after a prepass, which the translated shaders do not match bit for bit.",
+      "summary": "White specks on characters in dim light: an EQUAL depth test after a prepass, which the translated shaders do not match bit for bit. Recommended instead of the fix: DXMT with DXMT_CONFIG=\"d3d11.defuseFma=True\" in the game's launch options removes them with nothing installed (2026-10-26); the fix draws nearby grass and branches as solid shapes in some scenes.",
       "page": "legacy/wiki/God-of-War.md",
       "installs": [
         "libSceJobManager-gow.dll",
@@ -583,10 +583,10 @@
           "symbol": "hk_CreateShaderResourceView",
           "note": "macprotips': the wide R32 views past element 2^28 are created raw, which D3DMetal reads in full.",
           "language": "c",
-          "startLine": 496,
-          "endLine": 518,
-          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/sm2-tpose-fix.c#L496-L518",
+          "startLine": 565,
+          "endLine": 587,
+          "commit": "fabb97bc1bd6acc3c69d52f28c4f3f2da7fcfef0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fabb97bc1bd6acc3c69d52f28c4f3f2da7fcfef0/fixes/sm2-tpose-fix.c#L565-L587",
           "code": "static void STDMETHODCALLTYPE hk_CreateShaderResourceView(ID3D12Device *device, ID3D12Resource *resource,\n        const D3D12_SHADER_RESOURCE_VIEW_DESC *desc, D3D12_CPU_DESCRIPTOR_HANDLE handle)\n{\n    void (STDMETHODCALLTYPE *orig)(ID3D12Device *, ID3D12Resource *, const D3D12_SHADER_RESOURCE_VIEW_DESC *,\n            D3D12_CPU_DESCRIPTOR_HANDLE) = orig_fn(device, DEV_IDX(CreateShaderResourceView));\n\n    if (desc && desc->ViewDimension == D3D12_SRV_DIMENSION_BUFFER && desc->Buffer.NumElements > WIDE_VIEW\n            && !(desc->Buffer.Flags & D3D12_BUFFER_SRV_FLAG_RAW)\n            && (desc->Format == DXGI_FORMAT_R32_UINT || desc->Format == DXGI_FORMAT_R32_SINT\n                || desc->Format == DXGI_FORMAT_R32_FLOAT))\n    {\n        D3D12_SHADER_RESOURCE_VIEW_DESC raw = *desc;\n\n        raw.Format = DXGI_FORMAT_R32_TYPELESS;\n        raw.Buffer.Flags |= D3D12_BUFFER_SRV_FLAG_RAW;\n        raw.Buffer.StructureByteStride = 0;\n        if (InterlockedIncrement(&g_views) <= 4)\n            log_msg(\"Wide typed view (%u elements) created as a raw view\", desc->Buffer.NumElements);\n        orig(device, resource, &raw, handle);\n        return;\n    }\n    orig(device, resource, desc, handle);\n}"
         },
         {
@@ -594,10 +594,10 @@
           "symbol": "hk_Dispatch",
           "note": "Ours: a UAV barrier after the volumetric fog copy, which removed the black blocks in the sandstorm stage.",
           "language": "c",
-          "startLine": 344,
-          "endLine": 359,
-          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/sm2-tpose-fix.c#L344-L359",
+          "startLine": 411,
+          "endLine": 426,
+          "commit": "fabb97bc1bd6acc3c69d52f28c4f3f2da7fcfef0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fabb97bc1bd6acc3c69d52f28c4f3f2da7fcfef0/fixes/sm2-tpose-fix.c#L411-L426",
           "code": "static void STDMETHODCALLTYPE hk_Dispatch(ID3D12GraphicsCommandList *list, UINT x, UINT y, UINT z)\n{\n    void (STDMETHODCALLTYPE *orig)(ID3D12GraphicsCommandList *, UINT, UINT, UINT) = orig_fn(list, LIST_IDX(Dispatch));\n\n    orig(list, x, y, z);\n    if (t_bound.list == list && t_bound.fog)\n    {\n        D3D12_RESOURCE_BARRIER barrier;\n\n        memset(&barrier, 0, sizeof(barrier));\n        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;\n        barrier.UAV.pResource = NULL;   /* every UAV access before, against every one after */\n        list->lpVtbl->ResourceBarrier(list, 1, &barrier);\n        InterlockedIncrement(&g_fog_barriers);\n    }\n}"
         }
       ],
