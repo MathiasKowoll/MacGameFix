@@ -1,6 +1,6 @@
 {
   "about": "The games played for vibration with a DualSense or DualSense Edge on a Mac. A game is added after a session, from what was felt and what the Wine modules logged, never from what it should do. Each test names its controller and its connection. docs/vibration.md is made from this file by tools/vibration-md.py.",
-  "updated": "2026-10-23",
+  "updated": "2026-10-25",
   "stack": "MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 27), Steam Input off for the game, unless a result says otherwise.",
   "results": {
     "works": "Works",
@@ -982,6 +982,33 @@
           "shownAs": "DualShock 4",
           "date": "2026-10-23",
           "notes": "XInput's rumble on the motors beside it: PlayStation prompts and vibration (the user); 11 motor rises through XInput."
+        }
+      ]
+    },
+    {
+      "name": "The Last of Us Part I",
+      "steamAppId": "1888930",
+      "status": "works",
+      "technology": "Naughty Dog's engine, with its own DualSense code over HID: it reads the pad's feature reports itself, writes its output report, and plays its haptics as audio on the pad's output.",
+      "library": "Raw HID",
+      "vibration": "Haptics",
+      "features": [
+        "Haptics",
+        "Trigger effects",
+        "Motors"
+      ],
+      "description": "Haptics, trigger effects and the motors, as on a PS5.",
+      "settings": "Game Feel: every game's settings. Steam Input off.",
+      "details": [
+        "The game read the pad's feature reports 0x09, 0x20 and 0x05, opened the Bluetooth haptics output (48000 Hz, a 10 ms period) and played haptics on it, set trigger effects, and wrote the motors itself, up to 0xff on the heavy one."
+      ],
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "bluetooth",
+          "result": "works",
+          "date": "2026-10-25",
+          "notes": "Works perfectly (the user): haptics on the pad's output, trigger effects and motors, all seen in the modules' log."
         }
       ]
     }
