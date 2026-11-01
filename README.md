@@ -195,8 +195,10 @@ Play in full screen: the green button, or Control-Command-F. Measured on
 - In CrossOver Preview's Steam bottle, Spider-Man 2 and F1 23 in full screen
   turned Game Mode on by themselves, and their haptics lost none.
 
-The links are made for the exes MacGameFix finds in the Steam libraries and in
-each bottle's Program Files; a game elsewhere is not covered. Game Feel's
+The links are made for the exes MacGameFix finds in the libraries of each
+bottle's Steam and in each bottle's Program Files; a game elsewhere is not
+covered. A library only the Mac's own Steam lists is NotProton's, and is left
+out: NotProton runs its games from a bundle of its own. Game Feel's
 options are read when the bottle starts, so in CrossOver change them before you
 open Steam there (engine/README.md, "The options").
 
