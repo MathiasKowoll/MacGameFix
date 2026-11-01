@@ -77,8 +77,9 @@ Mortal Shell 2, Resonance: A Plague Tale Legacy and both Life is Strange titles
 from 4.0b3). The game says so. It is only a notice: the fix still installs.
 
 The exception is a fix that also writes registry keys: the Kingdom Hearts
-titles and NieR Replicant, and NINJA GAIDEN 3: Razor's Edge, whose DLLs go
-there too and nothing into its folder. Those keys go into the game's prefix, a
+titles and NieR Replicant, NINJA GAIDEN 3: Razor's Edge, whose DLLs go
+there too and nothing into its folder, and Phantom Blade Zero, which is registry
+values alone. Those keys go into the game's prefix, a
 Steam Play prefix (`compatdata/<appid>/pfx`) or a CrossOver bottle, so the game
 needs to have run there once. The prefix is shown in the game's *Goes into* column. When there is
 more than one, that column is a menu where any number of them can be checked, and the fix goes into
@@ -219,6 +220,7 @@ open Steam there (engine/README.md, "The options").
 | Nioh 2 | Cutscene refuses to play, then a crash | DXMT |
 | Nioh 3 | "Failed to play movie" | D3DMetal |
 | Persona 5 Strikers | Video never starts; sound only | DXMT |
+| Phantom Blade Zero | Never opens a window under Rosetta (Denuvo) | D3DMetal 4, the Wine modules on, a prefix |
 | RESIDENT EVIL 2 | Crashes when a video plays | D3DMetal |
 | RESIDENT EVIL 3 | Crashes when a video plays | D3DMetal |
 | RESONANCE: A Plague Tale Legacy | "Shader Model 6.7 is not supported" | D3DMetal |
@@ -314,6 +316,25 @@ A CrossOver update that updated the bottle was measured putting back Wine's
 own copies of three of the four DLLs. The game then shows as needing repair,
 and installing again puts them back; with "Keep it applied" on, the agent does
 it.
+
+### Phantom Blade Zero needs the Wine modules
+
+Under Rosetta its Denuvo spins one core and never opens a window: it checks the
+CPU for CLFLUSHOPT, CLWB and RDPID, which Rosetta does not have. The Wine modules'
+`ntdll.so` (engine patches `0017` and `0018`, see
+[engine/README.md](engine/README.md#rosettas-cpu-for-copy-protection)) shows them
+to a process that asks with `WINE_ROSETTA_CPUID7_OR` and emulates the two
+instructions. The fix asks for `PBZ.exe` alone, in the prefix's registry
+(`AppDefaults\PBZ.exe\Environment`), where a game started by a Steam client that
+was already running still finds it, and loads Microsoft's Visual C++ runtime
+before Wine's for it, which the game checks. Nothing goes into its folder, and no
+launch option is needed.
+
+It needs the Wine modules on for the CrossOver that runs it (CrossOver's own
+`ntdll.so` ignores the value), the Intel side, and D3DMetal 4: CrossOver Preview
+27 carries it, 26.3 carries 3.0. Played on 2026-11-01 on Preview 41073's NotProton
+runner with the same values passed as launch options: it passed Denuvo and was
+played for 32 minutes. Through the installer it has not been played yet.
 
 ### Beast of Reincarnation needs CrossOver Preview
 
@@ -765,6 +786,7 @@ how, is in the game's page under `legacy/wiki/`.
 | `install-ng4-fix.sh` | NINJA GAIDEN 4 | `dstorage.dll` (from `dstorage-ng4.dll`); `dstoragecore.dll` renamed aside | `tools/ng4-observe.c`, built with `-DNG4_FIX` | [NINJA GAIDEN 4](legacy/wiki/Ninja-Gaiden-4.md) |
 | `install-nioh-bridge.sh` | Nioh, Nioh 2 | `GfeSDK.dll`, and the reader | `p5s-video-bridge.c` | [Nioh](legacy/wiki/Nioh.md), [Nioh 2](legacy/wiki/Nioh-2.md) |
 | `install-nioh3-bridge.sh` | Nioh 3 | `amd_ags_x64.dll` (from `amd_ags_x64-nioh3.dll`), and the reader | `dwo-video-bridge.c` | [Nioh 3](legacy/wiki/Nioh-3.md) |
+| `install-pbz-fix.sh` | Phantom Blade Zero | Nothing: nine registry values for `PBZ.exe` in the prefix, the CPUID bits the Wine modules' `ntdll.so` adds and native-first overrides for its Visual C++ runtime | Nothing: the engine's `ntdll.so` does the work (`engine/patches/*/0017`, `0018`) | [Its section](#phantom-blade-zero-needs-the-wine-modules) |
 | `install-p5s-bridge.sh` | Persona 5 Strikers | `amd_ags_x64.dll`, and the reader | `p5s-video-bridge.c` | [Persona 5 Strikers](legacy/wiki/Persona-5-Strikers.md) |
 | `install-resonance-fix.sh` | RESONANCE: A Plague Tale Legacy | `NvCloth_x64.dll` (from `NvCloth_x64-resonance.dll`) | `shader-floor-fix.c` | [RESONANCE](legacy/wiki/Resonance-A-Plague-Tale-Legacy.md) |
 | `install-tmnt-fix.sh` | TMNT: Splintered Fate | `fmod.dll` (from `fmod-tmnt.dll`) | `d3d12-guards.c` | [TMNT](legacy/wiki/TMNT-Splintered-Fate.md) |
@@ -808,6 +830,9 @@ how, is in the game's page under `legacy/wiki/`.
   its fix installs (LGPL-2.1-or-later).
 - **[d9vk](https://github.com/Sikarugir-App/d9vk) by Sikarugir-App** (zlib):
   the Direct3D 9 that NINJA GAIDEN 3 runs on.
+- **Hrava** wrote the ntdll patch that makes Rosetta's CPU look like the one
+  Phantom Blade Zero's Denuvo checks for (engine patch `0017`), which reached us
+  in a package for that game with the D3DMetal fallback (`0018`).
 - **The Cyberpunk 2077 patch** comes from a community script published
   anonymously; its author is not known. MacGameFix writes one of its five
   words.

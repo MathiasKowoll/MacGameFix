@@ -177,6 +177,14 @@
       "env": {},
       "symptom": "Failed to play movie"
     },
+    "PBZ.exe": {
+      "title": "Phantom Blade Zero",
+      "backend": "d3dmetal",
+      "codec": "",
+      "gptk": "4",
+      "env": {},
+      "symptom": "Never opens a window under Rosetta (Denuvo)"
+    },
     "re2.exe": {
       "title": "RESIDENT EVIL 2",
       "backend": "d3dmetal",
