@@ -1,0 +1,55 @@
+{
+  "title": "Phantom Blade Zero",
+  "installer": "install-pbz-fix.sh",
+  "scope": "prefix",
+  "executable": "PBZ.exe",
+  "carrierDirectory": "platform/steam",
+  "alsoRuns": [],
+  "summary": "Never opens a window under Rosetta: its Denuvo checks the CPU for instructions Rosetta does not have. The Wine modules' ntdll shows them to this executable alone, it loads Microsoft's Visual C++ runtime first, and an H.264 decoder that offers NV12 brings back the black menu video.",
+  "page": null,
+  "installs": [
+    "bottles.sh",
+    "msmpeg2vdec-sw.dll"
+  ],
+  "builtFrom": [
+    "h264-software-decoder.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [
+    {
+      "name": "Hrava",
+      "url": null,
+      "note": "Wrote the ntdll patch that makes Rosetta's CPU look like the one Denuvo checks for (engine patch 0017), handed to us in a package for this game with the D3DMetal fallback (0018)."
+    },
+    {
+      "name": "winevideo",
+      "url": "https://github.com/Jfishin/winevideo",
+      "note": "Its winegstreamer patch 0006 is what the decoder DLL answers at the COM boundary: NV12 offered, no D3D awareness, a D3D manager refused."
+    }
+  ],
+  "excerpts": [
+    {
+      "file": "install-pbz-fix.sh",
+      "from": "^values\\(\\) \\{",
+      "to": "^\\}",
+      "note": "Ten values, for PBZ.exe only: the CPUID bits the Wine modules' ntdll adds when asked, Microsoft's Visual C++ runtime loaded before Wine's, and the H.264 decoder below loaded native."
+    },
+    {
+      "file": "h264-software-decoder.c",
+      "from": "^static HRESULT WINAPI decoder_GetOutputAvailableType",
+      "to": "^\\}",
+      "note": "NV12 offered first: CrossOver's list on macOS skips it, and the YV12 type renamed is the same frame size, stride and image size."
+    },
+    {
+      "file": "h264-software-decoder.c",
+      "from": "^static HRESULT WINAPI decoder_ProcessMessage",
+      "to": "^\\}",
+      "note": "A D3D manager refused, as a decoder that is not D3D aware does, so Electra decodes into system memory."
+    }
+  ],
+  "symptom": "Under Rosetta one core runs at 100% and no window ever opens. Once it starts, the menu video is black.",
+  "cause": "Its Denuvo checks the CPU for CLFLUSHOPT, CLWB and RDPID, which Rosetta does not have, and expects x86 answers for debug registers and non-canonical addresses. The game also quits on Wine's builtin Visual C++ runtime. Its menu video goes through Unreal's Electra, which takes NV12 only, and CrossOver's H.264 decoder offers no NV12 on macOS while saying it is D3D aware.",
+  "fix": "The Wine modules' ntdll.so (engine patches 0017 and 0018) shows those bits to a process that asks and emulates the instructions; this fix asks for PBZ.exe in the prefix's registry, and loads its Visual C++ runtime native first. A decoder DLL of ours, loaded for PBZ.exe from the prefix's system32, serves Microsoft's H.264 decoder class over CrossOver's and offers NV12 without D3D, as winevideo's patch 0006 does inside Wine. For DLSS, set D3DM_SUPPORT_DXR=0 (NotProton: the game's launch options; a CrossOver bottle: [EnvironmentVariables] in its cxbottle.conf): with DLSS available, D3DMetal's NVAPI offers NVIDIA opacity micromaps it cannot build, and the game closes as it loads a level.",
+  "backend": "D3DMetal 4 on the Intel side (Rosetta): CrossOver Preview 27, or 26.3 with D3DMetal 4.",
+  "crossover": "CrossOver Preview 27 (27.0.0.41073), NotProton runner, 2026-11-01"
+}

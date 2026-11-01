@@ -180,6 +180,36 @@ last="$(ng3 --restore 2>/dev/null | tail -1)"
   && ! /usr/bin/grep -q "NINJA GAIDEN" "$pfx/user.reg" \
   && say ok "ng3 in a Steam Play prefix: restored, the overrides gone" || say FAIL "ng3 prefix: restore ($last, $(ng3st))"
 
+# Phantom Blade Zero's fix is registry values for PBZ.exe and the H.264 decoder
+# in system32: tried in a fake Steam Play prefix, as NINJA GAIDEN 3's.
+pfx="$W/pbzpfx"; psys="$pfx/drive_c/windows/system32"; mkdir -p "$psys"
+echo "CrossOver's own msmpeg2vdec" > "$psys/msmpeg2vdec.dll"
+printf 'WINE REGISTRY Version 2\n;; All keys relative to \\\\User\\\\S-1-5-21-0-0-0-1000\n\n#arch=win64\n' > "$pfx/user.reg"
+touch "$pfx/system.reg"
+pbzst() { MGVF_BOTTLE="$pfx" st install-pbz-fix.sh "$W/pbz"; }
+pbz() { MGVF_BOTTLE="$pfx" /bin/bash "$FIX/install-pbz-fix.sh" "$W/pbz" "$@"; }
+mkdir -p "$W/pbz"
+[ "$(pbzst)" = absent ] && say ok "pbz in a Steam Play prefix: absent before" || say FAIL "pbz prefix: absent before ($(pbzst))"
+pbz > "$W/pbz.install.log" 2>&1 || say FAIL "pbz prefix: install failed: $(tail -2 "$W/pbz.install.log")"
+[ "$(pbzst)" = installed ] && /usr/bin/grep -qF '"WINE_ROSETTA_CPUID7_OR"="01800000,00400000"' "$pfx/user.reg" \
+  && [ "$(/usr/bin/grep -c '"=\"native,builtin\"' "$pfx/user.reg")" = 9 ] \
+  && /usr/bin/grep -qF "[Software\\\\Wine\\\\AppDefaults\\\\PBZ.exe\\\\Environment]" "$pfx/user.reg" \
+  && cmp -s "$psys/msmpeg2vdec.dll" "$FIX/msmpeg2vdec-sw.dll" \
+  && [ "$(cat "$psys/msmpeg2vdec.dll.mgvf-stock")" = "CrossOver's own msmpeg2vdec" ] \
+  && say ok "pbz in a Steam Play prefix: the CPUID value, nine overrides and the decoder, for PBZ.exe only" || say FAIL "pbz prefix: installed ($(pbzst))"
+MGVF_BOTTLE="$pfx" /bin/bash -c '. "$0/bottles.sh"; user_reg_edit "$1" delete "Software\\Wine\\AppDefaults\\PBZ.exe\\DllOverrides" "*msvcp140"' "$FIX" "$pfx"
+[ "$(pbzst)" = half ] && say ok "pbz in a Steam Play prefix: a value taken out is half" || say FAIL "pbz prefix: half ($(pbzst))"
+pbz > "$W/pbz.install2.log" 2>&1 && [ "$(pbzst)" = installed ] && say ok "pbz in a Steam Play prefix: installing again repairs it" || say FAIL "pbz prefix: repair ($(pbzst))"
+cp "$psys/msmpeg2vdec.dll.mgvf-stock" "$psys/msmpeg2vdec.dll"
+[ "$(pbzst)" = half ] && say ok "pbz in a Steam Play prefix: the decoder put back by a prefix update is half" || say FAIL "pbz prefix: decoder half ($(pbzst))"
+pbz > "$W/pbz.install3.log" 2>&1 && [ "$(pbzst)" = installed ] \
+  && [ "$(cat "$psys/msmpeg2vdec.dll.mgvf-stock")" = "CrossOver's own msmpeg2vdec" ] \
+  && say ok "pbz in a Steam Play prefix: installing over it keeps CrossOver's file once" || say FAIL "pbz prefix: reinstall over stock ($(pbzst))"
+last="$(pbz --restore 2>/dev/null | tail -1)"
+[ "$last" = restored ] && [ "$(pbzst)" = absent ] && ! /usr/bin/grep -q '"WINE_ROSETTA_CPUID7_OR"\|native,builtin' "$pfx/user.reg" \
+  && [ "$(cat "$psys/msmpeg2vdec.dll")" = "CrossOver's own msmpeg2vdec" ] && [ ! -e "$psys/msmpeg2vdec.dll.mgvf-stock" ] \
+  && say ok "pbz in a Steam Play prefix: restored, every value gone and CrossOver's decoder back" || say FAIL "pbz prefix: restore ($last, $(pbzst))"
+
 # Cyberpunk 2077's fix writes four bytes into a macOS game's executable and signs
 # the app again, so it is tried on a fake app: a small executable built here,
 # with the word the recipe changes behind a tag the test finds it by, signed ad

@@ -79,8 +79,9 @@ Mortal Shell 2, Resonance: A Plague Tale Legacy and both Life is Strange titles
 from 4.0b3). The game says so. It is only a notice: the fix still installs.
 
 The exception is a fix that also writes registry keys: the Kingdom Hearts
-titles and NieR Replicant, and NINJA GAIDEN 3: Razor's Edge, whose DLLs go
-there too and nothing into its folder. Those keys go into the game's prefix, a
+titles and NieR Replicant, NINJA GAIDEN 3: Razor's Edge, whose DLLs go
+there too and nothing into its folder, and Phantom Blade Zero, whose H.264
+decoder goes there with its registry values. Those keys go into the game's prefix, a
 Steam Play prefix (`compatdata/<appid>/pfx`) or a CrossOver bottle, so the game
 needs to have run there once. The prefix is shown in the game's *Goes into* column. When there is
 more than one, that column is a menu where any number of them can be checked, and the fix goes into
@@ -224,6 +225,7 @@ open Steam there (engine/README.md, "The options").
 | Nioh 2 | Cutscene refuses to play, then a crash | DXMT |
 | Nioh 3 | "Failed to play movie" | D3DMetal |
 | Persona 5 Strikers | Video never starts; sound only | DXMT |
+| Phantom Blade Zero | Never opens a window under Rosetta (Denuvo); black menu video | D3DMetal 4, the Wine modules on, a prefix |
 | RESIDENT EVIL 2 | Crashes when a video plays | D3DMetal |
 | RESIDENT EVIL 3 | Crashes when a video plays | D3DMetal |
 | RESONANCE: A Plague Tale Legacy | "Shader Model 6.7 is not supported" | D3DMetal |
@@ -319,6 +321,74 @@ A CrossOver update that updated the bottle was measured putting back Wine's
 own copies of three of the four DLLs. The game then shows as needing repair,
 and installing again puts them back; with "Keep it applied" on, the agent does
 it.
+
+### Phantom Blade Zero needs the Wine modules
+
+Under Rosetta its Denuvo spins one core and never opens a window: it checks the
+CPU for CLFLUSHOPT, CLWB and RDPID, which Rosetta does not have. The Wine modules'
+`ntdll.so` (engine patches `0017` and `0018`, see
+[engine/README.md](engine/README.md#rosettas-cpu-for-copy-protection)) shows them
+to a process that asks with `WINE_ROSETTA_CPUID7_OR` and emulates the two
+instructions. The fix asks for `PBZ.exe` alone, in the prefix's registry
+(`AppDefaults\PBZ.exe\Environment`), where a game started by a Steam client that
+was already running still finds it, and loads Microsoft's Visual C++ runtime
+before Wine's for it, which the game checks. Nothing goes into its folder, and no
+launch option is needed.
+
+Its menu video is H.264 played by Unreal's Electra, which takes NV12 frames and
+nothing else. CrossOver's H.264 decoder does not offer NV12 on macOS (its CW HACK
+26265) and says it is D3D aware, so the menu stays black. The fix puts
+`msmpeg2vdec.dll` (built from `fixes/h264-software-decoder.c`) into the prefix's
+`system32` and loads it for `PBZ.exe` alone: it serves the same decoder over
+CrossOver's own and answers as winevideo's patch `0006` makes Wine answer, NV12
+offered and no D3D awareness, so Electra decodes into system memory. The engine
+is not changed, and the one file serves CrossOver 26.3 and Preview 27, whose
+decoder code is the same there. CrossOver's file stays beside it as
+`msmpeg2vdec.dll.mgvf-stock`.
+
+For DLSS, set `D3DM_SUPPORT_DXR=0`. With DLSS available (D3DMetal's default) PBZ
+turns on NVIDIA's opacity micromaps, because D3DMetal's NVAPI says it supports
+them; D3DMetal then cannot build them (`Unknown geometry type 2`) and the game
+closes as it loads a level, whatever upscaler its menu has. With D3DMetal's ray
+tracing off it does not ask for them, and DLSS works. Without the variable, turn
+DLSS off for the game instead (`D3DM_ENABLE_METALFX=0`). D3DMetal reads these
+from the macOS environment, which the prefix's registry does not reach, so they
+go where the CrossOver that runs the game takes variables:
+
+- NotProton (a Steam Play prefix): the game's launch options in Steam,
+  `D3DM_SUPPORT_DXR=0 %command%`.
+- A CrossOver bottle: the bottle's `cxbottle.conf`, under
+  `[EnvironmentVariables]`, as `"D3DM_SUPPORT_DXR" = "0"`, with CrossOver
+  closed. The Windows Steam inside a bottle does not read `VAR=value %command%`
+  launch options. CrossOver's own DLSS switch for the bottle is
+  `D3DM_ENABLE_METALFX` and does not set this one. Every game of the bottle gets
+  it, so a bottle of its own keeps ray tracing for the others.
+
+In a CrossOver Preview 27 bottle, everything but that variable is in the
+bottle's settings:
+
+1. Turn the Wine modules on for CrossOver Preview in MacGameFix, and install
+   this fix for the bottle.
+2. In the bottle's settings: graphics D3DMetal, AVX on (every run played had it
+   on), MSync on.
+3. Without DLSS: turn DLSS off there, and that is all.
+4. With DLSS: leave DLSS on, quit CrossOver, add `"D3DM_SUPPORT_DXR" = "0"`
+   under `[EnvironmentVariables]` in the bottle's `cxbottle.conf`, and open
+   CrossOver again.
+
+NotProton's pipeline cache (`NOTPROTON_ROSETTA_PIPELINE_CACHE`), on in every run
+played, does not exist in a bottle. These steps have not been played yet.
+
+It needs the Wine modules on for the CrossOver that runs it (CrossOver's own
+`ntdll.so` ignores the value), the Intel side, and D3DMetal 4: CrossOver Preview
+27 carries it, 26.3 carries 3.0, so PBZ is for Preview 27. Played on 2026-11-01
+on Preview 41073's NotProton runner, first with the values as launch options for
+32 minutes, then through this installer with CrossOver's own winegstreamer: the
+menu video played from our decoder, the pad vibrated, and with
+`D3DM_SUPPORT_DXR=0` a level loaded with DLSS on. The decoder DLL was measured
+with a probe on all four CrossOvers: NV12 offered and the clip decoded (30 of 30
+frames, 29 on the 26.3 runner), where CrossOver's own offers no NV12. In a
+CrossOver bottle the game has not been played.
 
 ### Beast of Reincarnation needs CrossOver Preview
 
@@ -770,6 +840,7 @@ how, is in the game's page under `legacy/wiki/`.
 | `install-ng4-fix.sh` | NINJA GAIDEN 4 | `dstorage.dll` (from `dstorage-ng4.dll`); `dstoragecore.dll` renamed aside | `tools/ng4-observe.c`, built with `-DNG4_FIX` | [NINJA GAIDEN 4](legacy/wiki/Ninja-Gaiden-4.md) |
 | `install-nioh-bridge.sh` | Nioh, Nioh 2 | `GfeSDK.dll`, and the reader | `p5s-video-bridge.c` | [Nioh](legacy/wiki/Nioh.md), [Nioh 2](legacy/wiki/Nioh-2.md) |
 | `install-nioh3-bridge.sh` | Nioh 3 | `amd_ags_x64.dll` (from `amd_ags_x64-nioh3.dll`), and the reader | `dwo-video-bridge.c` | [Nioh 3](legacy/wiki/Nioh-3.md) |
+| `install-pbz-fix.sh` | Phantom Blade Zero | Nothing: ten registry values for `PBZ.exe` in the prefix (the CPUID bits the Wine modules' `ntdll.so` adds, native-first overrides for its Visual C++ runtime and for the decoder) and `msmpeg2vdec.dll` in its `system32` (from `msmpeg2vdec-sw.dll`) | `h264-software-decoder.c`; the engine's `ntdll.so` does the rest (`engine/patches/*/0017`, `0018`) | [Its section](#phantom-blade-zero-needs-the-wine-modules) |
 | `install-p5s-bridge.sh` | Persona 5 Strikers | `amd_ags_x64.dll`, and the reader | `p5s-video-bridge.c` | [Persona 5 Strikers](legacy/wiki/Persona-5-Strikers.md) |
 | `install-resonance-fix.sh` | RESONANCE: A Plague Tale Legacy | `NvCloth_x64.dll` (from `NvCloth_x64-resonance.dll`) | `shader-floor-fix.c` | [RESONANCE](legacy/wiki/Resonance-A-Plague-Tale-Legacy.md) |
 | `install-tmnt-fix.sh` | TMNT: Splintered Fate | `fmod.dll` (from `fmod-tmnt.dll`) | `d3d12-guards.c` | [TMNT](legacy/wiki/TMNT-Splintered-Fate.md) |
@@ -813,6 +884,9 @@ how, is in the game's page under `legacy/wiki/`.
   its fix installs (LGPL-2.1-or-later).
 - **[d9vk](https://github.com/Sikarugir-App/d9vk) by Sikarugir-App** (zlib):
   the Direct3D 9 that NINJA GAIDEN 3 runs on.
+- **Hrava** wrote the ntdll patch that makes Rosetta's CPU look like the one
+  Phantom Blade Zero's Denuvo checks for (engine patch `0017`), which reached us
+  in a package for that game with the D3DMetal fallback (`0018`).
 - **The Cyberpunk 2077 patch** comes from a community script published
   anonymously; its author is not known. MacGameFix writes one of its five
   words.

@@ -1097,6 +1097,80 @@
       "notNeededFromGptk": null
     },
     {
+      "title": "Phantom Blade Zero",
+      "installer": "install-pbz-fix.sh",
+      "scope": "prefix",
+      "executable": "PBZ.exe",
+      "carrierDirectory": "platform/steam",
+      "alsoRuns": [],
+      "summary": "Never opens a window under Rosetta: its Denuvo checks the CPU for instructions Rosetta does not have. The Wine modules' ntdll shows them to this executable alone, it loads Microsoft's Visual C++ runtime first, and an H.264 decoder that offers NV12 brings back the black menu video.",
+      "page": null,
+      "installs": [
+        "bottles.sh",
+        "msmpeg2vdec-sw.dll"
+      ],
+      "builtFrom": [
+        "h264-software-decoder.c"
+      ],
+      "license": "GPL-3.0-or-later",
+      "credits": [
+        {
+          "name": "Hrava",
+          "url": null,
+          "note": "Wrote the ntdll patch that makes Rosetta's CPU look like the one Denuvo checks for (engine patch 0017), handed to us in a package for this game with the D3DMetal fallback (0018)."
+        },
+        {
+          "name": "winevideo",
+          "url": "https://github.com/Jfishin/winevideo",
+          "note": "Its winegstreamer patch 0006 is what the decoder DLL answers at the COM boundary: NV12 offered, no D3D awareness, a D3D manager refused."
+        }
+      ],
+      "excerpts": [
+        {
+          "file": "fixes/install-pbz-fix.sh",
+          "symbol": null,
+          "note": "Ten values, for PBZ.exe only: the CPUID bits the Wine modules' ntdll adds when asked, Microsoft's Visual C++ runtime loaded before Wine's, and the H.264 decoder below loaded native.",
+          "language": "bash",
+          "startLine": 171,
+          "endLine": 177,
+          "commit": "e9a36f5924d22e07200569506deb7de381aa9d47",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/e9a36f5924d22e07200569506deb7de381aa9d47/fixes/install-pbz-fix.sh#L171-L177",
+          "code": "values() {\n  printf '%s|%s|%s\\n' \"$ENV_KEY\" \"$CPUID_NAME\" \"$CPUID_DATA\"\n  local d\n  for d in $DLLS; do printf '%s|*%s|native,builtin\\n' \"$DLL_KEY\" \"$d\"; done\n  # native,builtin: should the prefix lose our file, CrossOver's decoder loads.\n  printf '%s|*msmpeg2vdec|native,builtin\\n' \"$DLL_KEY\"\n}"
+        },
+        {
+          "file": "fixes/h264-software-decoder.c",
+          "symbol": null,
+          "note": "NV12 offered first: CrossOver's list on macOS skips it, and the YV12 type renamed is the same frame size, stride and image size.",
+          "language": "c",
+          "startLine": 214,
+          "endLine": 243,
+          "commit": "e9a36f5924d22e07200569506deb7de381aa9d47",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/e9a36f5924d22e07200569506deb7de381aa9d47/fixes/h264-software-decoder.c#L214-L243",
+          "code": "static HRESULT WINAPI decoder_GetOutputAvailableType(IMFTransform *iface, DWORD id, DWORD index, IMFMediaType **type)\n{\n    struct decoder *decoder = impl(iface);\n    IMFMediaType *first, *nv12 = NULL;\n    HRESULT hr;\n\n    if (index)\n        return IMFTransform_GetOutputAvailableType(decoder->inner, id, index, type);\n\n    if (FAILED(hr = IMFTransform_GetOutputAvailableType(decoder->inner, id, 0, &first)))\n        return hr;\n    if (is_subtype(first, &MFVideoFormat_NV12) || !is_subtype(first, &MFVideoFormat_YV12))\n    {\n        *type = first;  /* NV12 already offered, or a list this was not written for */\n        return S_OK;\n    }\n\n    if (SUCCEEDED(hr = MFCreateMediaType(&nv12))\n            && SUCCEEDED(hr = IMFMediaType_CopyAllItems(first, (IMFAttributes *)nv12))\n            && SUCCEEDED(hr = IMFMediaType_SetGUID(nv12, &MF_MT_SUBTYPE, &MFVideoFormat_NV12)))\n    {\n        *type = nv12;\n        if (!InterlockedExchange(&decoder->offered_nv12, 1))\n            say(\"decoder %p: offering NV12 first\", decoder);\n    }\n    else if (nv12)\n        IMFMediaType_Release(nv12);\n    IMFMediaType_Release(first);\n    return hr;\n}"
+        },
+        {
+          "file": "fixes/h264-software-decoder.c",
+          "symbol": null,
+          "note": "A D3D manager refused, as a decoder that is not D3D aware does, so Electra decodes into system memory.",
+          "language": "c",
+          "startLine": 291,
+          "endLine": 301,
+          "commit": "e9a36f5924d22e07200569506deb7de381aa9d47",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/e9a36f5924d22e07200569506deb7de381aa9d47/fixes/h264-software-decoder.c#L291-L301",
+          "code": "static HRESULT WINAPI decoder_ProcessMessage(IMFTransform *iface, MFT_MESSAGE_TYPE message, ULONG_PTR param)\n{\n    struct decoder *decoder = impl(iface);\n\n    if (message == MFT_MESSAGE_SET_D3D_MANAGER && param)\n    {\n        say(\"decoder %p: refused a D3D manager\", decoder);\n        return E_NOTIMPL;\n    }\n    return IMFTransform_ProcessMessage(decoder->inner, message, param);\n}"
+        }
+      ],
+      "symptom": "Under Rosetta one core runs at 100% and no window ever opens. Once it starts, the menu video is black.",
+      "cause": "Its Denuvo checks the CPU for CLFLUSHOPT, CLWB and RDPID, which Rosetta does not have, and expects x86 answers for debug registers and non-canonical addresses. The game also quits on Wine's builtin Visual C++ runtime. Its menu video goes through Unreal's Electra, which takes NV12 only, and CrossOver's H.264 decoder offers no NV12 on macOS while saying it is D3D aware.",
+      "fix": "The Wine modules' ntdll.so (engine patches 0017 and 0018) shows those bits to a process that asks and emulates the instructions; this fix asks for PBZ.exe in the prefix's registry, and loads its Visual C++ runtime native first. A decoder DLL of ours, loaded for PBZ.exe from the prefix's system32, serves Microsoft's H.264 decoder class over CrossOver's and offers NV12 without D3D, as winevideo's patch 0006 does inside Wine. For DLSS, set D3DM_SUPPORT_DXR=0 (NotProton: the game's launch options; a CrossOver bottle: [EnvironmentVariables] in its cxbottle.conf): with DLSS available, D3DMetal's NVAPI offers NVIDIA opacity micromaps it cannot build, and the game closes as it loads a level.",
+      "backend": "D3DMetal 4 on the Intel side (Rosetta): CrossOver Preview 27, or 26.3 with D3DMetal 4.",
+      "crossover": "CrossOver Preview 27 (27.0.0.41073), NotProton runner, 2026-11-01",
+      "pageUrl": null,
+      "graphicsBackend": "d3dmetal",
+      "gptk": "4",
+      "notNeededFromGptk": null
+    },
+    {
       "title": "RESIDENT EVIL 2",
       "installer": "install-re-vc1-fix.sh",
       "scope": "folder",
