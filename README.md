@@ -51,13 +51,15 @@ and where a fix that writes registry keys goes, shown *All* (every supported gam
 *Fixed*, *Not fixed*, or *All fixes*, which adds the fixes for games that are not on this Mac; under
 the table, **It Works…** and **Works Without the Fix…** report a game you played, one selected at a
 time (see [Reporting a problem](#reporting-a-problem));
-**Wine Modules**, the one part that changes CrossOver
-itself (patched Wine modules for a DualSense's haptics on a cable and over Bluetooth, the pad on
-Bluetooth as if on a cable, XInput, trigger effects for a game that sets none, the pad's audio output
-through SetupAPI and XAudio2, and the Edge or the pad shown to a game as another pad, see
-[`engine/README.md`](engine/README.md)), with a
-switch and an Update button for every CrossOver app and NotProton runner, and
-the modules' own updates; **Game Feel**, the DualSense's options for every game
+**Improvements**, the one part that changes CrossOver
+itself, one section each: *DualSense controllers* (patched Wine modules for a DualSense's haptics on a
+cable and over Bluetooth, the pad on Bluetooth as if on a cable, XInput, trigger effects for a game
+that sets none, the pad's audio output through SetupAPI and XAudio2, and the Edge or the pad shown to a
+game as another pad) and *Copy protection under Rosetta* (the Intel side's `ntdll.so`, for
+Denuvo-protected games such as Phantom Blade Zero and Persona 4 Golden), see
+[`engine/README.md`](engine/README.md), each with a switch and an Update button for every CrossOver
+app and NotProton runner; then *Game Mode*, which changes nothing in CrossOver, and the modules' own
+updates; **Game Feel**, the DualSense's options for every game
 and, in a table of the Steam games on this Mac, for each one, with what the
 modules saw each game do; **Report**, for a game that does not work (see
 [Reporting a problem](#reporting-a-problem)); and **Settings**, with the background agent, the game
@@ -128,17 +130,20 @@ until you turn it on, and the fixes stay in the games' own folders as before.
   versioned on its own: the game fixes (the installers and every file they use)
   and the Wine modules. New modules for a new CrossOver build come without
   touching the fixes, and the other way round. Each has its own choice: *Game
-  fixes* in Settings, *New Wine modules* in Wine Modules:
+  fixes* in Settings, *New modules* in Improvements:
   - *Install them automatically*: the agent takes the catalog without a new app.
   - *Ask before installing them*: the agent checks the catalog's signature and
     tells you, and installs nothing. *Install New Fixes* or *Install New Wine
     Modules*, in the menu bar or in Settings, takes it.
   - *Do not look for them*: the agent does not ask the releases.
 
-  Wine Modules lists every CrossOver app and NotProton runner, by its release
-  ("CrossOver Preview 20261015"), with a switch, and *All* and *None*. The switch
-  is the action: on installs the modules there, off puts CrossOver's own files
-  back. Only a CrossOver of a build and Wine the modules were built for can be
+  Improvements lists, under each improvement, every CrossOver app and NotProton
+  runner by its release ("CrossOver Preview 20261015"), with a switch, and *All*
+  and *None*. The switch is the action: on installs that improvement there, off
+  puts CrossOver's own files back, and the other improvement is left as it is.
+  *Copy protection under Rosetta* is on wherever the controllers are, unless it
+  is turned off there. A game whose fix needs an improvement that is in no
+  CrossOver says so in Games, beside the fix, with an *Install…* button. Only a CrossOver of a build and Wine the modules were built for can be
   turned on; the others say so. Turning on a CrossOver app asks first. With the
   Wine modules on automatic, the agent keeps them in the CrossOver installs that
   are on: it puts them back after a CrossOver or NotProton update put CrossOver's
@@ -693,7 +698,7 @@ change to the app itself.
    change.
 
 Apps then take it within a day, or at once with *Check for New Fixes* in the
-menu bar or *Check Now* in Wine Modules. First done on 2026-10-22, for Mortal
+menu bar or *Check Now* in Improvements. First done on 2026-10-22, for Mortal
 Kombat 11's movies (#14) in 1.5.6.
 
 **Testing it.** `app/test-automation.sh` checks all of it offline, with a

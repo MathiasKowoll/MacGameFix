@@ -98,6 +98,11 @@ for script in sorted((root / "fixes").glob("install-*.sh")):
     # The logs the fix's DLL writes beside itself while the game runs, by name:
     # a fix's report (It Works… in Games) carries their last lines.
     logs = re.search(r"^# MGVF-LOG: (.*)$", text, re.M)
+    # The improvements of the Improvements tab the fix needs in the CrossOver that runs
+    # the game (MGVF-NEEDS: rosetta), and, for a fix in the prefix, whether it writes
+    # registry values alone (MGVF-IN-PREFIX: registry) rather than DLLs as well.
+    needs = re.search(r"^# MGVF-NEEDS: (.*)$", text, re.M)
+    in_prefix = re.search(r"^# MGVF-IN-PREFIX: (\S+)", text, re.M)
     for m in re.finditer(r"^# MGVF-GAME: (.*?) \| (.*?) \|(.*)$", text, re.M):
         # An optional fourth field names the other executables the title runs as
         # (MK11.exe beside MK11_DX12.exe), so the app knows it is running either way.
@@ -121,6 +126,8 @@ for script in sorted((root / "fixes").glob("install-*.sh")):
             "exe": exe,
             "alsoRuns": also,
             "logs": logs.group(1).split() if logs else [],
+            "improvements": needs.group(1).split() if needs else [],
+            "inPrefixWhat": in_prefix.group(1) if in_prefix else "",
             "carrierDir": carrier,
             "script": script.name,
             # folder, prefix or app: the app then says where the fix goes.

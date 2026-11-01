@@ -34,6 +34,36 @@
           ],
           "commit": "9ec59e2d6a58cd0f24483a0299b7e29993056644",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/9ec59e2d6a58cd0f24483a0299b7e29993056644/engine/patches/wine-11.0/0003-mmdevapi.patch"
+        },
+        {
+          "name": "0017-ntdll-rosetta-cpu-fidelity.patch",
+          "file": "engine/patches/wine-11.0/0017-ntdll-rosetta-cpu-fidelity.patch",
+          "subject": "Under Rosetta the CPU looks more like the x86 one copy protection checks for: CPUID leaf 7 bits on request, CLWB and RDPID, debug-register breakpoints, non-canonical faults",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "852082a381eb01baeb08620f7e0d5f2245bab327",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/852082a381eb01baeb08620f7e0d5f2245bab327/engine/patches/wine-11.0/0017-ntdll-rosetta-cpu-fidelity.patch"
+        },
+        {
+          "name": "0018-ntdll-d3dmetal-fallback.patch",
+          "file": "engine/patches/wine-11.0/0018-ntdll-d3dmetal-fallback.patch",
+          "subject": "A 64-bit process with CX_GRAPHICS_BACKEND=d3dmetal finds D3DMetal's DLLs first, even when CrossOver did not route it",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "852082a381eb01baeb08620f7e0d5f2245bab327",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/852082a381eb01baeb08620f7e0d5f2245bab327/engine/patches/wine-11.0/0018-ntdll-d3dmetal-fallback.patch"
+        },
+        {
+          "name": "0019-ntdll-rosetta-smc-cpuid.patch",
+          "file": "engine/patches/wine-11.0/0019-ntdll-rosetta-smc-cpuid.patch",
+          "subject": "Under Rosetta, a cpuid that self-modifying code wrote right before running it, which Rosetta skips and faults after, is run by ntdll",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "b799166362e28fefac0376ba567aaa6395248b0c",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/b799166362e28fefac0376ba567aaa6395248b0c/engine/patches/wine-11.0/0019-ntdll-rosetta-smc-cpuid.patch"
         }
       ]
     },
@@ -199,6 +229,36 @@
           ],
           "commit": "92ac862b9c77b24f5d2b792edd8060a0f5d53ff8",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/92ac862b9c77b24f5d2b792edd8060a0f5d53ff8/engine/patches/wine-11.17/0016-winebus-rumble-flag-0x02-keeps-the-motors.patch"
+        },
+        {
+          "name": "0017-ntdll-rosetta-cpu-fidelity.patch",
+          "file": "engine/patches/wine-11.17/0017-ntdll-rosetta-cpu-fidelity.patch",
+          "subject": "Under Rosetta the CPU looks more like the x86 one copy protection checks for: CPUID leaf 7 bits on request, CLWB and RDPID, debug-register breakpoints, non-canonical faults",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "852082a381eb01baeb08620f7e0d5f2245bab327",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/852082a381eb01baeb08620f7e0d5f2245bab327/engine/patches/wine-11.17/0017-ntdll-rosetta-cpu-fidelity.patch"
+        },
+        {
+          "name": "0018-ntdll-d3dmetal-fallback.patch",
+          "file": "engine/patches/wine-11.17/0018-ntdll-d3dmetal-fallback.patch",
+          "subject": "A 64-bit process with CX_GRAPHICS_BACKEND=d3dmetal finds D3DMetal's DLLs first, even when CrossOver did not route it",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "852082a381eb01baeb08620f7e0d5f2245bab327",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/852082a381eb01baeb08620f7e0d5f2245bab327/engine/patches/wine-11.17/0018-ntdll-d3dmetal-fallback.patch"
+        },
+        {
+          "name": "0019-ntdll-rosetta-smc-cpuid.patch",
+          "file": "engine/patches/wine-11.17/0019-ntdll-rosetta-smc-cpuid.patch",
+          "subject": "Under Rosetta, a cpuid that self-modifying code wrote right before running it, which Rosetta skips and faults after, is run by ntdll",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "b799166362e28fefac0376ba567aaa6395248b0c",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/b799166362e28fefac0376ba567aaa6395248b0c/engine/patches/wine-11.17/0019-ntdll-rosetta-smc-cpuid.patch"
         }
       ]
     }

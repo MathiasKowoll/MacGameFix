@@ -1,9 +1,17 @@
 #!/bin/bash
-# Puts the DualSense Wine modules into one CrossOver, or takes them out.
+# Puts the Wine modules into one CrossOver, or takes them out.
 #
 #   engine-modules.sh <CrossOver folder> --status    installed, outdated, half, absent or nomodules
 #   engine-modules.sh <CrossOver folder>             install
 #   engine-modules.sh <CrossOver folder> --restore   put CrossOver's own files back
+#   ... --part=controls|rosetta                      the same for one improvement only
+#
+# The modules are two improvements, each installed and removed on its own:
+#   controls  the DualSense's haptics, triggers, Bluetooth and XInput: every module but ntdll.so
+#   rosetta   Rosetta's CPU for copy protection: the Intel side's ntdll.so
+# Without --part every improvement the build carries is meant, as before there were two.
+# An improvement removed with --part is noted in the backup folder, so that its status
+# is absent and not outdated while the other one stays in.
 #
 # <CrossOver folder> is the folder that holds lib/wine: a NotProton runner's
 #   ~/Library/Application Support/notproton/runners/crossover-<build>[-fex]/CrossOver
@@ -27,8 +35,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ROOT="${1:-}"; MODE="${2:-install}"
+ROOT="${1:-}"; MODE=install; PART=all
+[ $# -gt 0 ] && shift
+for arg in "$@"; do
+  case "$arg" in
+    --part=controls|--part=rosetta) PART="${arg#--part=}" ;;
+    --part=*) printf 'Unknown improvement: %s\n' "${arg#--part=}"; exit 2 ;;
+    *) MODE="$arg" ;;
+  esac
+done
 ROOT="${ROOT%/}"
+# Which improvement a module belongs to.
+part_of() { case "${1##*/}" in ntdll.so) echo rosetta ;; *) echo controls ;; esac; }
+in_part() { [ "$PART" = all ] || [ "$(part_of "$1")" = "$PART" ]; }
 BACKUPS="${MGVF_ENGINE_BACKUP:-$HOME/Library/Application Support/MacGameFix/engine-backup}"
 LIB="$ROOT/lib/wine"
 MANIFEST="$HERE/engine-modules.json"
@@ -72,8 +91,9 @@ for side in x86_64 aarch64; do
   if [ -f "$(src "$side-unix/winecoreaudio.so")" ]; then
     FILES="$FILES $side-windows/winebus.sys $side-windows/mmdevapi.dll $side-unix/winecoreaudio.so"
     # winebus.so (the Bluetooth DualSense), hidclass.sys and xinput (XInput),
-    # then setupapi.dll and xaudio2_9.dll, came later; a build may not carry them.
-    for f in $side-unix/winebus.so $side-windows/hidclass.sys $side-windows/setupapi.dll $side-windows/xaudio2_9.dll $XINPUT_DLLS; do
+    # then setupapi.dll and xaudio2_9.dll, and ntdll.so (Rosetta's CPU fidelity, the
+    # Intel side only), came later; a build may not carry them.
+    for f in $side-unix/winebus.so $side-unix/ntdll.so $side-windows/hidclass.sys $side-windows/setupapi.dll $side-windows/xaudio2_9.dll $XINPUT_DLLS; do
       case "$f" in */*) ;; *) f="$side-windows/$f" ;; esac
       [ -f "$(src "$f")" ] && FILES="$FILES $f"
     done
@@ -81,8 +101,14 @@ for side in x86_64 aarch64; do
     say "This CrossOver has a $side side, and there are no modules for it."
   fi
 done
+# The improvement asked for alone.
+KEEP=""
+for f in $FILES; do in_part "$f" && KEEP="$KEEP $f"; done
+FILES="$KEEP"
 sha() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1; }
 recorded() { [ -f "$SAVE/installed.list" ] && sed -n "s|^\([0-9a-f]*\)  $1\$|\1|p" "$SAVE/installed.list"; }
+# The improvements taken out on their own, one name a line.
+is_off() { [ -f "$SAVE/off.list" ] && grep -qx "$(part_of "$1")" "$SAVE/off.list"; }
 
 state() {
   local n=0 ours=0 old=0 f t
@@ -90,8 +116,10 @@ state() {
     n=$((n + 1)); t="$(sha "$LIB/$f")"
     if [ "$t" = "$(sha "$(src "$f")")" ]; then ours=$((ours + 1))
     elif [ -n "$t" ] && [ "$t" = "$(recorded "$f")" ]; then old=$((old + 1))
-    # A file newer modules add, beside an install that did not have it: an update.
-    elif [ -n "$t" ] && [ -f "$SAVE/installed.list" ] && [ -z "$(recorded "$f")" ]; then old=$((old + 1)); fi
+    # A file newer modules add, beside an install that did not have it: an update,
+    # unless its improvement was taken out on its own.
+    elif [ -n "$t" ] && [ -f "$SAVE/installed.list" ] && [ -z "$(recorded "$f")" ] && ! is_off "$f"; then
+      old=$((old + 1)); fi
   done
   if [ "$n" -gt 0 ] && [ "$ours" -eq "$n" ]; then echo installed
   elif [ "$old" -gt 0 ] && [ $((ours + old)) -eq "$n" ]; then echo outdated
@@ -100,6 +128,7 @@ state() {
 }
 
 if [ "$MODE" = --status ]; then
+  [ -n "$FILES" ] || { say "There is nothing of this improvement for CrossOver $BUILD yet."; say nomodules; exit 0; }
   s="$(state)"
   [ "$s" = absent ] && [ -f "$SAVE/installed.list" ] && say "Something replaced the modules since they were installed."
   say "$s"; exit 0
@@ -128,7 +157,13 @@ case "$MODE" in
 install)
   [ -n "$FILES" ] || { say "Nothing to install for CrossOver $BUILD."; exit 1; }
   mkdir -p "$SAVE" || exit 1
+  # What another improvement put in stays on the list.
   : >"$SAVE/installed.list.new"
+  if [ -f "$SAVE/installed.list" ]; then
+    while read -r h f; do
+      case " $FILES " in *" $f "*) ;; *) printf '%s  %s\n' "$h" "$f" >>"$SAVE/installed.list.new" ;; esac
+    done <"$SAVE/installed.list"
+  fi
   for f in $FILES; do
     t="$(sha "$LIB/$f")"; s="$(sha "$(src "$f")")"
     # The first time, a file that is neither ours nor what we last put there is
@@ -149,16 +184,21 @@ install)
     printf '%s  %s\n' "$s" "$f" >>"$SAVE/installed.list.new"
   done
   mv "$SAVE/installed.list.new" "$SAVE/installed.list"
+  if [ -f "$SAVE/off.list" ]; then
+    for f in $FILES; do grep -vx "$(part_of "$f")" "$SAVE/off.list" >"$SAVE/off.list.new"; mv "$SAVE/off.list.new" "$SAVE/off.list"; done
+    [ -s "$SAVE/off.list" ] || rm -f "$SAVE/off.list"
+  fi
   resign
   say "Installed the modules for CrossOver $BUILD into $ROOT." ;;
 --restore)
   [ -d "$SAVE" ] || { say "Nothing of MacGameFix's is in $ROOT."; exit 0; }
   for f in x86_64-windows/winebus.sys x86_64-windows/mmdevapi.dll x86_64-windows/hidclass.sys \
-           x86_64-unix/winecoreaudio.so x86_64-unix/winebus.so aarch64-windows/winebus.sys \
+           x86_64-unix/winecoreaudio.so x86_64-unix/winebus.so x86_64-unix/ntdll.so aarch64-windows/winebus.sys \
            aarch64-windows/mmdevapi.dll aarch64-windows/hidclass.sys aarch64-unix/winecoreaudio.so \
            aarch64-unix/winebus.so x86_64-windows/setupapi.dll aarch64-windows/setupapi.dll \
            x86_64-windows/xaudio2_9.dll aarch64-windows/xaudio2_9.dll \
            $(for x in $XINPUT_DLLS; do printf 'x86_64-windows/%s aarch64-windows/%s ' "$x" "$x"; done); do
+    in_part "$f" || continue
     if [ -f "$SAVE/$f.absent" ]; then
       rm -f "$LIB/$f" 2>/dev/null || refused "$LIB/$f"
       say "  $f (CrossOver had none)"
@@ -168,7 +208,18 @@ install)
     cp -p "$SAVE/$f" "$LIB/$f" 2>/dev/null || refused "$LIB/$f"
     say "  $f"
   done
-  rm -rf "$SAVE"
+  # One improvement out: its lines leave the list and it is noted as off. The folder goes
+  # with the last of them, as it went with everything before.
+  if [ "$PART" != all ] && [ -f "$SAVE/installed.list" ]; then
+    : >"$SAVE/installed.list.new"
+    while read -r h f; do in_part "$f" || printf '%s  %s\n' "$h" "$f" >>"$SAVE/installed.list.new"; done <"$SAVE/installed.list"
+    mv "$SAVE/installed.list.new" "$SAVE/installed.list"
+  fi
+  if [ "$PART" = all ] || [ ! -s "$SAVE/installed.list" ]; then
+    rm -rf "$SAVE"
+  else
+    grep -qx "$PART" "$SAVE/off.list" 2>/dev/null || echo "$PART" >>"$SAVE/off.list"
+  fi
   resign
   say "Put CrossOver's own files back in $ROOT." ;;
 *) sed -n '4,6p' "$0"; exit 2 ;;

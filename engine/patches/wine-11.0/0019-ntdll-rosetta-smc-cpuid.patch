@@ -1,0 +1,61 @@
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -1946,6 +1946,45 @@
+ }
+ 
+ /***********************************************************************
++ *           emulate_skipped_cpuid
++ *
++ * ROSETTA_SMC_CPUID: Rosetta 2 runs the instructions of a block as it translated
++ * them, even when an instruction of the block has just rewritten the next one. On
++ * x86 the rewritten instruction runs. Copy protection decrypts a cpuid that way
++ * (add dword [rip+0], key; then the four bytes it changed): Rosetta runs the old
++ * bytes and, when the old first instruction is one byte long, carries on from the
++ * cpuid's second byte, 0xa2, which decodes as mov [imm64], al and faults on the
++ * eight bytes after it. That fault, at RIP, with 0f a2 at RIP - 1 and the address
++ * those eight bytes hold, means the cpuid never ran: it is run here and the thread
++ * resumes after it. A cpuid skipped without a fault cannot be seen from here.
++ */
++static inline BOOL emulate_skipped_cpuid( ucontext_t *sigcontext, siginfo_t *siginfo )
++{
++    BYTE code[10];
++    ULONG64 target;
++    unsigned int eax, ebx, ecx, edx;
++
++    if (!is_rosetta2) return FALSE;
++    if (virtual_uninterrupted_read_memory( (BYTE *)RIP_sig(sigcontext) - 1, code, sizeof(code) ) != sizeof(code))
++        return FALSE;
++    if (code[0] != 0x0f || code[1] != 0xa2) return FALSE;
++    memcpy( &target, code + 2, sizeof(target) );
++    if ((ULONG_PTR)siginfo->si_addr != target) return FALSE;
++
++    eax = RAX_sig(sigcontext);
++    ecx = RCX_sig(sigcontext);
++    __asm__ volatile( "cpuid" : "+a"(eax), "=b"(ebx), "+c"(ecx), "=d"(edx) );
++    RAX_sig(sigcontext) = eax;
++    RBX_sig(sigcontext) = ebx;
++    RCX_sig(sigcontext) = ecx;
++    RDX_sig(sigcontext) = edx;
++    RIP_sig(sigcontext) += 1;
++    TRACE_(seh)( "ran the cpuid Rosetta skipped after self-modifying code at %p\n",
++                 (void *)(RIP_sig(sigcontext) - 2) );
++    return TRUE;
++}
++
++/***********************************************************************
+  *           emulate_rdpid
+  *
+  * HRAVA_ROSETTA_RDPID: Rosetta 2 has no RDPID, and its RDTSCP returns a constant
+@@ -2779,6 +2818,12 @@
+         break;
+     case TRAP_x86_PAGEFLT:  /* Page fault */
+ #ifdef __APPLE__
++        /* ROSETTA_SMC_CPUID */
++        if (emulate_skipped_cpuid( sigcontext, siginfo ))
++        {
++            leave_handler( sigcontext );
++            return;
++        }
+         /* HRAVA_NONCANONICAL_GP: an x86 CPU raises a general protection fault, not a page
+          * fault, for an access through a non-canonical address, and Windows reports it as an
+          * access violation with no usable address (read, -1). Rosetta 2 delivers a page fault

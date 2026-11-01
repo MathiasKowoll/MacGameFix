@@ -6,6 +6,9 @@ NotProton runner. They give a DualSense or DualSense Edge its haptics on a
 cable, the same pad on Bluetooth as if it were on a cable, XInput (its vibration
 on the motors, or the pad as an XInput controller), trigger effects for a game
 that sets none, and options per game that the app's **Game Feel** tab sets.
+One more, the Intel side's `ntdll.so`, is not about the pad: it lets copy
+protection that checks the CPU start under Rosetta (see
+[Rosetta's CPU, for copy protection](#rosettas-cpu-for-copy-protection)).
 
 ## What they fix
 
@@ -241,6 +244,70 @@ Upstream, Wine MR !360 does the same for PulseAudio on Linux. It has been a
 draft since July 2022, and its author notes it needs MR !359 (mmdevapi) and a
 winebus counterpart.
 
+## Rosetta's CPU, for copy protection
+
+Under Rosetta, Phantom Blade Zero's Denuvo spins one core at 100% and never opens
+a window. Rosetta's x86 CPU lacks what the protection checks for, and two of its
+answers differ from a real CPU's. Two patches to the Intel side's `ntdll.so` make
+it look more like one, and a third runs code Rosetta skips. The game's code is
+not touched. The first two come from Hrava's `ntdll-rosetta-cpu-fidelity` and a
+D3DMetal fallback, both written for CrossOver 26.3 and handed to us in a package
+for that game; the Wine 11.17 copy is ported to 41073, where every signal-path
+helper takes `struct thread_data`. The third, `0019`, is ours, from Persona 4
+Golden.
+
+| Patch | Module | Change |
+|---|---|---|
+| `0017-ntdll-rosetta-cpu-fidelity.patch` | `ntdll.so` | Under Rosetta only (`is_rosetta2`): CPUID leaf 7 gains CLFLUSHOPT and CLWB (EBX) and RDPID (ECX) in Rosetta's own CPUID table, only when `WINE_ROSETTA_CPUID7_OR` asks for them; CLWB and RDPID are emulated on the invalid-opcode trap; Dr0-Dr3 execution breakpoints set through `NtSetContextThread` are emulated with non-executable pages and single-stepping, and Dr7's bit 10 reads as set while one is enabled; an access through a non-canonical address is reported as Windows reports the general protection fault, an access violation at address -1, instead of the real address. |
+| `0019-ntdll-rosetta-smc-cpuid.patch` | `ntdll.so` | Rosetta runs the instructions of a block as it translated them, even when one of them has just rewritten the next: copy protection decrypts a `cpuid` that way (`add dword [rip+0], key`, then the four bytes it changed), and Rosetta runs the old bytes. When the old first instruction is one byte long it carries on from the `cpuid`'s second byte, `0xa2`, which decodes as `mov [imm64], al` and faults on the eight bytes after it. That fault, with `0f a2` just before the faulting address and the address those eight bytes hold, means the `cpuid` never ran: `ntdll` runs it, with Rosetta's own answers (and `0017`'s leaf 7), and resumes after it. A `cpuid` skipped without a fault cannot be seen. |
+| `0018-ntdll-d3dmetal-fallback.patch` | `ntdll.so` | A 64-bit process with `CX_GRAPHICS_BACKEND=d3dmetal` gets D3DMetal's DLL folder first in its DLL path when it is not there: `lib/apple_gptk/wine` (`lib/apple_gptk3/wine` with `CX_GRAPHICS_BACKEND_VERSION=3`), or 26.3's `lib64/apple_gptk/wine`. Phantom Blade Zero started by NotProton got wined3d's DXGI and vkd3d without it and refused to start ("failed the SM6 hardware preflight"). `CX_ACTIVE_GRAPHICS_BACKEND` cannot tell whether it was routed: the game inherits it from its bootstrapper. A process CrossOver did route is left as it is. |
+
+Only the CPUID bits need asking for, per game:
+`WINE_ROSETTA_CPUID7_OR=01800000,00400000` (EBX bits, then ECX bits, in hex; any
+other bit is ignored). `ntdll.so` reads it from the environment, or from
+`HKCU\Software\Wine\AppDefaults\<exe>\Environment`. The registry suits a game
+started by a Steam client that was already running, which does not inherit the
+launch's environment. NotProton drops `WINE_*` variables from launch options;
+`NOTPROTON_ENV_WINE_ROSETTA_CPUID7_OR=01800000,00400000 %command%` passes it.
+Without it Rosetta's CPUID is left as it is. The rest takes effect only when a
+program meets it: an instruction Rosetta does not have, a hardware breakpoint,
+or a fault through a non-canonical address.
+
+`ntdll.so` is built from the same CrossOver sources as CodeWeavers', so their
+hacks stay: CW HACK 22144, the loader link Game Mode works through
+(`app/GameMode.swift`), among them. Like CodeWeavers', 26.3's is built with
+libunwind (`UNWIND=yes` in `wine-11.0/build.conf`) and 41073's without, and
+neither uses `pipe2`, which the SDK declares from macOS 27 only. The FEX side
+keeps CrossOver's own: the patches are for Rosetta.
+
+Measured on 2026-11-01, CrossOver Preview 27.0.0.41073's NotProton runner, Intel
+side, with the same two patches built by NotProton's experiment:
+
+- A probe saw leaf 7 extended, and CLWB and RDPID run, only with
+  `WINE_ROSETTA_CPUID7_OR` set.
+- Phantom Blade Zero passed Denuvo, compiled its shaders, reached the menu and
+  was played for 32 minutes; it quit cleanly.
+- A D3D12 probe failed 2 times in 150 runs with this `ntdll.so` and 2 in 150 with
+  CodeWeavers'. Each failure starts as macOS's malloc aborting on heap corruption
+  (`tiny_free_no_lock`) in D3DMetal's process, which Wine dispatches as a Windows
+  exception. `RtlVirtualUnwind2` then reads a garbage Rsp walking macOS's frames:
+  `0017` reports that fault as the general protection fault, CodeWeavers' as an
+  access violation at that address.
+
+Persona 4 Golden's Denuvo (2026-11-01): with or without `WINE_ROSETTA_CPUID7_OR` it
+died about 12 s in, at `P4G.exe+0x269d745b`, writing `0xfffffff22d819090`, `rax=0x80000002`,
+the fault it had in September on 26.3. The bytes there at the fault are a stub that decrypts
+a `cpuid` (leaf `0x80000002`, the processor's name) with the instruction before it, and the
+address is the eight bytes after that `cpuid`. Its 34 bytes, copied into a small program,
+fault the same way under Rosetta with no Wine at all (a macOS x86_64 binary, `SIGSEGV` at
+the same address); with a jump between the add and the `cpuid` they run, and with other
+instructions in place of the `cpuid` Rosetta runs the old bytes every time. With `0019` the
+stub runs a thousand times and returns the name's first four bytes. Persona 4 Golden itself
+not yet played with it.
+
+Not played yet: CrossOver 26.3, and a CrossOver app's bottle (only the runner),
+with these builds.
+
 ## Measured
 
 Measured on 2026-10-18 on CrossOver Preview 27.0.0.41069, in a NotProton runner,
@@ -344,13 +411,14 @@ Not played yet: the FEX (arm64) side, `xinput=pad` with God of War Ragnarök and
 CrossOver 27 runs a bottle either on the Intel side, under Rosetta (x86_64), or
 on the FEX side, where Wine runs natively on arm64 and FEX translates only the
 game's code. Each side has its own copy of these modules, so both are built.
-CrossOver 26.3 has only the Intel side.
+CrossOver 26.3 has only the Intel side. `ntdll.so` is built for the Intel side
+only; 41069's modules do not carry it yet.
 
 | CrossOver | Sources | Wine | Intel (x86_64) | FEX (arm64) |
 |---|---|---|---|---|
 | Preview 27.0.0.41069 (20261006) | `crossover-sources-20261006.tar.gz` | 11.17 | played; see "Measured" | built, not played |
 | Preview 27.0.0.41073 (20261015) | `crossover-sources-20261015.tar.gz` | 11.17 | played; see "Measured" | built, not played |
-| 26.3.0.39832 | `crossover-sources-26.3.0.tar.gz` | 11.0 | `0001`-`0003` only, built, not played: our PE imports differ from CodeWeavers' (toolchain), and our `mmdevapi.dll` also lists `winmm.dll` | no FEX side |
+| 26.3.0.39832 | `crossover-sources-26.3.0.tar.gz` | 11.0 | `0001`-`0003`, `0017` and `0018` only, built, not played: our PE imports differ from CodeWeavers' (toolchain), and our `mmdevapi.dll` also lists `winmm.dll` | no FEX side |
 
 `modules/<id>/` holds the files laid out as in `lib/wine` (`x86_64-windows`,
 `x86_64-unix`, `aarch64-windows`, `aarch64-unix`), plus `built-for.json` with the
@@ -441,9 +509,12 @@ modules:
 
 ## Installing them
 
-The app's **Wine Modules** tab lists every CrossOver app (in `/Applications`
-and `~/Applications`) and every NotProton runner by its release, says what is in
-each, and installs or removes the modules with a switch. It runs `engine-modules.sh`, which the catalog
+The app's **Improvements** tab lists every CrossOver app (in `/Applications`
+and `~/Applications`) and every NotProton runner by its release, under each of
+the two improvements the modules make, says what is in each, and installs or
+removes that improvement with a switch: the DualSense controllers (every module
+but `ntdll.so`) and copy protection under Rosetta (the Intel side's `ntdll.so`).
+It runs `engine-modules.sh` with `--part=controls` or `--part=rosetta`, which the catalog
 carries with the modules (flat, as `engine-<build>-<dir>-<file>`, with
 `engine-modules.json`). They travel in their own signed catalog (`modules.zip`,
 `modules.json`, `modules.json.sig` in a release), apart from the game fixes', so
@@ -466,7 +537,7 @@ them in the CrossOver installs that are on (the top-level README says how).
 What else each kind of CrossOver needs:
 
 - **NotProton runner:** nothing else. The PE files carry no macOS signature,
-  and `winebus.so` and `winecoreaudio.so` carry MacGameFix's Developer ID
+  and `winebus.so`, `winecoreaudio.so` and `ntdll.so` carry MacGameFix's Developer ID
   (`tools/sign-payload.sh`). The eight Wine loaders of the CrossOver apps and
   runners on the test Mac (2026-10-22, both sides) all have
   `com.apple.security.cs.disable-library-validation`, so they may load a library

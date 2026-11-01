@@ -150,6 +150,12 @@ struct Game: Decodable, Identifiable, Hashable {
     /// The logs the fix's DLL writes beside itself while the game runs, by name
     /// (an installer's MGVF-LOG line); absent from catalogs older than the field.
     let logs: [String]?
+    /// The improvements (EnginePart) the fix needs in the CrossOver that runs the game,
+    /// from the installer's MGVF-NEEDS line; absent from catalogs older than the field.
+    let improvements: [String]?
+    /// "registry" for a fix in the prefix that writes registry values alone; empty, or
+    /// absent from older catalogs, for one that puts DLLs there too.
+    let inPrefixWhat: String?
     let carrierDir: String
     let script: String
     let needsPrefix: Bool
@@ -182,8 +188,14 @@ struct Game: Decodable, Identifiable, Hashable {
     /// whose app it signs again ad hoc. No Wine runs it.
     var inApp: Bool { scope == "app" }
 
+    /// The improvements it needs, those this app knows.
+    var neededParts: [EnginePart] { (improvements ?? []).compactMap(EnginePart.init(rawValue:)) }
+
+    /// A fix in the prefix that puts DLLs there (NINJA GAIDEN 3's), not registry values alone.
+    var prefixDLLs: Bool { inPrefix && inPrefixWhat != "registry" }
+
     /// Where the fix's part outside the game folder goes, said before the place.
-    var prefixWhat: String { inPrefix ? "Its DLLs and overrides go into" : "Registry keys go into" }
+    var prefixWhat: String { prefixDLLs ? "Its DLLs and overrides go into" : "Registry keys go into" }
 
     /// Is this folder this game? Identity is the shipping executable, looked for
     /// where these titles keep it: the folder itself, the carrier's folder (The
@@ -228,6 +240,7 @@ struct Game: Decodable, Identifiable, Hashable {
         if !engineFreeOn.isEmpty {
             parts.append("needs \(engineFreeOn); stable CrossOver 26.3 needed MacGameVideoFix's engine, now archived")
         }
+        for part in neededParts { parts.append("needs \(part.title) (Improvements)") }
         return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }
 }
@@ -320,7 +333,7 @@ struct Hit: Identifiable {
             return "No prefix for this game was found. Run it once with NotProton or CrossOver, then Scan again."
         }
         if game.needsPrefix && chosen.isEmpty {
-            return game.inPrefix ? "Choose at least one place for its DLLs." : "Choose at least one place for its registry keys."
+            return game.prefixDLLs ? "Choose at least one place for its DLLs." : "Choose at least one place for its registry keys."
         }
         return nil
     }

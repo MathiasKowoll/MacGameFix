@@ -69,6 +69,11 @@ struct AutoSettings: Codable {
     /// keeps them in, and those the user took them out of, which it leaves alone.
     var modulesKept: [String] = []
     var modulesDeclined: [String] = []
+    /// The same for Rosetta's CPU (EnginePart.rosetta). It came after the controls, and
+    /// is on wherever the controls are unless the user took it out: rosettaKept holds
+    /// where it was put on its own, rosettaDeclined where it was taken out.
+    var rosettaKept: [String] = []
+    var rosettaDeclined: [String] = []
     /// On automatic, also put them into a runner NotProton adds for a new CrossOver build.
     var modulesNewBuilds = true
     /// When the user last opened the window: what the agent did before it has been seen.
@@ -92,11 +97,44 @@ struct AutoSettings: Codable {
         modulesAskFirst = try c.decodeIfPresent(Bool.self, forKey: .modulesAskFirst) ?? false
         modulesKept = try c.decodeIfPresent([String].self, forKey: .modulesKept) ?? []
         modulesDeclined = try c.decodeIfPresent([String].self, forKey: .modulesDeclined) ?? []
+        rosettaKept = try c.decodeIfPresent([String].self, forKey: .rosettaKept) ?? []
+        rosettaDeclined = try c.decodeIfPresent([String].self, forKey: .rosettaDeclined) ?? []
         modulesNewBuilds = try c.decodeIfPresent(Bool.self, forKey: .modulesNewBuilds) ?? true
         seen = try c.decodeIfPresent(Date.self, forKey: .seen) ?? .distantPast
         padBattery = try c.decodeIfPresent(Bool.self, forKey: .padBattery) ?? true
         batteryIcon = try c.decodeIfPresent(String.self, forKey: .batteryIcon) ?? "raccoon"
         gameMode = try c.decodeIfPresent(Bool.self, forKey: .gameMode) ?? false
+    }
+
+    /// Whether the agent keeps an improvement in a CrossOver folder.
+    func kept(_ part: EnginePart, _ path: String) -> Bool {
+        let key = Engine.resolved(path)
+        func has(_ list: [String]) -> Bool { list.contains { Engine.resolved($0) == key } }
+        switch part {
+        case .controls: return has(modulesKept)
+        case .rosetta: return has(rosettaKept) || (has(modulesKept) && !has(rosettaDeclined))
+        }
+    }
+
+    /// Whether the user took an improvement out of a CrossOver folder, which the agent then leaves alone.
+    func declined(_ part: EnginePart, _ path: String) -> Bool {
+        let key = Engine.resolved(path)
+        return (part == .controls ? modulesDeclined : rosettaDeclined).contains { Engine.resolved($0) == key }
+    }
+
+    /// Kept from now on, or taken out and left alone.
+    mutating func setKept(_ part: EnginePart, _ path: String, _ on: Bool) {
+        let key = Engine.resolved(path)
+        switch part {
+        case .controls:
+            modulesKept.removeAll { Engine.resolved($0) == key }
+            modulesDeclined.removeAll { Engine.resolved($0) == key }
+            if on { modulesKept.append(key) } else { modulesDeclined.append(key) }
+        case .rosetta:
+            rosettaKept.removeAll { Engine.resolved($0) == key }
+            rosettaDeclined.removeAll { Engine.resolved($0) == key }
+            if on { rosettaKept.append(key) } else { rosettaDeclined.append(key) }
+        }
     }
 
     static func load() -> AutoSettings {
@@ -288,7 +326,7 @@ enum Agent {
                             ask: settings.modulesAskFirst, state: &state, events: &events)
         var kept = settings
         events += await Engine.keep(&kept, state: &state, now: now)
-        if kept.modulesKept != settings.modulesKept { kept.save() }
+        if kept.modulesKept != settings.modulesKept || kept.rosettaKept != settings.rosettaKept { kept.save() }
         // A game installed since, a CrossOver updated, or a temporary folder macOS emptied.
         if settings.gameMode { GameMode.keep().forEach { print($0) } }
         // What the Wine modules saw each game do, kept before a restart empties /tmp.
