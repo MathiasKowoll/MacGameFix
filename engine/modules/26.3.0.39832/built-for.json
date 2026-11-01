@@ -4,8 +4,9 @@
   "wine": "Wine version 11.0",
   "patches": "wine-11.0",
   "files": {
-    "x86_64-windows/winebus.sys": "9760923623bedfa289731a4a03785417045c4ffdb587a63794423d491398e278",
+    "x86_64-unix/ntdll.so": "427f75348d742da6cf451f4c24343b5de0001e764122b2f9063a381d261c9a93",
+    "x86_64-unix/winecoreaudio.so": "4be4fbfe75df635c9a1073c1a946f1b598667be9446dc4f821b719b52ff1c455",
     "x86_64-windows/mmdevapi.dll": "2fbab2f617124a9ad5e1b380996d2b4a330eddd0f76dd6afb4c50cdea0c7eba6",
-    "x86_64-unix/winecoreaudio.so": "4be4fbfe75df635c9a1073c1a946f1b598667be9446dc4f821b719b52ff1c455"
+    "x86_64-windows/winebus.sys": "9760923623bedfa289731a4a03785417045c4ffdb587a63794423d491398e278"
   }
 }

@@ -11,9 +11,11 @@
 #
 # x86_64 (the default) is CrossOver's Intel side, run under Rosetta: it writes
 # modules/<id>/x86_64-windows/{winebus.sys,mmdevapi.dll,hidclass.sys,setupapi.dll,xaudio2_9.dll,xinput*.dll} and
-# x86_64-unix/{winebus.so,winecoreaudio.so}. arm64 is the FEX side, where Wine runs
+# x86_64-unix/{winebus.so,winecoreaudio.so,ntdll.so}. arm64 is the FEX side, where Wine runs
 # natively: aarch64-windows/ the same PE files as ARM64X (arm64 and arm64ec in one
 # file, as CrossOver ships them) and aarch64-unix/{winebus.so,winecoreaudio.so}.
+# ntdll.so is built for the Intel side only: its patches change what Rosetta shows a
+# game, and the FEX side keeps CrossOver's own.
 # The six xinput DLLs are one source, dlls/xinput1_3.
 # winebus.so is built with SDL, as CodeWeavers build theirs (it opens libSDL2 when it
 # runs): SDL2's headers must be installed (brew install sdl2).
@@ -97,6 +99,12 @@ if [ ! -d "$TREE" ]; then
   fi
 fi
 
+# A series whose CrossOver built ntdll.so with libunwind (UNWIND=yes in its build.conf,
+# 26.3's: nm -u shows unw_*) is built with it too; the others without, as theirs.
+# pipe2 is declared from macOS 27 only in its SDK and the minimum is older, so configure
+# is told it is missing, as CodeWeavers' build is (no pipe2 in their ntdll.so).
+UNWIND_FLAG=--without-unwind; [ "${UNWIND:-no}" = yes ] && UNWIND_FLAG=
+NTDLL=""; [ "$ARCH" = x86_64 ] && NTDLL=dlls/ntdll/all
 if [ ! -f "$BUILD/Makefile" ]; then
   echo "==> configuring $ARCH (log: $BUILD/configure.log)"
   mkdir -p "$BUILD"
@@ -106,15 +114,16 @@ if [ ! -f "$BUILD/Makefile" ]; then
     --without-cups --without-dbus --without-fontconfig --without-gnutls --without-krb5 --without-gssapi \
     --without-opencl --without-pcap --without-usb --without-v4l2 --without-sane --without-capi \
     --without-gphoto --without-netapi --without-pulse --without-alsa --without-oss --without-udev \
-    --without-unwind --without-ffmpeg --without-inotify \
+    $UNWIND_FLAG --without-ffmpeg --without-inotify \
     SDL2_CFLAGS="-I$SDL2_INCLUDE -D_THREAD_SAFE" ac_cv_lib_soname_SDL2=libSDL2-2.0.0.dylib \
+    ac_cv_func_pipe2=no \
     >"$BUILD/configure.log" 2>&1) || { tail -20 "$BUILD/configure.log"; exit 1; }
 fi
 
 echo "==> building $ARCH (log: $BUILD/make.log)"
 XINPUT="xinput1_1 xinput1_2 xinput1_3 xinput1_4 xinput9_1_0 xinputuap"
 (cd "$BUILD" && make -j10 dlls/winebus.sys/all dlls/mmdevapi/all dlls/winecoreaudio.drv/all dlls/hidclass.sys/all dlls/setupapi/all dlls/xaudio2_9/all \
-  dlls/xinput1_1/all dlls/xinput1_2/all dlls/xinput1_3/all dlls/xinput1_4/all dlls/xinput9_1_0/all dlls/xinputuap/all \
+  dlls/xinput1_1/all dlls/xinput1_2/all dlls/xinput1_3/all dlls/xinput1_4/all dlls/xinput9_1_0/all dlls/xinputuap/all $NTDLL \
   >"$BUILD/make.log" 2>&1) \
   || { tail -30 "$BUILD/make.log"; exit 1; }
 
@@ -140,7 +149,7 @@ else
   IDENTITY=""
   echo "==> signing $UNIX ad hoc (MACGAMEFIX_CODESIGN_IDENTITY is not set): run tools/sign-payload.sh before committing them"
 fi
-for f in dlls/winebus.sys/winebus.so dlls/winecoreaudio.drv/winecoreaudio.so; do
+for f in dlls/winebus.sys/winebus.so dlls/winecoreaudio.drv/winecoreaudio.so ${NTDLL:+dlls/ntdll/ntdll.so}; do
   so="$OUT/$UNIX/$(basename "$f")"
   cp "$BUILD/$f" "$so"
   strip -x "$so"
