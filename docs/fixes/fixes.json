@@ -1101,7 +1101,7 @@
       "installer": "install-pbz-fix.sh",
       "scope": "prefix",
       "executable": "PBZ.exe",
-      "carrierDirectory": null,
+      "carrierDirectory": "platform/steam",
       "alsoRuns": [],
       "summary": "Never opens a window under Rosetta: its Denuvo checks the CPU for instructions Rosetta does not have. The Wine modules' ntdll shows them to this executable alone, and it loads Microsoft's Visual C++ runtime first.",
       "page": null,
@@ -1125,8 +1125,8 @@
           "language": "bash",
           "startLine": 153,
           "endLine": 157,
-          "commit": "35698841abba427c4edcb2ff9fc02db45eb634c8",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/35698841abba427c4edcb2ff9fc02db45eb634c8/fixes/install-pbz-fix.sh#L153-L157",
+          "commit": "ba1083ac43b22ab50001d3eacbbac9d061fd0323",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/ba1083ac43b22ab50001d3eacbbac9d061fd0323/fixes/install-pbz-fix.sh#L153-L157",
           "code": "values() {\n  printf '%s|%s|%s\\n' \"$ENV_KEY\" \"$CPUID_NAME\" \"$CPUID_DATA\"\n  local d\n  for d in $DLLS; do printf '%s|*%s|native,builtin\\n' \"$DLL_KEY\" \"$d\"; done\n}"
         }
       ],
