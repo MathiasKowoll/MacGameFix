@@ -341,22 +341,34 @@ is not changed, and the one file serves CrossOver 26.3 and Preview 27, whose
 decoder code is the same there. CrossOver's file stays beside it as
 `msmpeg2vdec.dll.mgvf-stock`.
 
-For DLSS, add `D3DM_SUPPORT_DXR=0` to its launch options. With DLSS available
-(D3DMetal's default) PBZ turns on NVIDIA's opacity micromaps, because D3DMetal's
-NVAPI says it supports them; D3DMetal then cannot build them (`Unknown geometry
-type 2`) and the game closes as it loads a level, whatever upscaler its menu has.
-With D3DMetal's ray tracing off it does not ask for them, and DLSS works. Without
-the variable, turn DLSS off for the game instead (`D3DM_ENABLE_METALFX=0`).
-Measured on 2026-11-01 on Preview 41073's NotProton runner.
+For DLSS, set `D3DM_SUPPORT_DXR=0`. With DLSS available (D3DMetal's default) PBZ
+turns on NVIDIA's opacity micromaps, because D3DMetal's NVAPI says it supports
+them; D3DMetal then cannot build them (`Unknown geometry type 2`) and the game
+closes as it loads a level, whatever upscaler its menu has. With D3DMetal's ray
+tracing off it does not ask for them, and DLSS works. Without the variable, turn
+DLSS off for the game instead (`D3DM_ENABLE_METALFX=0`). D3DMetal reads these
+from the macOS environment, which the prefix's registry does not reach, so they
+go where the CrossOver that runs the game takes variables:
+
+- NotProton (a Steam Play prefix): the game's launch options in Steam,
+  `D3DM_SUPPORT_DXR=0 %command%`.
+- A CrossOver bottle: the bottle's `cxbottle.conf`, under
+  `[EnvironmentVariables]`, as `"D3DM_SUPPORT_DXR" = "0"`, with CrossOver
+  closed. The Windows Steam inside a bottle does not read `VAR=value %command%`
+  launch options. CrossOver's own DLSS switch for the bottle is
+  `D3DM_ENABLE_METALFX` and does not set this one. Every game of the bottle gets
+  it, so a bottle of its own keeps ray tracing for the others.
 
 It needs the Wine modules on for the CrossOver that runs it (CrossOver's own
 `ntdll.so` ignores the value), the Intel side, and D3DMetal 4: CrossOver Preview
-27 carries it, 26.3 carries 3.0. Played on 2026-11-01 on Preview 41073's NotProton
-runner with the same values passed as launch options: it passed Denuvo and was
-played for 32 minutes, the menu video playing from a winegstreamer carrying
-`0006`. The decoder DLL was measured with a probe on all four CrossOvers: NV12
-offered and 30 frames decoded, where CrossOver's own offers no NV12. Through the
-installer the game has not been played yet.
+27 carries it, 26.3 carries 3.0, so PBZ is for Preview 27. Played on 2026-11-01
+on Preview 41073's NotProton runner, first with the values as launch options for
+32 minutes, then through this installer with CrossOver's own winegstreamer: the
+menu video played from our decoder, the pad vibrated, and with
+`D3DM_SUPPORT_DXR=0` a level loaded with DLSS on. The decoder DLL was measured
+with a probe on all four CrossOvers: NV12 offered and the clip decoded (30 of 30
+frames, 29 on the 26.3 runner), where CrossOver's own offers no NV12. In a
+CrossOver bottle the game has not been played.
 
 ### Beast of Reincarnation needs CrossOver Preview
 
