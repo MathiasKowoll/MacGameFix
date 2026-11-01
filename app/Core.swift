@@ -374,17 +374,26 @@ enum Libraries {
                 add(URL(fileURLWithPath: p).appendingPathComponent("steamapps/common"))
             }
         }
+        for common in bottleLibraries() { add(common) }
+        for u in extra { add(u) }
+        return found
+    }
+
+    /// The steamapps/common of the Steam inside each CrossOver bottle, wherever its
+    /// libraries are.
+    static func bottleLibraries() -> [URL] {
+        var found: [URL] = []
+        var seen = Set<String>()
         for bottle in bottles() {
             let vdf = bottle.appendingPathComponent(
                 "drive_c/Program Files (x86)/Steam/config/libraryfolders.vdf")
             guard let text = try? String(contentsOf: vdf, encoding: .utf8) else { continue }
             for p in paths(in: text) {
-                if let mac = translate(p, inBottle: bottle) {
-                    add(mac.appendingPathComponent("steamapps/common"))
-                }
+                guard let mac = translate(p, inBottle: bottle) else { continue }
+                let common = mac.appendingPathComponent("steamapps/common")
+                if seen.insert(common.standardizedFileURL.path.lowercased()).inserted { found.append(common) }
             }
         }
-        for u in extra { add(u) }
         return found
     }
 

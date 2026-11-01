@@ -151,12 +151,14 @@ enum GameMode {
         return (copy, changed)
     }
 
-    /// Where games are: every game folder of every Steam library the app knows, and
-    /// each CrossOver bottle's Program Files.
+    /// Where CrossOver's games are: every game folder of the Steam in each bottle,
+    /// wherever its libraries are, and each bottle's Program Files. The Mac's own
+    /// Steam is left out: its Windows games run from NotProton's runners, whose
+    /// loaders are not CrossOver's, and NotProton puts them in a game's bundle itself.
     static func gameFolders() -> [URL] {
         let fm = FileManager.default
         var folders: [URL] = []
-        for common in Libraries.all(extra: []) {
+        for common in Libraries.bottleLibraries() {
             folders += ((try? fm.contentsOfDirectory(at: common, includingPropertiesForKeys: nil)) ?? [])
                 .sorted { $0.path < $1.path }
         }

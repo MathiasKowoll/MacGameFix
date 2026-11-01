@@ -812,9 +812,16 @@ mkdir -p "$OLD/Contents/SharedSupport/CrossOver/lib/wine/x86_64-unix"
 /usr/libexec/PlistBuddy -c 'Add :CFBundleVersion string 25.0.0.1' "$OLD/Contents/Info.plist" >/dev/null
 : > "$OLD/Contents/SharedSupport/CrossOver/lib/wine/x86_64-unix/ntdll.so"
 cp "$GW/x86_64-unix/wine" "$OLD/Contents/SharedSupport/CrossOver/lib/wine/x86_64-unix/wine"
-MG="$SUPPORT/Steam/steamapps/common/Mode Game"
-mkdir -p "$MG/Binaries/Win64" "$T/tmp"
+# The game is in a library of a bottle's Steam; one in the Mac's own Steam is NotProton's and gets nothing.
+GB="$SUPPORT/CrossOver/Bottles/GM Steam"
+mkdir -p "$GB/drive_c/Program Files (x86)/Steam/config" "$GB/dosdevices"
+ln -s / "$GB/dosdevices/z:"
+printf '"libraryfolders"\n{\n\t"0"\n\t{\n\t\t"path"\t\t"Z:%s"\n\t}\n}\n' "$(printf '%s' "$T/GM Library" | sed 's#/#\\\\#g')" \
+  > "$GB/drive_c/Program Files (x86)/Steam/config/libraryfolders.vdf"
+MG="$T/GM Library/steamapps/common/Mode Game"
+mkdir -p "$MG/Binaries/Win64" "$T/tmp" "$SUPPORT/Steam/steamapps/common/NP Game"
 : > "$MG/ModeGame.exe"; : > "$MG/Binaries/Win64/ModeGame-Win64-Shipping.exe"; : > "$MG/Other.exe"; : > "$MG/explorer.exe"
+: > "$SUPPORT/Steam/steamapps/common/NP Game/NPGame.exe"
 export MACGAMEFIX_TEMP_DIR="$T/tmp"
 WT="$T/tmp/winetemp-$(stat -f '%i-%z-%m' "$GW/x86_64-unix/wine")-12345678"
 mkdir -p "$WT"
@@ -832,6 +839,7 @@ check '[ "$(plutil -extract CFBundleExecutable raw "$COPY/Contents/Info.plist")"
 check '[ "$(plutil -extract LSApplicationCategoryType raw "$COPY/Contents/Info.plist")" = public.app-category.games ] && cmp -s "$COPY/Contents/MacOS/wine" "$GW/x86_64-unix/wine" && [ "$COPY/Contents/MacOS/ntdll.so" -ef "$GW/x86_64-unix/ntdll.so" ]' "the bundle says it is a game and holds a copy of the loader beside a link to its ntdll.so"
 WA="$T/tmp/winetemp-$(stat -f '%i-%z-%m' "$GW/aarch64-unix/wine.app/Contents/MacOS/wine")-$(stat -f '%.9Fm' "$GW/aarch64-unix/wine.app/Contents/MacOS/wine" | sed 's/.*\.//; s/^0*//; s/^$/0/')"
 check '[ "$(readlink "$WA/ModeGame.exe")" = "$ARMCOPY/Contents/MacOS/ModeGame.exe" ] && cmp -s "$ARMCOPY/Contents/MacOS/wine" "$GW/aarch64-unix/wine.app/Contents/MacOS/wine"' "the FEX side's loader, in its wine.app, gets its own"
+check '[ ! -e "$WT/NPGame.exe" ] && [ ! -e "$WA/NPGame.exe" ] && [ ! -e "$COPY/Contents/MacOS/NPGame.exe" ]' "a game in the Mac's own Steam is left to NotProton"
 check '[ ! -d "$SUPPORT/MacGameFix/GameMode/CrossOver Old 25.0.0.1 x86_64" ] && ! has "$("$BIN" --game-mode-report 2>&1)" "25.0.0.1"' "a CrossOver of a release not checked gets nothing"
 LINKED=$(for f in "$WT"/*; do to=$(readlink "$f" || true); if [ "${to#"$COPY/Contents/MacOS/"}" != "$to" ]; then echo; fi; done | wc -l | tr -d ' ')
 check '[ "$LINKED" -ge 2 ] && has "$("$BIN" --game-mode-report 2>&1)" "| x86_64 | ${WT##*/} | $LINKED linked"' "the report counts the links on disk"
@@ -845,5 +853,6 @@ printf '{"kept":[],"updates":false,"modulesUpdates":false}' > "$SUPPORT/MacGameF
 "$BIN" --agent-once >/dev/null 2>&1
 check '[ ! -e "$WT/ModeGame.exe" ]' "with it off, the agent does nothing"
 unset MACGAMEFIX_TEMP_DIR
+rm -rf "$GB" "$SUPPORT/Steam/steamapps/common/NP Game"
 
 [ "$fail" = 0 ] && echo "==> MacGameFix automation: the Wine modules and their own updates, signed catalogs taken automatically or asked first, what each game runs on, the agent's updates, waits and reports, a macOS game waiting for a recipe or refused by its installer, the menu bar's summary, a fix's report and its forms" || exit 1
