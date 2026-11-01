@@ -16,6 +16,11 @@
       "options": { "edgeAsDualSense": true, "xinput": "off" },
       "measured": "2026-10-22, MacGameFix's modules with patches 0009-0011, an Edge over Bluetooth, the game's vibration on Immersive: it found the pad's audio output through SetupAPI, opened an XAudio2 mastering voice on it and played its haptics. With the Edge shown as an Edge, or with XInput's rumble on the motors, it never opened the voice and never vibrated."
     },
+    "4115450": {
+      "title": "Phantom Blade Zero",
+      "options": { "xinput": "off", "edgeHapticsGainCable": 1, "edgeHapticsGainBluetooth": 1 },
+      "measured": "2026-11-01, MacGameFix's modules on CrossOver Preview 41073's NotProton runner, Intel side, a DualSense and a DualSense Edge over Bluetooth shown as a cable: the game drives the pad itself through its own SDL 3 (HIDAPI), reads features 0x09, 0x20 and 0x05, sets trigger effects, claims the motor power at 0x00 for both pads, asks for the old rumble emulation (given the improved one), and plays its haptics on the pad's audio output. A standard DualSense at 1× already reached full scale (sent 127 of 127), so the Edge stays at 1× too. It never wrote to XInput in any session, so XInput is off and the pad is one HID device; controls and prompts with XInput off not yet played."
+    },
     "2651280": {
       "title": "Marvel's Spider-Man 2",
       "options": { "fullMotorPower": true, "edgeHapticsGainCable": 2, "edgeHapticsGainBluetooth": 2 },
