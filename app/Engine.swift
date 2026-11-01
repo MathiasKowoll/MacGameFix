@@ -1,10 +1,12 @@
 // The Wine modules: the one part of MacGameFix that changes CrossOver itself.
 //
-// Three patched Wine files (engine/README.md) go into a CrossOver app or a
-// NotProton runner, so that games find a DualSense's haptic output on a cable.
-// As with the game fixes, the app decides nothing: engine-modules.sh, carried in
-// the catalog with the modules, answers --status, installs on a plain run and
-// undoes with --restore. This file finds the places it can go and runs it.
+// Patched Wine files (engine/README.md) go into a CrossOver app or a NotProton
+// runner. They are two improvements, each turned on and off on its own in the
+// Improvements tab: the DualSense's controls, and Rosetta's CPU for copy
+// protection. As with the game fixes, the app decides nothing: engine-modules.sh,
+// carried in the catalog with the modules, answers --status, installs on a plain
+// run and undoes with --restore, for one improvement with --part. This file finds
+// the places they can go and runs it.
 //
 // Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -33,6 +35,76 @@ struct EngineTarget: Identifiable, Hashable {
     var key: String { root.resolvingSymlinksInPath().path }
 }
 
+/// One improvement the Wine modules make, installed and removed on its own
+/// (engine-modules.sh --part).
+enum EnginePart: String, CaseIterable, Identifiable {
+    case controls, rosetta
+
+    var id: String { rawValue }
+    var argument: String { "--part=\(rawValue)" }
+
+    var title: String {
+        switch self {
+        case .controls: return "DualSense controllers"
+        case .rosetta: return "Copy protection under Rosetta"
+        }
+    }
+
+    /// What it does, in one line under its title.
+    var summary: String {
+        switch self {
+        case .controls: return "Haptics, adaptive triggers, Bluetooth as a cable, and XInput's vibration."
+        case .rosetta: return "Lets Denuvo-protected games start on the Intel side, such as Phantom Blade Zero and Persona 4 Golden."
+        }
+    }
+
+    /// The longer account, for the section's help.
+    var detail: String {
+        switch self {
+        case .controls:
+            return "Patched winebus, hidclass, xinput, mmdevapi, setupapi, xaudio2 and winecoreaudio, on both sides. "
+                + "Games find the pad's haptic output, set its trigger effects and rumble it as on Windows; "
+                + "Game Feel sets the options per game."
+        case .rosetta:
+            return "A patched ntdll.so for the Intel side. It runs a cpuid Rosetta skips after self-modifying code, "
+                + "emulates CLWB, RDPID and hardware breakpoints, and reports faults as Windows does. "
+                + "The CPUID bits a game asks for stay per game (its fix writes them). Changes nothing else."
+        }
+    }
+
+    /// Its symbol beside the title.
+    var symbol: String {
+        switch self {
+        case .controls: return "gamecontroller"
+        case .rosetta: return "cpu"
+        }
+    }
+
+    /// The one thing to know under its switches.
+    var footer: String {
+        switch self {
+        case .controls: return "Game Feel sets its options per game. Quit a CrossOver's games before changing it."
+        case .rosetta: return "Intel side only. The CPUID bits a game asks for come with that game's fix."
+        }
+    }
+
+    /// The short name in a status line or a log.
+    var short: String {
+        switch self {
+        case .controls: return "controllers"
+        case .rosetta: return "Rosetta CPU"
+        }
+    }
+
+    /// Whether a build of the modules carries this improvement, from its file list.
+    func carried(by build: EngineBuild) -> Bool {
+        switch self {
+        case .controls: return build.files.keys.contains { $0.hasSuffix("unix/winecoreaudio.so") }
+        case .rosetta: return build.files.keys.contains("x86_64-unix/ntdll.so")
+        }
+    }
+}
+
 /// The installer's word for one CrossOver.
 enum EngineState: Equatable {
     case unknown, installed, outdated, half, absent, noModules
@@ -41,10 +113,10 @@ enum EngineState: Equatable {
         switch self {
         case .unknown: return "…"
         case .installed: return "Installed"
-        case .outdated: return "Older modules: install again"
+        case .outdated: return "Update available"
         case .half: return "Partly installed"
         case .absent: return "Not installed"
-        case .noModules: return "No modules for this build yet"
+        case .noModules: return "Not available for this build yet"
         }
     }
 
@@ -145,9 +217,9 @@ enum Engine {
         return found
     }
 
-    static func status(_ target: EngineTarget, catalog: URL) async -> EngineState {
+    static func status(_ target: EngineTarget, part: EnginePart? = nil, catalog: URL) async -> EngineState {
         let out = Collected()
-        let code = await run(target, catalog: catalog, ["--status"]) { out.add($0) }
+        let code = await run(target, part: part, catalog: catalog, ["--status"]) { out.add($0) }
         let word = out.all.map { $0.trimmingCharacters(in: .whitespaces) }
             .first { ["installed", "outdated", "half", "absent", "nomodules"].contains($0) }
         guard code == 0, let word else { return .unknown }
@@ -162,12 +234,12 @@ enum Engine {
 
     /// Runs engine-modules.sh on one CrossOver, under the lock the game
     /// installers take, so it never runs beside one of them.
-    static func run(_ target: EngineTarget, catalog: URL, _ extra: [String],
+    static func run(_ target: EngineTarget, part: EnginePart? = nil, catalog: URL, _ extra: [String],
                     onLine: @escaping @Sendable (String) -> Void) async -> Int32 {
         let lock = InstallLock()
         defer { lock.release() }
         let script = catalog.appendingPathComponent(Self.script).path
-        return await runStreaming("/bin/bash", [script, target.root.path] + extra,
+        return await runStreaming("/bin/bash", [script, target.root.path] + extra + (part.map { [$0.argument] } ?? []),
                                   environment: ["MGVF_ENGINE_BACKUP": backups.path], onLine: onLine)
     }
 
@@ -186,63 +258,67 @@ enum Engine {
         return String(decoding: data, as: UTF8.self).contains(target.root.path + "/")
     }
 
-    /// The agent's part. With the Wine modules on automatic it keeps them in the
-    /// NotProton runners the user put them into -- after a CrossOver or NotProton
-    /// update put CrossOver's own files back, or when newer modules came -- and
-    /// puts them into a runner that appears for a new CrossOver build, once they
-    /// are in a runner already and the user left "new CrossOver builds" on;
-    /// always after that CrossOver's games close. Asked
-    /// first, it says so instead, once. A CrossOver app is only ever reported:
-    /// changing one needs App Management and signs the app again, which is the
-    /// user's to do. Off, it does nothing.
+    /// The agent's part. With the Wine modules on automatic it keeps each improvement
+    /// in the NotProton runners the user put it into -- after a CrossOver or NotProton
+    /// update put CrossOver's own files back, or when newer modules came -- and puts
+    /// it into a runner that appears for a new CrossOver build, once it is in a
+    /// runner already and the user left "new CrossOver builds" on; always after that
+    /// CrossOver's games close. Asked first, it says so instead, once. A CrossOver
+    /// app is only ever reported: changing one needs App Management and signs the
+    /// app again, which is the user's to do. Off, it does nothing.
     static func keep(_ settings: inout AutoSettings, state: inout AgentState, now: Date) async -> [AgentEvent] {
         guard settings.modulesUpdates else { return [] }
         let catalog = Catalog.active(.modules).dir
         let targets = Engine.targets()
+        let builds = Engine.builds(in: catalog)
         // The first look only learns what is there: those runners are not new.
         let firstLook = state.engineSeen == nil
         let seen = Set(state.engineSeen ?? [])
         state.engineSeen = targets.map(\.key)
-        let keptPaths = Set(settings.modulesKept.map(resolved)), declined = Set(settings.modulesDeclined.map(resolved))
-        let runnerKept = targets.contains { $0.app == nil && keptPaths.contains($0.key) }
         var events: [AgentEvent] = []
-        func once(_ path: String, _ message: String, failed: Bool) {
-            guard state.engineNoted[path] != message else { return }
-            state.engineNoted[path] = message
+        func once(_ key: String, _ message: String, failed: Bool) {
+            guard state.engineNoted[key] != message else { return }
+            state.engineNoted[key] = message
             events.append(AgentEvent(date: now, game: "", message: message, failed: failed))
         }
-        for target in targets {
-            let path = target.key
-            guard !declined.contains(path) else { continue }
-            let kept = keptPaths.contains(path)
-            let fresh = !firstLook && !seen.contains(path) && target.app == nil && runnerKept && settings.modulesNewBuilds
-            guard kept || fresh else { continue }
-            let before = await status(target, catalog: catalog)
-            let needs: String
-            if before == .outdated {
-                needs = "newer Wine modules"
-            } else if before == .absent || before == .half {
-                needs = kept ? "the Wine modules again: something replaced them, such as a CrossOver or NotProton update"
-                    : "the Wine modules: it is a new CrossOver build"
-            } else {
-                state.engineNoted[path] = nil
-                continue
-            }
-            if target.app != nil || settings.modulesAskFirst {
-                once(path, "\(target.name) needs \(needs). Install them from MacGameFix's Wine Modules tab.", failed: false)
-                continue
-            }
-            if running(target) { continue }
-            let out = Collected()
-            let code = await run(target, catalog: catalog, []) { out.add($0) }
-            if code == 0, await status(target, catalog: catalog) == .installed {
-                if !kept { settings.modulesKept.append(path) }
-                state.engineNoted[path] = nil
-                let did = before == .outdated ? "updated in" : kept ? "put back in" : "installed in the new"
-                events.append(AgentEvent(date: now, game: "", message: "Wine modules \(did) \(target.name).", failed: false))
-            } else {
-                once(path, "The Wine modules could not go into \(target.name): \(out.all.last ?? "see the log").",
-                     failed: true)
+        for part in EnginePart.allCases {
+            let runnerKept = targets.contains { $0.app == nil && settings.kept(part, $0.key) }
+            for target in targets {
+                let path = target.key
+                // The controls keep the key they always had, so what was noted before stays noted.
+                let noted = part == .controls ? path : "\(path)#\(part.rawValue)"
+                guard !settings.declined(part, path),
+                      let build = builds.first(where: { $0.build == target.build }), part.carried(by: build) else { continue }
+                let kept = settings.kept(part, path)
+                let fresh = !firstLook && !seen.contains(path) && target.app == nil && runnerKept && settings.modulesNewBuilds
+                guard kept || fresh else { continue }
+                let before = await status(target, part: part, catalog: catalog)
+                let needs: String
+                if before == .outdated {
+                    needs = "a newer \(part.title) improvement"
+                } else if before == .absent || before == .half {
+                    needs = kept ? "the \(part.title) improvement again: something replaced it, such as a CrossOver or NotProton update"
+                        : "the \(part.title) improvement: it is a new CrossOver build"
+                } else {
+                    state.engineNoted[noted] = nil
+                    continue
+                }
+                if target.app != nil || settings.modulesAskFirst {
+                    once(noted, "\(target.name) needs \(needs). Install it from MacGameFix's Improvements tab.", failed: false)
+                    continue
+                }
+                if running(target) { continue }
+                let out = Collected()
+                let code = await run(target, part: part, catalog: catalog, []) { out.add($0) }
+                if code == 0, await status(target, part: part, catalog: catalog) == .installed {
+                    if !kept { settings.setKept(part, path, true) }
+                    state.engineNoted[noted] = nil
+                    let did = before == .outdated ? "updated in" : kept ? "put back in" : "installed in the new"
+                    events.append(AgentEvent(date: now, game: "", message: "\(part.title) \(did) \(target.name).", failed: false))
+                } else {
+                    once(noted, "\(part.title) could not go into \(target.name): \(out.all.last ?? "see the log").",
+                         failed: true)
+                }
             }
         }
         return events

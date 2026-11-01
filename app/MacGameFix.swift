@@ -57,7 +57,7 @@ final class Model: ObservableObject {
     /// The CrossOver apps and NotProton runners the Wine modules can go into.
     @Published var engineRows: [EngineRow] = []
     /// The CrossOver apps macOS refused to let this app change, by name, from the
-    /// last look; the Wine Modules tab offers App Management for them.
+    /// last look; the Improvements tab offers App Management for them.
     @Published var appManagementBlocked: [String] = []
     /// The CrossOver builds the Wine modules' catalog carries modules for.
     @Published var engineBuilds: [EngineBuild] = []
@@ -410,7 +410,7 @@ final class Model: ObservableObject {
     }
 
     /// A fix that changes a macOS game's own app is asked about first, as a
-    /// CrossOver app is in Wine Modules: it signs the app again. Keep asks too,
+    /// CrossOver app is in Improvements: it signs the app again. Keep asks too,
     /// since the agent then does it in the background.
     private func confirmGameApps(_ hits: [Hit], keep: Bool = false) -> Bool {
         guard !hits.isEmpty else { return true }
@@ -434,52 +434,60 @@ final class Model: ObservableObject {
 
 // MARK: - Wine modules
 
-/// One CrossOver the Wine modules can go into, with what its installer says.
+/// One improvement in one CrossOver, with what its installer says.
 struct EngineRow: Identifiable {
     let target: EngineTarget
+    let part: EnginePart
     var state: EngineState = .unknown
     /// What the last install or removal left, when it needs the user.
     var outcome: String?
 
-    var id: String { target.id }
+    var id: String { "\(part.rawValue)|\(target.id)" }
 }
 
 extension Model {
-    /// Whether the agent keeps the modules in this CrossOver: the Settings box.
-    func engineKept(_ row: EngineRow) -> Bool {
-        settings.modulesKept.contains { Engine.resolved($0) == row.target.key }
-    }
+    /// Whether the agent keeps this improvement in this CrossOver.
+    func engineKept(_ row: EngineRow) -> Bool { settings.kept(row.part, row.target.key) }
 
-    /// Whether the agent keeps the modules there from now on. The switch in Wine
-    /// Modules sets this and also installs or removes them (setEngineOn).
+    /// Whether the agent keeps the improvement there from now on. Its switch in
+    /// Improvements sets this and also installs or removes it (setEngineOn).
     func setEngineKept(_ row: EngineRow, _ on: Bool) {
-        let key = row.target.key
-        settings.modulesKept.removeAll { Engine.resolved($0) == key }
-        settings.modulesDeclined.removeAll { Engine.resolved($0) == key }
-        if on { settings.modulesKept.append(key) } else { settings.modulesDeclined.append(key) }
+        settings.setKept(row.part, row.target.key, on)
         settings.save()
         objectWillChange.send()
     }
 
+    /// The rows of one improvement, in the order the CrossOvers were found.
+    func engineRows(_ part: EnginePart) -> [EngineRow] { engineRows.filter { $0.part == part } }
+
     /// Only a CrossOver there are modules for, of its exact build and Wine, can be turned on.
     func engineSelectable(_ row: EngineRow) -> Bool { row.state != .noModules && row.state != .unknown }
 
-    /// The switch in Wine Modules is the action: on installs into that CrossOver
-    /// and keeps the modules there, off puts CrossOver's own files back and leaves
-    /// it alone. A CrossOver app is asked about first, since it changes the app.
+    /// An improvement's switch is the action: on installs it into that CrossOver and
+    /// keeps it there, off puts CrossOver's own files back and leaves it alone. A
+    /// CrossOver app is asked about first, since it changes the app.
     func setEngineOn(_ row: EngineRow, _ on: Bool) {
         if on, row.target.app != nil, !confirmApp([row]) { objectWillChange.send(); return }
         setEngineKept(row, on)
         engineBatch([row], install: on)
     }
 
-    /// All, or None: every CrossOver there are modules for, after one question.
-    func setAllEngine(_ on: Bool) {
-        let rows = engineRows.filter { engineSelectable($0) && engineKept($0) != on }
+    /// The improvements a game's fix needs that are in no CrossOver: the Games tab says so beside it.
+    /// Unknown until the CrossOvers have been looked at.
+    func missingImprovements(_ game: Game) -> [EnginePart] {
+        guard !engineRows.isEmpty else { return [] }
+        return game.neededParts.filter { part in
+            !engineRows(part).contains { [.installed, .outdated].contains($0.state) }
+        }
+    }
+
+    /// All, or None, for one improvement: every CrossOver it is available for, after one question.
+    func setAllEngine(_ part: EnginePart, _ on: Bool) {
+        let rows = engineRows(part).filter { engineSelectable($0) && engineKept($0) != on }
         guard !rows.isEmpty else { return }
         let alert = NSAlert()
-        alert.messageText = on ? "Install the Wine modules into \(rows.count) CrossOver install(s)?"
-            : "Remove the Wine modules from \(rows.count) CrossOver install(s)?"
+        alert.messageText = on ? "Install \(part.title) into \(rows.count) CrossOver install(s)?"
+            : "Remove \(part.title) from \(rows.count) CrossOver install(s)?"
         alert.informativeText = rows.map(\.target.name).joined(separator: "\n")
         alert.addButton(withTitle: on ? "Install" : "Remove")
         alert.addButton(withTitle: "Cancel")
@@ -492,7 +500,8 @@ extension Model {
     private func confirmApp(_ rows: [EngineRow]) -> Bool {
         let alert = NSAlert()
         alert.messageText = "Change CrossOver itself?"
-        alert.informativeText = "MacGameFix puts its Wine modules into " + rows.map(\.target.name).joined(separator: ", ")
+        alert.informativeText = "MacGameFix puts " + ListFormatter.localizedString(byJoining: Array(Set(rows.map(\.part.title))).sorted())
+            + " into " + Array(Set(rows.map(\.target.name))).sorted().joined(separator: ", ")
             + ". macOS asks you to allow MacGameFix under App Management, and the app is signed again ad hoc, "
             + "so CodeWeavers' signature no longer covers it. Turning it off puts CrossOver's own files back."
         alert.addButton(withTitle: "Install")
@@ -514,7 +523,7 @@ extension Model {
 
     /// The rows macOS lets this app change. A refused write makes macOS show its
     /// own notification, so nothing more is asked here: a CrossOver app it refused
-    /// is kept in appManagementBlocked, for the Wine Modules tab's notice.
+    /// is kept in appManagementBlocked, for the Improvements tab's notice.
     func allowedToChange(_ rows: [EngineRow]) -> [EngineRow] {
         let blocked = rows.filter { !Model.mayChange($0.target) }
         let checked = Set(rows.map(\.target.name))
@@ -522,7 +531,7 @@ extension Model {
         return rows.filter { row in !blocked.contains { $0.id == row.id } }
     }
 
-    /// Check Again: each CrossOver app the modules are kept in, or that was refused.
+    /// Check Again: each CrossOver app an improvement is kept in, or that was refused.
     func checkAppManagement() {
         _ = allowedToChange(engineRows.filter {
             $0.target.app != nil && (engineKept($0) || appManagementBlocked.contains($0.target.name))
@@ -539,24 +548,24 @@ extension Model {
     func engineBatch(_ rows: [EngineRow], install: Bool) {
         guard !busy, !rows.isEmpty else { return }
         let allowed = allowedToChange(rows)
-        let refused = rows.filter { row in !allowed.contains { $0.id == row.id } }.map(\.target.name)
+        let refused = Array(Set(rows.filter { row in !allowed.contains { $0.id == row.id } }.map(\.target.name))).sorted()
         let needs = refused.isEmpty ? "" : " " + ListFormatter.localizedString(byJoining: refused)
-            + " " + (refused.count == 1 ? "needs" : "need") + " App Management: see Wine Modules."
+            + " " + (refused.count == 1 ? "needs" : "need") + " App Management: see Improvements."
         guard !allowed.isEmpty else { status = needs.trimmingCharacters(in: .whitespaces); return }
         let rows = allowed
         busy = true
         Task {
             var failed = 0
             for (n, row) in rows.enumerated() {
-                status = "\(install ? "Installing the modules into" : "Removing the modules from") \(row.target.name)"
+                status = "\(install ? "Installing \(row.part.title) into" : "Removing \(row.part.title) from") \(row.target.name)"
                     + (rows.count > 1 ? " (\(n + 1) of \(rows.count))…" : "…")
-                note(""); note("▸ Wine modules — \(row.target.name) — \(row.target.root.path)")
-                let code = await Engine.run(row.target, catalog: modulesDir, install ? [] : ["--restore"]) { line in
+                note(""); note("▸ \(row.part.title) — \(row.target.name) — \(row.target.root.path)")
+                let code = await Engine.run(row.target, part: row.part, catalog: modulesDir, install ? [] : ["--restore"]) { line in
                     Task { @MainActor in self.note("  " + line) }
                 }
                 await Task.yield()
                 // As with the games, the state asked afterwards is the authority.
-                let state = await Engine.status(row.target, catalog: modulesDir)
+                let state = await Engine.status(row.target, part: row.part, catalog: modulesDir)
                 let took = install ? state == .installed : state == .absent
                 if let i = engineRows.firstIndex(where: { $0.id == row.id }) {
                     engineRows[i].state = state
@@ -575,7 +584,7 @@ extension Model {
     /// read its options in: those that carry winebus.so. An older build of them
     /// reads them too, so a new build of the modules does not hide the tab.
     var padAvailable: Bool {
-        engineRows.contains { row in
+        engineRows(.controls).contains { row in
             [.installed, .outdated].contains(row.state) && (engineBuilds.first { $0.build == row.target.build }?.files.keys
                 .contains { $0.hasSuffix("unix/winebus.so") } ?? false)
         }
@@ -677,7 +686,7 @@ extension Model {
     private func savePadReport(_ game: InstalledGame, as kind: String) -> Bool {
         let store = PadStore.exists ? PadStore.load() : pad
         let text = store.report(appid: game.appid, name: game.name, presets: padPresets,
-                                engines: engineRows.map { ($0.target.name, $0.target.build, $0.state.label) })
+                                engines: engineRows.map { ("\($0.target.name) — \($0.part.short)", $0.target.build, $0.state.label) })
         return saveReport(text, as: kind, for: game.name)
     }
 
@@ -719,7 +728,7 @@ extension Model {
     /// A game's report, saved where the user chooses, and the issue form for a game
     /// that does not work opened with the game and what goes wrong in it.
     func probeReport(_ game: ProbeGame, symptom: ProbeSymptom, findings: ProbeFindings) {
-        let engines = engineRows.map { ($0.target.name, $0.target.build, $0.state.label) }
+        let engines = engineRows.map { ("\($0.target.name) — \($0.part.short)", $0.target.build, $0.state.label) }
         let log = (try? String(contentsOf: PadStore.log, encoding: .utf8)) ?? ""
         let padLines = log.split(separator: "\n").map(String.init).filter { $0.contains(" game=\(game.appid) ") }
         let text = Probe.report(game, symptom: symptom.rawValue, findings: findings, fix: probeFixes[game.id],
@@ -751,7 +760,7 @@ extension Model {
         busy = true
         status = "Making \(hit.game.name)'s fix report…"
         let session = FixReport.session(log, game: hit.game.name, folder: hit.folder)
-        let engines = engineRows.map { ($0.target.name, $0.target.build, $0.state.label) }
+        let engines = engineRows.map { ("\($0.target.name) — \($0.part.short)", $0.target.build, $0.state.label) }
         let catalog = resources
         Task {
             let made = await FixReport.make(hit, kind: kind, catalog: catalog, session: session, engines: engines)
@@ -805,8 +814,8 @@ extension Model {
         status = "Looking at CrossOver and the NotProton runners…"
         Task {
             let found = await Task.detached { Engine.targets() }.value
-            var rows = found.map { EngineRow(target: $0) }
-            for i in rows.indices { rows[i].state = await Engine.status(rows[i].target, catalog: modulesDir) }
+            var rows = EnginePart.allCases.flatMap { part in found.map { EngineRow(target: $0, part: part) } }
+            for i in rows.indices { rows[i].state = await Engine.status(rows[i].target, part: rows[i].part, catalog: modulesDir) }
             engineRows = rows
             busy = false
             status = found.isEmpty ? "No CrossOver or NotProton runner found." : "\(found.count) CrossOver install(s) found."
@@ -819,11 +828,12 @@ extension Model {
             }
             // Once a launch: whether macOS lets this app change the CrossOver apps the
             // modules are kept in. A refusal shows macOS's own notification, and the
-            // Wine Modules tab its notice; no alert of ours (one beside macOS's was
+            // Improvements tab its notice; no alert of ours (one beside macOS's was
             // one too many, 2026-10-20).
             if !appManagementChecked {
                 appManagementChecked = true
                 let apps = rows.filter { $0.target.app != nil && engineKept($0) }
+                    .reduce(into: [EngineRow]()) { kept, row in if !kept.contains(where: { $0.target.id == row.target.id }) { kept.append(row) } }
                 if !apps.isEmpty { _ = allowedToChange(apps) }
             }
             // The first time the modules that read them are in, the options start
@@ -872,7 +882,7 @@ struct ContentView: View {
                 GamesView(model: model).padding(.top, 6)
                     .tabItem { Text("Games") }
                 EngineView(model: model).padding(.top, 6)
-                    .tabItem { Text("Wine Modules") }
+                    .tabItem { Text("Improvements") }
                 if model.padAvailable {
                     ControllersView(model: model).padding(.top, 6)
                         .tabItem { Text("Game Feel") }
@@ -888,7 +898,7 @@ struct ContentView: View {
             }
         }
         .padding(16)
-        // Five tabs of 107 pt each (the width "Wine Modules" sets), centred clear of the window's buttons:
+        // Five tabs of 107 pt each (the width "Improvements" sets), centred clear of the window's buttons:
         // at 620 pt they went behind the toolbar's overflow menu (seen 2026-10-20).
         .frame(minWidth: 720, minHeight: 460)
         .onGeometryChange(for: CGSize.self, of: { $0.size }) { windowSize = $0 }
@@ -1016,8 +1026,20 @@ struct GamesView: View {
                     }
                     .width(min: 150, ideal: 200)
                     TableColumn("Requires") { row in
-                        Text(row.game.requirementNote ?? "—").font(.caption).foregroundStyle(.secondary).lineLimit(3)
-                            .help(row.game.requirementNote ?? "")
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(row.game.requirementNote ?? "—").font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                                .help(row.game.requirementNote ?? "")
+                            ForEach(model.missingImprovements(row.game)) { part in
+                                HStack(spacing: 4) {
+                                    Label("\(part.title) is not installed", systemImage: "exclamationmark.triangle.fill")
+                                        .labelStyle(.titleAndIcon).font(.caption).foregroundStyle(.orange).lineLimit(2)
+                                    Button("Install…") { model.setAllEngine(part, true) }
+                                        .controlSize(.mini).disabled(model.busy)
+                                }
+                                .help("This game's fix needs the \(part.title) improvement in the CrossOver that runs it. "
+                                      + "Install puts it into every CrossOver it is available for, as All does in Improvements.")
+                            }
+                        }
                     }
                     .width(min: 100, ideal: 140)
                     TableColumn("Status") { row in
@@ -1136,6 +1158,9 @@ struct GamePrefixCell: View {
 /// The Wine modules: the part of MacGameFix that does change CrossOver. Each
 /// CrossOver has a switch, and the switch is the action; the tab also has the
 /// modules' own updates.
+/// Improvements: what MacGameFix changes in CrossOver itself, one section each with
+/// a switch per CrossOver, then Game Mode, which changes nothing in CrossOver, and the
+/// updates they share.
 struct EngineView: View {
     @ObservedObject var model: Model
 
@@ -1159,49 +1184,40 @@ struct EngineView: View {
                     }
                 }
             }
+
+            ForEach(EnginePart.allCases) { part in ImprovementSection(part: part, model: model) }
+
             Section {
-                ForEach(model.engineRows) { row in EngineSwitch(row: row, model: model) }
-                if model.engineRows.isEmpty {
-                    Text(model.busy ? "Looking…" : "No CrossOver or NotProton runner found.").foregroundStyle(.secondary)
+                Toggle("Run CrossOver's games as games", isOn: Binding(get: { model.settings.gameMode },
+                                                                        set: { model.setGameMode($0) }))
+                    .help("macOS turns Game Mode on for a game in full screen whose app says it is a game. A game in "
+                          + "CrossOver runs from a copy of Wine that does not say so; with this on, it runs from one "
+                          + "that does, kept in MacGameFix's folder. CrossOver itself is not changed, and turning "
+                          + "this off takes it all away.")
+                if model.settings.gameMode && !model.gameModeLine.isEmpty {
+                    Text(model.gameModeLine).font(.caption).foregroundStyle(.secondary)
                 }
-                Toggle("New CrossOver builds too", isOn: Binding(
-                    get: { model.settings.modulesNewBuilds },
-                    set: { model.settings.modulesNewBuilds = $0; model.settings.save(); model.objectWillChange.send() }))
-                    .help("With updates on Automatic: when NotProton adds a runner for a new CrossOver build and "
-                          + "there are modules for it, they go there too, once a runner that is on has them.")
-                HStack {
-                    Button("All") { model.setAllEngine(true) }
-                    Button("None") { model.setAllEngine(false) }
-                    Spacer()
-                    let behind = model.engineRows.filter { model.engineBehind($0) }
-                    if !behind.isEmpty {
-                        Button("Update All") { model.engineBatch(behind, install: true) }
-                            .help("Brings the modules up to date in every CrossOver that is on and behind.")
-                    }
-                    Button("Look Again") { model.scanEngine() }
-                }
-                .disabled(model.busy)
             } header: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("The DualSense's haptics and triggers, on a cable and over Bluetooth")
-                    Text("On installs the Wine modules into that CrossOver; off puts CrossOver's own back.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                .help("Unlike the game fixes, these go into CrossOver itself. Quit that CrossOver's games first. "
-                      + "In a CrossOver app, macOS asks to allow MacGameFix under App Management, and the app is "
-                      + "signed again ad hoc.")
+                ImprovementHeader(symbol: "speedometer", title: "Game Mode",
+                                  summary: "macOS gives a full-screen game the CPU, the GPU and twice the Bluetooth bandwidth.",
+                                  count: model.settings.gameMode ? "On" : "Off")
             } footer: {
-                Text("Only a CrossOver of a build and Wine the modules were built for can be turned on.")
+                Text("Play in full screen: the green button, or Control-Command-F. Changes nothing in CrossOver.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
-            Section("Updates") {
-                Picker("New Wine modules", selection: Binding(get: { model.modulesMode }, set: { model.setModulesMode($0) })) {
+            Section {
+                Picker("New modules", selection: Binding(get: { model.modulesMode }, set: { model.setModulesMode($0) })) {
                     ForEach(Model.UpdateMode.allCases) { Text($0.label).tag($0) }
                 }
                 .help("New Wine modules from GitHub, on their own, once a day. On Automatic they also go back "
                       + "into the runners that are on after a CrossOver or NotProton update. “Ask first” checks "
                       + "the signature and tells you. A CrossOver app is only ever reported.")
+                Toggle("Also into runners for new CrossOver builds", isOn: Binding(
+                    get: { model.settings.modulesNewBuilds },
+                    set: { model.settings.modulesNewBuilds = $0; model.settings.save(); model.objectWillChange.send() }))
+                    .help("With updates on Automatic: when NotProton adds a runner for a new CrossOver build and "
+                          + "there are modules for it, each improvement goes there too, once a runner that is on has it.")
                 if let waiting = model.waitingModules {
                     LabeledContent(String(localized: "New Wine modules ready (\(String(waiting)))")) {
                         Button("Install") { model.checkForModules() }.disabled(model.busy)
@@ -1215,10 +1231,76 @@ struct EngineView: View {
                         Button("Check Now") { model.checkForModules() }.disabled(model.busy)
                     }
                 }
+                HStack {
+                    let behind = model.engineRows.filter { model.engineBehind($0) }
+                    if !behind.isEmpty {
+                        Button("Update All (\(behind.count))") { model.engineBatch(behind, install: true) }
+                            .help("Brings every improvement that is on and behind up to date.")
+                    }
+                    Spacer()
+                    Button("Look Again") { model.scanEngine() }
+                }
+                .disabled(model.busy)
+            } header: {
+                Text("Updates")
             }
         }
         .formStyle(.grouped)
         .onAppear { if model.engineRows.isEmpty { model.scanEngine() } }
+    }
+}
+
+/// An improvement's title, what it does in a line, and where it is on.
+struct ImprovementHeader: View {
+    let symbol: String
+    let title: String
+    let summary: String
+    let count: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: symbol).foregroundStyle(.tint).frame(width: 18)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.headline).foregroundStyle(.primary)
+                Text(summary).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            Text(count).font(.caption).monospacedDigit().foregroundStyle(.secondary)
+        }
+        .textCase(nil)
+        .padding(.bottom, 2)
+    }
+}
+
+/// One improvement: a switch for each CrossOver, and All or None for every one it is available for.
+struct ImprovementSection: View {
+    let part: EnginePart
+    @ObservedObject var model: Model
+
+    var body: some View {
+        let rows = model.engineRows(part)
+        let available = rows.filter { model.engineSelectable($0) }
+        Section {
+            if rows.isEmpty {
+                Text(model.busy ? "Looking…" : "No CrossOver or NotProton runner found.").foregroundStyle(.secondary)
+            }
+            ForEach(rows) { row in EngineSwitch(row: row, model: model) }
+        } header: {
+            ImprovementHeader(symbol: part.symbol, title: part.title, summary: part.summary,
+                              count: available.isEmpty ? "" : "On in \(available.filter { model.engineKept($0) }.count) of \(available.count)")
+                .help(part.detail)
+        } footer: {
+            HStack(alignment: .firstTextBaseline) {
+                Text(part.footer).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("All") { model.setAllEngine(part, true) }
+                    .disabled(available.allSatisfy { model.engineKept($0) })
+                Button("None") { model.setAllEngine(part, false) }
+                    .disabled(!available.contains { model.engineKept($0) })
+            }
+            .controlSize(.small)
+            .disabled(model.busy || available.isEmpty)
+        }
     }
 }
 
@@ -1366,7 +1448,7 @@ struct ReportSheet: View {
                                 .help("The Wine modules log what this game writes to the pad, from its next start. "
                                       + "Turn it off again afterwards.")
                         } else {
-                            Text("The Wine modules are in no CrossOver yet: turn them on in Wine Modules first.")
+                            Text("The DualSense controllers improvement is in no CrossOver yet: turn it on in Improvements first.")
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -2081,13 +2163,15 @@ struct EngineSwitch: View {
     @ObservedObject var model: Model
 
     var body: some View {
+        let selectable = model.engineSelectable(row)
         HStack(alignment: .center, spacing: 10) {
-            VStack(alignment: .leading, spacing: 1) {
+            EngineTargetIcon(target: row.target)
+            VStack(alignment: .leading, spacing: 2) {
                 Text(row.target.name).lineLimit(1).truncationMode(.middle)
-                HStack(spacing: 6) {
-                    Text(model.engineSelectable(row) ? "\(row.target.build) · \(row.state.label)"
-                         : "\(row.target.build) · no modules for this build")
-                        .foregroundStyle(model.engineSelectable(row) ? row.state.color : .secondary)
+                HStack(spacing: 5) {
+                    Circle().fill(selectable ? row.state.color : Color.secondary.opacity(0.4)).frame(width: 6, height: 6)
+                    Text(selectable ? "\(row.target.build) · \(row.state.label)" : "\(row.target.build) · \(EngineState.noModules.label)")
+                        .foregroundStyle(selectable ? row.state.color : .secondary)
                     if let o = row.outcome { Text(o).foregroundStyle(.orange) }
                 }
                 .font(.caption)
@@ -2096,14 +2180,41 @@ struct EngineSwitch: View {
             // On, and something put CrossOver's own files back or newer modules came.
             if model.engineBehind(row) {
                 Button(row.state == .outdated ? "Update" : "Install Again") { model.engineBatch([row], install: true) }
+                    .controlSize(.small)
                     .disabled(model.busy)
             }
             Toggle("", isOn: Binding(get: { model.engineKept(row) }, set: { model.setEngineOn(row, $0) }))
                 .labelsHidden()
                 .toggleStyle(.switch)
-                .disabled(!model.engineSelectable(row) || model.busy)
+                .controlSize(.small)
+                .disabled(!selectable || model.busy)
         }
+        .opacity(selectable ? 1 : 0.6)
         .help(row.target.root.path)
+    }
+}
+
+/// The CrossOver app's own icon, or NotProton's for one of its runners.
+struct EngineTargetIcon: View {
+    let target: EngineTarget
+
+    var body: some View {
+        Group {
+            if let icon = Self.icon(target) {
+                Image(nsImage: icon).resizable().interpolation(.high)
+            } else {
+                Image(systemName: "shippingbox").foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 20, height: 20)
+        .help(target.app != nil ? "A CrossOver app" : "A NotProton runner")
+    }
+
+    static func icon(_ target: EngineTarget) -> NSImage? {
+        if let app = target.app { return NSWorkspace.shared.icon(forFile: app.path) }
+        let notproton = ["/Applications/NotProton.app", Paths.home.appendingPathComponent("Applications/NotProton.app").path]
+            .first { FileManager.default.fileExists(atPath: $0) }
+        return notproton.map { NSWorkspace.shared.icon(forFile: $0) }
     }
 }
 
@@ -2142,24 +2253,6 @@ struct SettingsView: View {
             }
 
             Section {
-                Toggle("Game Mode for CrossOver's games", isOn: Binding(get: { model.settings.gameMode },
-                                                                        set: { model.setGameMode($0) }))
-                    .help("macOS turns Game Mode on for a game in full screen whose app says it is a game. A game in "
-                          + "CrossOver runs from a copy of Wine that does not say so; with this on, it runs from one "
-                          + "that does, kept in MacGameFix's folder. CrossOver itself is not changed, and turning "
-                          + "this off takes it all away.")
-                if model.settings.gameMode && !model.gameModeLine.isEmpty {
-                    Text(model.gameModeLine).font(.caption).foregroundStyle(.secondary)
-                }
-            } header: {
-                Text("Game Mode")
-            } footer: {
-                Text("Play in full screen: the green button, or Control-Command-F. Game Mode also doubles what a "
-                     + "wireless controller's Bluetooth link carries, which a DualSense's haptics need.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-
-            Section {
                 Picker("Game fixes", selection: Binding(get: { model.updateMode }, set: { model.setUpdateMode($0) })) {
                     ForEach(Model.UpdateMode.allCases) { Text($0.label).tag($0) }
                 }
@@ -2180,7 +2273,7 @@ struct SettingsView: View {
             } header: {
                 Text("Game fix updates")
             } footer: {
-                Text("The Wine modules have their own, in Wine Modules.").font(.caption).foregroundStyle(.secondary)
+                Text("The Wine modules have their own, in Improvements.").font(.caption).foregroundStyle(.secondary)
             }
 
             if !model.events.isEmpty {
@@ -2352,7 +2445,7 @@ enum Entry {
                 var parts = [hit.game.name, hit.game.requirementNote ?? "no special requirement"]
                 if hit.game.needsPrefix {
                     parts.append(hit.chosen.isEmpty ? "no prefix"
-                                 : (hit.game.inPrefix ? "DLLs into the " : "keys into the ")
+                                 : (hit.game.prefixDLLs ? "DLLs into the " : "keys into the ")
                                    + hit.chosen.map(\.label).joined(separator: " and the "))
                 }
                 print(parts.joined(separator: " | "))
@@ -2374,11 +2467,14 @@ enum Entry {
             exit(0)
         }
         if args.contains("--engine-report") {
-            // Every CrossOver app and NotProton runner, and what the Wine modules' installer says of it.
+            // Every CrossOver app and NotProton runner, and what the Wine modules' installer says of
+            // it: all of them, then each improvement.
             let (dir, _) = Catalog.active(.modules)
             wait {
                 for t in Engine.targets() {
-                    print("\(t.name) | \(t.build)\(t.fex ? " | fex" : "") | \(await Engine.status(t, catalog: dir))")
+                    var line = "\(t.name) | \(t.build)\(t.fex ? " | fex" : "") | \(await Engine.status(t, catalog: dir))"
+                    for part in EnginePart.allCases { line += " | \(part.rawValue) \(await Engine.status(t, part: part, catalog: dir))" }
+                    print(line)
                 }
                 return 0
             }
@@ -2466,20 +2562,21 @@ enum Entry {
             exit(0)
         }
         if let root = value("--engine-install") ?? value("--engine-remove") {
-            // One CrossOver, by the folder that holds lib/wine, for the tests.
+            // One CrossOver, by the folder that holds lib/wine, for the tests; --part controls|rosetta
+            // for one improvement, every one without it.
             let (dir, _) = Catalog.active(.modules)
             let path = Engine.resolved(root)
             guard let target = Engine.targets().first(where: { $0.key == path })
             else { print("not a CrossOver this app knows: \(root)"); exit(1) }
+            let part = value("--part").flatMap(EnginePart.init(rawValue:))
+            if value("--part") != nil, part == nil { print("unknown improvement: \(value("--part")!)"); exit(2) }
             let remove = args.contains("--engine-remove")
             wait {
-                let code = await Engine.run(target, catalog: dir, remove ? ["--restore"] : []) { print($0) }
+                let code = await Engine.run(target, part: part, catalog: dir, remove ? ["--restore"] : []) { print($0) }
                 // As from the window: what is put in is kept, what is taken out is left alone.
                 if code == 0 {
                     var settings = AutoSettings.load()
-                    settings.modulesKept.removeAll { Engine.resolved($0) == target.key }
-                    settings.modulesDeclined.removeAll { Engine.resolved($0) == target.key }
-                    if remove { settings.modulesDeclined.append(target.key) } else { settings.modulesKept.append(target.key) }
+                    for p in part.map({ [$0] }) ?? EnginePart.allCases { settings.setKept(p, target.key, !remove) }
                     settings.save()
                 }
                 return code
