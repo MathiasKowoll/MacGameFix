@@ -249,10 +249,12 @@ winebus counterpart.
 Under Rosetta, Phantom Blade Zero's Denuvo spins one core at 100% and never opens
 a window. Rosetta's x86 CPU lacks what the protection checks for, and two of its
 answers differ from a real CPU's. Two patches to the Intel side's `ntdll.so` make
-it look more like one, and a third runs code Rosetta skips. The game's code is not touched. They come from Hrava's
-`ntdll-rosetta-cpu-fidelity` and a D3DMetal fallback, both written for CrossOver
-26.3 and handed to us in a package for that game; the Wine 11.17 copy is ported
-to 41073, where every signal-path helper takes `struct thread_data`.
+it look more like one, and a third runs code Rosetta skips. The game's code is
+not touched. The first two come from Hrava's `ntdll-rosetta-cpu-fidelity` and a
+D3DMetal fallback, both written for CrossOver 26.3 and handed to us in a package
+for that game; the Wine 11.17 copy is ported to 41073, where every signal-path
+helper takes `struct thread_data`. The third, `0019`, is ours, from Persona 4
+Golden.
 
 | Patch | Module | Change |
 |---|---|---|
