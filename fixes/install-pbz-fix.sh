@@ -38,7 +38,7 @@
 # Through this installer it has not been played yet.
 #
 # MGVF-SCOPE: prefix
-# MGVF-GAME: Phantom Blade Zero | PBZ.exe |
+# MGVF-GAME: Phantom Blade Zero | PBZ.exe | platform/steam
 # MGVF-WHY: Never opens a window under Rosetta: its Denuvo checks the CPU for instructions Rosetta does not have. The Wine modules' ntdll shows them to this executable alone, and it loads Microsoft's Visual C++ runtime first.
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix

@@ -3,7 +3,7 @@
   "installer": "install-pbz-fix.sh",
   "scope": "prefix",
   "executable": "PBZ.exe",
-  "carrierDirectory": null,
+  "carrierDirectory": "platform/steam",
   "alsoRuns": [],
   "summary": "Never opens a window under Rosetta: its Denuvo checks the CPU for instructions Rosetta does not have. The Wine modules' ntdll shows them to this executable alone, and it loads Microsoft's Visual C++ runtime first.",
   "page": null,
