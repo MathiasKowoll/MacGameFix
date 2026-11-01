@@ -249,7 +249,7 @@ winebus counterpart.
 Under Rosetta, Phantom Blade Zero's Denuvo spins one core at 100% and never opens
 a window. Rosetta's x86 CPU lacks what the protection checks for, and two of its
 answers differ from a real CPU's. Two patches to the Intel side's `ntdll.so` make
-it look more like one. The game's code is not touched. They come from Hrava's
+it look more like one, and a third runs code Rosetta skips. The game's code is not touched. They come from Hrava's
 `ntdll-rosetta-cpu-fidelity` and a D3DMetal fallback, both written for CrossOver
 26.3 and handed to us in a package for that game; the Wine 11.17 copy is ported
 to 41073, where every signal-path helper takes `struct thread_data`.
@@ -257,6 +257,7 @@ to 41073, where every signal-path helper takes `struct thread_data`.
 | Patch | Module | Change |
 |---|---|---|
 | `0017-ntdll-rosetta-cpu-fidelity.patch` | `ntdll.so` | Under Rosetta only (`is_rosetta2`): CPUID leaf 7 gains CLFLUSHOPT and CLWB (EBX) and RDPID (ECX) in Rosetta's own CPUID table, only when `WINE_ROSETTA_CPUID7_OR` asks for them; CLWB and RDPID are emulated on the invalid-opcode trap; Dr0-Dr3 execution breakpoints set through `NtSetContextThread` are emulated with non-executable pages and single-stepping, and Dr7's bit 10 reads as set while one is enabled; an access through a non-canonical address is reported as Windows reports the general protection fault, an access violation at address -1, instead of the real address. |
+| `0019-ntdll-rosetta-smc-cpuid.patch` | `ntdll.so` | Rosetta runs the instructions of a block as it translated them, even when one of them has just rewritten the next: copy protection decrypts a `cpuid` that way (`add dword [rip+0], key`, then the four bytes it changed), and Rosetta runs the old bytes. When the old first instruction is one byte long it carries on from the `cpuid`'s second byte, `0xa2`, which decodes as `mov [imm64], al` and faults on the eight bytes after it. That fault, with `0f a2` just before the faulting address and the address those eight bytes hold, means the `cpuid` never ran: `ntdll` runs it, with Rosetta's own answers (and `0017`'s leaf 7), and resumes after it. A `cpuid` skipped without a fault cannot be seen. |
 | `0018-ntdll-d3dmetal-fallback.patch` | `ntdll.so` | A 64-bit process with `CX_GRAPHICS_BACKEND=d3dmetal` gets D3DMetal's DLL folder first in its DLL path when it is not there: `lib/apple_gptk/wine` (`lib/apple_gptk3/wine` with `CX_GRAPHICS_BACKEND_VERSION=3`), or 26.3's `lib64/apple_gptk/wine`. Phantom Blade Zero started by NotProton got wined3d's DXGI and vkd3d without it and refused to start ("failed the SM6 hardware preflight"). `CX_ACTIVE_GRAPHICS_BACKEND` cannot tell whether it was routed: the game inherits it from its bootstrapper. A process CrossOver did route is left as it is. |
 
 Only the CPUID bits need asking for, per game:
@@ -290,6 +291,17 @@ side, with the same two patches built by NotProton's experiment:
   exception. `RtlVirtualUnwind2` then reads a garbage Rsp walking macOS's frames:
   `0017` reports that fault as the general protection fault, CodeWeavers' as an
   access violation at that address.
+
+Persona 4 Golden's Denuvo (2026-11-01): with or without `WINE_ROSETTA_CPUID7_OR` it
+died about 12 s in, at `P4G.exe+0x269d745b`, writing `0xfffffff22d819090`, `rax=0x80000002`,
+the fault it had in September on 26.3. The bytes there at the fault are a stub that decrypts
+a `cpuid` (leaf `0x80000002`, the processor's name) with the instruction before it, and the
+address is the eight bytes after that `cpuid`. Its 34 bytes, copied into a small program,
+fault the same way under Rosetta with no Wine at all (a macOS x86_64 binary, `SIGSEGV` at
+the same address); with a jump between the add and the `cpuid` they run, and with other
+instructions in place of the `cpuid` Rosetta runs the old bytes every time. With `0019` the
+stub runs a thousand times and returns the name's first four bytes. Persona 4 Golden itself
+not yet played with it.
 
 Not played yet: CrossOver 26.3, and a CrossOver app's bottle (only the runner),
 with these builds.
