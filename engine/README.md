@@ -302,8 +302,9 @@ address is the eight bytes after that `cpuid`. Its 34 bytes, copied into a small
 fault the same way under Rosetta with no Wine at all (a macOS x86_64 binary, `SIGSEGV` at
 the same address); with a jump between the add and the `cpuid` they run, and with other
 instructions in place of the `cpuid` Rosetta runs the old bytes every time. With `0019` the
-stub runs a thousand times and returns the name's first four bytes. Persona 4 Golden itself
-not yet played with it.
+stub runs a thousand times and returns the name's first four bytes. Persona 4 Golden then
+played at about 60 fps on Preview 41073's NotProton runner with `0019` and no
+`WINE_ROSETTA_CPUID7_OR` at all: it needs `0019` alone.
 
 Not played yet: CrossOver 26.3, and a CrossOver app's bottle (only the runner),
 with these builds.
