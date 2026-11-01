@@ -1123,10 +1123,10 @@
           "symbol": null,
           "note": "Nine values, for PBZ.exe only: the CPUID bits the Wine modules' ntdll adds when asked, and Microsoft's Visual C++ runtime loaded before Wine's.",
           "language": "bash",
-          "startLine": 153,
-          "endLine": 157,
-          "commit": "ba1083ac43b22ab50001d3eacbbac9d061fd0323",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/ba1083ac43b22ab50001d3eacbbac9d061fd0323/fixes/install-pbz-fix.sh#L153-L157",
+          "startLine": 155,
+          "endLine": 159,
+          "commit": "9ce088164ef172d26c27e6dbde3cbdf9c35be9a9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/9ce088164ef172d26c27e6dbde3cbdf9c35be9a9/fixes/install-pbz-fix.sh#L155-L159",
           "code": "values() {\n  printf '%s|%s|%s\\n' \"$ENV_KEY\" \"$CPUID_NAME\" \"$CPUID_DATA\"\n  local d\n  for d in $DLLS; do printf '%s|*%s|native,builtin\\n' \"$DLL_KEY\" \"$d\"; done\n}"
         }
       ],
