@@ -11,9 +11,12 @@
 # or the Steam Play prefix a runner such as NotProton keeps for it,
 #   .../steamapps/compatdata/4115450/pfx
 #
-# NOTHING IN THE GAME FOLDER IS TOUCHED, and no file is placed: the fix is nine
-# registry values under HKCU\Software\Wine\AppDefaults\PBZ.exe, so they apply to
-# this executable only (its Steam bootstrapper and the game share the name).
+# NOTHING IN THE GAME FOLDER IS TOUCHED. The fix is ten registry values under
+# HKCU\Software\Wine\AppDefaults\PBZ.exe, so they apply to this executable only
+# (its Steam bootstrapper and the game share the name), and one DLL in the
+# prefix's system32, msmpeg2vdec.dll, which only that override loads; CrossOver's
+# own is kept beside it as msmpeg2vdec.dll.mgvf-stock and every other program
+# keeps CrossOver's builtin.
 #
 # WHAT THIS FIXES.
 #
@@ -30,18 +33,28 @@
 # The game also checks its Visual C++ runtime and quits on Wine's builtin one,
 # so msvcp140 and vcruntime140 and their parts load native first, for it alone.
 #
+# Its menu video is H.264 through Unreal's Electra, which takes NV12 and nothing
+# else, and CrossOver on macOS does not offer NV12 from its H.264 decoder while
+# saying the decoder is D3D aware: the menu stays black. msmpeg2vdec-sw.dll,
+# built from h264-software-decoder.c, serves the same decoder class over
+# CrossOver's own decoder and answers as winevideo's patch 0006 makes Wine
+# answer: NV12 offered, no D3D awareness, so Electra decodes into system memory.
+# It is the same file for CrossOver 26.3 and Preview 27.
+#
 # What else it needs, and this does not do: the Wine modules on (Wine Modules
 # tab), since CrossOver's own ntdll ignores the value; D3DMetal 4 (CrossOver
 # Preview 27 carries it; 26.3 carries 3.0); the Intel side, not FEX. Played on
 # 2026-11-01 with the same values passed in the launch options, on Preview
-# 41073's NotProton runner: it passed Denuvo and was played for 32 minutes.
-# Through this installer it has not been played yet.
+# 41073's NotProton runner: it passed Denuvo and was played for 32 minutes,
+# with the menu video from winegstreamer carrying 0006. The decoder DLL was
+# measured with a probe on all four CrossOvers (NV12 offered and 30 frames
+# decoded into the caller's system-memory samples, where CrossOver's own offers
+# no NV12); in the game it has not been played yet.
 #
 # MGVF-SCOPE: prefix
-# MGVF-IN-PREFIX: registry
 # MGVF-NEEDS: rosetta
 # MGVF-GAME: Phantom Blade Zero | PBZ.exe | platform/steam
-# MGVF-WHY: Never opens a window under Rosetta: its Denuvo checks the CPU for instructions Rosetta does not have. The Wine modules' ntdll shows them to this executable alone, and it loads Microsoft's Visual C++ runtime first.
+# MGVF-WHY: Never opens a window under Rosetta: its Denuvo checks the CPU for instructions Rosetta does not have. The Wine modules' ntdll shows them to this executable alone, it loads Microsoft's Visual C++ runtime first, and an H.264 decoder that offers NV12 brings back the black menu video.
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -89,7 +102,10 @@ CPUID_NAME="WINE_ROSETTA_CPUID7_OR"
 # CLFLUSHOPT and CLWB in EBX, RDPID in ECX: the only bits 0017 accepts.
 CPUID_DATA="01800000,00400000"
 DLLS="msvcp140 msvcp140_1 msvcp140_2 msvcp140_atomic_wait msvcp140_codecvt_ids vcruntime140 vcruntime140_1 vcruntime140_threads"
-COUNT=9   # the CPUID value and one override per DLL
+COUNT=10  # the CPUID value, one override per runtime DLL, and the decoder's
+# Named literally: build-app.sh ships the files an installer names beside itself.
+DECODER="$HERE/msmpeg2vdec-sw.dll"
+SYS="${BOTTLE:-$PFX}/drive_c/windows/system32"
 
 # bottles.sh answers from user.reg without starting wine, and edits a prefix's.
 [ -f "$HERE/bottles.sh" ] && . "$HERE/bottles.sh"
@@ -156,6 +172,21 @@ values() {
   printf '%s|%s|%s\n' "$ENV_KEY" "$CPUID_NAME" "$CPUID_DATA"
   local d
   for d in $DLLS; do printf '%s|*%s|native,builtin\n' "$DLL_KEY" "$d"; done
+  # native,builtin: should the prefix lose our file, CrossOver's decoder loads.
+  printf '%s|*msmpeg2vdec|native,builtin\n' "$DLL_KEY"
+}
+
+# Is our decoder the prefix's msmpeg2vdec.dll.
+decoder_placed() { [ -f "$SYS/msmpeg2vdec.dll" ] && cmp -s "$SYS/msmpeg2vdec.dll" "$DECODER"; }
+
+# CrossOver's file back, or ours gone when there is none to put back. A kept
+# copy that is ours is not CrossOver's, as install-ng3-fix.sh learned.
+decoder_out() {
+  if [ -f "$SYS/msmpeg2vdec.dll.mgvf-stock" ] && ! cmp -s "$SYS/msmpeg2vdec.dll.mgvf-stock" "$DECODER"; then
+    mv -f "$SYS/msmpeg2vdec.dll.mgvf-stock" "$SYS/msmpeg2vdec.dll"
+  elif decoder_placed || [ -f "$SYS/msmpeg2vdec.dll.mgvf-stock" ]; then
+    rm -f "$SYS/msmpeg2vdec.dll" "$SYS/msmpeg2vdec.dll.mgvf-stock"
+  fi
 }
 
 # How many of the values are there. From user.reg for a prefix, and for a bottle
@@ -184,8 +215,8 @@ present() {
 status() {
   local n
   n="$(present)"
-  if [ "$n" -eq "$COUNT" ]; then echo installed
-  elif [ "$n" -gt 0 ]; then echo half
+  if [ "$n" -eq "$COUNT" ] && decoder_placed; then echo installed
+  elif [ "$n" -gt 0 ] || decoder_placed; then echo half
   else echo absent; fi
 }
 
@@ -193,8 +224,9 @@ case "$ACTION" in
   --status) status; exit 0 ;;
   --restore)
       gone=1
+      if [ -n "$PFX" ]; then prefix_stopped "$PFX" || exit 1; fi
+      decoder_out
       if [ -n "$PFX" ]; then
-        prefix_stopped "$PFX" || exit 1
         while IFS='|' read -r key name data; do
           user_reg_edit "$PFX" delete "$key" "$name" || gone=0
         done < <(values)
@@ -208,7 +240,7 @@ case "$ACTION" in
         gone=0
       fi
       if [ "$gone" = 1 ]; then
-        echo "removed the values for $EXE"
+        echo "removed the values for $EXE and put CrossOver's msmpeg2vdec.dll back"
         echo "restored"
       else
         echo "warning: some of the values for $EXE could not be taken out; --status says which state is left." >&2
@@ -219,8 +251,18 @@ case "$ACTION" in
   *) usage ;;
 esac
 
+[ -f "$DECODER" ] || { echo "error: msmpeg2vdec-sw.dll is not beside this script" >&2; exit 1; }
+if [ -n "$PFX" ]; then prefix_stopped "$PFX" || exit 1; fi
+[ -d "$SYS" ] || { echo "error: no system32 here yet -- run the game once first" >&2; exit 1; }
+# Only CrossOver's own file is kept aside: ours, from an earlier install, is not
+# an original to put back.
+if [ -f "$SYS/msmpeg2vdec.dll" ] && [ ! -f "$SYS/msmpeg2vdec.dll.mgvf-stock" ] && ! decoder_placed; then
+  mv "$SYS/msmpeg2vdec.dll" "$SYS/msmpeg2vdec.dll.mgvf-stock"
+fi
+cp "$DECODER" "$SYS/msmpeg2vdec.dll"
+echo "  msmpeg2vdec.dll  <- msmpeg2vdec-sw.dll"
+
 if [ -n "$PFX" ]; then
-  prefix_stopped "$PFX" || exit 1
   while IFS='|' read -r key name data; do
     # Written and then read back, as install-ng3-fix.sh does.
     if ! user_reg_edit "$PFX" set "$key" "$name" "$data" \

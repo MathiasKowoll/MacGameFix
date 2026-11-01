@@ -120,7 +120,9 @@ for dll in "$HERE"/*.dll; do
 
   stem="$(LC_ALL=C strings -a "$dll" | grep -aoE '^[A-Za-z0-9_]+_real\.' | head -1 | sed 's/_real\.$//')"
   mark="$(LC_ALL=C strings -a "$dll" | grep -aoE '[A-Za-z0-9_-]+\.log' | head -1)"
-  if [ -z "$stem" ] || [ -z "$mark" ]; then
+  # A DLL of ours that forwards to nothing (msmpeg2vdec-sw.dll, a COM server)
+  # is built from its source alone and compared the same way.
+  if [ -z "$mark" ]; then
     printf '  %-32s ?  not a proxy of ours, or it names neither carrier nor log\n' "$name"
     continue
   fi
@@ -141,20 +143,25 @@ for dll in "$HERE"/*.dll; do
   fi
 
   out="$TMP/$name.d"; mkdir -p "$out"
-  def="$out/$stem.def"
-  {
-    echo "LIBRARY $stem.dll"
-    echo "EXPORTS"
-    python3 "$PE" exports "$dll" --ordinals |
-      while read -r ordinal sym; do
-        printf '    %s = %s_real.%s @%s\n' "$sym" "$stem" "$sym" "$ordinal"
-      done
-  } > "$def"
+  def=""
+  if [ -n "$stem" ]; then
+    def="$out/$stem.def"
+    {
+      echo "LIBRARY $stem.dll"
+      echo "EXPORTS"
+      python3 "$PE" exports "$dll" --ordinals |
+        while read -r ordinal sym; do
+          printf '    %s = %s_real.%s @%s\n' "$sym" "$stem" "$sym" "$ordinal"
+        done
+    } > "$def"
+  else
+    stem="${name%.dll}"
+  fi
 
   if ! "$CC" -shared -O2 $(flags_for "$(basename "$src")") -I"$HERE" \
-        -o "$out/$stem.dll" "$src" "$def" \
+        -o "$out/$stem.dll" "$src" ${def:+"$def"} \
         -Wl,--enable-stdcall-fixup \
-        -lmfuuid -lole32 -luuid -lshlwapi -lkernel32 -static-libgcc 2>"$out/err"; then
+        -lmfplat -lmfuuid -lole32 -luuid -lshlwapi -lkernel32 -static-libgcc 2>"$out/err"; then
     printf '  %-32s !! %s does not compile\n' "$name" "$(basename "$src")"
     [ "$VERBOSE" = 1 ] && sed 's/^/       /' "$out/err"
     drifted=$((drifted + 1)); continue

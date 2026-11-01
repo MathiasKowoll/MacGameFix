@@ -78,8 +78,8 @@ from 4.0b3). The game says so. It is only a notice: the fix still installs.
 
 The exception is a fix that also writes registry keys: the Kingdom Hearts
 titles and NieR Replicant, NINJA GAIDEN 3: Razor's Edge, whose DLLs go
-there too and nothing into its folder, and Phantom Blade Zero, which is registry
-values alone. Those keys go into the game's prefix, a
+there too and nothing into its folder, and Phantom Blade Zero, whose H.264
+decoder goes there with its registry values. Those keys go into the game's prefix, a
 Steam Play prefix (`compatdata/<appid>/pfx`) or a CrossOver bottle, so the game
 needs to have run there once. The prefix is shown in the game's *Goes into* column. When there is
 more than one, that column is a menu where any number of them can be checked, and the fix goes into
@@ -220,7 +220,7 @@ open Steam there (engine/README.md, "The options").
 | Nioh 2 | Cutscene refuses to play, then a crash | DXMT |
 | Nioh 3 | "Failed to play movie" | D3DMetal |
 | Persona 5 Strikers | Video never starts; sound only | DXMT |
-| Phantom Blade Zero | Never opens a window under Rosetta (Denuvo) | D3DMetal 4, the Wine modules on, a prefix |
+| Phantom Blade Zero | Never opens a window under Rosetta (Denuvo); black menu video | D3DMetal 4, the Wine modules on, a prefix |
 | RESIDENT EVIL 2 | Crashes when a video plays | D3DMetal |
 | RESIDENT EVIL 3 | Crashes when a video plays | D3DMetal |
 | RESONANCE: A Plague Tale Legacy | "Shader Model 6.7 is not supported" | D3DMetal |
@@ -330,11 +330,25 @@ was already running still finds it, and loads Microsoft's Visual C++ runtime
 before Wine's for it, which the game checks. Nothing goes into its folder, and no
 launch option is needed.
 
+Its menu video is H.264 played by Unreal's Electra, which takes NV12 frames and
+nothing else. CrossOver's H.264 decoder does not offer NV12 on macOS (its CW HACK
+26265) and says it is D3D aware, so the menu stays black. The fix puts
+`msmpeg2vdec.dll` (built from `fixes/h264-software-decoder.c`) into the prefix's
+`system32` and loads it for `PBZ.exe` alone: it serves the same decoder over
+CrossOver's own and answers as winevideo's patch `0006` makes Wine answer, NV12
+offered and no D3D awareness, so Electra decodes into system memory. The engine
+is not changed, and the one file serves CrossOver 26.3 and Preview 27, whose
+decoder code is the same there. CrossOver's file stays beside it as
+`msmpeg2vdec.dll.mgvf-stock`.
+
 It needs the Wine modules on for the CrossOver that runs it (CrossOver's own
 `ntdll.so` ignores the value), the Intel side, and D3DMetal 4: CrossOver Preview
 27 carries it, 26.3 carries 3.0. Played on 2026-11-01 on Preview 41073's NotProton
 runner with the same values passed as launch options: it passed Denuvo and was
-played for 32 minutes. Through the installer it has not been played yet.
+played for 32 minutes, the menu video playing from a winegstreamer carrying
+`0006`. The decoder DLL was measured with a probe on all four CrossOvers: NV12
+offered and 30 frames decoded, where CrossOver's own offers no NV12. Through the
+installer the game has not been played yet.
 
 ### Beast of Reincarnation needs CrossOver Preview
 
@@ -786,7 +800,7 @@ how, is in the game's page under `legacy/wiki/`.
 | `install-ng4-fix.sh` | NINJA GAIDEN 4 | `dstorage.dll` (from `dstorage-ng4.dll`); `dstoragecore.dll` renamed aside | `tools/ng4-observe.c`, built with `-DNG4_FIX` | [NINJA GAIDEN 4](legacy/wiki/Ninja-Gaiden-4.md) |
 | `install-nioh-bridge.sh` | Nioh, Nioh 2 | `GfeSDK.dll`, and the reader | `p5s-video-bridge.c` | [Nioh](legacy/wiki/Nioh.md), [Nioh 2](legacy/wiki/Nioh-2.md) |
 | `install-nioh3-bridge.sh` | Nioh 3 | `amd_ags_x64.dll` (from `amd_ags_x64-nioh3.dll`), and the reader | `dwo-video-bridge.c` | [Nioh 3](legacy/wiki/Nioh-3.md) |
-| `install-pbz-fix.sh` | Phantom Blade Zero | Nothing: nine registry values for `PBZ.exe` in the prefix, the CPUID bits the Wine modules' `ntdll.so` adds and native-first overrides for its Visual C++ runtime | Nothing: the engine's `ntdll.so` does the work (`engine/patches/*/0017`, `0018`) | [Its section](#phantom-blade-zero-needs-the-wine-modules) |
+| `install-pbz-fix.sh` | Phantom Blade Zero | Nothing: ten registry values for `PBZ.exe` in the prefix (the CPUID bits the Wine modules' `ntdll.so` adds, native-first overrides for its Visual C++ runtime and for the decoder) and `msmpeg2vdec.dll` in its `system32` (from `msmpeg2vdec-sw.dll`) | `h264-software-decoder.c`; the engine's `ntdll.so` does the rest (`engine/patches/*/0017`, `0018`) | [Its section](#phantom-blade-zero-needs-the-wine-modules) |
 | `install-p5s-bridge.sh` | Persona 5 Strikers | `amd_ags_x64.dll`, and the reader | `p5s-video-bridge.c` | [Persona 5 Strikers](legacy/wiki/Persona-5-Strikers.md) |
 | `install-resonance-fix.sh` | RESONANCE: A Plague Tale Legacy | `NvCloth_x64.dll` (from `NvCloth_x64-resonance.dll`) | `shader-floor-fix.c` | [RESONANCE](legacy/wiki/Resonance-A-Plague-Tale-Legacy.md) |
 | `install-tmnt-fix.sh` | TMNT: Splintered Fate | `fmod.dll` (from `fmod-tmnt.dll`) | `d3d12-guards.c` | [TMNT](legacy/wiki/TMNT-Splintered-Fate.md) |
