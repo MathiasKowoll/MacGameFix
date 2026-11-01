@@ -54,6 +54,16 @@
           ],
           "commit": "852082a381eb01baeb08620f7e0d5f2245bab327",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/852082a381eb01baeb08620f7e0d5f2245bab327/engine/patches/wine-11.0/0018-ntdll-d3dmetal-fallback.patch"
+        },
+        {
+          "name": "0019-ntdll-rosetta-smc-cpuid.patch",
+          "file": "engine/patches/wine-11.0/0019-ntdll-rosetta-smc-cpuid.patch",
+          "subject": "Under Rosetta, a cpuid that self-modifying code wrote right before running it, which Rosetta skips and faults after, is run by ntdll",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "b799166362e28fefac0376ba567aaa6395248b0c",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/b799166362e28fefac0376ba567aaa6395248b0c/engine/patches/wine-11.0/0019-ntdll-rosetta-smc-cpuid.patch"
         }
       ]
     },
@@ -239,6 +249,16 @@
           ],
           "commit": "852082a381eb01baeb08620f7e0d5f2245bab327",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/852082a381eb01baeb08620f7e0d5f2245bab327/engine/patches/wine-11.17/0018-ntdll-d3dmetal-fallback.patch"
+        },
+        {
+          "name": "0019-ntdll-rosetta-smc-cpuid.patch",
+          "file": "engine/patches/wine-11.17/0019-ntdll-rosetta-smc-cpuid.patch",
+          "subject": "Under Rosetta, a cpuid that self-modifying code wrote right before running it, which Rosetta skips and faults after, is run by ntdll",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "b799166362e28fefac0376ba567aaa6395248b0c",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/b799166362e28fefac0376ba567aaa6395248b0c/engine/patches/wine-11.17/0019-ntdll-rosetta-smc-cpuid.patch"
         }
       ]
     }
