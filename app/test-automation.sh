@@ -764,7 +764,7 @@ settings() { # modulesAskFirst, kept list, declined list (JSON)
 R1="$(runner crossover-27.0.0.41069-fex 20261006)"
 settings false "[\"$R1\"]" "[]"; mdue
 OUT="$(modagent)"
-check '[ "$(readlink "$SUPPORT/MacGameFix/modules/current")" = 4000000010 ] && has "$OUT" "Wine modules put back in NotProton runner · CrossOver Preview 20261006" && ours "$R1"' "automatic: the modules' own catalog is taken, and the modules go back into a runner they were kept in"
+check '[ "$(readlink "$SUPPORT/MacGameFix/modules/current")" = 4000000010 ] && has "$OUT" "DualSense controllers put back in NotProton runner · CrossOver Preview 20261006" && ours "$R1"' "automatic: the modules' own catalog is taken, and the modules go back into a runner they were kept in"
 check '[ "$(readlink "$SUPPORT/MacGameFix/catalog/current")" = 4000000005 ]' "without touching the fixes' catalog"
 for f in $MODS; do echo "CodeWeavers' updated $f" > "$R1/lib/wine/$f"; done
 check 'has "$(modagent)" "put back in" && ours "$R1"' "after a CrossOver update they are put back"
@@ -787,11 +787,11 @@ printf 'x wine-11.17-8909 x' > "$APPDIR/Contents/SharedSupport/CrossOver/lib/win
 for f in $MODS; do echo "CodeWeavers' $f" > "$APPDIR/Contents/SharedSupport/CrossOver/lib/wine/$f"; done
 settings false "[\"$R1\", \"$APPDIR/Contents/SharedSupport/CrossOver\"]" "[]"
 OUT="$(modagent)"
-check 'has "$OUT" "needs the Wine modules again" && ! ours "$APPDIR/Contents/SharedSupport/CrossOver"' "a CrossOver app is only reported, even on automatic"
+check 'has "$OUT" "needs the DualSense controllers improvement again" && ! ours "$APPDIR/Contents/SharedSupport/CrossOver"' "a CrossOver app is only reported, even on automatic"
 for f in $MODS; do echo "CodeWeavers' $f" > "$R1/lib/wine/$f"; done
 settings true "[\"$R1\"]" "[]"
 OUT="$(modagent)"
-check 'has "$OUT" "needs the Wine modules again" && ! ours "$R1"' "asked first, a runner is reported and left as it is"
+check 'has "$OUT" "needs the DualSense controllers improvement again" && ! ours "$R1"' "asked first, a runner is reported and left as it is"
 settings false "[\"$R1\"]" "[]"
 printf '{"kept":[],"updates":false,"modulesUpdates":false}' > "$SUPPORT/MacGameFix/automatic.json"
 modagent >/dev/null

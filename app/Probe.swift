@@ -747,7 +747,7 @@ enum FixReport {
         if !hit.game.carrierDir.isEmpty {
             places.append((hit.folder.appendingPathComponent(hit.game.carrierDir), hit.game.carrierDir + "/"))
         }
-        if hit.game.inPrefix {
+        if hit.game.prefixDLLs {
             for p in hit.chosen {
                 places.append((p.path.appendingPathComponent("drive_c/windows/system32"), "\(p.label): windows/system32/"))
             }

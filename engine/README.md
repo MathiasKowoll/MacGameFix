@@ -509,9 +509,12 @@ modules:
 
 ## Installing them
 
-The app's **Wine Modules** tab lists every CrossOver app (in `/Applications`
-and `~/Applications`) and every NotProton runner by its release, says what is in
-each, and installs or removes the modules with a switch. It runs `engine-modules.sh`, which the catalog
+The app's **Improvements** tab lists every CrossOver app (in `/Applications`
+and `~/Applications`) and every NotProton runner by its release, under each of
+the two improvements the modules make, says what is in each, and installs or
+removes that improvement with a switch: the DualSense controllers (every module
+but `ntdll.so`) and copy protection under Rosetta (the Intel side's `ntdll.so`).
+It runs `engine-modules.sh` with `--part=controls` or `--part=rosetta`, which the catalog
 carries with the modules (flat, as `engine-<build>-<dir>-<file>`, with
 `engine-modules.json`). They travel in their own signed catalog (`modules.zip`,
 `modules.json`, `modules.json.sig` in a release), apart from the game fixes', so
