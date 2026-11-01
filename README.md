@@ -359,6 +359,21 @@ go where the CrossOver that runs the game takes variables:
   `D3DM_ENABLE_METALFX` and does not set this one. Every game of the bottle gets
   it, so a bottle of its own keeps ray tracing for the others.
 
+In a CrossOver Preview 27 bottle, everything but that variable is in the
+bottle's settings:
+
+1. Turn the Wine modules on for CrossOver Preview in MacGameFix, and install
+   this fix for the bottle.
+2. In the bottle's settings: graphics D3DMetal, AVX on (every run played had it
+   on), MSync on.
+3. Without DLSS: turn DLSS off there, and that is all.
+4. With DLSS: leave DLSS on, quit CrossOver, add `"D3DM_SUPPORT_DXR" = "0"`
+   under `[EnvironmentVariables]` in the bottle's `cxbottle.conf`, and open
+   CrossOver again.
+
+NotProton's pipeline cache (`NOTPROTON_ROSETTA_PIPELINE_CACHE`), on in every run
+played, does not exist in a bottle. These steps have not been played yet.
+
 It needs the Wine modules on for the CrossOver that runs it (CrossOver's own
 `ntdll.so` ignores the value), the Intel side, and D3DMetal 4: CrossOver Preview
 27 carries it, 26.3 carries 3.0, so PBZ is for Preview 27. Played on 2026-11-01
