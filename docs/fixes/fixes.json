@@ -1097,6 +1097,50 @@
       "notNeededFromGptk": null
     },
     {
+      "title": "Phantom Blade Zero",
+      "installer": "install-pbz-fix.sh",
+      "scope": "prefix",
+      "executable": "PBZ.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "Never opens a window under Rosetta: its Denuvo checks the CPU for instructions Rosetta does not have. The Wine modules' ntdll shows them to this executable alone, and it loads Microsoft's Visual C++ runtime first.",
+      "page": null,
+      "installs": [
+        "bottles.sh"
+      ],
+      "builtFrom": [],
+      "license": "GPL-3.0-or-later",
+      "credits": [
+        {
+          "name": "Hrava",
+          "url": null,
+          "note": "Wrote the ntdll patch that makes Rosetta's CPU look like the one Denuvo checks for (engine patch 0017), handed to us in a package for this game with the D3DMetal fallback (0018)."
+        }
+      ],
+      "excerpts": [
+        {
+          "file": "fixes/install-pbz-fix.sh",
+          "symbol": null,
+          "note": "Nine values, for PBZ.exe only: the CPUID bits the Wine modules' ntdll adds when asked, and Microsoft's Visual C++ runtime loaded before Wine's.",
+          "language": "bash",
+          "startLine": 153,
+          "endLine": 157,
+          "commit": "35698841abba427c4edcb2ff9fc02db45eb634c8",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/35698841abba427c4edcb2ff9fc02db45eb634c8/fixes/install-pbz-fix.sh#L153-L157",
+          "code": "values() {\n  printf '%s|%s|%s\\n' \"$ENV_KEY\" \"$CPUID_NAME\" \"$CPUID_DATA\"\n  local d\n  for d in $DLLS; do printf '%s|*%s|native,builtin\\n' \"$DLL_KEY\" \"$d\"; done\n}"
+        }
+      ],
+      "symptom": "Under Rosetta one core runs at 100% and no window ever opens.",
+      "cause": "Its Denuvo checks the CPU for CLFLUSHOPT, CLWB and RDPID, which Rosetta does not have, and expects x86 answers for debug registers and non-canonical addresses. The game also quits on Wine's builtin Visual C++ runtime.",
+      "fix": "The Wine modules' ntdll.so (engine patches 0017 and 0018) shows those bits to a process that asks and emulates the instructions; this fix asks for PBZ.exe in the prefix's registry, and loads its Visual C++ runtime native first.",
+      "backend": "D3DMetal 4 on the Intel side (Rosetta): CrossOver Preview 27, or 26.3 with D3DMetal 4.",
+      "crossover": "CrossOver Preview 27 (27.0.0.41073), NotProton runner, 2026-11-01",
+      "pageUrl": null,
+      "graphicsBackend": "d3dmetal",
+      "gptk": "4",
+      "notNeededFromGptk": null
+    },
+    {
       "title": "RESIDENT EVIL 2",
       "installer": "install-re-vc1-fix.sh",
       "scope": "folder",
