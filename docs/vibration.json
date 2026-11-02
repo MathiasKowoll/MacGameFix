@@ -1,6 +1,6 @@
 {
   "about": "The games played for vibration with a DualSense or DualSense Edge on a Mac. A game is added after a session, from what was felt and what the Wine modules logged, never from what it should do. Each test names its controller and its connection. docs/vibration.md is made from this file by tools/vibration-md.py.",
-  "updated": "2026-10-26",
+  "updated": "2026-11-01",
   "stack": "MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 27), Steam Input off for the game, unless a result says otherwise.",
   "results": {
     "works": "Works",
@@ -1102,6 +1102,40 @@
           "result": "works",
           "date": "2026-10-26",
           "notes": "Vibrated very well (the user): haptics on the pad's output and trigger effects, seen in the modules' log."
+        }
+      ]
+    },
+    {
+      "name": "Phantom Blade Zero",
+      "steamAppId": "4115450",
+      "status": "works",
+      "vibration": "Haptics",
+      "library": "SDL",
+      "description": "Haptics and trigger effects, as on a PS5, over Bluetooth.",
+      "technology": "S-GAME's Unreal Engine game with its own SDL 3 (HIDAPI's PS5 driver) built into the exe: it reads the pad's feature reports itself, writes its output report, and plays its haptics as audio on the pad's output.",
+      "features": [
+        "Haptics",
+        "Trigger effects"
+      ],
+      "settings": "Game Feel: Phantom Blade Zero's suggested settings (XInput off, the Edge's haptics at 1x). Steam Input off.",
+      "details": [
+        "The game read the pad's feature reports 0x09, 0x20 and 0x05, set trigger effects, claimed the motor power at 0x00 on the DualSense Edge too, and played haptics on the Bluetooth haptics output. It never wrote to XInput.",
+        "Played on CrossOver Preview 27 (41073) under NotProton, on the Intel side, with MacGameFix's Phantom Blade Zero fix and the Wine modules' Copy protection under Rosetta."
+      ],
+      "tests": [
+        {
+          "connection": "bluetooth",
+          "controller": "DualSense Edge",
+          "date": "2026-11-01",
+          "result": "works",
+          "notes": "Vibration works (the user): haptics on the pad's output and trigger effects, seen in the modules' log."
+        },
+        {
+          "connection": "bluetooth",
+          "controller": "DualSense Edge",
+          "date": "2026-11-01",
+          "result": "works",
+          "notes": "With macOS Game Mode on, in full screen: vibrates incredibly well (the user)."
         }
       ]
     }

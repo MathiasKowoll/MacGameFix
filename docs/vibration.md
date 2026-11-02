@@ -4,7 +4,7 @@
 
 The games played for vibration with a DualSense or DualSense Edge on a Mac. A game is added after a session, from what was felt and what the Wine modules logged, never from what it should do. Each test names its controller and its connection.
 
-Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 27), Steam Input off for the game, unless a result says otherwise. Updated 2026-10-26.
+Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 27), Steam Input off for the game, unless a result says otherwise. Updated 2026-11-01.
 
 **How a game vibrates** decides what Game Feel needs to give it:
 
@@ -55,6 +55,7 @@ plays its haptics as audio on the pad's output, whatever its library.
 | [Horizon Zero Dawn Remastered](#2561580) | Haptics | Raw HID | Controller not recorded: Works | DualSense Edge: Works (2026-10-26) |
 | [Grand Theft Auto V Enhanced](#3240220) | Motors | Raw HID | DualSense Edge: Works (2026-10-26) | DualSense Edge: Works (2026-10-26) |
 | [The Last of Us Part II Remastered](#2531310) | Haptics | Raw HID | Not played yet | DualSense Edge: Works (2026-10-26) |
+| [Phantom Blade Zero](#4115450) | Haptics | SDL | Not played yet | DualSense Edge: Works (2026-11-01); DualSense Edge: Works (2026-11-01) |
 
 <a id="2651280"></a>
 ## Marvel's Spider-Man 2
@@ -745,6 +746,28 @@ Tested:
 What was measured:
 
 - The game read the pad's feature reports 0x09, 0x20 and 0x05, opened the Bluetooth haptics output (48000 Hz, a 10 ms period) and played haptics on it, keeping 0 to 30 ms waiting, and set trigger effects.
+
+<a id="4115450"></a>
+## Phantom Blade Zero
+
+Haptics and trigger effects, as on a PS5, over Bluetooth.
+
+- **Status:** Works
+- **Library:** SDL
+- **Technology:** S-GAME's Unreal Engine game with its own SDL 3 (HIDAPI's PS5 driver) built into the exe: it reads the pad's feature reports itself, writes its output report, and plays its haptics as audio on the pad's output.
+- **Features:** Haptics, Trigger effects
+- **Settings:** Game Feel: Phantom Blade Zero's suggested settings (XInput off, the Edge's haptics at 1x). Steam Input off.
+- **Steam app:** 4115450
+
+Tested:
+
+- DualSense Edge, Bluetooth: Works (2026-11-01). Vibration works (the user): haptics on the pad's output and trigger effects, seen in the modules' log.
+- DualSense Edge, Bluetooth: Works (2026-11-01). With macOS Game Mode on, in full screen: vibrates incredibly well (the user).
+
+What was measured:
+
+- The game read the pad's feature reports 0x09, 0x20 and 0x05, set trigger effects, claimed the motor power at 0x00 on the DualSense Edge too, and played haptics on the Bluetooth haptics output. It never wrote to XInput.
+- Played on CrossOver Preview 27 (41073) under NotProton, on the Intel side, with MacGameFix's Phantom Blade Zero fix and the Wine modules' Copy protection under Rosetta.
 
 ## Adding a game
 
