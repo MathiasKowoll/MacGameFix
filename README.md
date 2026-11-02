@@ -348,33 +348,42 @@ is not changed, and the one file serves CrossOver 26.3 and Preview 27, whose
 decoder code is the same there. CrossOver's file stays beside it as
 `msmpeg2vdec.dll.mgvf-stock`.
 
-For DLSS, set `D3DM_SUPPORT_DXR=0`. With DLSS available (D3DMetal's default) PBZ
-turns on NVIDIA's opacity micromaps, because D3DMetal's NVAPI says it supports
-them; D3DMetal then cannot build them (`Unknown geometry type 2`) and the game
-closes as it loads a level, whatever upscaler its menu has. With D3DMetal's ray
-tracing off it does not ask for them, and DLSS works. Without the variable, turn
-DLSS off for the game instead (`D3DM_ENABLE_METALFX=0`). D3DMetal reads these
-from the macOS environment, which the prefix's registry does not reach, so they
-go where the CrossOver that runs the game takes variables:
+TSR is the recommended upscaler: played on an M4 Max, it ran better than DLSS
+(as felt in play, not measured). Either way one D3DMetal variable is needed.
+With DLSS available (D3DMetal's default) PBZ turns on NVIDIA's opacity
+micromaps, because D3DMetal's NVAPI says it supports them; D3DMetal then cannot
+build them (`Unknown geometry type 2`) and the game closes as it loads a level,
+whatever upscaler its menu has, TSR included. So:
+
+- For TSR, turn DLSS off for the game (`D3DM_ENABLE_METALFX=0`) and choose TSR
+  in its graphics settings.
+- For DLSS, set `D3DM_SUPPORT_DXR=0`: with D3DMetal's ray tracing off the game
+  does not ask for the micromaps, and DLSS works.
+
+D3DMetal reads these from the macOS environment, which the prefix's registry
+does not reach, so they go where the CrossOver that runs the game takes
+variables:
 
 - NotProton (a Steam Play prefix): the game's launch options in Steam,
-  `D3DM_SUPPORT_DXR=0 %command%`.
-- A CrossOver bottle: the bottle's `cxbottle.conf`, under
-  `[EnvironmentVariables]`, as `"D3DM_SUPPORT_DXR" = "0"`, with CrossOver
-  closed. The Windows Steam inside a bottle does not read `VAR=value %command%`
-  launch options. CrossOver's own DLSS switch for the bottle is
-  `D3DM_ENABLE_METALFX` and does not set this one. Every game of the bottle gets
-  it, so a bottle of its own keeps ray tracing for the others.
+  `D3DM_ENABLE_METALFX=0 %command%` for TSR, or `D3DM_SUPPORT_DXR=0 %command%`
+  for DLSS.
+- A CrossOver bottle: for TSR, CrossOver's own DLSS switch in the bottle's
+  settings, off (it is `D3DM_ENABLE_METALFX`). For DLSS, the bottle's
+  `cxbottle.conf`, under `[EnvironmentVariables]`, as
+  `"D3DM_SUPPORT_DXR" = "0"`, with CrossOver closed. The Windows Steam inside a
+  bottle does not read `VAR=value %command%` launch options, and every game of
+  the bottle gets the variable, so a bottle of its own keeps ray tracing for the
+  others.
 
-In a CrossOver Preview 27 bottle, everything but that variable is in the
+In a CrossOver Preview 27 bottle, everything but DLSS's variable is in the
 bottle's settings:
 
 1. Turn the Wine modules on for CrossOver Preview in MacGameFix, and install
    this fix for the bottle.
 2. In the bottle's settings: graphics D3DMetal, AVX on (every run played had it
    on), MSync on.
-3. Without DLSS: turn DLSS off there, and that is all.
-4. With DLSS: leave DLSS on, quit CrossOver, add `"D3DM_SUPPORT_DXR" = "0"`
+3. For TSR (recommended): turn DLSS off there, and choose TSR in the game.
+4. For DLSS: leave DLSS on, quit CrossOver, add `"D3DM_SUPPORT_DXR" = "0"`
    under `[EnvironmentVariables]` in the bottle's `cxbottle.conf`, and open
    CrossOver again.
 
