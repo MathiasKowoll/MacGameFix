@@ -51,5 +51,35 @@ E --part=rosetta >/dev/null
 E --restore >/dev/null
 check 'cw x86_64-unix/ntdll.so && cw x86_64-unix/winebus.so && ! [ -d "$MGVF_ENGINE_BACKUP/crossover-$B-fex" ]' "a plain restore takes everything out"
 check '[ "$(E --part=nothing | tail -1)" = "Unknown improvement: nothing" ]' "an unknown improvement is refused"
+
+# NotProton's Game Mode copies the runner for each game and copies it again when this
+# stamp changes: runner_stamp, as NotProton's main has it in dylib/feats/compat_run.sh
+# (e67dd9b). Every change of the modules must change it, on a runner whose loader is in a
+# wine.app (Preview 27) and on one whose loader is not (26.3).
+runner_stamp() {
+  if [ -d "$wine_unix/wine.app" ]; then
+    set -- "$wine_unix/wine.app/Contents" "$wine_unix/wine.app/Contents/MacOS" \
+      "$wine_unix/wine.app/Contents/MacOS/wine"
+  else
+    set -- "$wine_unix/wine" "$wine_unix/ntdll.so"
+  fi
+  stat -f '%N %i %Fm' "$CX_ROOT/lib/wine" "$CX_ROOT/lib/wine"/* "$@"
+}
+stamp() { CX_ROOT="$R" wine_unix="$R/lib/wine/x86_64-unix" runner_stamp 2>/dev/null | shasum; }
+changes() { local a; a="$(stamp)"; "$@" >/dev/null; [ "$(stamp)" != "$a" ]; }
+mkdir -p "$R/lib/wine/x86_64-unix/wine.app/Contents/MacOS"
+: >"$R/lib/wine/x86_64-unix/wine.app/Contents/MacOS/wine"
+check 'changes E' "an install changes NotProton's stamp (a loader in a wine.app)"
+for f in $FILES; do printf 'newer %s wine-11.17-1\n' "$f" >"$CAT/engine-$B-$(printf '%s' "$f" | tr / -)"; done
+check 'changes E && ours x86_64-windows/winebus.sys' "so does an update of the modules"
+check 'changes E --restore --part=controls && cw x86_64-windows/winebus.sys' "and taking the controls out"
+check 'changes E --restore --part=rosetta && cw x86_64-unix/ntdll.so' "and taking Rosetta's out"
+rm -rf "$R/lib/wine/x86_64-unix/wine.app"; : >"$R/lib/wine/x86_64-unix/wine"
+check 'changes E --part=controls' "a controls install changes it on a runner whose loader is not in a wine.app"
+check 'changes E --restore' "and so does a restore"
+chmod 755 "$R/lib/wine/x86_64-unix/ntdll.so"
+E >/dev/null
+check '[ "$(stat -f %Lp "$R/lib/wine/x86_64-unix/ntdll.so")" = 755 ] && [ -z "$(find "$R/lib/wine" -name "*.mgvf-new")" ]' "a module keeps the mode of the file it replaces, and nothing is left beside it"
+E --restore >/dev/null
 echo "==> $fails failed"
 exit $((fails > 0))

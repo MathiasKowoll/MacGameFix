@@ -146,6 +146,24 @@ refused() {
   exit 1
 }
 
+# A file goes in under another name first and is renamed over the old one, so that the
+# folder holding it changes too. NotProton's Game Mode (its main since d01287d) runs each
+# game from a copy of the runner, and makes the copy again only when the runner's
+# lib/wine folders, its loader or the 26.3 ntdll.so change: a file written over in place
+# changes none of those, and the game would keep the modules it had. The file keeps the
+# mode of the one it replaces.
+put() {
+  local from="$1" to="$2" tmp
+  tmp="$(dirname "$2")/.$(basename "$2").mgvf-new"
+  rm -f "$tmp" 2>/dev/null
+  if cp ${3:-} "$from" "$tmp" 2>/dev/null &&
+     { [ ! -e "$to" ] || chmod "$(stat -f %Lp "$to")" "$tmp"; } && mv -f "$tmp" "$to" 2>/dev/null; then
+    return 0
+  fi
+  rm -f "$tmp" 2>/dev/null
+  return 1
+}
+
 resign() {
   [ -n "$APP" ] || return 0
   say "Signing $(basename "$APP") again (ad hoc): CodeWeavers' signature no longer covers its files."
@@ -179,7 +197,7 @@ install)
     elif [ "$t" != "$s" ] && [ "$t" != "$(recorded "$f")" ]; then
       mkdir -p "$SAVE/$(dirname "$f")" && cp -p "$LIB/$f" "$SAVE/$f" || exit 1
     fi
-    cp "$(src "$f")" "$LIB/$f" 2>/dev/null || refused "$LIB/$f"
+    put "$(src "$f")" "$LIB/$f" || refused "$LIB/$f"
     say "  $f"
     printf '%s  %s\n' "$s" "$f" >>"$SAVE/installed.list.new"
   done
@@ -205,7 +223,7 @@ install)
       continue
     fi
     [ -f "$SAVE/$f" ] || continue
-    cp -p "$SAVE/$f" "$LIB/$f" 2>/dev/null || refused "$LIB/$f"
+    put "$SAVE/$f" "$LIB/$f" -p || refused "$LIB/$f"
     say "  $f"
   done
   # One improvement out: its lines leave the list and it is noted as off. The folder goes
