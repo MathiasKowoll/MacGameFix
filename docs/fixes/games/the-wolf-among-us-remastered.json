@@ -1,0 +1,41 @@
+{
+  "title": "The Wolf Among Us Remastered",
+  "installer": "install-wolf-fix.sh",
+  "scope": "folder",
+  "executable": "TheWolfAmongUsRemastered.exe",
+  "carrierDirectory": "",
+  "alsoRuns": [],
+  "summary": "With anti-aliasing on, anything that moves leaves faded copies behind: the TAA reads 8 MSAA samples and D3DMetal gives 4. A d3d11.dll beside the game makes the shaders read the 4 there are, and one override for the game's executable loads it.",
+  "page": null,
+  "testing": "macprotips",
+  "installs": [
+    "bottles.sh",
+    "d3d11-wolf.dll"
+  ],
+  "builtFrom": [
+    "wolffix.c",
+    "wolffix_core.c",
+    "wolffix.def"
+  ],
+  "license": "GPL-3.0-or-later (installer); the DLL and its source are public domain (Unlicense)",
+  "credits": [
+    {
+      "name": "macprotips",
+      "url": "https://github.com/macprotips/WolfAmongUsFix",
+      "note": "Found why the trails happen, wrote the d3d11.dll that rewrites the shaders' sample reads and a test program for D3DMetal (WolfAmongUsFix 1.0). MacGameFix ships the DLL as published, with its source."
+    }
+  ],
+  "excerpts": [
+    {
+      "file": "install-wolf-fix.sh",
+      "from": "^echo \"\\[2/2\\]",
+      "to": "^  echo \"error: could not write the override",
+      "note": "The one value in the bottle or prefix, for this executable alone: Wine loads the d3d11.dll beside the game first."
+    }
+  ],
+  "symptom": "With anti-aliasing on, anything that moves leaves faded copies of itself behind.",
+  "cause": "The game's TAA resolves 8x MSAA with shaders that read 8 samples a pixel. Apple GPUs have no 8x: D3DMetal says so, and still creates the game's 8x textures with 4 samples, so the reads of samples 4 to 7 return black. With black always in the mix, the history clamp never throws away dark parts of old frames.",
+  "fix": "A d3d11.dll beside the game passes everything to the real d3d11.dll and, as the game creates each pixel shader, makes its reads of the missing samples use the 4 that exist. It does nothing on a device that really gives 8 samples. d3d11 = native,builtin is written for TheWolfAmongUsRemastered.exe alone, in the bottle or Steam Play prefix. Being tested: not played by MacGameFix yet.",
+  "backend": "D3DMetal",
+  "crossover": null
+}

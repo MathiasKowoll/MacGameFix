@@ -253,6 +253,29 @@ nfs --restore > /dev/null 2>&1
 printf x >> "$nd"
 [ "$(nfsst)" = norecipe ] && ! nfs > /dev/null 2>&1 && say ok "nfs unbound: another build waits for a recipe, untouched" || say FAIL "nfs unbound: unknown build ($(nfsst))"
 
+# The Wolf Among Us Remastered's fix is a d3d11.dll beside the game and one
+# override in the prefix: tried in a fake Steam Play prefix.
+wp="$W/wolfpfx"; mkdir -p "$wp/drive_c"; touch "$wp/system.reg"
+printf 'WINE REGISTRY Version 2\n;; All keys relative to \\\\User\\\\S-1-5-21-0-0-0-1000\n\n#arch=win64\n' > "$wp/user.reg"
+g="$W/wolf"; mkdir -p "$g"; touch "$g/TheWolfAmongUsRemastered.exe"
+wst() { MGVF_BOTTLE="$wp" st install-wolf-fix.sh "$g"; }
+wolf() { MGVF_BOTTLE="$wp" /bin/bash "$FIX/install-wolf-fix.sh" "$g" "$@"; }
+wolfkey() { /usr/bin/grep -qF '"d3d11"="native,builtin"' "$wp/user.reg"; }
+[ "$(wst)" = absent ] && say ok "wolf in a Steam Play prefix: absent before" || say FAIL "wolf: absent before ($(wst))"
+echo "someone else's d3d11" > "$g/d3d11.dll"
+wolf > "$W/wolf.install.log" 2>&1 && [ "$(wst)" = installed ] && cmp -s "$g/d3d11.dll" "$FIX/d3d11-wolf.dll" && wolfkey \
+  && [ "$(cat "$g/d3d11.dll.mgvf-original")" = "someone else's d3d11" ] \
+  && say ok "wolf in a Steam Play prefix: the DLL, the override for its exe, and the folder's own d3d11 kept" || say FAIL "wolf: install ($(wst)): $(tail -2 "$W/wolf.install.log")"
+MGVF_BOTTLE="$wp" /bin/bash -c '. "$1/bottles.sh"; user_reg_edit "$2" delete "Software\\Wine\\AppDefaults\\TheWolfAmongUsRemastered.exe\\DllOverrides" d3d11' _ "$FIX" "$wp"
+[ "$(wst)" = half ] && say ok "wolf in a Steam Play prefix: the override taken out is half" || say FAIL "wolf: half ($(wst))"
+wolf > /dev/null 2>&1 && [ "$(wst)" = installed ] && say ok "wolf in a Steam Play prefix: installing again repairs it" || say FAIL "wolf: repair ($(wst))"
+older "$g/d3d11.dll"
+[ "$(wst)" = outdated ] && say ok "wolf in a Steam Play prefix: an older build is outdated" || say FAIL "wolf: older build ($(wst))"
+wolf > /dev/null 2>&1
+last="$(wolf --restore 2>/dev/null | tail -1)"
+[ "$last" = restored ] && [ "$(wst)" = absent ] && ! wolfkey && [ "$(cat "$g/d3d11.dll")" = "someone else's d3d11" ] && [ ! -e "$g/d3d11.dll.mgvf-original" ] \
+  && say ok "wolf in a Steam Play prefix: restored, the override gone and the folder's own d3d11 back" || say FAIL "wolf: restore ($last, $(wst))"
+
 # Cyberpunk 2077's fix writes four bytes into a macOS game's executable and signs
 # the app again, so it is tried on a fake app: a small executable built here,
 # with the word the recipe changes behind a tag the test finds it by, signed ad

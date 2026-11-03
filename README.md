@@ -238,6 +238,14 @@ open Steam there (engine/README.md, "The options").
 | Tormented Souls 2 | Fatal error before the first frame | D3DMetal |
 | Wo Long: Fallen Dynasty | Cutscene with sound and a black picture | D3DMetal |
 
+**Being tested.** These are listed only with **Show fixes being tested** on (see
+[Fixes being tested](#fixes-being-tested)), since nobody here has played them yet:
+
+| Game | What the fix is for | Needs |
+| --- | --- | --- |
+| Need for Speed Unbound | Black screen at start | D3DMetal, Steam build 16690907 |
+| The Wolf Among Us Remastered | Anything that moves leaves faded copies behind | D3DMetal, a prefix |
+
 The list is not written by hand. The build takes every installer in `fixes/`
 that declares a game-folder, a prefix or an app fix, and keeps the games for which the table
 records no engine requirement, and either no codec or a CrossOver that ships
@@ -903,6 +911,14 @@ how, is in the game's page under `legacy/wiki/`.
 - **[SpiderMan2Fix](https://github.com/macprotips/SpiderMan2Fix) by macprotips.**
   The Spider-Man 2 fix is theirs; this adds a carrier that needs no DLL override,
   and a barrier after the volumetric fog copy.
+- **[NFSUnboundFix](https://github.com/macprotips/NFSUnboundFix) by macprotips.**
+  Need for Speed Unbound's fix is theirs: the cause in the shader pre-build and
+  the six changes, which the recipe carries byte for byte. It improves on the
+  first fix, by Ariel O in CodeWeavers' compatibility database, spread on Reddit
+  by u/ales_sandr.
+- **[WolfAmongUsFix](https://github.com/macprotips/WolfAmongUsFix) by macprotips**
+  (public domain): The Wolf Among Us Remastered's diagnosis and the `d3d11.dll`
+  it installs, shipped as published with its source.
 - **The God of War fix** comes from a r/macgaming post, "God Of War 2018 White
   Dot Fix (through Crossover)", whose author found the depth test behind the
   white specks.
