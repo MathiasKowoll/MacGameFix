@@ -127,6 +127,14 @@
       "symptom": "Crash on the first cutscene",
       "not_needed_from_gptk": "4.0b3"
     },
+    "NeedForSpeedUnbound.exe": {
+      "title": "Need for Speed Unbound",
+      "backend": "d3dmetal",
+      "codec": "",
+      "gptk": "",
+      "env": {},
+      "symptom": "Black screen at start"
+    },
     "NieR Replicant ver.1.22474487139.exe": {
       "title": "NieR Replicant ver.1.22474487139",
       "backend": "d3dmetal",

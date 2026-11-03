@@ -727,6 +727,72 @@
       "notNeededFromGptk": "4.0b3"
     },
     {
+      "title": "Need for Speed Unbound",
+      "installer": "install-nfsu-fix.sh",
+      "scope": "folder",
+      "executable": "NeedForSpeedUnbound.exe",
+      "carrierDirectory": "",
+      "alsoRuns": [],
+      "summary": "Stays on a black screen at start: the shader pre-build crashes after the few pipelines whose root signature D3DMetal cannot create. Six byte changes in the game's renderer DLL make it skip those and pre-build the rest, so the game neither crashes nor stutters as the first fix made it.",
+      "page": null,
+      "testing": "macprotips",
+      "installs": [
+        "nfsu-prebuild.recipes"
+      ],
+      "builtFrom": [],
+      "license": "GPL-3.0-or-later",
+      "credits": [
+        {
+          "name": "macprotips",
+          "url": "https://github.com/macprotips/NFSUnboundFix",
+          "note": "Found the cause in the pre-build and wrote the six changes (NFSUnboundFix 1.1.0); the recipe carries their bytes, and the installer follows its checks: the sha256 before and after, a kept original, and undoing without it."
+        },
+        {
+          "name": "Ariel O",
+          "url": "https://www.codeweavers.com/compatibility",
+          "note": "The first fix, in CodeWeavers' compatibility database: the shader pre-build turned off, which got the game running in CrossOver."
+        },
+        {
+          "name": "u/ales_sandr",
+          "url": "https://www.reddit.com/user/ales_sandr/",
+          "note": "Spread that first fix on Reddit."
+        }
+      ],
+      "excerpts": [
+        {
+          "file": "fixes/nfsu-prebuild.recipes",
+          "symbol": null,
+          "note": "The six changes for Steam build 16690907, with the sha256 of the DLL before and after; any other build is left alone.",
+          "language": "text",
+          "startLine": 17,
+          "endLine": 28,
+          "commit": "b458bebadd253fa35587f9ed455a8618aaaa093d",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/b458bebadd253fa35587f9ed455a8618aaaa093d/fixes/nfsu-prebuild.recipes#L17-L28",
+          "code": "result ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 496deaa8f65df105528cfd85e68b3521b11809d208da1724d07fd46494ef4b1f\n# The code section's size in the header, so the two checks below are code.\nedit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x258 8efd2000 00fe2000\n# Graphics pre-build: call the check for a root signature that could not be created.\nedit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x433f4 e8f79a1800 e897cd1c00\n# Compute pre-build: the same check.\nedit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x437d9 4d85ff7428 e9d2c91c00\n# Pre-build cleanup: skip an empty root-signature entry instead of calling through it.\nedit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x43ae0 488b4f08488b01ff5010488b4710488bf84885c0751766660f1f840000000000 488b4f08e306488b01ff5010488b7f104885ff75189090909090909090909090\n# The two checks, in unused space at the end of the code section.\nedit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x210190 000000000000000000000000000000000000 4883bd0004000000750331c0c3e94ecdfbff\nedit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x2101b0 00000000000000000000000000000000000000000000000000000000 4883bd68010000000f843d37e3ff4d85ff0f843f36e3ffe91236e3ff"
+        },
+        {
+          "file": "fixes/install-nfsu-fix.sh",
+          "symbol": null,
+          "note": "Each change written only where the expected bytes are, and undone the same way when the kept original is gone.",
+          "language": "bash",
+          "startLine": 93,
+          "endLine": 106,
+          "commit": "b458bebadd253fa35587f9ed455a8618aaaa093d",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/b458bebadd253fa35587f9ed455a8618aaaa093d/fixes/install-nfsu-fix.sh#L93-L106",
+          "code": "patch() { # <in> <out> <rows> <from field> <to field> <offset field>\n  /usr/bin/perl -e '\n    my ($in, $out, $rows, $fi, $ti, $oi) = @ARGV;\n    open(my $f, \"<:raw\", $in) or die \"cannot read $in\\n\"; local $/; my $d = <$f>; close $f;\n    for my $r (split /\\n/, $rows) {\n      my @x = split \" \", $r; my $o = hex $x[$oi];\n      my ($from, $to) = (pack(\"H*\", $x[$fi]), pack(\"H*\", $x[$ti]));\n      length($from) == length($to) or die \"row at $x[$oi]: the two byte strings differ in length\\n\";\n      substr($d, $o, length $from) eq $from or die \"the bytes at $x[$oi] are not the expected ones\\n\";\n      substr($d, $o, length $to) = $to;\n    }\n    open(my $g, \">:raw\", $out) or die \"cannot write $out\\n\"; print $g $d; close $g or die \"cannot write $out\\n\";\n  ' \"$1\" \"$2\" \"$3\" \"$4\" \"$5\" \"$6\"\n}"
+        }
+      ],
+      "symptom": "A black screen at start, and the game never reaches its menu.",
+      "cause": "At start the game pre-builds the pipelines it saved from the last session. D3DMetal cannot create the root signature of a few of them, and the game crashes as it cleans up after those. Turning the pre-build off starts the game, but then every pipeline is built the first time it is drawn, which stutters.",
+      "fix": "Engine.Render.Core2.PlatformPcDx12.dll is changed in six places: the cleanup skips an empty root-signature entry, and the graphics and compute pre-builds mark a pipeline whose root signature failed as failed, so the game drops it from the saved list and builds it when it is first drawn. Everything else is still pre-built. The original is kept beside the DLL, and only Steam build 16690907 is changed. Being tested: not played by MacGameFix yet.",
+      "backend": "D3DMetal",
+      "crossover": null,
+      "pageUrl": null,
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
       "title": "NieR Replicant ver.1.22474487139",
       "installer": "install-nier-bridge.sh",
       "scope": "folder",

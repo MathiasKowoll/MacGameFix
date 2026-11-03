@@ -1,0 +1,52 @@
+{
+  "title": "Need for Speed Unbound",
+  "installer": "install-nfsu-fix.sh",
+  "scope": "folder",
+  "executable": "NeedForSpeedUnbound.exe",
+  "carrierDirectory": "",
+  "alsoRuns": [],
+  "summary": "Stays on a black screen at start: the shader pre-build crashes after the few pipelines whose root signature D3DMetal cannot create. Six byte changes in the game's renderer DLL make it skip those and pre-build the rest, so the game neither crashes nor stutters as the first fix made it.",
+  "page": null,
+  "testing": "macprotips",
+  "installs": [
+    "nfsu-prebuild.recipes"
+  ],
+  "builtFrom": [],
+  "license": "GPL-3.0-or-later",
+  "credits": [
+    {
+      "name": "macprotips",
+      "url": "https://github.com/macprotips/NFSUnboundFix",
+      "note": "Found the cause in the pre-build and wrote the six changes (NFSUnboundFix 1.1.0); the recipe carries their bytes, and the installer follows its checks: the sha256 before and after, a kept original, and undoing without it."
+    },
+    {
+      "name": "Ariel O",
+      "url": "https://www.codeweavers.com/compatibility",
+      "note": "The first fix, in CodeWeavers' compatibility database: the shader pre-build turned off, which got the game running in CrossOver."
+    },
+    {
+      "name": "u/ales_sandr",
+      "url": "https://www.reddit.com/user/ales_sandr/",
+      "note": "Spread that first fix on Reddit."
+    }
+  ],
+  "excerpts": [
+    {
+      "file": "nfsu-prebuild.recipes",
+      "from": "^result ",
+      "to": "^edit .* 0x2101b0 ",
+      "note": "The six changes for Steam build 16690907, with the sha256 of the DLL before and after; any other build is left alone."
+    },
+    {
+      "file": "install-nfsu-fix.sh",
+      "from": "^patch\\(\\) \\{",
+      "to": "^\\}",
+      "note": "Each change written only where the expected bytes are, and undone the same way when the kept original is gone."
+    }
+  ],
+  "symptom": "A black screen at start, and the game never reaches its menu.",
+  "cause": "At start the game pre-builds the pipelines it saved from the last session. D3DMetal cannot create the root signature of a few of them, and the game crashes as it cleans up after those. Turning the pre-build off starts the game, but then every pipeline is built the first time it is drawn, which stutters.",
+  "fix": "Engine.Render.Core2.PlatformPcDx12.dll is changed in six places: the cleanup skips an empty root-signature entry, and the graphics and compute pre-builds mark a pipeline whose root signature failed as failed, so the game drops it from the saved list and builds it when it is first drawn. Everything else is still pre-built. The original is kept beside the DLL, and only Steam build 16690907 is changed. Being tested: not played by MacGameFix yet.",
+  "backend": "D3DMetal",
+  "crossover": null
+}
