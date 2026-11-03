@@ -1,0 +1,57 @@
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -2053,6 +2053,16 @@
+     RIP_sig(sigcontext) += 3;
+     TRACE_(seh)( "emulated an XGETBV instruction\n" );
+     return TRUE;
++}
++
++/* Each emulated instruction costs a trap, and with the leaf extended by default a program
++ * may use one in a hot path. Say how often, at 1, 10, 100... times, so that shows in a log. */
++static void note_emulated( const char *what, unsigned int *count )
++{
++    unsigned int n = __atomic_add_fetch( count, 1, __ATOMIC_RELAXED ), p = 1;
++
++    while (p < n && p <= 100000000) p *= 10;
++    if (p == n) ERR_(seh)( "emulated %s %u time%s\n", what, n, n == 1 ? "" : "s" );
+ }
+ 
+ /***********************************************************************
+@@ -2090,6 +2100,7 @@
+ 
+     RIP_sig(sigcontext) += pos;
+     TRACE_(seh)( "emulated a CLWB instruction\n" );
++    { static unsigned int count; note_emulated( "CLWB", &count ); }
+     return TRUE;
+ }
+ 
+@@ -2178,6 +2189,7 @@
+     }
+     RIP_sig(sigcontext) += pos + 3;
+     TRACE_(seh)( "emulated an RDPID instruction, processor %lu\n", (unsigned long)value );
++    { static unsigned int count; note_emulated( "RDPID", &count ); }
+     return TRUE;
+ }
+ #endif
+@@ -3425,8 +3437,9 @@
+  * CLFLUSHOPT + CLWB and RDPID. It is read from the process environment, or for one program
+  * from HKCU\\Software\\Wine\\AppDefaults\\<exe>\\Environment, where a launcher keeps per-game
+  * variables: a game started by a Steam client that was already running does not inherit
+- * the environment of the launch that asked for it. Unset means untouched; a table that
+- * does not look exactly as expected is left alone.
++ * the environment of the launch that asked for it. Unset means all three, so a game with
++ * this kind of protection needs no setting of its own; 0 leaves the leaf as Rosetta has it.
++ * A table that does not look exactly as expected is left alone.
+  */
+ static const char *rosetta_cpuid_setting( char *buffer, unsigned int size )
+ {
+@@ -3491,7 +3504,8 @@
+     unsigned int mask, mask_ecx = 0;
+     char *next;
+ 
+-    if (!is_rosetta2 || !(env = rosetta_cpuid_setting( setting, sizeof(setting) ))) return;
++    if (!is_rosetta2) return;
++    if (!(env = rosetta_cpuid_setting( setting, sizeof(setting) ))) env = "01800000,00400000";
+     mask = strtoul( env, &next, 16 ) & 0x01800000;   /* CLFLUSHOPT, CLWB: nothing else is backed */
+     if (*next == ',') mask_ecx = strtoul( next + 1, NULL, 16 ) & 0x00400000;   /* RDPID */
+     if (!mask && !mask_ecx) return;

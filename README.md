@@ -338,12 +338,13 @@ it.
 
 Under Rosetta its Denuvo spins one core and never opens a window: it checks the
 CPU for CLFLUSHOPT, CLWB and RDPID, which Rosetta does not have. The Wine modules'
-`ntdll.so` (engine patches `0017` and `0018`, see
+`ntdll.so` (engine patches `0017`, `0018` and `0020`, see
 [engine/README.md](engine/README.md#rosettas-cpu-for-copy-protection)) shows them
-to a process that asks with `WINE_ROSETTA_CPUID7_OR` and emulates the two
-instructions. The fix asks for `PBZ.exe` alone, in the prefix's registry
+to every process and emulates the two instructions. Modules from before `0020`
+showed them only to a process that asked with `WINE_ROSETTA_CPUID7_OR`, so the fix
+still asks for `PBZ.exe` alone, in the prefix's registry
 (`AppDefaults\PBZ.exe\Environment`), where a game started by a Steam client that
-was already running still finds it, and loads Microsoft's Visual C++ runtime
+was already running still finds it. It also loads Microsoft's Visual C++ runtime
 before Wine's for it, which the game checks. Nothing goes into its folder, and no
 launch option is needed.
 

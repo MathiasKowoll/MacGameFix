@@ -254,22 +254,23 @@ not touched. The first two come from Hrava's `ntdll-rosetta-cpu-fidelity` and a
 D3DMetal fallback, both written for CrossOver 26.3 and handed to us in a package
 for that game; the Wine 11.17 copy is ported to 41073, where every signal-path
 helper takes `struct thread_data`. The third, `0019`, is ours, from Persona 4
-Golden.
+Golden, and so is `0020`, which turns `0017`'s CPUID bits on for every game.
 
 | Patch | Module | Change |
 |---|---|---|
 | `0017-ntdll-rosetta-cpu-fidelity.patch` | `ntdll.so` | Under Rosetta only (`is_rosetta2`): CPUID leaf 7 gains CLFLUSHOPT and CLWB (EBX) and RDPID (ECX) in Rosetta's own CPUID table, only when `WINE_ROSETTA_CPUID7_OR` asks for them; CLWB and RDPID are emulated on the invalid-opcode trap; Dr0-Dr3 execution breakpoints set through `NtSetContextThread` are emulated with non-executable pages and single-stepping, and Dr7's bit 10 reads as set while one is enabled; an access through a non-canonical address is reported as Windows reports the general protection fault, an access violation at address -1, instead of the real address. |
 | `0019-ntdll-rosetta-smc-cpuid.patch` | `ntdll.so` | Rosetta runs the instructions of a block as it translated them, even when one of them has just rewritten the next: copy protection decrypts a `cpuid` that way (`add dword [rip+0], key`, then the four bytes it changed), and Rosetta runs the old bytes. When the old first instruction is one byte long it carries on from the `cpuid`'s second byte, `0xa2`, which decodes as `mov [imm64], al` and faults on the eight bytes after it. That fault, with `0f a2` just before the faulting address and the address those eight bytes hold, means the `cpuid` never ran: `ntdll` runs it, with Rosetta's own answers (and `0017`'s leaf 7), and resumes after it. A `cpuid` skipped without a fault cannot be seen. |
+| `0020-ntdll-rosetta-cpuid-by-default.patch` | `ntdll.so` | `0017`'s CPUID bits are on when `WINE_ROSETTA_CPUID7_OR` is unset, so a game with this kind of protection needs no setting of its own; `WINE_ROSETTA_CPUID7_OR=0` leaves Rosetta's leaf 7 as it is. Every CLWB and RDPID it emulates is counted, and the count is logged (an `err:seh` line) at 1, 10, 100... times, since each costs a trap. |
 | `0018-ntdll-d3dmetal-fallback.patch` | `ntdll.so` | A 64-bit process with `CX_GRAPHICS_BACKEND=d3dmetal` gets D3DMetal's DLL folder first in its DLL path when it is not there: `lib/apple_gptk/wine` (`lib/apple_gptk3/wine` with `CX_GRAPHICS_BACKEND_VERSION=3`), or 26.3's `lib64/apple_gptk/wine`. Phantom Blade Zero started by NotProton got wined3d's DXGI and vkd3d without it and refused to start ("failed the SM6 hardware preflight"). `CX_ACTIVE_GRAPHICS_BACKEND` cannot tell whether it was routed: the game inherits it from its bootstrapper. A process CrossOver did route is left as it is. |
 
-Only the CPUID bits need asking for, per game:
-`WINE_ROSETTA_CPUID7_OR=01800000,00400000` (EBX bits, then ECX bits, in hex; any
-other bit is ignored). `ntdll.so` reads it from the environment, or from
+The CPUID bits are on for every process (`0020`), and a game can turn them off or
+choose them: `WINE_ROSETTA_CPUID7_OR=0`, or `01800000,00400000` for all three (EBX
+bits, then ECX bits, in hex; any other bit is ignored). `ntdll.so` reads it from the environment, or from
 `HKCU\Software\Wine\AppDefaults\<exe>\Environment`. The registry suits a game
 started by a Steam client that was already running, which does not inherit the
 launch's environment. NotProton drops `WINE_*` variables from launch options;
-`NOTPROTON_ENV_WINE_ROSETTA_CPUID7_OR=01800000,00400000 %command%` passes it.
-Without it Rosetta's CPUID is left as it is. The rest takes effect only when a
+`NOTPROTON_ENV_WINE_ROSETTA_CPUID7_OR=0 %command%` passes it. Before `0020` the
+bits were off unless asked for. The rest takes effect only when a
 program meets it: an instruction Rosetta does not have, a hardware breakpoint,
 or a fault through a non-canonical address.
 
