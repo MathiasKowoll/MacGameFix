@@ -625,6 +625,21 @@ installed again, and what it left is the hand-patched executable byte for byte
 off, any M3 Mac, what Steam's verify does to the changed app, and the install
 run from MacGameFix, where macOS may ask for App Management.
 
+## Fixes being tested
+
+A fix someone else made, for a game MacGameFix has not played, comes first as a
+fix being tested. **Settings > Testing > Show fixes being tested** lists those in
+Games beside the others, marked *Testing*, with who is testing them in the game's
+help. They install and remove like any fix. Say how one went with **It Works…** or
+**Report**. Once it has been played, it loses the mark and is listed for everyone.
+
+The switch is off by default, so a fix nobody has validated reaches only someone
+who turned it on. In the repository, an installer marks it with
+`# MGVF-TESTING: <who is testing it>`, and `build-app.sh` puts its game into
+`games.json`'s `testing` table, which apps before 1.6.0 never read. Its
+`# MGVF-CREDIT: <name> | <url>` lines name whose work it is, in the app and in
+[Credits](#credits).
+
 ## Reporting a problem
 
 [Open an issue](https://github.com/MathiasKowoll/MacGameFix/issues/new/choose) with the form that fits:

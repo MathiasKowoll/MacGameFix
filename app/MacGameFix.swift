@@ -200,6 +200,15 @@ final class Model: ObservableObject {
         }
     }
 
+    /// Games lists the fixes still being tested too, or stops listing them.
+    func setTestingFixes(_ on: Bool) {
+        settings.testingFixes = on
+        settings.save()
+        loadCatalog()
+        objectWillChange.send()
+        scan()
+    }
+
     func setPadBattery(_ on: Bool) {
         settings.padBattery = on
         settings.save()
@@ -1018,11 +1027,20 @@ struct GamesView: View {
                 Table(rows, selection: selection) {
                     TableColumn("Game") { row in
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(row.game.name).fontWeight(.semibold)
+                            HStack(spacing: 6) {
+                                Text(row.game.name).fontWeight(.semibold)
+                                if row.game.testing != nil {
+                                    Text("Testing")
+                                        .font(.caption2.bold())
+                                        .padding(.horizontal, 5).padding(.vertical, 1)
+                                        .background(.orange.opacity(0.2), in: Capsule())
+                                        .foregroundStyle(.orange)
+                                }
+                            }
                             Text(row.game.symptom).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                         }
                         .padding(.vertical, 3)
-                        .help((row.hit.map { $0.folder.path + "\n\n" } ?? "") + row.game.why)
+                        .help((row.hit.map { $0.folder.path + "\n\n" } ?? "") + row.game.why + row.game.aboutTesting)
                     }
                     .width(min: 150, ideal: 200)
                     TableColumn("Requires") { row in
@@ -2274,6 +2292,18 @@ struct SettingsView: View {
                 Text("Game fix updates")
             } footer: {
                 Text("The Wine modules have their own, in Improvements.").font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Show fixes being tested", isOn: Binding(get: { model.settings.testingFixes },
+                                                               set: { model.setTestingFixes($0) }))
+                    .help("Games also lists the fixes nobody has validated yet, marked Testing. Install one only "
+                          + "to try it, and say how it went with It Works… or Report.")
+            } header: {
+                Text("Testing")
+            } footer: {
+                Text("A fix being tested has not been played by MacGameFix yet. It joins the others once it has been.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             if !model.events.isEmpty {

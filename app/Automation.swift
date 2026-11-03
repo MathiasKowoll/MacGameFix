@@ -84,6 +84,8 @@ struct AutoSettings: Codable {
     var batteryIcon = "raccoon"
     /// CrossOver's games run from a bundle that says it is a game (GameMode.swift).
     var gameMode = false
+    /// Games also lists the fixes still being tested: games.json's "testing" table.
+    var testingFixes = false
 
     init() {}
 
@@ -104,6 +106,7 @@ struct AutoSettings: Codable {
         padBattery = try c.decodeIfPresent(Bool.self, forKey: .padBattery) ?? true
         batteryIcon = try c.decodeIfPresent(String.self, forKey: .batteryIcon) ?? "raccoon"
         gameMode = try c.decodeIfPresent(Bool.self, forKey: .gameMode) ?? false
+        testingFixes = try c.decodeIfPresent(Bool.self, forKey: .testingFixes) ?? false
     }
 
     /// Whether the agent keeps an improvement in a CrossOver folder.

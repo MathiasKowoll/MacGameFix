@@ -188,7 +188,11 @@ cat > "$RES/games.json" <<'JSON'
   "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "", "why": ""},
  {"name": "Fake Fixed", "exe": "FakeFixed.exe", "alsoRuns": [], "logs": ["fake-fix.log"], "carrierDir": "Bin",
   "script": "install-fakedll.sh", "needsPrefix": false, "scope": "folder", "symptom": "test", "backend": "d3dmetal",
-  "gptk": "", "gptkAlso": "", "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "", "why": ""}]}
+  "gptk": "", "gptkAlso": "", "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "", "why": ""}],
+ "testing": [{"name": "Fake Trial", "exe": "FakeGame.exe", "carrierDir": "", "script": "install-fake.sh",
+  "needsPrefix": false, "symptom": "test", "backend": "d3dmetal", "gptk": "", "gptkAlso": "",
+  "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "", "why": "", "testing": "a friend",
+  "credits": ["A Friend | https://example.invalid/fix"]}]}
 JSON
 /usr/bin/python3 - "$RES" <<'PY'
 import hashlib, json, pathlib, sys
@@ -214,6 +218,10 @@ echo "== what each fix requires"
 steam 1 4
 games() { "$BIN" --games-report 2>&1; }
 check 'has "$(games)" "Fake Game | runs on DXMT, its videos need CrossOver Preview 27, which ships their codec"' "a fix's requirements are said beside the game, and nothing is asked"
+check '! has "$(games)" "Fake Trial"' "a fix being tested is not listed while the testing switch is off"
+printf '{"testingFixes":true,"updates":false}' > "$SUPPORT/MacGameFix/automatic.json"
+check 'has "$(games)" "Fake Trial | runs on D3DMetal" && has "$(games)" "Fake Game |"' "with it on, the fix being tested is listed beside the others"
+rm -f "$SUPPORT/MacGameFix/automatic.json"
 
 echo "== the agent"
 printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false}' "$GAME" > "$SUPPORT/MacGameFix/automatic.json"

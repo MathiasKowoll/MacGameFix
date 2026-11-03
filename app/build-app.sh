@@ -90,7 +90,7 @@ echo "==> choosing the games"
 import json, re, sys, pathlib
 root, out = pathlib.Path(sys.argv[1]), sys.argv[2]
 procs = json.loads((root / "process-features.json").read_text())["processes"]
-games, left = [], []
+games, testing, left = [], [], []
 for script in sorted((root / "fixes").glob("install-*.sh")):
     text = script.read_text()
     scope = re.search(r"^# MGVF-SCOPE: (\S+)", text, re.M)
@@ -103,6 +103,11 @@ for script in sorted((root / "fixes").glob("install-*.sh")):
     # registry values alone (MGVF-IN-PREFIX: registry) rather than DLLs as well.
     needs = re.search(r"^# MGVF-NEEDS: (.*)$", text, re.M)
     in_prefix = re.search(r"^# MGVF-IN-PREFIX: (\S+)", text, re.M)
+    # A fix nobody has played here yet names who is testing it (MGVF-TESTING:
+    # macprotips): it goes into games.json's "testing" table, which only an app
+    # with the testing switch on reads. Its credits are "name | url" lines.
+    in_testing = re.search(r"^# MGVF-TESTING:(.*)$", text, re.M)
+    credits = [c.strip() for c in re.findall(r"^# MGVF-CREDIT: (.*)$", text, re.M)]
     for m in re.finditer(r"^# MGVF-GAME: (.*?) \| (.*?) \|(.*)$", text, re.M):
         # An optional fourth field names the other executables the title runs as
         # (MK11.exe beside MK11_DX12.exe), so the app knows it is running either way.
@@ -121,7 +126,7 @@ for script in sorted((root / "fixes").glob("install-*.sh")):
             reason = "needs a winegstreamer carrying " + p["needs_engine"]
         if reason:
             left.append((name, reason)); continue
-        games.append({
+        (testing if in_testing else games).append({
             "name": name,
             "exe": exe,
             "alsoRuns": also,
@@ -148,11 +153,16 @@ for script in sorted((root / "fixes").glob("install-*.sh")):
             # The toolkit from which this title plays without its fix at all.
             "notNeededFrom": p.get("not_needed_from_gptk", ""),
             "why": why.group(1).strip() if why else "",
+            "credits": credits,
+            **({"testing": in_testing.group(1).strip()} if in_testing else {}),
         })
 games.sort(key=lambda g: g["name"].lower())
-json.dump({"games": games}, open(out, "w"), indent=2)
+testing.sort(key=lambda g: g["name"].lower())
+json.dump({"games": games, "testing": testing}, open(out, "w"), indent=2)
 for g in games:
     print(f"    in   {g['name']}")
+for g in testing:
+    print(f"    test {g['name']}" + (f" (by {g['testing']})" if g["testing"] else ""))
 for name, reason in left:
     print(f"    out  {name}: {reason}")
 if not games:
@@ -164,7 +174,7 @@ PY
 # to use is carried without anybody remembering to add it here.
 SCRIPTS=()
 while IFS= read -r s; do SCRIPTS+=("$s"); done < <(
-  /usr/bin/python3 -c 'import json,sys; print("\n".join(sorted({g["script"] for g in json.load(open(sys.argv[1]))["games"]})))' "$STAGE/games.json")
+  /usr/bin/python3 -c 'import json,sys; t=json.load(open(sys.argv[1])); print("\n".join(sorted({g["script"] for g in t["games"] + t["testing"]})))' "$STAGE/games.json")
 PAYLOAD=()
 for s in "${SCRIPTS[@]}"; do
   PAYLOAD+=("$s")
