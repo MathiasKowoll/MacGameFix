@@ -57,7 +57,8 @@ cable and over Bluetooth, the pad on Bluetooth as if on a cable, XInput, trigger
 that sets none, the pad's audio output through SetupAPI and XAudio2, and the Edge or the pad shown to a
 game as another pad) and *Copy protection under Rosetta* (the Intel side's `ntdll.so`, for
 Denuvo-protected games such as Phantom Blade Zero, Persona 4 Golden, Planet Zoo 2 and
-STAR WARS: Galactic Racer), see
+STAR WARS: Galactic Racer; the games played or reported are in
+[`docs/improvements`](docs/improvements)), see
 [`engine/README.md`](engine/README.md), each with a switch and an Update button for every CrossOver
 app and NotProton runner; then *Game Mode*, which changes nothing in CrossOver, and the modules' own
 updates; **Game Feel**, the DualSense's options for every game

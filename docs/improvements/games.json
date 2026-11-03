@@ -1,0 +1,102 @@
+{
+  "about": "The games that run because of an improvement: one of the Wine modules MacGameFix installs into a CrossOver app or a NotProton runner, not a fix in the game's folder or prefix. A game is added after it was played, by us or by someone who reported it, never from what it should do. A report from someone else stays 'reported' until we play it. A game that also needs a fix of its own names it in 'fix' (docs/fixes/games/<fix>.json).",
+  "updated": "2026-11-02",
+  "improvements": {
+    "rosetta-copy-protection": {
+      "name": "Copy protection under Rosetta",
+      "summary": "The Intel side's ntdll.so (engine patches 0017, 0018 and 0019): Rosetta's x86 CPU made to look more like a real one to copy protection such as Denuvo. The game's code is not touched.",
+      "page": "engine/README.md#rosettas-cpu-for-copy-protection"
+    },
+    "dualsense": {
+      "name": "DualSense controllers",
+      "summary": "The DualSense's haptics, trigger effects and audio output, on a cable and over Bluetooth. Its games are in docs/vibration.json.",
+      "page": "engine/README.md"
+    }
+  },
+  "statuses": {
+    "played": "Played by us",
+    "reported": "Reported, not played by us"
+  },
+  "games": [
+    {
+      "name": "Persona 4 Golden",
+      "steamAppId": "1113000",
+      "improvement": "rosetta-copy-protection",
+      "fix": null,
+      "status": "played",
+      "description": "Plays at about 60 fps with no launch options. It used to crash about 12 s in: Rosetta skipped a cpuid that Denuvo had just decrypted in place (patch 0019).",
+      "tests": [
+        {
+          "date": "2026-11-01",
+          "status": "played",
+          "by": "MacGameFix",
+          "mac": "M4 Max",
+          "macos": "27.2",
+          "crossover": "Preview 27.0.0.41073",
+          "runner": "NotProton, Intel side",
+          "notes": "About 60 fps, no launch options."
+        }
+      ]
+    },
+    {
+      "name": "Phantom Blade Zero",
+      "steamAppId": "4115450",
+      "improvement": "rosetta-copy-protection",
+      "fix": "phantom-blade-zero",
+      "status": "played",
+      "description": "Passes Denuvo with the improvement; its own fix asks for the CPU bits and makes the menu video play.",
+      "tests": [
+        {
+          "date": "2026-11-01",
+          "status": "played",
+          "by": "MacGameFix",
+          "mac": "M4 Max",
+          "macos": "27.2",
+          "crossover": "Preview 27.0.0.41073",
+          "runner": "NotProton, Intel side",
+          "notes": "Played for over 40 minutes, in full screen with macOS Game Mode on. TSR with D3DM_ENABLE_METALFX=0."
+        }
+      ]
+    },
+    {
+      "name": "Planet Zoo 2",
+      "steamAppId": "3219030",
+      "improvement": "rosetta-copy-protection",
+      "fix": null,
+      "status": "reported",
+      "description": "Runs with the improvement alone, no fix and no launch option.",
+      "tests": [
+        {
+          "date": "2026-11-02",
+          "status": "reported",
+          "by": "NotProton",
+          "mac": "M4 Pro",
+          "macos": "27.2",
+          "gptk": "4.0b3",
+          "runner": "NotProton, Intel side",
+          "notes": "Reported working, with screenshots, without changes beyond MacGameFix's improvement."
+        }
+      ]
+    },
+    {
+      "name": "STAR WARS: Galactic Racer",
+      "steamAppId": "4078430",
+      "improvement": "rosetta-copy-protection",
+      "fix": null,
+      "status": "reported",
+      "description": "Runs with the improvement alone, no fix and no launch option.",
+      "tests": [
+        {
+          "date": "2026-11-02",
+          "status": "reported",
+          "by": "NotProton",
+          "mac": "M4 Pro",
+          "macos": "27.2",
+          "gptk": "4.0b3",
+          "runner": "NotProton, Intel side",
+          "notes": "Reported working, with screenshots: racing at about 80 fps at 1512x827 with MetalFX temporal scaling."
+        }
+      ]
+    }
+  ]
+}
