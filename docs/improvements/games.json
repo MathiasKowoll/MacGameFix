@@ -1,10 +1,10 @@
 {
-  "about": "The games that run because of an improvement: one of the Wine modules MacGameFix installs into a CrossOver app or a NotProton runner, not a fix in the game's folder or prefix. A game is added after it was played, by us or by someone who reported it, never from what it should do. A report from someone else stays 'reported' until we play it. A game that also needs a fix of its own names it in 'fix' (docs/fixes/games/<fix>.json).",
-  "updated": "2026-11-02",
+  "about": "The games that run because of an improvement: one of the Wine modules MacGameFix installs into a CrossOver app or a NotProton runner, not a fix in the game's folder or prefix. A game is added after it was played, by us or by someone who reported it, never from what it should do. A report from someone else stays 'reported' until we play it, and a game we tried that does not run yet is 'in-progress'. A game that also needs a fix of its own names it in 'fix' (docs/fixes/games/<fix>.json).",
+  "updated": "2026-11-03",
   "improvements": {
     "rosetta-copy-protection": {
       "name": "Copy protection under Rosetta",
-      "summary": "The Intel side's ntdll.so (engine patches 0017, 0018 and 0019): Rosetta's x86 CPU made to look more like a real one to copy protection such as Denuvo. The game's code is not touched.",
+      "summary": "The Intel side's ntdll.so (engine patches 0017 to 0020): Rosetta's x86 CPU made to look more like a real one to copy protection such as Denuvo. The game's code is not touched.",
       "page": "engine/README.md#rosettas-cpu-for-copy-protection"
     },
     "dualsense": {
@@ -15,7 +15,8 @@
   },
   "statuses": {
     "played": "Played by us",
-    "reported": "Reported, not played by us"
+    "reported": "Reported, not played by us",
+    "in-progress": "Work in progress, does not run here yet"
   },
   "games": [
     {
