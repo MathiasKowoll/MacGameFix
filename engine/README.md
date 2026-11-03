@@ -309,6 +309,11 @@ played at about 60 fps on Preview 41073's NotProton runner with `0019` and no
 Not played yet: CrossOver 26.3, and a CrossOver app's bottle (only the runner),
 with these builds.
 
+Reported by NotProton (2026-11-02), not played here: Planet Zoo 2 and STAR WARS: Galactic
+Racer run under Rosetta with this `ntdll.so` and no fix or launch option of their own, on an
+M4 Pro with macOS 27.2 and Game Porting Toolkit 4.0b3 (D3DMetal 4). Galactic Racer was seen
+racing at about 80 fps with MetalFX's temporal scaling.
+
 ## Measured
 
 Measured on 2026-10-18 on CrossOver Preview 27.0.0.41069, in a NotProton runner,
