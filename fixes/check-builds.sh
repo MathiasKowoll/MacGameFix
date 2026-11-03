@@ -98,9 +98,10 @@ for dll in "$HERE"/*.dll; do
   # nothing useful about them -- and reported as unknown they read like drift.
   # What is checked instead is that they still hash to what was published.
   case "$name" in
-    ng3-*.dll|mgvf-asf-reader.dll)
+    ng3-*.dll|mgvf-asf-reader.dll|d3d11-wolf.dll)
       case "$name" in
         ng3-*) record="$HERE/ng3-THIRD-PARTY-LICENCES.md" ;;
+        d3d11-wolf.dll) record="$HERE/wolffix-LICENCES.md" ;;
         *)     record="$HERE/mgvf-asf-reader-LICENCES.md" ;;
       esac
       want="$(grep -E "\`$name\`" "$record" 2>/dev/null | grep -oE '[0-9a-f]{64}' | tail -1)"

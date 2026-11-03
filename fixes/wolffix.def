@@ -1,0 +1,4 @@
+LIBRARY d3d11.dll
+EXPORTS
+    D3D11CreateDevice = wolffix_D3D11CreateDevice
+    D3D11CreateDeviceAndSwapChain = wolffix_D3D11CreateDeviceAndSwapChain

@@ -226,6 +226,14 @@
       "env": {},
       "symptom": "Characters stay in a T-pose; the symbiote breaks; brief black blocks in the sandstorm"
     },
+    "TheWolfAmongUsRemastered.exe": {
+      "title": "The Wolf Among Us Remastered",
+      "backend": "d3dmetal",
+      "codec": "",
+      "gptk": "",
+      "env": {},
+      "symptom": "Anything that moves leaves faded copies behind"
+    },
     "TMNTSF.exe": {
       "title": "TMNT: Splintered Fate",
       "backend": "d3dmetal",
