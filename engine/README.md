@@ -315,6 +315,16 @@ Racer run under Rosetta with this `ntdll.so` and no fix or launch option of thei
 M4 Pro with macOS 27.2 and Game Porting Toolkit 4.0b3 (D3DMetal 4). Galactic Racer was seen
 racing at about 80 fps with MetalFX's temporal scaling.
 
+Measured here on 2026-11-03, an M4 Max with macOS 27.2, Preview 41073's NotProton
+runner: with `0017` and `0019` and no setting, both died before their first frame,
+Planet Zoo 2 on an unhandled access violation at address -1 in its own code. With
+the CPUID bits both got past Denuvo, which led to `0020`. Galactic Racer then ran,
+and since `0020` it starts with no launch option. Planet Zoo 2 stops a few seconds
+later on an assertion in its DirectStorage texture loader
+(`frTextureLoadQueue_DirectStorage.cpp`), with `DXGI_ERROR_UNSUPPORTED` from
+`DStorageCore.dll` on its stack; without `dstoragecore.dll` it stops earlier, so it
+has no path without DirectStorage. Not yet explained.
+
 ## Measured
 
 Measured on 2026-10-18 on CrossOver Preview 27.0.0.41069, in a NotProton runner,

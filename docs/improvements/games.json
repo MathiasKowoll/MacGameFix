@@ -83,8 +83,8 @@
       "steamAppId": "4078430",
       "improvement": "rosetta-copy-protection",
       "fix": null,
-      "status": "reported",
-      "description": "Runs with the improvement alone, no fix and no launch option.",
+      "status": "played",
+      "description": "Runs with the improvement alone, no fix and no launch option, since the Wine modules of 2026-11-03 (engine patch 0020); earlier modules showed the CPU bits its Denuvo checks for only when the launch options asked.",
       "tests": [
         {
           "date": "2026-11-02",
@@ -95,6 +95,17 @@
           "gptk": "4.0b3",
           "runner": "NotProton, Intel side",
           "notes": "Reported working, with screenshots: racing at about 80 fps at 1512x827 with MetalFX temporal scaling."
+        },
+        {
+          "date": "2026-11-03",
+          "status": "played",
+          "by": "MacGameFix",
+          "mac": "M4 Max",
+          "macos": "27.2",
+          "crossover": "Preview 27.0.0.41073",
+          "gptk": "4.0b3",
+          "runner": "NotProton, Intel side",
+          "notes": "Got past Denuvo and started with no launch option once 0020 was in the runner. With the modules before it, it died before its first frame unless NOTPROTON_ENV_WINE_ROSETTA_CPUID7_OR=01800000,00400000 was in its launch options."
         }
       ]
     }
