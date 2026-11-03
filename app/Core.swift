@@ -177,6 +177,12 @@ struct Game: Decodable, Identifiable, Hashable {
     /// A Game Porting Toolkit from which the title plays without this fix.
     let notNeededFrom: String
     let why: String
+    /// For a fix still being tested, who is testing it (the installer's MGVF-TESTING
+    /// line); absent for a validated fix and from catalogs older than the field.
+    let testing: String?
+    /// The work it stands on, as "name | url" (the installer's MGVF-CREDIT lines);
+    /// absent from catalogs older than the field.
+    let credits: [String]?
 
     var id: String { name }
 
@@ -215,6 +221,19 @@ struct Game: Decodable, Identifiable, Hashable {
             }
         }
         return false
+    }
+
+    /// Whose work the fix is, and for one being tested, that nobody has validated it
+    /// yet: added to the game's help in Games.
+    var aboutTesting: String {
+        var text = ""
+        let names = (credits ?? []).compactMap { $0.split(separator: "|").first?.trimmingCharacters(in: .whitespaces) }
+        if !names.isEmpty { text += "\n\nBy " + ListFormatter.localizedString(byJoining: names) + "." }
+        if let who = testing {
+            text += "\n\nBeing tested" + (who.isEmpty ? "" : " by \(who)")
+                + ": not validated yet. Say how it went with It Works… or Report."
+        }
+        return text
     }
 
     /// What the backend and toolkit fields mean to someone choosing settings.
@@ -590,10 +609,16 @@ enum Catalog {
         return (bundled, mine)
     }
 
-    static func games(in dir: URL) -> [Game] {
-        struct Table: Decodable { let games: [Game] }
+    /// The catalog's games: the validated ones, and with `testing` those still being
+    /// tested too. Those are a table of their own, "testing", which an app older than
+    /// the field never reads, so a fix nobody has validated reaches only someone who
+    /// turned them on in Settings.
+    static func games(in dir: URL, testing: Bool = AutoSettings.load().testingFixes) -> [Game] {
+        struct Table: Decodable { let games: [Game]; let testing: [Game]? }
         let data = (try? Data(contentsOf: dir.appendingPathComponent("games.json"))) ?? Data()
-        return (try? JSONDecoder().decode(Table.self, from: data))?.games ?? []
+        guard let table = try? JSONDecoder().decode(Table.self, from: data) else { return [] }
+        guard testing, let more = table.testing, !more.isEmpty else { return table.games }
+        return (table.games + more).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     /// Dotted versions compared number by number: "1.10" is newer than "1.9".
