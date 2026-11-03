@@ -1,0 +1,32 @@
+# Need for Speed Unbound: where Engine.Render.Core2.PlatformPcDx12.dll is
+# changed so the game's shader pre-build skips the pipelines whose root
+# signature D3DMetal cannot create, instead of crashing as it cleans up after
+# them. Read by install-nfsu-fix.sh. The bytes are macprotips' NFSUnboundFix
+# 1.1.0 (Sources/NFSUnboundFixKit/Patcher.swift), made for Steam build 16690907.
+#
+#   result <sha256 before> <sha256 after>
+#   edit   <sha256 before> <file offset> <bytes there> <bytes written>
+#   older  <sha256 of an older fix> <sha256 it came from> <file offset> <bytes there> <bytes it wrote>
+#
+# Lower-case hex, whitespace between fields, '#' for a comment. A DLL whose
+# sha256 has no result row is left alone, and MacGameFix says it waits for a
+# recipe. An older row is a fix made outside MacGameFix, which installing undoes
+# first and --restore undoes alone.
+
+# Steam build 16690907.
+result ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 496deaa8f65df105528cfd85e68b3521b11809d208da1724d07fd46494ef4b1f
+# The code section's size in the header, so the two checks below are code.
+edit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x258 8efd2000 00fe2000
+# Graphics pre-build: call the check for a root signature that could not be created.
+edit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x433f4 e8f79a1800 e897cd1c00
+# Compute pre-build: the same check.
+edit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x437d9 4d85ff7428 e9d2c91c00
+# Pre-build cleanup: skip an empty root-signature entry instead of calling through it.
+edit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x43ae0 488b4f08488b01ff5010488b4710488bf84885c0751766660f1f840000000000 488b4f08e306488b01ff5010488b7f104885ff75189090909090909090909090
+# The two checks, in unused space at the end of the code section.
+edit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x210190 000000000000000000000000000000000000 4883bd0004000000750331c0c3e94ecdfbff
+edit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x2101b0 00000000000000000000000000000000000000000000000000000000 4883bd68010000000f843d37e3ff4d85ff0f843f36e3ffe91236e3ff
+
+# The first fix shared for the game (Ariel O in CodeWeavers' compatibility
+# database, spread by u/ales_sandr): it turns the shader pre-build off.
+older 9dc33b2edebca402c48c53f32cce474aafd5d640e5754275484deaced66134aa ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x1ab423 4438abc0010000 80a3c001000000

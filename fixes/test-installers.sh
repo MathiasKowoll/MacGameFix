@@ -210,6 +210,49 @@ last="$(pbz --restore 2>/dev/null | tail -1)"
   && [ "$(cat "$psys/msmpeg2vdec.dll")" = "CrossOver's own msmpeg2vdec" ] && [ ! -e "$psys/msmpeg2vdec.dll.mgvf-stock" ] \
   && say ok "pbz in a Steam Play prefix: restored, every value gone and CrossOver's decoder back" || say FAIL "pbz prefix: restore ($last, $(pbzst))"
 
+# Need for Speed Unbound's fix changes the game's renderer DLL by recipe, keyed
+# by its sha256. The game's DLL is not here, so the test makes one: the recipe's
+# "from" bytes at their offsets in a file of 0xcc, and recipe rows for it, the
+# real rows' bytes under this file's sha256s, beside a copy of the installer.
+nf="$W/nfsfix"; g="$W/nfs"; mkdir -p "$nf" "$g"; touch "$g/NeedForSpeedUnbound.exe"
+cp "$FIX/install-nfsu-fix.sh" "$nf/"
+nd="$g/Engine.Render.Core2.PlatformPcDx12.dll"
+/usr/bin/python3 -I - "$FIX/nfsu-prebuild.recipes" "$nf/nfsu-prebuild.recipes" "$nd" "$W/nfs-older.dll" <<'PY'
+import hashlib, sys
+src, rec, dll, old = sys.argv[1:]
+rows = [l.split() for l in open(src) if l.strip() and not l.startswith('#')]
+edits, older = [r for r in rows if r[0] == 'edit'], [r for r in rows if r[0] == 'older'][0]
+def put(b, off, hexs): o = int(off, 16); v = bytes.fromhex(hexs); b[o:o + len(v)] = v
+d = bytearray(b'\xcc' * 0x220000)
+for e in edits: put(d, e[2], e[3])
+put(d, older[3], older[4])
+h = hashlib.sha256(d).hexdigest()
+p = bytearray(d); [put(p, e[2], e[4]) for e in edits]
+q = bytearray(d); put(q, older[3], older[5])
+out = [f'result {h} {hashlib.sha256(p).hexdigest()}'] + [f'edit {h} {e[2]} {e[3]} {e[4]}' for e in edits]
+out.append(f'older {hashlib.sha256(q).hexdigest()} {h} {older[3]} {older[4]} {older[5]}')
+open(rec, 'w').write('\n'.join(out) + '\n')
+open(dll, 'wb').write(d); open(old, 'wb').write(q)
+PY
+cp "$nd" "$W/nfs-orig.dll"
+nfsst() { FIX="$nf" st install-nfsu-fix.sh "$g"; }
+nfs() { /bin/bash "$nf/install-nfsu-fix.sh" "$g" "$@"; }
+[ "$(nfsst)" = absent ] && say ok "nfs unbound: absent before" || say FAIL "nfs unbound: absent before ($(nfsst))"
+nfs > "$W/nfs.install.log" 2>&1 && [ "$(nfsst)" = installed ] && cmp -s "$nd.mgvf-original" "$W/nfs-orig.dll" \
+  && say ok "nfs unbound: installed, the original kept beside it" || say FAIL "nfs unbound: install ($(nfsst)): $(tail -2 "$W/nfs.install.log")"
+nfs --restore > /dev/null 2>&1 && [ "$(nfsst)" = absent ] && cmp -s "$nd" "$W/nfs-orig.dll" && [ ! -e "$nd.mgvf-original" ] \
+  && say ok "nfs unbound: restored from the kept original" || say FAIL "nfs unbound: restore ($(nfsst))"
+nfs > /dev/null 2>&1; rm -f "$nd.mgvf-original"
+nfs --restore > /dev/null 2>&1 && cmp -s "$nd" "$W/nfs-orig.dll" \
+  && say ok "nfs unbound: restored without the kept copy, by undoing the recipe" || say FAIL "nfs unbound: restore by undoing ($(nfsst))"
+cp "$W/nfs-older.dll" "$nd"
+[ "$(nfsst)" = half ] && say ok "nfs unbound: the first fix (pre-build off) is half" || say FAIL "nfs unbound: older fix ($(nfsst))"
+nfs > /dev/null 2>&1 && [ "$(nfsst)" = installed ] && cmp -s "$nd.mgvf-original" "$W/nfs-orig.dll" \
+  && say ok "nfs unbound: installing over the first fix undoes it, and keeps the true original" || say FAIL "nfs unbound: over the first fix ($(nfsst))"
+nfs --restore > /dev/null 2>&1
+printf x >> "$nd"
+[ "$(nfsst)" = norecipe ] && ! nfs > /dev/null 2>&1 && say ok "nfs unbound: another build waits for a recipe, untouched" || say FAIL "nfs unbound: unknown build ($(nfsst))"
+
 # Cyberpunk 2077's fix writes four bytes into a macOS game's executable and signs
 # the app again, so it is tried on a fake app: a small executable built here,
 # with the word the recipe changes behind a tag the test finds it by, signed ad
