@@ -63,8 +63,8 @@
       "steamAppId": "3219030",
       "improvement": "rosetta-copy-protection",
       "fix": null,
-      "status": "reported",
-      "description": "Runs with the improvement alone, no fix and no launch option.",
+      "status": "in-progress",
+      "description": "Work in progress: gets past Denuvo with the improvement, then stops at its DirectStorage texture loader on this Mac. Reported working elsewhere.",
       "tests": [
         {
           "date": "2026-11-02",
@@ -75,6 +75,17 @@
           "gptk": "4.0b3",
           "runner": "NotProton, Intel side",
           "notes": "Reported working, with screenshots, without changes beyond MacGameFix's improvement."
+        },
+        {
+          "date": "2026-11-03",
+          "status": "in-progress",
+          "by": "MacGameFix",
+          "mac": "M4 Max",
+          "macos": "27.2",
+          "crossover": "Preview 27.0.0.41073",
+          "gptk": "4.0b3",
+          "runner": "NotProton, Intel side",
+          "notes": "Gets past Denuvo with the CPU bits (engine patch 0020), then stops seconds later: DirectStorage refuses its texture queue with DXGI_ERROR_UNSUPPORTED and the game asserts. Without dstoragecore.dll it stops earlier."
         }
       ]
     },

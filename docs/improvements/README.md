@@ -17,9 +17,11 @@ Each game has a `status`:
 | --- | --- |
 | `played` | We played it, on the CrossOver and Mac its test names |
 | `reported` | Someone else reported it working, named in `by`; we have not played it |
+| `in-progress` | Reported working, or expected to, but it does not run here yet; its last test says where it stops |
 
 A reported game becomes `played` only after we play it, with a test of our own
-added beside the report. Nothing is added from what an improvement should do.
+added beside the report. One we tried that does not run yet becomes `in-progress`,
+with that test, until it does. Nothing is added from what an improvement should do.
 
 Each test records:
 
