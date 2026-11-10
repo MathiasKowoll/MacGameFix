@@ -1,0 +1,28 @@
+--- a/dlls/ntdll/unix/sync.c
++++ b/dlls/ntdll/unix/sync.c
+@@ -2278,14 +2278,24 @@
+                             void *arg, BOOLEAN resume, ULONG period, BOOLEAN *state )
+ {
+     unsigned int ret = STATUS_SUCCESS;
++    LONGLONG expire = when->QuadPart;
+ 
+     TRACE( "(%p,%p,%p,%p,%08x,0x%08x,%p)\n", handle, when, callback, arg, resume, period, state );
++
++    /* wineserver makes a relative expiry a deadline by subtracting its monotonic clock
++     * (timeout_to_abstime), which overflows when the expiry is within that clock of
++     * -MAXLONGLONG, and the timer is then signalled at once. The threadpool's timer queue
++     * arms its relative timer with such a value, rel_now - MAXLONGLONG, whenever no relative
++     * timer is pending; with absolute timers only, its thread then wakes and re-arms in a
++     * loop (Forza Horizon 6: 88,000 set_timer requests a second, wineserver at 57% of a core).
++     * -2^62, about 14,600 years, cannot overflow and is as good as never. */
++    if (expire < -((LONGLONG)1 << 62)) expire = -((LONGLONG)1 << 62);
+ 
+     SERVER_START_REQ( set_timer )
+     {
+         req->handle   = wine_server_obj_handle( handle );
+         req->period   = period;
+-        req->expire   = when->QuadPart;
++        req->expire   = expire;
+         req->callback = wine_server_client_ptr( callback );
+         req->arg      = wine_server_client_ptr( arg );
+         ret = wine_server_call( req );

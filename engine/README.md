@@ -8,7 +8,9 @@ on the motors, or the pad as an XInput controller), trigger effects for a game
 that sets none, and options per game that the app's **Game Feel** tab sets.
 One more, the Intel side's `ntdll.so`, is not about the pad: it lets copy
 protection that checks the CPU start under Rosetta (see
-[Rosetta's CPU, for copy protection](#rosettas-cpu-for-copy-protection)).
+[Rosetta's CPU, for copy protection](#rosettas-cpu-for-copy-protection)), and
+stops Wine's threadpool timer thread from spinning (see
+[The threadpool's timer thread](#the-threadpools-timer-thread)).
 
 ## What they fix
 
@@ -324,6 +326,53 @@ later on an assertion in its DirectStorage texture loader
 (`frTextureLoadQueue_DirectStorage.cpp`), with `DXGI_ERROR_UNSUPPORTED` from
 `DStorageCore.dll` on its stack; without `dstoragecore.dll` it stops earlier, so it
 has no path without DirectStorage. Not yet explained.
+
+## The threadpool's timer thread
+
+Wine 11.17's threadpool keeps its timers in two queues, absolute and relative,
+and its timer thread waits on one Wine timer for each. When no relative timer is
+pending it arms that one with `rel_now - MAXLONGLONG`, as good as never. wineserver
+turns a relative expiry into a deadline by subtracting its monotonic clock
+(`timeout_to_abstime`), which overflows for that value, and the timer is signalled
+at once. A program whose threadpool timers all have an absolute due time then keeps
+the thread waking and re-arming both timers, two `set_timer` requests and a wait each
+turn, until its next timer is due. Wine 11.0 (CrossOver 26.3) has the older timer
+thread, which waits on a condition variable, and is not affected.
+
+| Patch | Module | Change |
+|---|---|---|
+| `0021-ntdll-timer-relative-overflow.patch` | `ntdll.so` | `NtSetTimer` sends wineserver a relative expiry of at most 2^62 (about 14,600 years), which cannot overflow, instead of one closer to `-MAXLONGLONG`. |
+
+Measured on 2026-11-10, an M4 Max with macOS 27.2, Preview 41073's NotProton
+runner (Intel side), with a probe that re-arms a one-shot threadpool timer with an
+absolute due time from its own callback, and counts of the requests the process
+sends wineserver:
+
+| Due time | Before: `set_timer`/s | Before: waits/s | After: `set_timer`/s | After: waits/s |
+|---|---|---|---|---|
+| now + 16 ms | 75,022 | 37,449 | 226 | 57 |
+| now + 1 ms | 58,982 | 28,724 | 3,058 | 765 |
+
+A timer set with a relative expiry of `-MAXLONGLONG`, or of `rel_now - MAXLONGLONG`,
+was signalled within 100 ms before; it is not after. Relative and periodic
+threadpool timers were already fine (a 1 ms periodic timer: about 1,600 to 2,000
+`set_timer` a second for 1,000 callbacks, before and after). The absolute timer now
+fires when wineserver wakes, about 0.3 to 1 ms after its due time, as any Wine
+timer does; the spinning thread had caught it a little sooner, so the 1 ms probe
+runs 764 callbacks a second instead of 983.
+
+Forza Horizon 6 at its title screen, D3DMetal, the same day: before, 88,000
+`set_timer` requests a second, all from the `wine_threadpool_timerqueue` thread,
+which used half a core, and wineserver at 57% of a core. After (this `ntdll.so` in
+its runner only): no `set_timer` among the requests it sends most, 12,000 requests a
+second in all (registry reads from one of its own threads), the timer thread under
+20 ms of CPU in 5 s, wineserver at 8%. The process makes 850,000 system calls a
+second instead of 1,100,000. Its hitch about once a second is the copy protection's
+work under Rosetta and stays; in one 3-minute run its frames lost 38 ms a second
+to it, against 45 before, which one run does not establish.
+
+Not fixed here: `NtDelayExecution` with a relative timeout of `-MAXLONGLONG`
+returns at once too (the same probe, 2026-11-10); waits with such a timeout do not.
 
 ## Measured
 

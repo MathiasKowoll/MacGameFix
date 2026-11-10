@@ -5,6 +5,7 @@
   "wine-11.0/0017-ntdll-rosetta-cpu-fidelity.patch": "Under Rosetta the CPU looks more like the x86 one copy protection checks for: CPUID leaf 7 bits on request, CLWB and RDPID, debug-register breakpoints, non-canonical faults",
   "wine-11.0/0018-ntdll-d3dmetal-fallback.patch": "A 64-bit process with CX_GRAPHICS_BACKEND=d3dmetal finds D3DMetal's DLLs first, even when CrossOver did not route it",
   "wine-11.0/0019-ntdll-rosetta-smc-cpuid.patch": "Under Rosetta, a cpuid that self-modifying code wrote right before running it, which Rosetta skips and faults after, is run by ntdll",
+  "wine-11.0/0020-ntdll-rosetta-cpuid-by-default.patch": "Rosetta's CPUID bits are on for every process unless WINE_ROSETTA_CPUID7_OR=0, and each emulated CLWB or RDPID is counted in the log",
   "wine-11.17/0001-winebus.patch": "A USB pad's container comes from its location ID, so a game can pair it with its audio",
   "wine-11.17/0002-winecoreaudio.patch": "The pad's audio endpoints answer DEVPKEY_Device_ContainerId with the pad's container",
   "wine-11.17/0003-mmdevapi.patch": "An active endpoint's container is asked of the driver, not read from the registry",
@@ -23,5 +24,7 @@
   "wine-11.17/0016-winebus-rumble-flag-0x02-keeps-the-motors.patch": "Over Bluetooth a game report with the rumble flag 0x02 alone keeps the motors, as the pad does on a cable",
   "wine-11.17/0017-ntdll-rosetta-cpu-fidelity.patch": "Under Rosetta the CPU looks more like the x86 one copy protection checks for: CPUID leaf 7 bits on request, CLWB and RDPID, debug-register breakpoints, non-canonical faults",
   "wine-11.17/0018-ntdll-d3dmetal-fallback.patch": "A 64-bit process with CX_GRAPHICS_BACKEND=d3dmetal finds D3DMetal's DLLs first, even when CrossOver did not route it",
-  "wine-11.17/0019-ntdll-rosetta-smc-cpuid.patch": "Under Rosetta, a cpuid that self-modifying code wrote right before running it, which Rosetta skips and faults after, is run by ntdll"
+  "wine-11.17/0019-ntdll-rosetta-smc-cpuid.patch": "Under Rosetta, a cpuid that self-modifying code wrote right before running it, which Rosetta skips and faults after, is run by ntdll",
+  "wine-11.17/0020-ntdll-rosetta-cpuid-by-default.patch": "Rosetta's CPUID bits are on for every process unless WINE_ROSETTA_CPUID7_OR=0, and each emulated CLWB or RDPID is counted in the log",
+  "wine-11.17/0021-ntdll-timer-relative-overflow.patch": "A relative timer expiry near -MAXLONGLONG, which wineserver's deadline overflows on, is sent as 2^62: the threadpool's timer thread no longer spins"
 }
