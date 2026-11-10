@@ -4,7 +4,7 @@
 | --- | --- |
 | Symptom | After Xbox sign-in, **Continue** stays in a blurred loading screen and returns to the menu or never ends |
 | Cause | D3DMetal reports a 24-byte CBV/SRV/UAV descriptor where FH5 sizes its descriptor pool for NVIDIA's 32, among other D3D12 gaps |
-| Fix | A source-built D3D12 proxy reports 32 and translates every handle to D3DMetal's 24; an Xbox UDP proxy keeps the online socket open |
+| Fix | A source-built D3D12 proxy reports 32 and translates every handle to D3DMetal's 24; an Xbox UDP proxy keeps the online socket open; the prefix gets the Xbox sign-in values. The GPU identity goes in the game's Steam launch options: `NOTPROTON_ENV_D3DM_VENDOR_ID=4318 NOTPROTON_ENV_D3DM_DEVICE_ID=10118 NOTPROTON_ENV_D3DM_DEVICE_DESCRIPTION="NVIDIA GeForce RTX 4070" %command%` |
 | Backend | **D3DMetal** 4, D3D12 |
 | CrossOver | NotProton's `crossover-27.0.0.41073-fex` runner, Steam Play prefix |
 
@@ -76,7 +76,16 @@ through DevTools and then removed them.
 The GPU identity (`D3DM_VENDOR_ID`, `D3DM_DEVICE_ID`,
 `D3DM_DEVICE_DESCRIPTION`) is a different case. D3DMetal reads it inside
 `D3DMetal.framework`, with the native environment, so no registry value reaches
-it and it stays a launch option.
+it and it stays a launch option. The complete Steam launch options of the
+validated profile are:
+
+```text
+NOTPROTON_ENV_D3DM_VENDOR_ID=4318 NOTPROTON_ENV_D3DM_DEVICE_ID=10118 NOTPROTON_ENV_D3DM_DEVICE_DESCRIPTION="NVIDIA GeForce RTX 4070" %command%
+```
+
+In a CrossOver bottle the same three go without the `NOTPROTON_ENV_` prefix, as
+the bottle's environment variables. The reference setup used them to pass the
+game's GPU checks; running without them has not been tried here.
 
 ## Online socket
 
