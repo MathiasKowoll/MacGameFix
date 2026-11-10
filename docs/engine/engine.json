@@ -64,6 +64,16 @@
           ],
           "commit": "b799166362e28fefac0376ba567aaa6395248b0c",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/b799166362e28fefac0376ba567aaa6395248b0c/engine/patches/wine-11.0/0019-ntdll-rosetta-smc-cpuid.patch"
+        },
+        {
+          "name": "0020-ntdll-rosetta-cpuid-by-default.patch",
+          "file": "engine/patches/wine-11.0/0020-ntdll-rosetta-cpuid-by-default.patch",
+          "subject": "Rosetta's CPUID bits are on for every process unless WINE_ROSETTA_CPUID7_OR=0, and each emulated CLWB or RDPID is counted in the log",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "1005dd1ade6d1a3e8c4f879c4700a705f07c7dd0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/1005dd1ade6d1a3e8c4f879c4700a705f07c7dd0/engine/patches/wine-11.0/0020-ntdll-rosetta-cpuid-by-default.patch"
         }
       ]
     },
@@ -259,6 +269,26 @@
           ],
           "commit": "b799166362e28fefac0376ba567aaa6395248b0c",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/b799166362e28fefac0376ba567aaa6395248b0c/engine/patches/wine-11.17/0019-ntdll-rosetta-smc-cpuid.patch"
+        },
+        {
+          "name": "0020-ntdll-rosetta-cpuid-by-default.patch",
+          "file": "engine/patches/wine-11.17/0020-ntdll-rosetta-cpuid-by-default.patch",
+          "subject": "Rosetta's CPUID bits are on for every process unless WINE_ROSETTA_CPUID7_OR=0, and each emulated CLWB or RDPID is counted in the log",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "1005dd1ade6d1a3e8c4f879c4700a705f07c7dd0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/1005dd1ade6d1a3e8c4f879c4700a705f07c7dd0/engine/patches/wine-11.17/0020-ntdll-rosetta-cpuid-by-default.patch"
+        },
+        {
+          "name": "0021-ntdll-timer-relative-overflow.patch",
+          "file": "engine/patches/wine-11.17/0021-ntdll-timer-relative-overflow.patch",
+          "subject": "A relative timer expiry near -MAXLONGLONG, which wineserver's deadline overflows on, is sent as 2^62: the threadpool's timer thread no longer spins",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "2bad275dea9bbf2ee33f85b087f546edafb8ba60",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2bad275dea9bbf2ee33f85b087f546edafb8ba60/engine/patches/wine-11.17/0021-ntdll-timer-relative-overflow.patch"
         }
       ]
     }
