@@ -252,6 +252,106 @@
       "notNeededFromGptk": null
     },
     {
+      "title": "Forza Horizon 5",
+      "installer": "install-fh5-fix.sh",
+      "scope": "prefix",
+      "executable": "ForzaHorizon5.exe",
+      "carrierDirectory": null,
+      "alsoRuns": [],
+      "summary": "After Xbox sign-in it never leaves the blurred loading screen: a source-built D3D12 proxy translates the NVIDIA-style descriptor layout Forza expects to D3DMetal and fills the D3D12 gaps it reaches; the Xbox UDP proxy keeps online play's socket open.",
+      "page": "legacy/wiki/Forza-Horizon-5.md",
+      "installs": [
+        "d3d12-fh5.dll",
+        "ws2_32-fh5.dll",
+        "install-fh5-netfix.sh",
+        "fh5-THIRD-PARTY-LICENCES.md",
+        "pe.pl",
+        "bottles.sh"
+      ],
+      "builtFrom": [
+        "fh5-d3d12/d3d12.c",
+        "fh5-d3d12/stride.h",
+        "fh5-d3d12/stride_math.h",
+        "fh5-d3d12/dxil_shadingrate.c",
+        "fh5-d3d12/inspect.c",
+        "fh5-d3d12/unwindguard.h",
+        "fh5-d3d12/memfix.h",
+        "fh5-netfix.c"
+      ],
+      "license": "GPL-3.0-only",
+      "credits": [
+        {
+          "name": "xvferxedd",
+          "url": null,
+          "note": "fh5-d3dmetal-fix (GPL-3.0), originally at github.com/xvferxedd/fh5-d3dmetal-fix, which is no longer online: the descriptor translation, the D3D12 work and the Xbox UDP diagnosis both proxies derive from."
+        },
+        {
+          "name": "Andytizer",
+          "url": "https://github.com/Andytizer/fh5-crossover-steam-fix",
+          "note": "Preserved xvferxedd's source in fh5-crossover-steam-fix v1.0.1 (upstream/source), which is what this fix is built from."
+        },
+        {
+          "name": "Gauthier Piarrette (Highball)",
+          "url": "https://github.com/gauthierpiarrette/highball",
+          "note": "The tsshim base of the D3D12 proxy and its D3DMetal measurements."
+        },
+        {
+          "name": "MACxus",
+          "url": null,
+          "note": "Credited upstream for the FH5 profile with the NVIDIA identity the launch options carry."
+        },
+        {
+          "name": "ADM1SH",
+          "url": "https://github.com/ADM1SH/Forza-Horizon-5-for-mac",
+          "note": "Research notes on the same build: the memory counters and the WebView2 fatal."
+        }
+      ],
+      "excerpts": [
+        {
+          "file": "fixes/fh5-d3d12/stride.h",
+          "symbol": "st_GDHIS",
+          "note": "The game is told a CBV/SRV/UAV descriptor is 32 bytes wide, so its descriptor pool is as large as on an NVIDIA card.",
+          "language": "c",
+          "startLine": 201,
+          "endLine": 209,
+          "commit": "2d9211e2cea05174afb1f61998776834a6ce8589",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2d9211e2cea05174afb1f61998776834a6ce8589/fixes/fh5-d3d12/stride.h#L201-L209",
+          "code": "static UINT STDMETHODCALLTYPE st_GDHIS(void *d, D3D12_DESCRIPTOR_HEAP_TYPE t)\n{\n    ENT(d, S_GDHIS); UINT r;\n    if (!e) return 0;\n    r = ((UINT (STDMETHODCALLTYPE *)(void *, D3D12_DESCRIPTOR_HEAP_TYPE))e->orig[S_GDHIS])(d, t);\n    ST_CNT(M_GDHIS, calls);\n    if (t == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV && st_active) { ST_CNT(M_GDHIS, hits); return ST_FAKE_INC; }\n    return r;\n}"
+        },
+        {
+          "file": "fixes/fh5-d3d12/stride.h",
+          "symbol": "st_tc",
+          "note": "Every CPU handle the game computes at 32 bytes is mapped back to D3DMetal's real 24-byte layout.",
+          "language": "c",
+          "startLine": 185,
+          "endLine": 191,
+          "commit": "2d9211e2cea05174afb1f61998776834a6ce8589",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2d9211e2cea05174afb1f61998776834a6ce8589/fixes/fh5-d3d12/stride.h#L185-L191",
+          "code": "static D3D12_CPU_DESCRIPTOR_HANDLE st_tc(D3D12_CPU_DESCRIPTOR_HANDLE h, int m)\n{\n    int s; D3D12_CPU_DESCRIPTOR_HANDLE r;\n    r.ptr = (SIZE_T)sm_xlat(st_heaps, st_nheap, 0, (uint64_t)h.ptr, ST_FAKE_INC, (uint32_t)st_real_inc, &s);\n    if (s) { ST_CNT(m, hits); if (s > SM_OK) st_anomaly(s, m, 0, (uint64_t)h.ptr); }\n    return r;\n}"
+        },
+        {
+          "file": "fixes/fh5-netfix.c",
+          "symbol": "wrap_setsockopt",
+          "note": "An IPv4 option on the dual-stack Xbox socket, which macOS refuses, is applied as its IPv6 equivalent so the game keeps the socket.",
+          "language": "c",
+          "startLine": 256,
+          "endLine": 293,
+          "commit": "2d9211e2cea05174afb1f61998776834a6ce8589",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2d9211e2cea05174afb1f61998776834a6ce8589/fixes/fh5-netfix.c#L256-L293",
+          "code": "int WSAAPI wrap_setsockopt(SOCKET socket, int level, int option, const char *value, int length)\n{\n    ORIGINAL(function, \"setsockopt\");\n    int result = ((int (WSAAPI *)(SOCKET,int,int,const char*,int))function_proc)(socket, level, option, value, length);\n    int original_result = result, alternate = -2;\n    if (result != 0 && level == IPPROTO_IP && enabled())\n    {\n        DWORD original_error = GetLastError();\n        if (original_error == WSAEINVAL || original_error == WSAENOPROTOOPT)\n        {\n            int ipv6_option = option == IP_TTL ? IPV6_UNICAST_HOPS :\n                              option == IP_MULTICAST_TTL ? IPV6_MULTICAST_HOPS :\n                              option == IP_MULTICAST_LOOP ? IPV6_MULTICAST_LOOP :\n                              option == IP_TOS ? IPV6_TCLASS : -1;\n            if (ipv6_option >= 0)\n                alternate = ((int (WSAAPI *)(SOCKET,int,int,const char*,int))function_proc)\n                    (socket, IPPROTO_IPV6, ipv6_option, value, length);\n            result = 0; SetLastError(0);\n        }\n        else SetLastError(original_error);\n    }\n    if (enabled() && known_socket(socket))\n    {\n        DWORD error = GetLastError();\n        LOG_BUFFER(buffer);\n        begin_line(&buffer, CALLER); put_string(&buffer, \"setsockopt h=\"); put_unsigned(&buffer, socket);\n        put_string(&buffer, \" level=\"); put_integer(&buffer, level);\n        put_string(&buffer, \" option=\"); put_integer(&buffer, option);\n        if (original_result != result)\n        {\n            put_string(&buffer, \" original=\"); put_integer(&buffer, original_result);\n            put_string(&buffer, \" ipv6-alternate=\"); put_integer(&buffer, alternate);\n            put_string(&buffer, \" forced-success\");\n        }\n        log_result(&buffer, result, error); emit(&buffer); SetLastError(error);\n    }\n    return result;\n}"
+        }
+      ],
+      "symptom": "After Xbox sign-in, **Continue** stays in a blurred loading screen and returns to the menu or never ends",
+      "cause": "D3DMetal reports a 24-byte CBV/SRV/UAV descriptor where FH5 sizes its descriptor pool for NVIDIA's 32, among other D3D12 gaps",
+      "fix": "A source-built D3D12 proxy reports 32 and translates every handle to D3DMetal's 24; an Xbox UDP proxy keeps the online socket open",
+      "backend": "**D3DMetal** 4, D3D12",
+      "crossover": "NotProton's `crossover-27.0.0.41073-fex` runner, Steam Play prefix",
+      "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Forza-Horizon-5.md",
+      "graphicsBackend": "d3dmetal",
+      "gptk": "4",
+      "notNeededFromGptk": null
+    },
+    {
       "title": "God of War Ragnarök",
       "installer": "install-gowr-triggers.sh",
       "scope": "folder",
