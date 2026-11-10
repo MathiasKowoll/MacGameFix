@@ -61,6 +61,14 @@
       "symptom": "Cutscene runs with sound, picture black",
       "codec_shipped_by": "CrossOver Preview 27"
     },
+    "ForzaHorizon5.exe": {
+      "title": "Forza Horizon 5",
+      "backend": "d3dmetal",
+      "codec": "",
+      "gptk": "4",
+      "env": {},
+      "symptom": "Never leaves ‘LOADING… PLEASE WAIT’ after Xbox sign-in"
+    },
     "game.exe": {
       "title": "Persona 5 Strikers",
       "backend": "dxmt",

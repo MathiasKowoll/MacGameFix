@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# pe.pl -- export names of a PE binary, for the one question the installers ask.
+# pe.pl -- the small PE export operations the installers ask.
 #
 # Perl rather than Python because macOS ships a real /usr/bin/perl and does not
 # ship Python: /usr/bin/python3 is a hard link to the xcrun dispatcher (78 of
@@ -7,12 +7,17 @@
 # fails. Not a compiled helper either: a binary downloaded from a release
 # arrives quarantined and Gatekeeper stops it, while a text script does not.
 #
+# `export-name` and `rename-export` are based on the corresponding GPL-3.0
+# helper in Andytizer/fh5-crossover-steam-fix.
 # SPDX-License-Identifier: GPL-3.0-or-later
 use strict; use warnings;
 
 my ($verb, $path, @rest) = @ARGV;
-die "usage: pe.pl exports <file> [--ordinals]\n"
-    unless defined $verb && defined $path && $verb eq 'exports';
+die "usage: pe.pl exports <file> [--ordinals]\n" .
+    "       pe.pl export-name <file>\n" .
+    "       pe.pl rename-export <file> <new-name>\n"
+    unless defined $verb && defined $path &&
+           ($verb eq 'exports' || $verb eq 'export-name' || $verb eq 'rename-export');
 # --ordinals prints "<ordinal> <name>", which is what the proxy generators read
 # with `while read -r ordinal sym`. Emitting only the name there would put the
 # symbol in $ordinal, leave $sym empty, and produce a .def whose every entry
@@ -59,7 +64,28 @@ sub rva2off {
     return undef;
 }
 
+sub cstring {
+    my ($offset) = @_;
+    my $end = index($buf, "\0", $offset);
+    die "unterminated PE string\n" if $end < 0;
+    return substr($buf, $offset, $end - $offset);
+}
+
 my $e = rva2off($exp_rva) // exit 0;
+if ($verb eq 'export-name' || $verb eq 'rename-export') {
+    my $name_rva = unpack('V', substr($buf, $e + 12, 4));
+    my $name_offset = rva2off($name_rva) // die "export name is outside the image\n";
+    my $old = cstring($name_offset);
+    if ($verb eq 'export-name') { print "$old\n"; exit 0; }
+    my $new = $rest[0] // die "rename-export needs a new name\n";
+    die "new name too long (max " . length($old) . ")\n" if length($new) > length($old);
+    substr($buf, $name_offset, length($old)) = $new . ("\0" x (length($old) - length($new)));
+    open my $out, '>:raw', $path or die "cannot write $path: $!\n";
+    print {$out} $buf;
+    close $out or die "cannot close $path: $!\n";
+    print "export name $old -> $new in $path\n";
+    exit 0;
+}
 my $base     = unpack('V', substr($buf, $e + 16, 4));   # ordinal base
 my $nnames   = unpack('V', substr($buf, $e + 24, 4));
 my $names_rva= unpack('V', substr($buf, $e + 32, 4));

@@ -471,4 +471,52 @@ back
   && say ok "cp2077 on a fake app: a write macOS refuses points to App Management, nothing changed" || say FAIL "cp2077: refused ($(tail -2 "$W/cp.refused.log"))"
 unset MGVF_APP_BACKUP
 
+# Forza Horizon 5's user-facing installer coordinates two proxies and makes a
+# private D3DMetal alias from the selected runner. A fake Steam Play prefix is
+# enough to exercise its whole reversible life: the shipped proxies stand in
+# for the runner modules because only their export tables are used here.
+fh="$W/fh5"; fhhome="$fh/home"; fhrun="$fh/runner"; fhpfx="$fh/pfx"; fhgame="$fh/game"
+mkdir -p "$fhhome" "$fhrun/bin" \
+  "$fhrun/lib/apple_gptk/wine/x86_64-windows" "$fhrun/lib/apple_gptk/wine/x86_64-unix" \
+  "$fhrun/lib/wine/x86_64-windows" "$fhrun/lib/wine/x86_64-unix" \
+  "$fhpfx/drive_c/windows/system32" "$fhgame"
+printf '#!/bin/sh\nexit 0\n' > "$fhrun/bin/wine"; chmod +x "$fhrun/bin/wine"
+cp "$FIX/d3d12-fh5.dll" "$fhrun/lib/apple_gptk/wine/x86_64-windows/d3d12.dll"
+touch "$fhrun/lib/apple_gptk/wine/x86_64-unix/d3d12.so"
+cp "$FIX/ws2_32-fh5.dll" "$fhrun/lib/wine/x86_64-windows/ws2_32.dll"
+touch "$fhrun/lib/wine/x86_64-unix/ws2_32.so"
+printf 'WINE REGISTRY Version 2\n' > "$fhpfx/user.reg"
+printf 'WINE REGISTRY Version 2\n' > "$fhpfx/system.reg"
+printf 'fake executable\n' > "$fhgame/ForzaHorizon5.exe"
+printf 'original game d3d12\n' > "$fhgame/d3d12.dll"
+printf 'original prefix apd12\n' > "$fhpfx/drive_c/windows/system32/apd12.dll"
+printf 'original prefix ws2\n' > "$fhpfx/drive_c/windows/system32/ws2_32.dll"
+cp "$fhgame/d3d12.dll" "$fh/orig-d3d12"
+cp "$fhpfx/drive_c/windows/system32/apd12.dll" "$fh/orig-apd12"
+cp "$fhpfx/drive_c/windows/system32/ws2_32.dll" "$fh/orig-ws2"
+fhdo() { HOME="$fhhome" MGVF_CX="$fhrun" MGVF_BOTTLE="$fhpfx" /bin/bash "$FIX/install-fh5-fix.sh" "$fhgame" "$@"; }
+fhst() { fhdo --status 2>/dev/null | /usr/bin/grep -E '^(installed|absent|half)$' | tail -1; }
+[ "$(fhst)" = absent ] && say ok "fh5 on a fake prefix: absent before" || say FAIL "fh5: absent before ($(fhst))"
+fhdo --install > "$fh/install.log" 2>&1 \
+  && [ "$(fhst)" = installed ] \
+  && cmp -s "$fhgame/d3d12.dll" "$FIX/d3d12-fh5.dll" \
+  && [ -f "$fhgame/d3d12.dll.mgf-original" ] \
+  && [ -f "$fhpfx/drive_c/windows/system32/apd12.dll.mgf-original" ] \
+  && [ -f "$fhpfx/drive_c/windows/system32/ws2_32.dll.mgf-stock" ] \
+  && say ok "fh5 on a fake prefix: both source-built proxies and the runner alias installed" \
+  || say FAIL "fh5: install ($(fhst), $(tail -2 "$fh/install.log" | tr '\n' ' '))"
+fhdo --install > "$fh/reinstall.log" 2>&1 && [ "$(fhst)" = installed ] \
+  && say ok "fh5 on a fake prefix: installing again is safe" || say FAIL "fh5: reinstall ($(fhst))"
+fhdo --restore > "$fh/restore.log" 2>&1 \
+  && [ "$(fhst)" = absent ] \
+  && cmp -s "$fhgame/d3d12.dll" "$fh/orig-d3d12" \
+  && cmp -s "$fhpfx/drive_c/windows/system32/apd12.dll" "$fh/orig-apd12" \
+  && cmp -s "$fhpfx/drive_c/windows/system32/ws2_32.dll" "$fh/orig-ws2" \
+  && [ ! -e "$fhrun/lib/wine/x86_64-windows/apd12.dll" ] \
+  && [ ! -e "$fhrun/lib/wine/x86_64-unix/apd12.so" ] \
+  && [ ! -e "$fhrun/lib/wine/x86_64-windows/ws2_o.dll" ] \
+  && [ ! -e "$fhrun/lib/wine/x86_64-unix/ws2_o.so" ] \
+  && say ok "fh5 on a fake prefix: originals and runner restored byte for byte" \
+  || say FAIL "fh5: restore ($(fhst), $(tail -2 "$fh/restore.log" | tr '\n' ' '))"
+
 if [ "$fails" = 0 ]; then echo "==> every installer: installed, outdated, updated, restored; Cyberpunk 2077's app patched, signed and put back"; else echo "==> $fails failed"; exit 1; fi

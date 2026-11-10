@@ -119,6 +119,95 @@ for dll in "$HERE"/*.dll; do
       continue ;;
   esac
 
+  # FH5's D3D12 proxy is a complete front end rather than the usual one-source
+  # carrier: its GPL source is kept together under fh5-d3d12/ and it forwards
+  # the D3D12 exports dynamically. Rebuild all three translation units under
+  # the runtime name d3d12.dll, then apply the same semantic comparison as the
+  # ordinary proxies (linker timestamps and build ids are intentionally free).
+  if [ "$name" = d3d12-fh5.dll ]; then
+    out="$TMP/$name.d"; mkdir -p "$out"
+    src="$HERE/fh5-d3d12"
+    if ! "$CC" -shared -O2 -Wall -static-libgcc -o "$out/d3d12.dll" \
+          "$src/d3d12.c" "$src/dxil_shadingrate.c" "$src/inspect.c" "$src/d3d12.def" \
+          2>"$out/err"; then
+      printf '  %-32s !! fh5-d3d12 does not compile\n' "$name"
+      [ "$VERBOSE" = 1 ] && sed 's/^/       /' "$out/err"
+      drifted=$((drifted + 1)); continue
+    fi
+    checked=$((checked + 1))
+    python3 "$PE" exports "$dll"             | sort > "$out/exp.old"
+    python3 "$PE" exports "$out/d3d12.dll"  | sort > "$out/exp.new"
+    meaningful "$dll"              > "$out/str.old"
+    meaningful "$out/d3d12.dll"    > "$out/str.new"
+    exp_delta="$(comm -3 "$out/exp.old" "$out/exp.new" | wc -l | tr -d ' ')"
+    gone="$(comm -23 "$out/str.old" "$out/str.new")"
+    came="$(comm -13 "$out/str.old" "$out/str.new")"
+    n_gone="$(printf '%s' "$gone" | grep -c . )"
+    n_came="$(printf '%s' "$came" | grep -c . )"
+    if [ "$exp_delta" = 0 ] && [ "$n_gone" = 0 ] && [ "$n_came" = 0 ]; then
+      printf '  %-32s ok   fh5-d3d12/\n' "$name"
+    else
+      drifted=$((drifted + 1))
+      printf '  %-32s DRIFT  fh5-d3d12/  (exports %s, strings -%s +%s)\n' \
+        "$name" "$exp_delta" "$n_gone" "$n_came"
+      if [ "$VERBOSE" = 1 ]; then
+        printf '%s\n' "$gone" | grep . | head -8 | sed 's/^/       shipped only: /'
+        printf '%s\n' "$came" | grep . | head -8 | sed 's/^/       source only:  /'
+      fi
+    fi
+    continue
+  fi
+
+  # FH5 forwards to ws2_o rather than the usual <name>_real carrier. Its DEF
+  # is generated from the exact names and ordinals of the Wine ws2_32 it is
+  # built for. Recreate that table from the shipped proxy itself: installer
+  # validation separately refuses a runner whose table differs.
+  if [ "$name" = ws2_32-fh5.dll ]; then
+    out="$TMP/$name.d"; mkdir -p "$out"
+    def="$out/ws2_32.def"
+    {
+      echo "LIBRARY ws2_32.dll"
+      echo "EXPORTS"
+      python3 "$PE" exports "$dll" --ordinals |
+        while read -r ordinal sym; do
+          case "$sym" in
+            socket|WSASocketW|WSASocketA|WSAIoctl|setsockopt|closesocket)
+              printf '    %s=wrap_%s @%s\n' "$sym" "$sym" "$ordinal" ;;
+            *) printf '    %s=ws2_o.%s @%s\n' "$sym" "$sym" "$ordinal" ;;
+          esac
+        done
+    } > "$def"
+    if ! "$CC" -O2 -fno-builtin -fno-stack-protector -Wall -Wextra -Wno-cast-function-type \
+          -shared -nostdlib -Wl,-e,DllMain -o "$out/$name" "$HERE/fh5-netfix.c" "$def" \
+          -lkernel32 2>"$out/err"; then
+      printf '  %-32s !! fh5-netfix.c does not compile\n' "$name"
+      [ "$VERBOSE" = 1 ] && sed 's/^/       /' "$out/err"
+      drifted=$((drifted + 1)); continue
+    fi
+    checked=$((checked + 1))
+    python3 "$PE" exports "$dll"       | sort > "$out/exp.old"
+    python3 "$PE" exports "$out/$name" | sort > "$out/exp.new"
+    meaningful "$dll"       > "$out/str.old"
+    meaningful "$out/$name" > "$out/str.new"
+    exp_delta="$(comm -3 "$out/exp.old" "$out/exp.new" | wc -l | tr -d ' ')"
+    gone="$(comm -23 "$out/str.old" "$out/str.new")"
+    came="$(comm -13 "$out/str.old" "$out/str.new")"
+    n_gone="$(printf '%s' "$gone" | grep -c . )"
+    n_came="$(printf '%s' "$came" | grep -c . )"
+    if [ "$exp_delta" = 0 ] && [ "$n_gone" = 0 ] && [ "$n_came" = 0 ]; then
+      printf '  %-32s ok   fh5-netfix.c\n' "$name"
+    else
+      drifted=$((drifted + 1))
+      printf '  %-32s DRIFT  fh5-netfix.c  (exports %s, strings -%s +%s)\n' \
+        "$name" "$exp_delta" "$n_gone" "$n_came"
+      if [ "$VERBOSE" = 1 ]; then
+        printf '%s\n' "$gone" | grep . | head -8 | sed 's/^/       shipped only: /'
+        printf '%s\n' "$came" | grep . | head -8 | sed 's/^/       source only:  /'
+      fi
+    fi
+    continue
+  fi
+
   stem="$(LC_ALL=C strings -a "$dll" | grep -aoE '^[A-Za-z0-9_]+_real\.' | head -1 | sed 's/_real\.$//')"
   mark="$(LC_ALL=C strings -a "$dll" | grep -aoE '[A-Za-z0-9_-]+\.log' | head -1)"
   # A DLL of ours that forwards to nothing (msmpeg2vdec-sw.dll, a COM server)
@@ -283,7 +372,10 @@ if python3 - "$ROOT" <<'PY'
 import re, sys, pathlib
 root = pathlib.Path(sys.argv[1])
 sources = [p.read_bytes() for d in ("fixes", "tools") for p in sorted((root/d).glob("*.c"))]
-bare = re.compile(rb'(?:^|[^\\A-Za-z0-9_.-])([A-Za-z0-9_-]+\.log)(?=\x00)')
+# A printf path such as "dualsrc-%lu.log" is not a literal file named lu.log.
+# '%' therefore belongs with path separators and name characters that cannot
+# start one of the local, fixed log names the report is looking for.
+bare = re.compile(rb'(?:^|[^\\%A-Za-z0-9_.-])([A-Za-z0-9_-]+\.log)(?=\x00)')
 # The same name as a wide string (L"x.log"), as a DLL that builds its path in WCHARs carries it.
 wide = re.compile(rb'(?:^|[^\\A-Za-z0-9_.-]\x00)((?:[A-Za-z0-9_-]\x00)+\.\x00l\x00o\x00g\x00)(?=\x00\x00)')
 def logs(b):
