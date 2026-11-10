@@ -13,9 +13,10 @@
 # modules/<id>/x86_64-windows/{winebus.sys,mmdevapi.dll,hidclass.sys,setupapi.dll,xaudio2_9.dll,xinput*.dll} and
 # x86_64-unix/{winebus.so,winecoreaudio.so,ntdll.so}. arm64 is the FEX side, where Wine runs
 # natively: aarch64-windows/ the same PE files as ARM64X (arm64 and arm64ec in one
-# file, as CrossOver ships them) and aarch64-unix/{winebus.so,winecoreaudio.so}.
-# ntdll.so is built for the Intel side only: its patches change what Rosetta shows a
-# game, and the FEX side keeps CrossOver's own.
+# file, as CrossOver ships them) and aarch64-unix/{winebus.so,winecoreaudio.so}, and
+# aarch64-unix/ntdll.so when the series names its patches in NTDLL_ARM64 (build.conf).
+# Most ntdll patches change what Rosetta shows a game, so the FEX side's ntdll.so is
+# built from a tree of its own that has only those: .build/tree-<id>-ntdll-arm64.
 # The six xinput DLLs are one source, dlls/xinput1_3.
 # winebus.so is built with SDL, as CodeWeavers build theirs (it opens libSDL2 when it
 # runs): SDL2's headers must be installed (brew install sdl2).
@@ -105,11 +106,11 @@ fi
 # is told it is missing, as CodeWeavers' build is (no pipe2 in their ntdll.so).
 UNWIND_FLAG=--without-unwind; [ "${UNWIND:-no}" = yes ] && UNWIND_FLAG=
 NTDLL=""; [ "$ARCH" = x86_64 ] && NTDLL=dlls/ntdll/all
-if [ ! -f "$BUILD/Makefile" ]; then
-  echo "==> configuring $ARCH (log: $BUILD/configure.log)"
-  mkdir -p "$BUILD"
-  (cd "$BUILD" && CC="/usr/bin/clang -arch $CPU -isysroot $SDKROOT $MIN" CXX="/usr/bin/clang++ -arch $CPU -isysroot $SDKROOT $MIN" \
-    LDFLAGS="-isysroot $SDKROOT $MIN" "$TREE/configure" --host=$HOST --enable-archs=$ARCHS \
+configure() {  # <tree> <build directory> [more LDFLAGS]
+  echo "==> configuring $ARCH in $(basename "$2") (log: $2/configure.log)"
+  mkdir -p "$2"
+  (cd "$2" && CC="/usr/bin/clang -arch $CPU -isysroot $SDKROOT $MIN" CXX="/usr/bin/clang++ -arch $CPU -isysroot $SDKROOT $MIN" \
+    LDFLAGS="-isysroot $SDKROOT $MIN${3:+ $3}" "$1/configure" --host=$HOST --enable-archs=$ARCHS \
     --without-freetype --without-x --without-gstreamer --without-vulkan --without-opengl \
     --without-cups --without-dbus --without-fontconfig --without-gnutls --without-krb5 --without-gssapi \
     --without-opencl --without-pcap --without-usb --without-v4l2 --without-sane --without-capi \
@@ -117,8 +118,9 @@ if [ ! -f "$BUILD/Makefile" ]; then
     $UNWIND_FLAG --without-ffmpeg --without-inotify \
     SDL2_CFLAGS="-I$SDL2_INCLUDE -D_THREAD_SAFE" ac_cv_lib_soname_SDL2=libSDL2-2.0.0.dylib \
     ac_cv_func_pipe2=no \
-    >"$BUILD/configure.log" 2>&1) || { tail -20 "$BUILD/configure.log"; exit 1; }
-fi
+    >"$2/configure.log" 2>&1) || { tail -20 "$2/configure.log"; exit 1; }
+}
+[ -f "$BUILD/Makefile" ] || configure "$TREE" "$BUILD"
 
 echo "==> building $ARCH (log: $BUILD/make.log)"
 XINPUT="xinput1_1 xinput1_2 xinput1_3 xinput1_4 xinput9_1_0 xinputuap"
@@ -126,6 +128,34 @@ XINPUT="xinput1_1 xinput1_2 xinput1_3 xinput1_4 xinput9_1_0 xinputuap"
   dlls/xinput1_1/all dlls/xinput1_2/all dlls/xinput1_3/all dlls/xinput1_4/all dlls/xinput9_1_0/all dlls/xinputuap/all $NTDLL \
   >"$BUILD/make.log" 2>&1) \
   || { tail -30 "$BUILD/make.log"; exit 1; }
+
+# The FEX side's ntdll.so, from the pristine sources and NTDLL_ARM64's patches alone. Its
+# tree carries their SHA-256 in .series as the main tree does, and is made again with its
+# build directory when they change.
+NTDLL_ARM64_SO=""
+if [ "$ARCH" = arm64 ] && [ -z "$suffix" ] && [ -n "${NTDLL_ARM64:-}" ]; then
+  NTREE="$here/.build/tree-$ID-ntdll-arm64"; NBUILD="$here/.build/build-$ID-arm64-ntdll"
+  for p in $NTDLL_ARM64; do [ -f "$SERIES/$p" ] || { echo "NTDLL_ARM64 names $p, which $(basename "$SERIES") does not have"; exit 1; }; done
+  nseries="$(for p in $NTDLL_ARM64; do cat "$SERIES/$p"; done | shasum -a 256 | cut -d' ' -f1)"
+  if [ -d "$NTREE" ] && [ "$(cat "$NTREE/.series" 2>/dev/null)" != "$nseries" ]; then
+    echo "==> $(basename "$NTREE") does not carry NTDLL_ARM64 as it is now: making it again"
+    rm -rf "$NTREE" "$NBUILD"
+  fi
+  if [ ! -d "$NTREE" ]; then
+    echo "==> copying $SRC for the FEX side's ntdll.so"
+    mkdir -p "$NTREE" && (cd "$SRC" && tar cf - .) | (cd "$NTREE" && tar xf -)
+    for p in $NTDLL_ARM64; do
+      echo "==> applying $p"
+      (cd "$NTREE" && patch -p1 --forward <"$SERIES/$p")
+    done
+    echo "$nseries" >"$NTREE/.series"
+  fi
+  # Linked with room for the second rpath, which its load commands have no space for otherwise.
+  [ -f "$NBUILD/Makefile" ] || configure "$NTREE" "$NBUILD" -Wl,-headerpad_max_install_names
+  echo "==> building the FEX side's ntdll.so (log: $NBUILD/make.log)"
+  (cd "$NBUILD" && make -j10 dlls/ntdll/all >"$NBUILD/make.log" 2>&1) || { tail -30 "$NBUILD/make.log"; exit 1; }
+  NTDLL_ARM64_SO="$NBUILD/dlls/ntdll/ntdll.so"
+fi
 
 # The shape the engine's own files have: PE files stripped (winebuild already wrote the
 # 32-byte builtin signature), the unix half with CrossOver's second rpath and signed.
@@ -149,9 +179,10 @@ else
   IDENTITY=""
   echo "==> signing $UNIX ad hoc (MACGAMEFIX_CODESIGN_IDENTITY is not set): run tools/sign-payload.sh before committing them"
 fi
-for f in dlls/winebus.sys/winebus.so dlls/winecoreaudio.drv/winecoreaudio.so ${NTDLL:+dlls/ntdll/ntdll.so}; do
+for f in "$BUILD/dlls/winebus.sys/winebus.so" "$BUILD/dlls/winecoreaudio.drv/winecoreaudio.so" \
+         ${NTDLL:+"$BUILD/dlls/ntdll/ntdll.so"} ${NTDLL_ARM64_SO:+"$NTDLL_ARM64_SO"}; do
   so="$OUT/$UNIX/$(basename "$f")"
-  cp "$BUILD/$f" "$so"
+  cp "$f" "$so"
   strip -x "$so"
   install_name_tool -add_rpath "$RPATH2" "$so" 2>/dev/null
   codesign -f -s - "$so"

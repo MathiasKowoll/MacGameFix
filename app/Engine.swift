@@ -66,8 +66,10 @@ enum EnginePart: String, CaseIterable, Identifiable {
                 + "Games find the pad's haptic output, set its trigger effects and rumble it as on Windows; "
                 + "Game Feel sets the options per game."
         case .rosetta:
-            return "A patched ntdll.so for the Intel side. It runs a cpuid Rosetta skips after self-modifying code, "
+            return "A patched ntdll.so. On the Intel side it runs a cpuid Rosetta skips after self-modifying code, "
                 + "emulates CLWB, RDPID and hardware breakpoints, and reports faults as Windows does. "
+                + "On both sides it keeps the threadpool's timer thread from waking in a loop, and on the FEX side "
+                + "it stores async I/O status wherever a game puts it. "
                 + "The CPUID bits a game asks for stay per game (its fix writes them). Changes nothing else."
         }
     }
@@ -84,7 +86,7 @@ enum EnginePart: String, CaseIterable, Identifiable {
     var footer: String {
         switch self {
         case .controls: return "Game Feel sets its options per game. Quit a CrossOver's games before changing it."
-        case .rosetta: return "Intel side only. The CPUID bits a game asks for come with that game's fix."
+        case .rosetta: return "The CPU changes are for the Intel side only. The CPUID bits a game asks for come with that game's fix."
         }
     }
 

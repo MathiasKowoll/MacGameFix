@@ -4,6 +4,7 @@
   "wine": "Wine version 11.17",
   "patches": "wine-11.17",
   "files": {
+    "aarch64-unix/ntdll.so": "5e320af9fa73895dea5fc8c83d15bf382978dc150e9dfdb68e169764e5d38529",
     "aarch64-unix/winebus.so": "0a76d4d3c8fa105f0413288f44b8d916c2d7b16a4355a9398feac8acc9ed1a1a",
     "aarch64-unix/winecoreaudio.so": "e9be26d41670ddff242c41beefd64f865f4530a69b48367c945dbe741244dfbb",
     "aarch64-windows/hidclass.sys": "44830fb591cff33f6d9bfa3e0705c34b1f35cf180299baff139605712e6e2c3d",

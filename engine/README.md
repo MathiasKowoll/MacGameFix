@@ -6,10 +6,10 @@ NotProton runner. They give a DualSense or DualSense Edge its haptics on a
 cable, the same pad on Bluetooth as if it were on a cable, XInput (its vibration
 on the motors, or the pad as an XInput controller), trigger effects for a game
 that sets none, and options per game that the app's **Game Feel** tab sets.
-One more, the Intel side's `ntdll.so`, is not about the pad: it lets copy
+One more, `ntdll.so`, is not about the pad: on the Intel side it lets copy
 protection that checks the CPU start under Rosetta (see
-[Rosetta's CPU, for copy protection](#rosettas-cpu-for-copy-protection)), and
-stops Wine's threadpool timer thread from spinning (see
+[Rosetta's CPU, for copy protection](#rosettas-cpu-for-copy-protection)), and on
+both sides it stops Wine's threadpool timer thread from spinning (see
 [The threadpool's timer thread](#the-threadpools-timer-thread)).
 
 ## What they fix
@@ -371,8 +371,34 @@ second instead of 1,100,000. Its hitch about once a second is the copy protectio
 work under Rosetta and stays; in one 3-minute run its frames lost 38 ms a second
 to it, against 45 before, which one run does not establish.
 
+On the FEX side (the same runner's arm64 Wine, the same day) the overflow is the
+same: both expiries were signalled within 100 ms before and are not after. The probe
+re-arming a 16 ms absolute timer for 3 s used 1.6 s of CPU (0.39 user, 1.22 system)
+and wineserver 1.6 s before; after, 0.07 s and 0.17 s, at 57 callbacks a second
+instead of 62.
+
 Not fixed here: `NtDelayExecution` with a relative timeout of `-MAXLONGLONG`
 returns at once too (the same probe, 2026-11-10); waits with such a timeout do not.
+
+## The FEX side's async I/O status
+
+Wine completes an asynchronous read or write by storing its `IO_STATUS_BLOCK`'s
+`Information`, then its `Status` with release semantics (`set_async_iosb`), which
+clang emits on arm64 as `stlr`. On Apple silicon `stlr` faults when its four bytes
+cross a 16-byte boundary, and an x86 game under FEX may put its `OVERLAPPED` there:
+Phantom Blade Zero lost an early thread to it, in two runs, on NotProton's FEX
+runner. The Intel side stores with an x86 `mov` and is not affected.
+
+| Patch | Module | Change |
+|---|---|---|
+| `0022-ntdll-aarch64-unaligned-iosb-status.patch` | `ntdll.so` (FEX side) | On aarch64, a release barrier (`dmb ish`) and a plain store, which may sit anywhere, in place of the store-release: the same ordering. |
+
+It does in source what NotProton's experimental binary patch of 41073's FEX
+`ntdll.so` (`6fbdff6` on its `experiment/fex-d3dmetal-bridge` branch) did, so that
+installing this `ntdll.so` over that one loses nothing. Measured on 2026-11-10 with
+that branch's probe, an overlapped pipe read whose `Status` sits at a given offset
+of a 16-byte granule: CodeWeavers' own `ntdll.so` dies at offset 14; this one passes
+at offsets 0, 2, 13, 14 and 15.
 
 ## Measured
 
@@ -477,8 +503,11 @@ Not played yet: the FEX (arm64) side, `xinput=pad` with God of War Ragnarök and
 CrossOver 27 runs a bottle either on the Intel side, under Rosetta (x86_64), or
 on the FEX side, where Wine runs natively on arm64 and FEX translates only the
 game's code. Each side has its own copy of these modules, so both are built.
-CrossOver 26.3 has only the Intel side. `ntdll.so` is built for the Intel side
-only; 41069's modules do not carry it yet.
+CrossOver 26.3 has only the Intel side. 41069's modules do not carry `ntdll.so`
+yet. The FEX side's `ntdll.so` (41073) is built from a tree of its own with the
+patches `NTDLL_ARM64` names in the series' `build.conf`, `0021` and `0022`: the
+others change what Rosetta shows a game or route a process to D3DMetal, which the
+FEX side does not have.
 
 | CrossOver | Sources | Wine | Intel (x86_64) | FEX (arm64) |
 |---|---|---|---|---|
@@ -579,7 +608,8 @@ The app's **Improvements** tab lists every CrossOver app (in `/Applications`
 and `~/Applications`) and every NotProton runner by its release, under each of
 the two improvements the modules make, says what is in each, and installs or
 removes that improvement with a switch: the DualSense controllers (every module
-but `ntdll.so`) and copy protection under Rosetta (the Intel side's `ntdll.so`).
+but `ntdll.so`) and copy protection under Rosetta (`ntdll.so`, which also carries
+the timer fix, on both sides where the build has it).
 It runs `engine-modules.sh` with `--part=controls` or `--part=rosetta`, which the catalog
 carries with the modules (flat, as `engine-<build>-<dir>-<file>`, with
 `engine-modules.json`). They travel in their own signed catalog (`modules.zip`,
