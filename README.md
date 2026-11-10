@@ -5,11 +5,13 @@ small macOS application that installs, checks and removes them. One more is
 for a macOS game: it turns on the MetalFX denoiser that Cyberpunk 2077 ships
 and leaves off, by changing the game's own app.
 
-None of them changes CrossOver. The Windows games' fixes work with CrossOver as
-CodeWeavers ships it, with CrossOver Preview, and with Steam Play tools for
-macOS such as [NotProton](https://github.com/NotProtonNot/NotProton): a proxy
-DLL beside the game, and for a few titles registry keys in the game's own
-prefix. One, NINJA GAIDEN 3: Razor's Edge, puts its DLLs in that prefix instead.
+None patches or replaces a CrossOver module. The Windows games' fixes work with
+CrossOver as CodeWeavers ships it, with CrossOver Preview, and with Steam Play
+tools for macOS such as [NotProton](https://github.com/NotProtonNot/NotProton):
+a proxy DLL beside the game, and for a few titles registry keys in the game's
+own prefix. Forza Horizon 5 also adds a private alias of the selected runner's
+own D3DMetal module; the alias is made locally and the module is not shipped.
+NINJA GAIDEN 3: Razor's Edge puts its DLLs in the prefix instead.
 
 This repository is where the fixes live now. They started in
 [MacGameVideoFix](https://github.com/MathiasKowoll/MacGameVideoFix), which also
@@ -80,10 +82,10 @@ Some fixes are not needed from a D3DMetal version on (CONTROL Resonant,
 Mortal Shell 2, Resonance: A Plague Tale Legacy and both Life is Strange titles
 from 4.0b3). The game says so. It is only a notice: the fix still installs.
 
-The exception is a fix that also writes registry keys: the Kingdom Hearts
-titles and NieR Replicant, NINJA GAIDEN 3: Razor's Edge, whose DLLs go
-there too and nothing into its folder, and Phantom Blade Zero, whose H.264
-decoder goes there with its registry values. Those keys go into the game's prefix, a
+The exception is a fix that also writes registry keys: Forza Horizon 5, the
+Kingdom Hearts titles and NieR Replicant; NINJA GAIDEN 3: Razor's Edge, whose
+DLLs go there too and nothing into its folder; and Phantom Blade Zero, whose
+H.264 decoder goes there with its registry values. Those keys go into the game's prefix, a
 Steam Play prefix (`compatdata/<appid>/pfx`) or a CrossOver bottle, so the game
 needs to have run there once. The prefix is shown in the game's *Goes into* column. When there is
 more than one, that column is a menu where any number of them can be checked, and the fix goes into
@@ -98,6 +100,24 @@ and *Goes into* says "Its app". See
 [its section](#cyberpunk-2077-changes-four-bytes-of-its-app).
 
 `MacGameFix --games-report` prints the same in a terminal.
+
+Forza Horizon 5's fix is made from source in this repository. It puts the
+D3D12 proxy in the game folder, makes `apd12.dll` from the runner's own
+D3DMetal DLL, adds that private alias to the runner and prefix, and applies the
+override only to `ForzaHorizon5.exe`. It also installs the Xbox UDP proxy used
+for Horizon Life. NotProton presently still needs these variables in the
+game's Steam launch options:
+
+```text
+NOTPROTON_ENV_D3DM_VENDOR_ID=4318 NOTPROTON_ENV_D3DM_DEVICE_ID=10118 NOTPROTON_ENV_D3DM_DEVICE_DESCRIPTION="NVIDIA GeForce RTX 4070" NOTPROTON_ENV_WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--disable-features=CalculateNativeWinOcclusion"
+```
+
+The last one, and WebView2 running as Windows 7 in the prefix, are for the
+Xbox sign-in window; the game's page says why.
+
+The first successful run may spend several minutes at **Optimizing for your
+PC**. The exact diagnosis, the files and the reversible layout are in
+[Forza Horizon 5](legacy/wiki/Forza-Horizon-5.md).
 
 ## Keeping fixes applied, and new fixes
 
@@ -847,6 +867,11 @@ DLLs, and a built app's copies with `fixes/`. It also checks that `sm2-shadertoo
 halves carry MacGameFix's Developer ID, a secure timestamp and the hardened
 runtime.
 
+Forza Horizon 5 has two dedicated builders because both proxies have unusual
+forwarding layouts: `build-fh5-d3d12.sh` builds `d3d12-fh5.dll` from the GPL
+sources under `fh5-d3d12/`, and `build-fh5-netfix.sh` generates the exact
+`ws2_32` export table of its target runner before building `ws2_32-fh5.dll`.
+
 ## How each fix is made
 
 Every fix is one installer in `fixes/` and the files it puts in the game
@@ -867,6 +892,7 @@ how, is in the game's page under `legacy/wiki/`.
 | `install-cp2077-denoiser.sh` | Cyberpunk 2077 | Nothing beside the game: four bytes of `Cyberpunk2077.app/Contents/MacOS/Cyberpunk2077`, at the offset its build's row in `cp2077-denoiser.recipes` names, and the app signed again ad hoc; the original kept in MacGameFix's `app-backup` folder | Not built: a recipe for each game build, and none of CD PROJEKT's code ships | [Its section](#cyberpunk-2077-changes-four-bytes-of-its-app) |
 | `install-re-vc1-fix.sh` | Devil May Cry 5, RESIDENT EVIL 2, RESIDENT EVIL 3 | `amd_ags_x64.dll` (from `amd_ags_x64-dmc5.dll`, or `amd_ags_x64-re2.dll` for both RE titles), and the reader | `mf-reader-fallback.c` | [RE Engine VC-1](legacy/wiki/RE-Engine-VC1.md) |
 | `install-dwo-bridge.sh` | DYNASTY WARRIORS: ORIGINS, Wo Long: Fallen Dynasty | `libxess.dll` | `dwo-video-bridge.c` | [DYNASTY WARRIORS: ORIGINS](legacy/wiki/Dynasty-Warriors-Origins.md), [Wo Long](legacy/wiki/Wo-Long-Fallen-Dynasty.md) |
+| `install-fh5-fix.sh` | Forza Horizon 5 | `d3d12.dll` (from `d3d12-fh5.dll`); the runner and prefix receive a private `apd12` alias made from their own D3DMetal, and the prefix receives the source-built Xbox UDP proxy | `fh5-d3d12/`; `fh5-netfix.c` | [Forza Horizon 5](legacy/wiki/Forza-Horizon-5.md) |
 | `install-gow-fix.sh` | God of War | `libSceJobManager.dll` (from `libSceJobManager-gow.dll`) and `gow-depth-fix.ini` | `gow-depth-fix.c` | [God of War](legacy/wiki/God-of-War.md) |
 | `install-gowr-triggers.sh` | God of War Ragnarök | `bink2w64.dll` (from `bink2w64-gowr.dll`) | `gowr-triggers.c` | [Its section](#god-of-war-ragnarök-sends-its-trigger-effects-to-the-pad) |
 | `install-kh-bridge.sh` | KINGDOM HEARTS Dream Drop Distance, KINGDOM HEARTS HD 1.5+2.5 ReMIX | `dinput8.dll` (from `dinput8-kh.dll`); the original is the bottle's or prefix's own `dinput8`, copied beside it | `dwo-video-bridge.c` | [KINGDOM HEARTS](legacy/wiki/Kingdom-Hearts.md) |
@@ -906,6 +932,19 @@ how, is in the game's page under `legacy/wiki/`.
 
 ## Credits
 
+- **`fh5-d3dmetal-fix` by xvferxedd** (GPL-3.0), originally at
+  `github.com/xvferxedd/fh5-d3dmetal-fix`, a repository that is no longer
+  online: the Forza Horizon 5 descriptor translation, D3D12 compatibility work
+  and Xbox UDP diagnosis from which both source-built proxies derive.
+- **[fh5-crossover-steam-fix](https://github.com/Andytizer/fh5-crossover-steam-fix)
+  by Andytizer**, whose v1.0.1 preserved that source
+  ([`upstream/source`](https://github.com/Andytizer/fh5-crossover-steam-fix/tree/main/upstream/source)),
+  so it could be built here at all.
+- **[Highball](https://github.com/gauthierpiarrette/highball) by Gauthier
+  Piarrette** (GPL-3.0): the `tsshim` base and the D3DMetal measurements behind
+  the Forza Horizon proxy.
+- **MACxus**, credited by xvferxedd for the FH5 profile: the NVIDIA identity
+  the launch options still carry.
 - **[witcher3-crossover-fix](https://github.com/tholtman1-del/witcher3-crossover-fix)
   by tholtman1-del** (MIT): the diagnosis of The Witcher 3's black screen and
   the rule that refuses the pipeline.

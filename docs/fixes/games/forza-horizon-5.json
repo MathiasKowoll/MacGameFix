@@ -1,0 +1,73 @@
+{
+  "title": "Forza Horizon 5",
+  "installer": "install-fh5-fix.sh",
+  "scope": "prefix",
+  "executable": "ForzaHorizon5.exe",
+  "carrierDirectory": null,
+  "alsoRuns": [],
+  "summary": "After Xbox sign-in it never leaves the blurred loading screen: a source-built D3D12 proxy translates the NVIDIA-style descriptor layout Forza expects to D3DMetal and fills the D3D12 gaps it reaches; the Xbox UDP proxy keeps online play's socket open.",
+  "page": "legacy/wiki/Forza-Horizon-5.md",
+  "installs": [
+    "d3d12-fh5.dll",
+    "ws2_32-fh5.dll",
+    "install-fh5-netfix.sh",
+    "fh5-THIRD-PARTY-LICENCES.md",
+    "pe.pl",
+    "bottles.sh"
+  ],
+  "builtFrom": [
+    "fh5-d3d12/d3d12.c",
+    "fh5-d3d12/stride.h",
+    "fh5-d3d12/stride_math.h",
+    "fh5-d3d12/dxil_shadingrate.c",
+    "fh5-d3d12/inspect.c",
+    "fh5-d3d12/unwindguard.h",
+    "fh5-d3d12/memfix.h",
+    "fh5-netfix.c"
+  ],
+  "license": "GPL-3.0-only",
+  "credits": [
+    {
+      "name": "xvferxedd",
+      "url": null,
+      "note": "fh5-d3dmetal-fix (GPL-3.0), originally at github.com/xvferxedd/fh5-d3dmetal-fix, which is no longer online: the descriptor translation, the D3D12 work and the Xbox UDP diagnosis both proxies derive from."
+    },
+    {
+      "name": "Andytizer",
+      "url": "https://github.com/Andytizer/fh5-crossover-steam-fix",
+      "note": "Preserved xvferxedd's source in fh5-crossover-steam-fix v1.0.1 (upstream/source), which is what this fix is built from."
+    },
+    {
+      "name": "Gauthier Piarrette (Highball)",
+      "url": "https://github.com/gauthierpiarrette/highball",
+      "note": "The tsshim base of the D3D12 proxy and its D3DMetal measurements."
+    },
+    {
+      "name": "MACxus",
+      "url": null,
+      "note": "Credited upstream for the FH5 profile with the NVIDIA identity the launch options carry."
+    },
+    {
+      "name": "ADM1SH",
+      "url": "https://github.com/ADM1SH/Forza-Horizon-5-for-mac",
+      "note": "Research notes on the same build: the memory counters and the WebView2 fatal."
+    }
+  ],
+  "excerpts": [
+    {
+      "file": "fh5-d3d12/stride.h",
+      "symbol": "st_GDHIS",
+      "note": "The game is told a CBV/SRV/UAV descriptor is 32 bytes wide, so its descriptor pool is as large as on an NVIDIA card."
+    },
+    {
+      "file": "fh5-d3d12/stride.h",
+      "symbol": "st_tc",
+      "note": "Every CPU handle the game computes at 32 bytes is mapped back to D3DMetal's real 24-byte layout."
+    },
+    {
+      "file": "fh5-netfix.c",
+      "symbol": "wrap_setsockopt",
+      "note": "An IPv4 option on the dual-stack Xbox socket, which macOS refuses, is applied as its IPv6 equivalent so the game keeps the socket."
+    }
+  ]
+}
