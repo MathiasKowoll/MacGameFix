@@ -289,6 +289,16 @@
           ],
           "commit": "2bad275dea9bbf2ee33f85b087f546edafb8ba60",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2bad275dea9bbf2ee33f85b087f546edafb8ba60/engine/patches/wine-11.17/0021-ntdll-timer-relative-overflow.patch"
+        },
+        {
+          "name": "0022-ntdll-aarch64-unaligned-iosb-status.patch",
+          "file": "engine/patches/wine-11.17/0022-ntdll-aarch64-unaligned-iosb-status.patch",
+          "subject": "On the FEX side, an async I/O status is stored with a barrier and a plain store instead of stlr, which faults on an OVERLAPPED that crosses 16 bytes",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "e8f89e5d37a12bc123641af93636ba2dd5c4966d",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/e8f89e5d37a12bc123641af93636ba2dd5c4966d/engine/patches/wine-11.17/0022-ntdll-aarch64-unaligned-iosb-status.patch"
         }
       ]
     }
