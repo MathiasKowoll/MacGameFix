@@ -8,10 +8,10 @@
 # The source is wine/ from the crossover-sources tarball the build was made from
 # (27.0.0.41073: 20261015, Wine 11.17; 27.0.0.41303: 20261111, Wine 11.21). The patch is
 # fh6-advapi32/; only the x86_64 half is built (FH6 runs on the Intel side), configured as
-# engine/build.sh configures CrossOver's modules. The 32-byte Wine builtin signature at 0x40
-# is cleared: the file is loaded as a native DLL from the game's folder, and Wine refuses
-# there one that says it is a builtin. It writes advapi32-fh6-<build>.dll beside this script
-# and prints its sha256, which fh6-advapi32/ORIGIN.md records.
+# engine/build.sh configures CrossOver's modules. It stays a Wine builtin, signature at 0x40
+# kept: install-fh6-fix.sh puts it in place of the builtin advapi32.dll of FH6's runner
+# clone. It writes advapi32-fh6-<build>.dll beside this script and prints its sha256, which
+# fh6-advapi32/ORIGIN.md records.
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 # SPDX-License-Identifier: LGPL-2.1-or-later
@@ -47,8 +47,6 @@ make -j10 dlls/advapi32/all > make.log 2>&1
 OUT="$HERE/advapi32-fh6-$BUILD.dll"
 llvm-strip -o "$OUT" dlls/advapi32/x86_64-windows/advapi32.dll
 /usr/bin/python3 -I -c 'import sys
-b = bytearray(open(sys.argv[1], "rb").read())
-assert b[0x40:0x50] == b"Wine builtin DLL", "no builtin signature where it was expected"
-b[0x40:0x60] = bytes(32)
-open(sys.argv[1], "wb").write(b)' "$OUT"
+b = open(sys.argv[1], "rb").read()
+assert b[0x40:0x50] == b"Wine builtin DLL", "no builtin signature where it was expected"' "$OUT"
 shasum -a 256 "$OUT"

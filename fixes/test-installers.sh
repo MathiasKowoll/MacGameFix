@@ -562,6 +562,10 @@ cp "$FIX/../engine/engine-modules.sh" "$f6modules/engine-modules.sh"
 cp "$f6modules/engine-27.0.0.41073-x86_64-unix-ntdll.so" "$f6run/lib/wine/x86_64-unix/ntdll.so"
 printf 'original runner PE\n' > "$f6run/lib/wine/x86_64-windows/ntdll.dll"
 printf 'original prefix PE\n' > "$f6pfx/drive_c/windows/system32/ntdll.dll"
+# FH6's own runner clone, as NotProton's Game Mode makes it: the sign-in fix goes there only.
+f6clone="$f6home/Library/Application Support/notproton/launchers/2483190/runner"
+mkdir -p "$(dirname "$f6clone")"; cp -R "$f6run" "$f6clone"
+printf '27.0.0.41073-fex\n' > "$f6/notproton-build"
 f6config="$f6home/Library/Application Support/Steam/userdata/1/config"; mkdir -p "$f6config"
 printf '"UserLocalConfigStore" { "Software" { "Valve" { "Steam" { "apps" { "2483190" { "LaunchOptions" "PERSONAL=keep %%command%%" } } } } } }\n' > "$f6config/localconfig.vdf"
 f6do() { HOME="$f6home" MGVF_MODULES="$f6modules" MGVF_CX="$f6run" MGVF_BOTTLE="$f6pfx" /bin/bash "$f6fix/install-fh6-fix.sh" "$f6game" "$@"; }
@@ -573,9 +577,11 @@ f6do --install > "$f6/install.log" 2>&1 \
   && [ -f "$f6game/d3d12.dll.mgf-original" ] \
   && [ -f "$f6pfx/drive_c/windows/system32/apd12.dll.mgf-original" ] \
   && [ ! -e "$f6pfx/drive_c/windows/system32/ws2_32.dll.mgf-stock" ] \
-  && cmp -s "$f6game/advapi32.dll" "$FIX/advapi32-fh6-27.0.0.41073.dll" \
-  && /usr/bin/grep -q '^"advapi32"="native"' "$f6pfx/user.reg" \
-  && say ok "fh6 on a fake prefix: source-built profile, private runner alias and sign-in fix installed" \
+  && cmp -s "$f6clone/lib/wine/x86_64-windows/advapi32.dll" "$FIX/advapi32-fh6-27.0.0.41073.dll" \
+  && cmp -s "$f6clone/lib/wine/x86_64-windows/advapi32.dll.mgf-fh6-original" "$f6run/lib/wine/x86_64-windows/advapi32.dll" \
+  && [ "$(cat "$f6run/lib/wine/x86_64-windows/advapi32.dll")" = "CodeWeavers' advapi32" ] \
+  && [ ! -e "$f6game/advapi32.dll" ] && ! /usr/bin/grep -q '^"advapi32"=' "$f6pfx/user.reg" \
+  && say ok "fh6 on a fake prefix: source-built profile, private runner alias and sign-in fix in the clone" \
   || say FAIL "fh6: install ($(f6st), $(tail -2 "$f6/install.log" | tr '\n' ' '))"
 f6do --install > "$f6/reinstall.log" 2>&1 && [ "$(f6st)" = installed ] \
   && say ok "fh6 on a fake prefix: installing again is safe" || say FAIL "fh6: reinstall ($(f6st))"
@@ -585,16 +591,17 @@ f6do --restore > "$f6/restore.log" 2>&1 \
   && cmp -s "$f6pfx/drive_c/windows/system32/apd12.dll" "$f6/orig-apd12" \
   && [ ! -e "$f6run/lib/wine/x86_64-windows/apd12.dll" ] \
   && [ ! -e "$f6run/lib/wine/x86_64-unix/apd12.so" ] \
-  && [ ! -e "$f6game/advapi32.dll" ] \
-  && ! /usr/bin/grep -q '^"advapi32"=' "$f6pfx/user.reg" \
-  && say ok "fh6 on a fake prefix: originals and runner restored byte for byte" \
+  && [ "$(cat "$f6clone/lib/wine/x86_64-windows/advapi32.dll")" = "CodeWeavers' advapi32" ] \
+  && [ ! -e "$f6clone/lib/wine/x86_64-windows/advapi32.dll.mgf-fh6-original" ] \
+  && say ok "fh6 on a fake prefix: originals, runner and clone restored byte for byte" \
   || say FAIL "fh6: restore ($(f6st), $(tail -2 "$f6/restore.log" | tr '\n' ' '))"
-# Another advapi32.dll in the runner: the D3D12 fix goes in, the sign-in fix does not.
-printf "another advapi32\n" > "$f6run/lib/wine/x86_64-windows/advapi32.dll"
+# Another advapi32.dll in the clone: the D3D12 fix goes in, the sign-in fix does not.
+printf "another advapi32\n" > "$f6clone/lib/wine/x86_64-windows/advapi32.dll"
 f6do --install > "$f6/other.log" 2>&1 && [ "$(f6st)" = installed ] \
-  && [ ! -e "$f6game/advapi32.dll" ] && ! /usr/bin/grep -q '^"advapi32"=' "$f6pfx/user.reg" \
+  && [ "$(cat "$f6clone/lib/wine/x86_64-windows/advapi32.dll")" = "another advapi32" ] \
+  && [ ! -e "$f6clone/lib/wine/x86_64-windows/advapi32.dll.mgf-fh6-original" ] \
   && /usr/bin/grep -q 'not one the Xbox sign-in fix was built for' "$f6/other.log" \
-  && say ok "fh6 on a fake prefix: another runner advapi32 gets no sign-in fix" \
+  && say ok "fh6 on a fake prefix: another clone advapi32 gets no sign-in fix" \
   || say FAIL "fh6: other advapi32 ($(f6st), $(tail -2 "$f6/other.log" | tr '\n' ' '))"
 f6do --restore > /dev/null 2>&1
 
