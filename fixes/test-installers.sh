@@ -547,10 +547,7 @@ cp "$f6pfx/drive_c/windows/system32/apd12.dll" "$f6/orig-apd12"
 # Exercise the exact installer on a fake executable, substituting only the fixture hash
 # in a disposable copy. Production has no environment switch to bypass the build gate.
 f6fix="$f6/fixes"; mkdir -p "$f6fix"
-for n in install-fh6-fix.sh fh6-runtime.sh fh6-launch-options.pl bottles.sh pe.pl d3d12-fh6.dll ncrypt-fh6.dll fh5-THIRD-PARTY-LICENCES.md notproton-rosetta-trap-boost.dylib; do cp "$FIX/$n" "$f6fix/$n"; done
-# The runner's own ncrypt.dll stands for 41073's: the copy's base hash is the fake's.
-printf "CodeWeavers' ncrypt\n" > "$f6run/lib/wine/x86_64-windows/ncrypt.dll"
-sed -i '' "s/^N_BASE_SHA=.*/N_BASE_SHA=$(shasum -a 256 "$f6run/lib/wine/x86_64-windows/ncrypt.dll" | cut -d' ' -f1)/" "$f6fix/install-fh6-fix.sh"
+for n in install-fh6-fix.sh fh6-runtime.sh fh6-launch-options.pl bottles.sh pe.pl d3d12-fh6.dll fh5-THIRD-PARTY-LICENCES.md notproton-rosetta-trap-boost.dylib; do cp "$FIX/$n" "$f6fix/$n"; done
 # The separate launch-options tests exercise the running-Steam refusal. This fixture
 # substitutes only process discovery so the real user's open Steam is irrelevant.
 sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$f6fix/fh6-launch-options.pl"
@@ -573,9 +570,7 @@ f6do --install > "$f6/install.log" 2>&1 \
   && [ -f "$f6game/d3d12.dll.mgf-original" ] \
   && [ -f "$f6pfx/drive_c/windows/system32/apd12.dll.mgf-original" ] \
   && [ ! -e "$f6pfx/drive_c/windows/system32/ws2_32.dll.mgf-stock" ] \
-  && cmp -s "$f6game/ncrypt.dll" "$FIX/ncrypt-fh6.dll" \
-  && /usr/bin/grep -q '^"ncrypt"="native"' "$f6pfx/user.reg" \
-  && say ok "fh6 on a fake prefix: source-built profile, private runner alias and sign-in key storage installed" \
+  && say ok "fh6 on a fake prefix: source-built profile and private runner alias installed" \
   || say FAIL "fh6: install ($(f6st), $(tail -2 "$f6/install.log" | tr '\n' ' '))"
 f6do --install > "$f6/reinstall.log" 2>&1 && [ "$(f6st)" = installed ] \
   && say ok "fh6 on a fake prefix: installing again is safe" || say FAIL "fh6: reinstall ($(f6st))"
@@ -585,17 +580,7 @@ f6do --restore > "$f6/restore.log" 2>&1 \
   && cmp -s "$f6pfx/drive_c/windows/system32/apd12.dll" "$f6/orig-apd12" \
   && [ ! -e "$f6run/lib/wine/x86_64-windows/apd12.dll" ] \
   && [ ! -e "$f6run/lib/wine/x86_64-unix/apd12.so" ] \
-  && [ ! -e "$f6game/ncrypt.dll" ] \
-  && ! /usr/bin/grep -q '^"ncrypt"=' "$f6pfx/user.reg" \
   && say ok "fh6 on a fake prefix: originals and runner restored byte for byte" \
   || say FAIL "fh6: restore ($(f6st), $(tail -2 "$f6/restore.log" | tr '\n' ' '))"
-# Another CrossOver's ncrypt.dll: the D3D12 fix goes in, the 41073 ncrypt does not.
-printf "a newer CrossOver's ncrypt\n" > "$f6run/lib/wine/x86_64-windows/ncrypt.dll"
-f6do --install > "$f6/other.log" 2>&1 && [ "$(f6st)" = installed ] \
-  && [ ! -e "$f6game/ncrypt.dll" ] && ! /usr/bin/grep -q '^"ncrypt"=' "$f6pfx/user.reg" \
-  && /usr/bin/grep -q 'built for CrossOver 27.0.0.41073' "$f6/other.log" \
-  && say ok "fh6 on a fake prefix: another CrossOver's runner gets no 41073 ncrypt" \
-  || say FAIL "fh6: other runner ($(f6st), $(tail -2 "$f6/other.log" | tr '\n' ' '))"
-f6do --restore > /dev/null 2>&1
 
 if [ "$fails" = 0 ]; then echo "==> every installer: installed, outdated, updated, restored; Cyberpunk 2077's app patched, signed and put back"; else echo "==> $fails failed"; exit 1; fi

@@ -109,21 +109,9 @@ KEPT="$GAME/d3d12.dll.mgf-original"
 KEY="Software\\Wine\\AppDefaults\\forzahorizon6.exe\\DllOverrides"
 VALUE="*d3d12"
 NOTICES="$HERE/fh5-THIRD-PARTY-LICENCES.md"
-# Xbox sign-in. XAL keeps its device key as a named CNG key, which Wine 11.17's ncrypt
-# cannot keep (NCryptOpenKey is a stub), so every start made a new device and asked for
-# sign-in again. ncrypt-fh6.dll is Wine's ncrypt with persisted keys (fh6-ncrypt/), built
-# from CrossOver 27.0.0.41073's sources: it goes beside the game for forzahorizon6.exe
-# alone, and only onto a runner whose own ncrypt.dll is the one it was built against. A
-# runner with another (a newer CrossOver) leaves it out until it is built for that one.
-NCRYPT="$HERE/ncrypt-fh6.dll"
-N_LIVE="$GAME/ncrypt.dll"
-N_KEPT="$GAME/ncrypt.dll.mgf-original"
-N_VALUE="ncrypt"
-N_BASE_SHA=ae9f0b9b3e90cbcb97892b5b884e63df95e323a28827dabe2ef04d64b6264abd
 
 [ -f "$PROXY" ] || { echo "error: d3d12-fh6.dll is not beside this installer" >&2; exit 1; }
 [ -f "$NOTICES" ] || { echo "error: the Forza third-party notices are missing" >&2; exit 1; }
-[ -f "$NCRYPT" ] || { echo "error: ncrypt-fh6.dll is not beside this installer" >&2; exit 1; }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -164,9 +152,6 @@ fi
 is_proxy() { [ -f "$1" ] && cmp -s "$1" "$PROXY"; }
 is_alias() { [ -f "$1" ] && cmp -s "$1" "$EXPECTED"; }
 override_present() { user_reg_has_value "$PFX" "$KEY" "$VALUE"; }
-is_ncrypt() { [ -f "$1" ] && cmp -s "$1" "$NCRYPT"; }
-ncrypt_fits() { [ "$(fh6sha "$W/ncrypt.dll")" = "$N_BASE_SHA" ]; }
-ncrypt_override_present() { user_reg_has_value "$PFX" "$KEY" "$N_VALUE"; }
 pair_ok() {
   local root="$1" backend="$2"
   is_alias "$root/lib/wine/x86_64-windows/apd12.dll" \
@@ -197,11 +182,6 @@ parts() {
     total=5
     pair_ok "$CLONE" "$CLONE_BACKEND" && pieces=$((pieces + 1))
   fi
-  if ncrypt_fits; then
-    total=$((total + 2))
-    is_ncrypt "$N_LIVE" && pieces=$((pieces + 1))
-    ncrypt_override_present && pieces=$((pieces + 1)) || true
-  fi
   total=$((total + 2))
   fh6_runtime_ok && pieces=$((pieces + 1)) || true
   fh6_options status >/dev/null 2>&1 && pieces=$((pieces + 1)) || true
@@ -218,7 +198,7 @@ status() {
   echo "looking at $PFX and $RUNNER"
   if [ "$pieces" -eq "$total" ]; then echo installed
   elif [ "$pieces" -gt 0 ]; then
-    echo "Why: $pieces of $total compatibility components are in place (D3D12, ntdll, Xbox sign-in keys and launch options)" >&2
+    echo "Why: $pieces of $total compatibility components are in place (D3D12, ntdll and launch options)" >&2
     echo half
   else echo absent; fi
 }
@@ -287,11 +267,6 @@ case "$MODE" in
       if [ -f "$KEPT" ] && ! is_proxy "$KEPT"; then mv -f "$KEPT" "$LIVE"
       else rm -f "$LIVE" "$KEPT"; fi
     else [ ! -f "$LIVE" ] || echo "the game's d3d12.dll is not ours; it stays"; fi
-    if is_ncrypt "$N_LIVE"; then
-      rm -f "$N_LIVE"
-      if [ -f "$N_KEPT" ] && ! is_ncrypt "$N_KEPT"; then mv -f "$N_KEPT" "$N_LIVE"; fi
-    fi
-    user_reg_edit "$PFX" delete "$KEY" "$N_VALUE" || true
     if is_alias "$P_ALIAS"; then rm -f "$P_ALIAS"; fi
     if [ ! -e "$P_ALIAS" ] && [ -f "$P_KEPT" ]; then mv -f "$P_KEPT" "$P_ALIAS"; fi
     user_reg_edit "$PFX" delete "$KEY" "$VALUE" || true
@@ -349,33 +324,6 @@ user_reg_edit "$PFX" set "$KEY" "$VALUE" native || {
   echo "error: files are in place, but the FH6-only d3d12 override could not be written" >&2
   exit 1
 }
-
-if ncrypt_fits; then
-  if [ -f "$N_KEPT" ] && is_ncrypt "$N_KEPT"; then
-    echo "error: the kept game ncrypt.dll is ours, not an original." >&2
-    exit 1
-  fi
-  if [ -f "$N_LIVE" ] && ! is_ncrypt "$N_LIVE"; then mv -f "$N_LIVE" "$N_KEPT"; fi
-  cp -p "$NCRYPT" "$N_LIVE.mgf-new" && mv -f "$N_LIVE.mgf-new" "$N_LIVE"
-  user_reg_edit "$PFX" set "$KEY" "$N_VALUE" native || {
-    echo "error: ncrypt.dll is in place, but its FH6-only override could not be written" >&2
-    exit 1
-  }
-  is_ncrypt "$N_LIVE" && ncrypt_override_present || {
-    echo "error: the Xbox sign-in key storage did not verify" >&2
-    exit 1
-  }
-  echo "installed persisted Xbox sign-in keys (ncrypt) for forzahorizon6.exe"
-else
-  # Built for another CrossOver: one put in before for this runner comes out.
-  if is_ncrypt "$N_LIVE"; then
-    rm -f "$N_LIVE"
-    if [ -f "$N_KEPT" ]; then mv -f "$N_KEPT" "$N_LIVE"; fi
-  fi
-  user_reg_edit "$PFX" delete "$KEY" "$N_VALUE" || true
-  echo "note: ncrypt-fh6.dll was built for CrossOver 27.0.0.41073 and this runner has another ncrypt.dll;"
-  echo "      FH6 keeps asking for Xbox sign-in at each start until it is built for this CrossOver."
-fi
 
 is_proxy "$LIVE" && is_alias "$P_ALIAS" && pair_ok "$RUNNER" "$BACKEND" && override_present || {
   echo "error: the D3D installation did not verify; --status reports the missing part" >&2
