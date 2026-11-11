@@ -21,12 +21,16 @@ and after `NCryptDeleteKey` opening it gave `NTE_BAD_KEYSET`.
 
 Source: `wine/` from CodeWeavers' `crossover-sources-20261015.tar.gz`, the sources
 of CrossOver Preview 27.0.0.41073, with this patch. `../build-fh6-ncrypt.sh` builds
-it (x86_64 only; FH6 runs on the Intel side). A rebuild differs from the shipped
-file only by its PE timestamps; the code is the same.
+it (x86_64 only; FH6 runs on the Intel side) and clears the 32-byte Wine builtin
+signature at 0x40: the file is loaded as a native DLL from the game's folder, and
+Wine refuses there a file that says it is one of its builtins (the game stopped with
+c0000135 before its window, 2026-11-11). Loaded that way, the probe kept and reopened
+its key with CrossOver's own ncrypt.dll in the runner. A rebuild differs from the
+shipped file only by its PE timestamps; the code is the same.
 
 | File | sha256 |
 |---|---|
-| `ncrypt-fh6.dll` | 9b5596636467b9f3f489eafdc6d9faea9de26328b1478046210ff0f9ee5a873b |
+| `ncrypt-fh6.dll` | 9bc37e29d08c8e4c2c3ec6870d5e2f2ee2f0612e0aab7e9684990199dda96023 |
 | CrossOver 41073's own `x86_64-windows/ncrypt.dll`, which the installer requires | ae9f0b9b3e90cbcb97892b5b884e63df95e323a28827dabe2ef04d64b6264abd |
 
 `install-fh6-fix.sh` puts it beside the game as `ncrypt.dll` with an

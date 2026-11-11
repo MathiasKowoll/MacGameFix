@@ -36,4 +36,12 @@ LDFLAGS="-isysroot $SDK -mmacosx-version-min=14.0" \
   --without-unwind --without-ffmpeg --without-inotify --without-sdl ac_cv_func_pipe2=no > configure.log 2>&1
 make -j10 dlls/ncrypt/all > make.log 2>&1
 llvm-strip -o "$HERE/ncrypt-fh6.dll" dlls/ncrypt/x86_64-windows/ncrypt.dll
+# It is loaded as a native DLL from the game's folder (ncrypt=native for forzahorizon6.exe):
+# Wine refuses a file that says it is one of its builtins there, and the game then stops
+# with c0000135 before its window. The 32-byte builtin signature at 0x40 is cleared.
+/usr/bin/python3 -I -c 'import sys
+b = bytearray(open(sys.argv[1], "rb").read())
+assert b[0x40:0x50] == b"Wine builtin DLL", "no builtin signature where it was expected"
+b[0x40:0x60] = bytes(32)
+open(sys.argv[1], "wb").write(b)' "$HERE/ncrypt-fh6.dll"
 shasum -a 256 "$HERE/ncrypt-fh6.dll"
