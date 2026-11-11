@@ -69,6 +69,18 @@
       "env": {},
       "symptom": "Never leaves ‘LOADING… PLEASE WAIT’ after Xbox sign-in"
     },
+    "forzahorizon6.exe": {
+      "title": "Forza Horizon 6",
+      "backend": "d3dmetal",
+      "codec": "",
+      "gptk": "4",
+      "env": {
+        "WINE_SOFTWARE_EXCEPTION_CHAIN": "1",
+        "WINE_SOFTWARE_BRIDGE_RESUME": "0",
+        "WINE_SOFTWARE_ALU_BRIDGE": "1"
+      },
+      "symptom": "WIP: sign-in and driving validated; reduced recurring stutter with the new Rosetta runtime"
+    },
     "game.exe": {
       "title": "Persona 5 Strikers",
       "backend": "dxmt",

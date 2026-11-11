@@ -1,0 +1,10 @@
+{
+  "fresh_source_build": true,
+  "exports_match": true,
+  "instruction_count": [
+    157750,
+    157750
+  ],
+  "instructions_equal_after_rip_relocation_normalization": true,
+  "note": "Original validated binaries remain the distribution payload. Fresh build is only a source completeness check; path-dependent data/debug offsets can change hashes."
+}

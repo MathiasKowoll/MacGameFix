@@ -1,25 +1,25 @@
 # MacGameFix
 
+Preview 1.6.1-pre.1: **Forza Horizon 5 complete and gameplay validated; Forza Horizon 6 WIP with sign-in and driving advances.** [Release notes and validation limits](docs/releases/1.6.1-pre.1.md). The FH6 runtime belongs to the existing Rosetta improvement; diagnostics are optional.
+
 Fixes for Windows games on a Mac that go into the game's own folder, and the
 small macOS application that installs, checks and removes them. One more is
 for a macOS game: it turns on the MetalFX denoiser that Cyberpunk 2077 ships
 and leaves off, by changing the game's own app.
 
-None patches or replaces a CrossOver module. The Windows games' fixes work with
+Most game-folder fixes do not replace a CrossOver module. FH6 WIP additionally uses the paired ntdll from the existing Rosetta improvement. The other Windows game fixes work with
 CrossOver as CodeWeavers ships it, with CrossOver Preview, and with Steam Play
 tools for macOS such as [NotProton](https://github.com/NotProtonNot/NotProton):
 a proxy DLL beside the game, and for a few titles registry keys in the game's
-own prefix. Forza Horizon 5 also adds a private alias of the selected runner's
-own D3DMetal module; the alias is made locally and the module is not shipped.
+own prefix. Forza Horizon 5 and Forza Horizon 6 also add a private alias of the
+selected runner's own D3DMetal module; the alias is made locally and the module
+is not shipped.
 NINJA GAIDEN 3: Razor's Edge puts its DLLs in the prefix instead.
 
 This repository is where the fixes live now. They started in
 [MacGameVideoFix](https://github.com/MathiasKowoll/MacGameVideoFix), which also
 patched CrossOver itself: staged GStreamer codecs, its own `winegstreamer`, a
-controller bus. That project is archived. On CrossOver Preview 27 none of the
-games here needs anything in the engine (for three of them that is read off how
-the fix works rather than run; see "Measured, and what was not"), so the work
-that is still alive is the DLLs and their installers, and that is what moved
+controller bus. That project is archived. The current game fixes and their installers moved
 here. The history of every fix, and the engine work, stays in the
 archived repository.
 
@@ -82,8 +82,9 @@ Some fixes are not needed from a D3DMetal version on (CONTROL Resonant,
 Mortal Shell 2, Resonance: A Plague Tale Legacy and both Life is Strange titles
 from 4.0b3). The game says so. It is only a notice: the fix still installs.
 
-The exception is a fix that also writes registry keys: Forza Horizon 5, the
-Kingdom Hearts titles and NieR Replicant; NINJA GAIDEN 3: Razor's Edge, whose
+The exception is a fix that also writes registry keys: Forza Horizon 5, Forza
+Horizon 6, the Kingdom Hearts titles and NieR Replicant; NINJA GAIDEN 3:
+Razor's Edge, whose
 DLLs go there too and nothing into its folder; and Phantom Blade Zero, whose
 H.264 decoder goes there with its registry values. Those keys go into the game's prefix, a
 Steam Play prefix (`compatdata/<appid>/pfx`) or a CrossOver bottle, so the game
@@ -118,6 +119,17 @@ Xbox sign-in window; the game's page says why.
 The first successful run may spend several minutes at **Optimizing for your
 PC**. The exact diagnosis, the files and the reversible layout are in
 [Forza Horizon 5](legacy/wiki/Forza-Horizon-5.md).
+
+Forza Horizon 6 uses a separate build from the same audited GPL source. Its
+profile keeps the general D3DMetal compatibility fixes, the shader-model and
+input-layout fallbacks, the `SV_ShadingRate` rewrite, and the real-memory
+report. It deliberately leaves out FH5's descriptor-handle translation,
+unwind guard and Xbox UDP proxy. The installer makes the same private
+`apd12.dll` alias from the selected runner and applies the override only to
+`forzahorizon6.exe`. NotProton's native Visual C++ runtime override remains
+responsible for the concurrent-vector crash fixed by Highball's FH6 recipe.
+The measured result and remaining validation are in
+[Forza Horizon 6](legacy/wiki/Forza-Horizon-6.md).
 
 ## Keeping fixes applied, and new fixes
 
@@ -233,6 +245,8 @@ open Steam there (engine/README.md, "The options").
 | Cyberpunk 2077 | The MetalFX denoiser it ships is left off | The macOS version 2.5.0, an M3 or later |
 | Devil May Cry 5 | Crashes when a skill preview plays | D3DMetal |
 | DYNASTY WARRIORS: ORIGINS | Cutscenes with sound and no picture | D3DMetal, CrossOver Preview 27 |
+| Forza Horizon 5 | Never leaves the loading screen after Xbox sign-in | D3DMetal 4, a prefix |
+| Forza Horizon 6 — WIP | Sign-in and driving validated; reduced recurring stutter | D3DMetal 4, Preview 41073 Rosetta improvement, a prefix |
 | God of War | White specks on characters in dim light | DXMT |
 | God of War Ragnarök | Adaptive triggers never reach the pad | A DualSense or DualSense Edge, Bluetooth as a cable over Bluetooth |
 | KINGDOM HEARTS Dream Drop Distance | Cutscenes with a solid green picture; a crash dialog on exit | D3DMetal, a prefix |
@@ -867,10 +881,12 @@ DLLs, and a built app's copies with `fixes/`. It also checks that `sm2-shadertoo
 halves carry MacGameFix's Developer ID, a secure timestamp and the hardened
 runtime.
 
-Forza Horizon 5 has two dedicated builders because both proxies have unusual
-forwarding layouts: `build-fh5-d3d12.sh` builds `d3d12-fh5.dll` from the GPL
-sources under `fh5-d3d12/`, and `build-fh5-netfix.sh` generates the exact
-`ws2_32` export table of its target runner before building `ws2_32-fh5.dll`.
+Forza Horizon has dedicated builders because the D3D12 proxies have an unusual
+forwarding layout: `build-fh5-d3d12.sh` and `build-fh6-d3d12.sh` build separate
+profiles from the GPL sources under `fh5-d3d12/` and the retained FH6 instrumentation baseline under `fh6-d3d12/`. The FH6 profile omits FH5's
+descriptor translation and FH5-only guards. `build-fh5-netfix.sh` generates the
+exact `ws2_32` export table of its target runner before building FH5's separate
+`ws2_32-fh5.dll`.
 
 ## How each fix is made
 
@@ -893,6 +909,7 @@ how, is in the game's page under `legacy/wiki/`.
 | `install-re-vc1-fix.sh` | Devil May Cry 5, RESIDENT EVIL 2, RESIDENT EVIL 3 | `amd_ags_x64.dll` (from `amd_ags_x64-dmc5.dll`, or `amd_ags_x64-re2.dll` for both RE titles), and the reader | `mf-reader-fallback.c` | [RE Engine VC-1](legacy/wiki/RE-Engine-VC1.md) |
 | `install-dwo-bridge.sh` | DYNASTY WARRIORS: ORIGINS, Wo Long: Fallen Dynasty | `libxess.dll` | `dwo-video-bridge.c` | [DYNASTY WARRIORS: ORIGINS](legacy/wiki/Dynasty-Warriors-Origins.md), [Wo Long](legacy/wiki/Wo-Long-Fallen-Dynasty.md) |
 | `install-fh5-fix.sh` | Forza Horizon 5 | `d3d12.dll` (from `d3d12-fh5.dll`); the runner and prefix receive a private `apd12` alias made from their own D3DMetal, and the prefix receives the source-built Xbox UDP proxy | `fh5-d3d12/`; `fh5-netfix.c` | [Forza Horizon 5](legacy/wiki/Forza-Horizon-5.md) |
+| `install-fh6-fix.sh` | Forza Horizon 6 | `d3d12.dll` (from `d3d12-fh6.dll`); the runner and prefix receive a private `apd12` alias made from their own D3DMetal | `fh5-d3d12/`, built with its FH6 profile | [Forza Horizon 6](legacy/wiki/Forza-Horizon-6.md) |
 | `install-gow-fix.sh` | God of War | `libSceJobManager.dll` (from `libSceJobManager-gow.dll`) and `gow-depth-fix.ini` | `gow-depth-fix.c` | [God of War](legacy/wiki/God-of-War.md) |
 | `install-gowr-triggers.sh` | God of War Ragnarök | `bink2w64.dll` (from `bink2w64-gowr.dll`) | `gowr-triggers.c` | [Its section](#god-of-war-ragnarök-sends-its-trigger-effects-to-the-pad) |
 | `install-kh-bridge.sh` | KINGDOM HEARTS Dream Drop Distance, KINGDOM HEARTS HD 1.5+2.5 ReMIX | `dinput8.dll` (from `dinput8-kh.dll`); the original is the bottle's or prefix's own `dinput8`, copied beside it | `dwo-video-bridge.c` | [KINGDOM HEARTS](legacy/wiki/Kingdom-Hearts.md) |
@@ -941,8 +958,8 @@ how, is in the game's page under `legacy/wiki/`.
   ([`upstream/source`](https://github.com/Andytizer/fh5-crossover-steam-fix/tree/main/upstream/source)),
   so it could be built here at all.
 - **[Highball](https://github.com/gauthierpiarrette/highball) by Gauthier
-  Piarrette** (GPL-3.0): the `tsshim` base and the D3DMetal measurements behind
-  the Forza Horizon proxy.
+  Piarrette** (GPL-3.0): the `tsshim` base, FH6 recipe and D3DMetal measurements
+  behind the Forza Horizon proxies.
 - **MACxus**, credited by xvferxedd for the FH5 profile: the NVIDIA identity
   the launch options still carry.
 - **[witcher3-crossover-fix](https://github.com/tholtman1-del/witcher3-crossover-fix)

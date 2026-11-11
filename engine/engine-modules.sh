@@ -46,7 +46,7 @@ for arg in "$@"; do
 done
 ROOT="${ROOT%/}"
 # Which improvement a module belongs to.
-part_of() { case "${1##*/}" in ntdll.so) echo rosetta ;; *) echo controls ;; esac; }
+part_of() { case "${1##*/}" in ntdll.so|ntdll.dll) echo rosetta ;; *) echo controls ;; esac; }
 in_part() { [ "$PART" = all ] || [ "$(part_of "$1")" = "$PART" ]; }
 BACKUPS="${MGVF_ENGINE_BACKUP:-$HOME/Library/Application Support/MacGameFix/engine-backup}"
 LIB="$ROOT/lib/wine"
@@ -93,7 +93,7 @@ for side in x86_64 aarch64; do
     # winebus.so (the Bluetooth DualSense), hidclass.sys and xinput (XInput),
     # then setupapi.dll and xaudio2_9.dll, and ntdll.so (Rosetta's CPU fidelity, the
     # Intel side only), came later; a build may not carry them.
-    for f in $side-unix/winebus.so $side-unix/ntdll.so $side-windows/hidclass.sys $side-windows/setupapi.dll $side-windows/xaudio2_9.dll $XINPUT_DLLS; do
+    for f in $side-unix/winebus.so $side-unix/ntdll.so $side-windows/ntdll.dll $side-windows/hidclass.sys $side-windows/setupapi.dll $side-windows/xaudio2_9.dll $XINPUT_DLLS; do
       case "$f" in */*) ;; *) f="$side-windows/$f" ;; esac
       [ -f "$(src "$f")" ] && FILES="$FILES $f"
     done
@@ -211,7 +211,7 @@ install)
 --restore)
   [ -d "$SAVE" ] || { say "Nothing of MacGameFix's is in $ROOT."; exit 0; }
   for f in x86_64-windows/winebus.sys x86_64-windows/mmdevapi.dll x86_64-windows/hidclass.sys \
-           x86_64-unix/winecoreaudio.so x86_64-unix/winebus.so x86_64-unix/ntdll.so aarch64-windows/winebus.sys \
+           x86_64-unix/winecoreaudio.so x86_64-unix/winebus.so x86_64-unix/ntdll.so x86_64-windows/ntdll.dll aarch64-windows/winebus.sys \
            aarch64-windows/mmdevapi.dll aarch64-windows/hidclass.sys aarch64-unix/winecoreaudio.so \
            aarch64-unix/winebus.so x86_64-windows/setupapi.dll aarch64-windows/setupapi.dll \
            x86_64-windows/xaudio2_9.dll aarch64-windows/xaudio2_9.dll \

@@ -1,0 +1,20 @@
+{
+  "id": "fh6-20261111-destination-shifts",
+  "status": "WIP",
+  "runtime": "CrossOver 27.0.0.41073 / Wine 11.17 / x86_64 Rosetta",
+  "game_sha256": "63791d0b686186c23ade10a1ae02efd785045bd818cc89816f472cad9a69fcb9",
+  "validated_files": {
+    "ntdll.so": "dd6ef76ff8d51da5e2d246bdb7432a6c0b110668d742b1937e82ffcbb05d3ea0",
+    "ntdll.dll": "1705a2489f759893865b1ea45343a066184308eb7826eb830cde56fc148fc02d",
+    "d3d12.dll": "f63d708ab2c630961a42340e630896d788b31b3413b7fe1ac0814d63891042c0"
+  },
+  "validated_launch_options": "NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_CHAIN=1 NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_STATS=1 NOTPROTON_ENV_WINE_SOFTWARE_BRIDGE_RESUME=0 NOTPROTON_ENV_WINE_SOFTWARE_ALU_BRIDGE=1 NOTPROTON_ROSETTA_TRAP_BOOST=1 NOTPROTON_RAW_CONTROLLERS=0 MTL_HUD_ENABLED=1 MTL_HUD_LOG_ENABLED=1 %command%",
+  "installed_base_preserved": true,
+  "distribution_files": {
+    "engine/modules/27.0.0.41073/x86_64-unix/ntdll.so": "05b16ee2af72ca0983259484fc8ab9c2b261761b7225d95caaabfe2c8cd9a682",
+    "engine/modules/27.0.0.41073/x86_64-windows/ntdll.dll": "1705a2489f759893865b1ea45343a066184308eb7826eb830cde56fc148fc02d",
+    "fixes/d3d12-fh6.dll": "f63d708ab2c630961a42340e630896d788b31b3413b7fe1ac0814d63891042c0",
+    "fixes/notproton-rosetta-trap-boost.dylib": "28315251485196c816b3579c90a8e9fa81a4bb7b9b61d87c4269c8972c9f4197"
+  },
+  "distribution_signing": "Mach-O copies only: Developer ID signature and timestamp; otool -t unchanged. Installed binaries untouched."
+}
