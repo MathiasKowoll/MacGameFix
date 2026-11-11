@@ -17,3 +17,8 @@ alias from the selected NotProton/CrossOver runner's own D3DMetal module and
 changes its PE export name. No D3DMetal binary is distributed by MacGameFix.
 
 `build-fh5-d3d12.sh` builds the shipped `d3d12-fh5.dll` from these files.
+`build-fh6-d3d12.sh` builds `d3d12-fh6.dll` from the same audited source with
+`MGF_FH6_PROFILE=1`. That profile does not install FH5's 24-to-32-byte
+descriptor-handle translation, its unwind guard or its dual-source blend
+workaround. It keeps the generic `tsshim` paths and the FH6-specific
+`SV_ShadingRate` and unused-blend fixes already present in this source.

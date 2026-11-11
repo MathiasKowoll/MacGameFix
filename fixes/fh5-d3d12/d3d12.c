@@ -51,12 +51,17 @@
 #include <string.h>
 #include "dxil_shadingrate.h"
 #include "inspect.h"
+#ifndef MGF_FH6_PROFILE
+#define MGF_FH6_PROFILE 0
+#endif
 // PLAY BUILD: every log and diagnostic counter is off unless HB_DEBUG=1 (read once in DllMain); with it unset no file or directory is created.
 int hb_debug;
 #include <winternl.h>
 #include "memfix.h"
 #include "fiberhook.h"
+#if !MGF_FH6_PROFILE
 #include "unwindguard.h"
+#endif
 
 static HMODULE real_dll;
 static HINSTANCE self;
@@ -1053,7 +1058,16 @@ static void patch_queue_vtbl(void *iface)
 
 #include <stdarg.h>
 #include "faillog.h"
+#if MGF_FH6_PROFILE
+/* FH5 alone needs its 24-to-32-byte descriptor-handle translation.  FH6 uses
+ * the increment D3DMetal reports, so its build keeps the diagnostic layer but
+ * leaves descriptor handles untouched. */
+static void stride_dump_locked(void) {}
+static void stride_init(void) {}
+static void stride_patch_device(ID3D12Device *dev) { (void)dev; }
+#else
 #include "stride.h"
+#endif
 
 // Every interface generation may carry its own vtable copy, so patch each one the object answers to.
 static void patch_all(IUnknown *obj, const IID *const *ids, int n, void (*patch)(void *))
@@ -1191,7 +1205,9 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
         DisableThreadLibraryCalls(inst);
         InitializeCriticalSection(&ring_lock);
         InitializeCriticalSection(&pso_lock);
+#if !MGF_FH6_PROFILE
         ug_init();
+#endif
         fl_init();
         stride_init();
         QueryPerformanceFrequency(&f); qpc_freq = (UINT64)f.QuadPart;
@@ -1203,7 +1219,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
         { char v[8]; keep_append_offsets = GetEnvironmentVariableA("HB_TSSHIM_APPEND_OFFSETS", v, sizeof v) == 1 && v[0] == '0'; }
         { char v[8]; keep_shadingrate = GetEnvironmentVariableA("HB_TSSHIM_SHADINGRATE", v, sizeof v) == 1 && v[0] == '0'; }
         { char v[8]; keep_unused_blend = GetEnvironmentVariableA("HB_TSSHIM_UNUSED_BLEND", v, sizeof v) == 1 && v[0] == '0'; }
-        { char v[8]; keep_dualsrc = GetEnvironmentVariableA("HB_TSSHIM_DUALSRC_FIX", v, sizeof v) == 1 && v[0] == '0'; dualsrc_log_on = hb_debug && !(GetEnvironmentVariableA("HB_TSSHIM_DUALSRC_LOG", v, sizeof v) == 1 && v[0] == '0'); }
+        { char v[8]; keep_dualsrc = MGF_FH6_PROFILE || (GetEnvironmentVariableA("HB_TSSHIM_DUALSRC_FIX", v, sizeof v) == 1 && v[0] == '0'); dualsrc_log_on = !MGF_FH6_PROFILE && hb_debug && !(GetEnvironmentVariableA("HB_TSSHIM_DUALSRC_LOG", v, sizeof v) == 1 && v[0] == '0'); }
         { char v[8]; depth_equal_fix = GetEnvironmentVariableA("HB_TSSHIM_DEPTH_EQUAL", v, sizeof v) == 1 && v[0] == '1'; }
         { char v[8]; dump_shaders = hb_debug && GetEnvironmentVariableA("HB_TSSHIM_DUMP", v, sizeof v) == 1 && v[0] == '1'; }
         InitializeCriticalSection(&dump_lock);
@@ -1215,8 +1231,8 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
         RESOLVE(D3D12CreateRootSignatureDeserializer); RESOLVE(D3D12CreateVersionedRootSignatureDeserializer);
         RESOLVE(D3D12EnableExperimentalFeatures); RESOLVE(D3D12GetDebugInterface); RESOLVE(D3D12SerializeRootSignature);
         RESOLVE(D3D12SerializeVersionedRootSignature); RESOLVE(GetBehaviorValue);
-        // FH5 fixes for Wine on macOS: report real RAM (Wine reports ~140 GB) and keep gs:0x20 apart for
-        // Windows fibers and native libdispatch. HB_FH6_MEMFIX=0 turns the memory fix off; HB_FH6_FIBERFIX=1 turns the fiber fix on.
+        // Forza fixes for Wine on macOS: report real RAM (Wine reports the task's much larger virtual size).
+        // The separate fiber experiment remains opt-in and is not enabled by either shipped profile.
         { char v[8]; if (!(GetEnvironmentVariableA("HB_FH6_MEMFIX", v, sizeof v) == 1 && v[0] == '0')) memfix_install(); }
         { char v[8]; if (GetEnvironmentVariableA("HB_FH6_FIBERFIX", v, sizeof v) == 1 && v[0] == '1') fh_log(fiberhook_install(), 0, 0xF1000000u); }   // opt-in: crashes FH6 at startup on Bridgeplay winecx-11.17
         LOG("loaded in front of the real d3d12.dll");

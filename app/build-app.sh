@@ -52,12 +52,13 @@ APP="$HERE/MacGameFix.app"
 MACOS="$APP/Contents/MacOS"
 RES="$APP/Contents/Resources"
 CACHE="${TMPDIR:-/tmp}/mgf-swift-cache"
-VERSION="1.6.0"
+VERSION="1.6.1"
+PRERELEASE_TAG="v1.6.1-pre.1"
 # The oldest app that can use the catalog this build writes: the first with a
 # catalog it can take from a release.
-CATALOG_MIN_APP="1.4.0"
+CATALOG_MIN_APP="1.6.1"
 # The Wine modules' catalog came with 1.5.0.
-MODULES_MIN_APP="1.5.0"
+MODULES_MIN_APP="1.6.1"
 # The private half of the key whose public half Automation.swift carries. It
 # never enters the repository; without it the build writes no release catalog.
 SIGNING_KEY="${MACGAMEFIX_SIGNING_KEY:-$HOME/.config/macgamefix/catalog-signing.key}"
@@ -128,6 +129,7 @@ for script in sorted((root / "fixes").glob("install-*.sh")):
             left.append((name, reason)); continue
         (testing if in_testing else games).append({
             "name": name,
+            "supportStatus": "WIP" if "# MGVF-STATUS: WIP" in text else "",
             "exe": exe,
             "alsoRuns": also,
             "logs": logs.group(1).split() if logs else [],
@@ -205,6 +207,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
+  <key>MacGameFixPrereleaseTag</key><string>$PRERELEASE_TAG</string>
   <key>CFBundleName</key><string>MacGameFix</string>
   <key>CFBundleDisplayName</key><string>MacGameFix</string>
   <key>CFBundleIdentifier</key><string>io.github.macgamefix</string>

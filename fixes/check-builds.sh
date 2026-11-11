@@ -124,13 +124,15 @@ for dll in "$HERE"/*.dll; do
   # the D3D12 exports dynamically. Rebuild all three translation units under
   # the runtime name d3d12.dll, then apply the same semantic comparison as the
   # ordinary proxies (linker timestamps and build ids are intentionally free).
-  if [ "$name" = d3d12-fh5.dll ]; then
+  if [ "$name" = d3d12-fh5.dll ] || [ "$name" = d3d12-fh6.dll ]; then
     out="$TMP/$name.d"; mkdir -p "$out"
     src="$HERE/fh5-d3d12"
-    if ! "$CC" -shared -O2 -Wall -static-libgcc -o "$out/d3d12.dll" \
+    profile=""
+    [ "$name" != d3d12-fh6.dll ] || { profile="-DMGF_FH6_PROFILE=1"; src="$HERE/fh6-d3d12"; }
+    if ! "$CC" -shared -O2 -Wall -static-libgcc $profile -o "$out/d3d12.dll" \
           "$src/d3d12.c" "$src/dxil_shadingrate.c" "$src/inspect.c" "$src/d3d12.def" \
           2>"$out/err"; then
-      printf '  %-32s !! fh5-d3d12 does not compile\n' "$name"
+      printf '  %-32s !! shared Forza D3D12 source does not compile\n' "$name"
       [ "$VERBOSE" = 1 ] && sed 's/^/       /' "$out/err"
       drifted=$((drifted + 1)); continue
     fi
@@ -145,10 +147,10 @@ for dll in "$HERE"/*.dll; do
     n_gone="$(printf '%s' "$gone" | grep -c . )"
     n_came="$(printf '%s' "$came" | grep -c . )"
     if [ "$exp_delta" = 0 ] && [ "$n_gone" = 0 ] && [ "$n_came" = 0 ]; then
-      printf '  %-32s ok   fh5-d3d12/\n' "$name"
+      printf '  %-32s ok   fh5-d3d12/ (%s profile)\n' "$name" "${name#d3d12-}"
     else
       drifted=$((drifted + 1))
-      printf '  %-32s DRIFT  fh5-d3d12/  (exports %s, strings -%s +%s)\n' \
+      printf '  %-32s DRIFT  shared Forza D3D12 source  (exports %s, strings -%s +%s)\n' \
         "$name" "$exp_delta" "$n_gone" "$n_came"
       if [ "$VERBOSE" = 1 ]; then
         printf '%s\n' "$gone" | grep . | head -8 | sed 's/^/       shipped only: /'

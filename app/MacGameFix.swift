@@ -377,6 +377,21 @@ final class Model: ObservableObject {
         return hit
     }
 
+    func setFH6Diagnostics(_ on: Bool) {
+        let targets = selected.filter { $0.game.exe.lowercased() == "forzahorizon6.exe" }
+        guard !busy, targets.count == 1, let hit = targets.first else { return }
+        busy = true
+        Task {
+            let code = await Fixer.run(hit.game, folder: hit.folder, prefixes: hit.chosen.map(\.path.path),
+                catalog: resources, [on ? "--diagnostics-on" : "--diagnostics-off"]) { line in
+                    Task { @MainActor in self.note(line) }
+                }
+            status = code == 0 ? "FH6 diagnostics \(on ? "enabled" : "disabled") for the next launch."
+                : "Could not change diagnostics — see the log."
+            busy = false
+        }
+    }
+
     func apply(install: Bool) {
         guard !busy else { return }
         // A row waiting for a recipe is only removed: what MacGameFix kept for
@@ -1029,8 +1044,8 @@ struct GamesView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 6) {
                                 Text(row.game.name).fontWeight(.semibold)
-                                if row.game.testing != nil {
-                                    Text("Testing")
+                                if row.game.testing != nil || row.game.supportStatus == "WIP" {
+                                    Text(row.game.supportStatus == "WIP" ? "WIP" : "Testing")
                                         .font(.caption2.bold())
                                         .padding(.horizontal, 5).padding(.vertical, 1)
                                         .background(.orange.opacity(0.2), in: Capsule())
@@ -1091,6 +1106,14 @@ struct GamesView: View {
                 Text("Played a game? Select it to report that its fix works, or that it works without it.")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
+                if model.selected.count == 1, model.selected.first?.game.exe.lowercased() == "forzahorizon6.exe" {
+                    Menu("Diagnostics") {
+                        Button("Enable HUD and counters") { model.setFH6Diagnostics(true) }
+                        Button("Disable HUD and counters") { model.setFH6Diagnostics(false) }
+                    }
+                    .disabled(model.busy)
+                    .help("For the next FH6 launch. Quit Steam first so its settings can be saved safely.")
+                }
                 Button("It Works…") { model.fixReport(.works) }
                     .disabled(model.busy || model.fixReportHit(.works) == nil)
                     .help("For one selected game whose fix is installed: saves its fix report and opens a new issue "

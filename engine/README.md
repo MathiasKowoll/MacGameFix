@@ -507,7 +507,10 @@ CrossOver 26.3 has only the Intel side. 41069's modules do not carry `ntdll.so`
 yet. The FEX side's `ntdll.so` (41073) is built from a tree of its own with the
 patches `NTDLL_ARM64` names in the series' `build.conf`, `0021` and `0022`: the
 others change what Rosetta shows a game or route a process to D3DMetal, which the
-FEX side does not have.
+FEX side does not have. On 41073's Intel side the `ntdll.so` and `ntdll.dll` are the
+retained FH6 pair instead (see "Forza preview baseline" below): `built-for.json` names it
+in `ntdll_baseline`, and `build.sh` keeps it as it is and does not build that side's
+`ntdll.so` from the series.
 
 | CrossOver | Sources | Wine | Intel (x86_64) | FEX (arm64) |
 |---|---|---|---|---|
@@ -659,3 +662,13 @@ backups under `.build/runner-backup/`, separate from the app's.
 Wine is LGPL-2.1-or-later, and so are these modules. Their source is
 CodeWeavers' `crossover-sources-<id>.tar.gz` for the build they target, plus the
 patches in `patches/`. `build.sh` is the whole recipe.
+
+### Forza preview baseline (2026-11-11)
+
+Preview 41073's existing **Copy protection under Rosetta** improvement now includes
+both `x86_64-unix/ntdll.so` and `x86_64-windows/ntdll.dll`, with timer patch 0021 and
+the opt-in, build-guarded FH6 dispatcher. Other runner builds are unchanged.
+See the [retained source overlay](sources/fh6-20261111/README.md) and
+[prerelease validation and limits](../docs/releases/1.6.1-pre.1.md).
+Do not replace this pair with a controller-only rebuild's ntdll. Use the dedicated
+source archive/build script for subsequent ntdll work and validate it separately.

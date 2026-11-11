@@ -52,6 +52,20 @@ suffix=""; [ "${PATCHES:-}" = none ] && suffix="-unpatched"
 TREE="$here/.build/tree-$ID$suffix"   # a patched copy; the extracted sources stay pristine
 BUILD="$here/.build/build-$ID$suffix-$ARCH"
 if [ -n "$suffix" ]; then OUT="$here/.build/modules-$ID$suffix"; else OUT="$here/modules/$ID"; fi
+# A build whose built-for.json names an ntdll_baseline keeps the Intel side's ntdll pair it
+# holds (41073's: ntdll.so and ntdll.dll from the overlay in sources/, with FH6's exception
+# dispatcher, which this series does not make). It is copied aside before anything here
+# removes a module folder, is not built from the series, and is put back as it was.
+BASELINE="$(sed -n 's/.*"ntdll_baseline": "\(.*\)".*/\1/p' "$OUT/built-for.json" 2>/dev/null)"
+RETAIN="$here/.build/retained-$ID"
+PAIR="x86_64-unix/ntdll.so x86_64-windows/ntdll.dll"
+if [ -n "$BASELINE" ] && [ -z "$suffix" ]; then
+  for f in $PAIR; do
+    [ -f "$OUT/$f" ] || continue
+    mkdir -p "$RETAIN/$(dirname "$f")" && cp -p "$OUT/$f" "$RETAIN/$f"
+  done
+  echo "==> keeping the Intel side's ntdll pair ($BASELINE); the series does not build it"
+fi
 LLVM_MINGW="${LLVM_MINGW:-$HOME/.local/cxge/toolchains/llvm-mingw}"
 SDL2_INCLUDE="${SDL2_INCLUDE:-/opt/homebrew/include/SDL2}"
 [ -f "$SDL2_INCLUDE/SDL.h" ] || { echo "SDL2's headers not found at $SDL2_INCLUDE (brew install sdl2, or set SDL2_INCLUDE)"; exit 1; }
@@ -105,7 +119,7 @@ fi
 # pipe2 is declared from macOS 27 only in its SDK and the minimum is older, so configure
 # is told it is missing, as CodeWeavers' build is (no pipe2 in their ntdll.so).
 UNWIND_FLAG=--without-unwind; [ "${UNWIND:-no}" = yes ] && UNWIND_FLAG=
-NTDLL=""; [ "$ARCH" = x86_64 ] && NTDLL=dlls/ntdll/all
+NTDLL=""; [ "$ARCH" = x86_64 ] && [ -z "$BASELINE" ] && NTDLL=dlls/ntdll/all
 configure() {  # <tree> <build directory> [more LDFLAGS]
   echo "==> configuring $ARCH in $(basename "$2") (log: $2/configure.log)"
   mkdir -p "$2"
@@ -192,6 +206,14 @@ for f in "$BUILD/dlls/winebus.sys/winebus.so" "$BUILD/dlls/winecoreaudio.drv/win
   fi
 done
 
+# The retained pair goes back, over whatever a rebuild left in its place.
+if [ -n "$BASELINE" ] && [ -z "$suffix" ]; then
+  for f in $PAIR; do
+    [ -f "$RETAIN/$f" ] || continue
+    mkdir -p "$OUT/$(dirname "$f")" && cp -p "$RETAIN/$f" "$OUT/$f"
+  done
+fi
+
 # CROSSOVER names the release for people ("CrossOver Preview 20261006"); a rebuild keeps
 # the name the folder already has.
 label="${CROSSOVER:-$(sed -n 's/.*"crossover": "\(.*\)",$/\1/p' "$OUT/built-for.json" 2>/dev/null)}"
@@ -201,6 +223,7 @@ label="${CROSSOVER:-$(sed -n 's/.*"crossover": "\(.*\)",$/\1/p' "$OUT/built-for.
   (cd "$OUT" && find . -type f ! -name 'built-for.json*' | sed 's|^\./||' | sort) | while read -r f; do
     printf '    "%s": "%s",\n' "$f" "$(shasum -a 256 "$OUT/$f" | cut -d' ' -f1)"
   done | sed '$ s/,$//'
-  printf '  }\n}\n'
+  if [ -n "$BASELINE" ] && [ -z "$suffix" ]; then printf '  },\n  "ntdll_baseline": "%s"\n}\n' "$BASELINE"
+  else printf '  }\n}\n'; fi
 } >"$OUT/built-for.json.new" && mv "$OUT/built-for.json.new" "$OUT/built-for.json"
 cat "$OUT/built-for.json"
