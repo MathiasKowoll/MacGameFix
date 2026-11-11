@@ -510,12 +510,41 @@ others change what Rosetta shows a game or route a process to D3DMetal, which th
 FEX side does not have. On 41073's Intel side the `ntdll.so` and `ntdll.dll` are the
 retained FH6 pair instead (see "Forza preview baseline" below): `built-for.json` names it
 in `ntdll_baseline`, and `build.sh` keeps it as it is and does not build that side's
-`ntdll.so` from the series.
+`ntdll.so` from the series. 41303 has no retained pair yet: its Intel `ntdll.so` is the
+series' own (`0017`-`0022`), without FH6's dispatcher.
+
+### Wine 11.21 (41303)
+
+`wine-11.21` is `wine-11.17` ported, one commit per patch, every patch applying
+with no fuzz. Wine 11.21 changed three things the series touches, all in
+`winebus.sys`:
+
+- A device's container ID comes from a hash of its parent (`desc.parent`, in
+  `get_container_id`); `device_extension.container_id` and
+  `make_unique_container_id` are gone. `0001` keeps the USB location's container,
+  which winecoreaudio gives the same device's audio endpoints, inside
+  `get_container_id`.
+- `struct device_desc` has no `uid`. The IOHID bus keeps the location ID in
+  `desc.index`, the value `uid` held, and the series' five uses of `desc.uid`
+  read `desc.index`.
+- `bus_iohid.c` includes `<IOKit/usb/IOUSBLib.h>`; `0004`'s includes follow it.
+
+CodeWeavers' 41303 `winebus.so` links `libinotify` (only `bus_udev.c`, which
+watches Linux's `/dev/input`, uses it; it imports none of its symbols) and has one
+more rpath. Ours is built without it, as for 41073. Every other module matches
+CodeWeavers' in exports, linked libraries, rpaths and minimum macOS.
+
+Measured on 2026-11-11 in a copy of CrossOver Preview 27.0.0.41303, with the probes
+of "The threadpool's timer thread" and "The FEX side's async I/O status":
+CodeWeavers' `ntdll.so` signals a relative timer of `rel_now - MAXLONGLONG` or
+`-MAXLONGLONG` within 100 ms on both sides, and its FEX one dies at offset 14; with
+these, neither timer is signalled, and offsets 0, 2, 13, 14 and 15 pass.
 
 | CrossOver | Sources | Wine | Intel (x86_64) | FEX (arm64) |
 |---|---|---|---|---|
 | Preview 27.0.0.41069 (20261006) | `crossover-sources-20261006.tar.gz` | 11.17 | played; see "Measured" | built, not played |
 | Preview 27.0.0.41073 (20261015) | `crossover-sources-20261015.tar.gz` | 11.17 | played; see "Measured" | built, not played |
+| Preview 27.0.0.41303 (20261111) | `crossover-sources-20261111.tar.gz` | 11.21 | built from `wine-11.21`; `0021` checked with the probe, not played | built; `0021` and `0022` checked with the probes, not played |
 | 26.3.0.39832 | `crossover-sources-26.3.0.tar.gz` | 11.0 | `0001`-`0003`, `0017` and `0018` only, built, not played: our PE imports differ from CodeWeavers' (toolchain), and our `mmdevapi.dll` also lists `winmm.dll` | no FEX side |
 
 `modules/<id>/` holds the files laid out as in `lib/wine` (`x86_64-windows`,

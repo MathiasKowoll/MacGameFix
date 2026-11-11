@@ -1,0 +1,84 @@
+--- a/dlls/mmdevapi/devenum.c
++++ b/dlls/mmdevapi/devenum.c
+@@ -449,6 +449,72 @@
+  * If GUID is null, a random guid will be assigned
+  * and the device will be created
+  */
++/* SetupAPI lists an endpoint as Windows does: a software device SWD\MMDEVAPI\<endpoint id>
++ * of the AudioEndpoint class, with the audio render or capture interface, linked while the
++ * endpoint is active. A game that looks for a pad's audio output through SetupAPI, matching
++ * its container (SPDRP_BASE_CONTAINERID) against the pad's HID device, finds it there; Nioh 3
++ * does, and stops at the first endpoint without one. The container is the driver's, as the
++ * property store gives it, or the computer's, which Windows gives a device that is part of no
++ * other, as it gives every endpoint one. The interface's path,
++ * \\?\SWD#MMDEVAPI#<endpoint id>#<interface class>, is one ActivateAudioInterfaceAsync takes. */
++static void set_setupapi_endpoint(MMDevice *dev)
++{
++    static const WCHAR endpoint_class[] = L"{c166523c-fe0c-4a94-a586-f1a80cfbbf3e}";
++    static const WCHAR render_class[] = L"{e6327cad-dcec-4949-ae8a-991e976a79d2}";
++    static const WCHAR capture_class[] = L"{2eef81be-33fa-4800-9670-1cd474972c3f}";
++    static const WCHAR computer_container[] = L"{00000000-0000-0000-FFFF-FFFFFFFFFFFF}";
++    const WCHAR *iface_class = dev->flow == eCapture ? capture_class : render_class;
++    WCHAR *id, instance[MAX_PATH], path[MAX_PATH], symlink[MAX_PATH], container[39];
++    DWORD linked = dev->state == DEVICE_STATE_ACTIVE;
++    HKEY key, refstr_key, control_key;
++    PROPVARIANT pv;
++
++    if (FAILED(IMMDevice_GetId(&dev->IMMDevice_iface, &id)))
++        return;
++    swprintf(instance, ARRAY_SIZE(instance), L"SWD\\MMDEVAPI\\%s", id);
++    swprintf(symlink, ARRAY_SIZE(symlink), L"\\\\?\\SWD#MMDEVAPI#%s#%s", id, iface_class);
++
++    swprintf(path, ARRAY_SIZE(path), L"System\\CurrentControlSet\\Enum\\%s", instance);
++    if (!RegCreateKeyExW(HKEY_LOCAL_MACHINE, path, 0, NULL, 0, KEY_WRITE, NULL, &key, NULL))
++    {
++        RegSetValueExW(key, L"ClassGUID", 0, REG_SZ, (const BYTE *)endpoint_class, sizeof(endpoint_class));
++        if (linked)
++        {
++            PropVariantInit(&pv);
++            if (SUCCEEDED(get_driver_prop_value(&dev->devguid, (const PROPERTYKEY *)&DEVPKEY_Device_ContainerId, &pv))
++                    && pv.vt == VT_CLSID && pv.puuid)
++                StringFromGUID2(pv.puuid, container, ARRAY_SIZE(container));
++            else
++                wcscpy(container, computer_container);
++            RegSetValueExW(key, L"ContainerId", 0, REG_SZ, (const BYTE *)container,
++                    (wcslen(container) + 1) * sizeof(WCHAR));
++            PropVariantClear(&pv);
++        }
++        RegCloseKey(key);
++    }
++
++    swprintf(path, ARRAY_SIZE(path), L"System\\CurrentControlSet\\Control\\DeviceClasses\\%s\\##?#SWD#MMDEVAPI#%s#%s",
++            iface_class, id, iface_class);
++    if (!RegCreateKeyExW(HKEY_LOCAL_MACHINE, path, 0, NULL, 0, KEY_WRITE, NULL, &key, NULL))
++    {
++        RegSetValueExW(key, L"DeviceInstance", 0, REG_SZ, (const BYTE *)instance, (wcslen(instance) + 1) * sizeof(WCHAR));
++        if (!RegCreateKeyExW(key, L"#", 0, NULL, 0, KEY_WRITE, NULL, &refstr_key, NULL))
++        {
++            RegSetValueExW(refstr_key, L"SymbolicLink", 0, REG_SZ, (const BYTE *)symlink,
++                    (wcslen(symlink) + 1) * sizeof(WCHAR));
++            if (!RegCreateKeyExW(refstr_key, L"Control", 0, NULL, 0, KEY_WRITE, NULL, &control_key, NULL))
++            {
++                RegSetValueExW(control_key, L"Linked", 0, REG_DWORD, (const BYTE *)&linked, sizeof(linked));
++                RegCloseKey(control_key);
++            }
++            RegCloseKey(refstr_key);
++        }
++        RegCloseKey(key);
++    }
++
++    CoTaskMemFree(id);
++}
++
+ static MMDevice *MMDevice_Create(const WCHAR *name, GUID *id, EDataFlow flow, DWORD state, BOOL setdefault)
+ {
+     HKEY key, root;
+@@ -573,6 +639,8 @@
+         RegCloseKey(key);
+     }
+ 
++    set_setupapi_endpoint(cur);
++
+     if (setdefault)
+     {
+         if (flow == eRender)
