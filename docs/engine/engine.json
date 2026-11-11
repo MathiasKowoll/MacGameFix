@@ -301,6 +301,231 @@
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/e8f89e5d37a12bc123641af93636ba2dd5c4966d/engine/patches/wine-11.17/0022-ntdll-aarch64-unaligned-iosb-status.patch"
         }
       ]
+    },
+    {
+      "wine": "11.21",
+      "patches": [
+        {
+          "name": "0001-winebus.patch",
+          "file": "engine/patches/wine-11.21/0001-winebus.patch",
+          "subject": "A USB pad's container comes from its location ID, so a game can pair it with its audio",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0001-winebus.patch"
+        },
+        {
+          "name": "0002-winecoreaudio.patch",
+          "file": "engine/patches/wine-11.21/0002-winecoreaudio.patch",
+          "subject": "The pad's audio endpoints answer DEVPKEY_Device_ContainerId with the pad's container",
+          "modules": [
+            "winecoreaudio.drv"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0002-winecoreaudio.patch"
+        },
+        {
+          "name": "0003-mmdevapi.patch",
+          "file": "engine/patches/wine-11.21/0003-mmdevapi.patch",
+          "subject": "An active endpoint's container is asked of the driver, not read from the registry",
+          "modules": [
+            "mmdevapi"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0003-mmdevapi.patch"
+        },
+        {
+          "name": "0004-winebus-bluetooth.patch",
+          "file": "engine/patches/wine-11.21/0004-winebus-bluetooth.patch",
+          "subject": "A Bluetooth DualSense or Edge is shown to the game as the same pad on a cable",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0004-winebus-bluetooth.patch"
+        },
+        {
+          "name": "0005-winecoreaudio-bluetooth.patch",
+          "file": "engine/patches/wine-11.21/0005-winecoreaudio-bluetooth.patch",
+          "subject": "A Bluetooth pad gets the audio output its wired self would have, for its haptics",
+          "modules": [
+            "winecoreaudio.drv"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0005-winecoreaudio-bluetooth.patch"
+        },
+        {
+          "name": "0006-winebus-xinput-and-triggers.patch",
+          "file": "engine/patches/wine-11.21/0006-winebus-xinput-and-triggers.patch",
+          "subject": "XInput's rumble on the pad's motors, trigger effects chosen in Game Feel, a steadier Bluetooth stream",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0006-winebus-xinput-and-triggers.patch"
+        },
+        {
+          "name": "0007-hidclass-xinput.patch",
+          "file": "engine/patches/wine-11.21/0007-hidclass-xinput.patch",
+          "subject": "A pad with a haptics collection is also offered to XInput",
+          "modules": [
+            "hidclass.sys"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0007-hidclass-xinput.patch"
+        },
+        {
+          "name": "0008-xinput-sony-order.patch",
+          "file": "engine/patches/wine-11.21/0008-xinput-sony-order.patch",
+          "subject": "XInput reads a Sony pad's own descriptor in Sony's order",
+          "modules": [
+            "xinput1_3"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0008-xinput-sony-order.patch"
+        },
+        {
+          "name": "0009-mmdevapi-setupapi-endpoints.patch",
+          "file": "engine/patches/wine-11.21/0009-mmdevapi-setupapi-endpoints.patch",
+          "subject": "Audio endpoints are listed through SetupAPI as Windows lists them, with the pad's container",
+          "modules": [
+            "mmdevapi"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0009-mmdevapi-setupapi-endpoints.patch"
+        },
+        {
+          "name": "0010-setupapi-base-containerid-wchar.patch",
+          "file": "engine/patches/wine-11.21/0010-setupapi-base-containerid-wchar.patch",
+          "subject": "SetupDiGetDeviceRegistryPropertyA returns SPDRP_BASE_CONTAINERID as a WCHAR string, as Windows does",
+          "modules": [
+            "setupapi"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0010-setupapi-base-containerid-wchar.patch"
+        },
+        {
+          "name": "0011-xaudio2-mastering-voice-device.patch",
+          "file": "engine/patches/wine-11.21/0011-xaudio2-mastering-voice-device.patch",
+          "subject": "An XAudio2 mastering voice opens the device the game names, not the default one",
+          "modules": [
+            "xaudio2_7"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0011-xaudio2-mastering-voice-device.patch"
+        },
+        {
+          "name": "0012-winecoreaudio-edge-output-name.patch",
+          "file": "engine/patches/wine-11.21/0012-winecoreaudio-edge-output-name.patch",
+          "subject": "An Edge shown as a DualSense has the DualSense's audio device on a cable too",
+          "modules": [
+            "winecoreaudio.drv"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0012-winecoreaudio-edge-output-name.patch"
+        },
+        {
+          "name": "0013-winebus-dualshock4.patch",
+          "file": "engine/patches/wine-11.21/0013-winebus-dualshock4.patch",
+          "subject": "The pad shown to a game as a USB DualShock 4 (pad_as=dualshock4)",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0013-winebus-dualshock4.patch"
+        },
+        {
+          "name": "0014-winebus-trigger-replace-and-live-settings.patch",
+          "file": "engine/patches/wine-11.21/0014-winebus-trigger-replace-and-live-settings.patch",
+          "subject": "A chosen trigger effect can replace the game's own, and Game Feel's changes reach a running game",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0014-winebus-trigger-replace-and-live-settings.patch"
+        },
+        {
+          "name": "0015-winebus-input-rate-once-a-minute.patch",
+          "file": "engine/patches/wine-11.21/0015-winebus-input-rate-once-a-minute.patch",
+          "subject": "With diagnostics on, the pad's input rate is logged once a minute, not every 2 s",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0015-winebus-input-rate-once-a-minute.patch"
+        },
+        {
+          "name": "0016-winebus-rumble-flag-0x02-keeps-the-motors.patch",
+          "file": "engine/patches/wine-11.21/0016-winebus-rumble-flag-0x02-keeps-the-motors.patch",
+          "subject": "Over Bluetooth a game report with the rumble flag 0x02 alone keeps the motors, as the pad does on a cable",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0016-winebus-rumble-flag-0x02-keeps-the-motors.patch"
+        },
+        {
+          "name": "0017-ntdll-rosetta-cpu-fidelity.patch",
+          "file": "engine/patches/wine-11.21/0017-ntdll-rosetta-cpu-fidelity.patch",
+          "subject": "Under Rosetta the CPU looks more like the x86 one copy protection checks for: CPUID leaf 7 bits on request, CLWB and RDPID, debug-register breakpoints, non-canonical faults",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0017-ntdll-rosetta-cpu-fidelity.patch"
+        },
+        {
+          "name": "0018-ntdll-d3dmetal-fallback.patch",
+          "file": "engine/patches/wine-11.21/0018-ntdll-d3dmetal-fallback.patch",
+          "subject": "A 64-bit process with CX_GRAPHICS_BACKEND=d3dmetal finds D3DMetal's DLLs first, even when CrossOver did not route it",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0018-ntdll-d3dmetal-fallback.patch"
+        },
+        {
+          "name": "0019-ntdll-rosetta-smc-cpuid.patch",
+          "file": "engine/patches/wine-11.21/0019-ntdll-rosetta-smc-cpuid.patch",
+          "subject": "Under Rosetta, a cpuid that self-modifying code wrote right before running it, which Rosetta skips and faults after, is run by ntdll",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0019-ntdll-rosetta-smc-cpuid.patch"
+        },
+        {
+          "name": "0020-ntdll-rosetta-cpuid-by-default.patch",
+          "file": "engine/patches/wine-11.21/0020-ntdll-rosetta-cpuid-by-default.patch",
+          "subject": "Rosetta's CPUID bits are on for every process unless WINE_ROSETTA_CPUID7_OR=0, and each emulated CLWB or RDPID is counted in the log",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0020-ntdll-rosetta-cpuid-by-default.patch"
+        },
+        {
+          "name": "0021-ntdll-timer-relative-overflow.patch",
+          "file": "engine/patches/wine-11.21/0021-ntdll-timer-relative-overflow.patch",
+          "subject": "A relative timer expiry near -MAXLONGLONG, which wineserver's deadline overflows on, is sent as 2^62: the threadpool's timer thread no longer spins",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0021-ntdll-timer-relative-overflow.patch"
+        },
+        {
+          "name": "0022-ntdll-aarch64-unaligned-iosb-status.patch",
+          "file": "engine/patches/wine-11.21/0022-ntdll-aarch64-unaligned-iosb-status.patch",
+          "subject": "On the FEX side, an async I/O status is stored with a barrier and a plain store instead of stlr, which faults on an OVERLAPPED that crosses 16 bytes",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0022-ntdll-aarch64-unaligned-iosb-status.patch"
+        }
+      ]
     }
   ],
   "excerpts": {
