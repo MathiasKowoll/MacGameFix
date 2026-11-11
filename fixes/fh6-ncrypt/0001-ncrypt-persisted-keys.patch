@@ -1,0 +1,303 @@
+--- a/dlls/ncrypt/Makefile.in
++++ b/dlls/ncrypt/Makefile.in
+@@ -1,6 +1,6 @@
+ IMPORTLIB = ncrypt
+ MODULE    = ncrypt.dll
+-IMPORTS   = bcrypt
++IMPORTS   = bcrypt crypt32 advapi32
+ 
+ SOURCES = \
+ 	main.c
+--- a/dlls/ncrypt/main.c
++++ b/dlls/ncrypt/main.c
+@@ -26,11 +26,21 @@
+ #include "winbase.h"
+ #include "ncrypt.h"
+ #include "bcrypt.h"
++#include "wincrypt.h"
++#include "winreg.h"
+ #include "ncrypt_internal.h"
+ #include "wine/debug.h"
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(ncrypt);
+ 
++/* As in the Windows SDK's ncrypt.h, which Wine's does not have yet. */
++#ifndef NCRYPT_MACHINE_KEY_FLAG
++#define NCRYPT_MACHINE_KEY_FLAG   0x00000020
++#endif
++#ifndef NCRYPT_OVERWRITE_KEY_FLAG
++#define NCRYPT_OVERWRITE_KEY_FLAG 0x00000080
++#endif
++
+ static SECURITY_STATUS map_ntstatus(NTSTATUS status)
+ {
+     switch (status)
+@@ -49,6 +59,112 @@
+     }
+ }
+ 
++/* Persisted keys. Windows keeps a named key in its key storage provider, so that another
++ * process can open it by name; Xbox's XAL keeps its device key that way and finds it again
++ * at every start (a new one each time makes every start a new device, which signs the user
++ * out). They are kept here in the registry, under the user's or the machine's hive, one
++ * subkey per name: the algorithm, and the private key blob protected with DPAPI. */
++static const WCHAR keys_path[] = L"Software\\Wine\\NCrypt\\Keys";
++
++static HKEY open_key_store(DWORD machine, BOOL create)
++{
++    HKEY root = machine ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER, hkey;
++    LSTATUS ret;
++
++    if (create) ret = RegCreateKeyExW(root, keys_path, 0, NULL, 0, KEY_ALL_ACCESS, NULL, &hkey, NULL);
++    else ret = RegOpenKeyExW(root, keys_path, 0, KEY_ALL_ACCESS, &hkey);
++    return ret ? NULL : hkey;
++}
++
++/* A registry key name cannot hold a backslash. */
++static WCHAR *store_name(const WCHAR *name)
++{
++    WCHAR *ret, *p;
++    if (!(ret = wcsdup(name))) return NULL;
++    for (p = ret; *p; p++) if (*p == '\\') *p = '/';
++    return ret;
++}
++
++static BOOL stored_key_exists(const WCHAR *name, DWORD machine)
++{
++    HKEY store, hkey;
++    WCHAR *sub;
++    BOOL ret = FALSE;
++
++    if (!(store = open_key_store(machine, FALSE))) return FALSE;
++    if ((sub = store_name(name)))
++    {
++        if (!RegOpenKeyExW(store, sub, 0, KEY_READ, &hkey))
++        {
++            RegCloseKey(hkey);
++            ret = TRUE;
++        }
++        free(sub);
++    }
++    RegCloseKey(store);
++    return ret;
++}
++
++static const WCHAR *private_blob_type(enum algid algid)
++{
++    switch (algid)
++    {
++    case RSA:        return BCRYPT_RSAFULLPRIVATE_BLOB;
++    case ECDSA_P256: return BCRYPT_ECCPRIVATE_BLOB;
++    default:         return NULL;
++    }
++}
++
++static SECURITY_STATUS store_key(const struct key *key)
++{
++    const WCHAR *type = private_blob_type(key->algid);
++    const WCHAR *alg = key->algid == RSA ? BCRYPT_RSA_ALGORITHM : BCRYPT_ECDSA_P256_ALGORITHM;
++    DATA_BLOB plain, sealed = {0};
++    SECURITY_STATUS ret = NTE_INTERNAL_ERROR;
++    HKEY store, hkey;
++    WCHAR *sub = NULL;
++    ULONG size;
++
++    if (!type) return NTE_NOT_SUPPORTED;
++    if (BCryptExportKey(key->bcrypt_key, NULL, type, NULL, 0, &size, 0)) return NTE_INTERNAL_ERROR;
++    if (!(plain.pbData = malloc(size))) return NTE_NO_MEMORY;
++    plain.cbData = size;
++    if (BCryptExportKey(key->bcrypt_key, NULL, type, plain.pbData, size, &size, 0)) goto done;
++    if (!CryptProtectData(&plain, NULL, NULL, NULL, NULL, CRYPTPROTECT_UI_FORBIDDEN, &sealed)) goto done;
++    if (!(store = open_key_store(key->machine, TRUE))) goto done;
++    if ((sub = store_name(key->name)) && !RegCreateKeyExW(store, sub, 0, NULL, 0, KEY_ALL_ACCESS, NULL, &hkey, NULL))
++    {
++        if (!RegSetValueExW(hkey, L"Algorithm", 0, REG_SZ, (const BYTE *)alg, (lstrlenW(alg) + 1) * sizeof(WCHAR)) &&
++            !RegSetValueExW(hkey, L"Blob", 0, REG_BINARY, sealed.pbData, sealed.cbData))
++            ret = ERROR_SUCCESS;
++        RegCloseKey(hkey);
++    }
++    RegCloseKey(store);
++done:
++    SecureZeroMemory(plain.pbData, plain.cbData);
++    free(plain.pbData);
++    LocalFree(sealed.pbData);
++    free(sub);
++    if (ret) ERR("could not keep key %s\n", wine_dbgstr_w(key->name));
++    return ret;
++}
++
++static SECURITY_STATUS unstore_key(const WCHAR *name, DWORD machine)
++{
++    HKEY store;
++    WCHAR *sub;
++    LSTATUS ret = ERROR_FILE_NOT_FOUND;
++
++    if (!(store = open_key_store(machine, FALSE))) return NTE_BAD_KEYSET;
++    if ((sub = store_name(name)))
++    {
++        ret = RegDeleteTreeW(store, sub);
++        free(sub);
++    }
++    RegCloseKey(store);
++    return ret ? NTE_BAD_KEYSET : ERROR_SUCCESS;
++}
++
+ static struct object *allocate_object(enum object_type type)
+ {
+     struct object *ret;
+@@ -180,7 +296,8 @@
+ 
+     if (!provider) return NTE_INVALID_HANDLE;
+     if (!algid) return HRESULT_FROM_WIN32(RPC_X_NULL_REF_POINTER);
+-    if (name) FIXME("Persistent keys are not supported\n");
++    if (name && !(flags & NCRYPT_OVERWRITE_KEY_FLAG) && stored_key_exists(name, flags & NCRYPT_MACHINE_KEY_FLAG))
++        return NTE_EXISTS;
+ 
+     if (!lstrcmpiW(algid, BCRYPT_RSA_ALGORITHM))
+     {
+@@ -228,6 +345,16 @@
+         return NTE_NOT_SUPPORTED;
+     }
+ 
++    if (name)
++    {
++        if (!(object->key.name = wcsdup(name)))
++        {
++            NCryptFreeObject((NCRYPT_HANDLE)object);
++            return NTE_NO_MEMORY;
++        }
++        object->key.machine = flags & NCRYPT_MACHINE_KEY_FLAG;
++    }
++
+     *key = (NCRYPT_KEY_HANDLE)object;
+     return ERROR_SUCCESS;
+ }
+@@ -242,8 +369,16 @@
+ 
+ SECURITY_STATUS WINAPI NCryptDeleteKey(NCRYPT_KEY_HANDLE key, DWORD flags)
+ {
+-    FIXME("(%#Ix, %#lx): stub\n", key, flags);
+-    return NTE_NOT_SUPPORTED;
++    struct object *object = (struct object *)key;
++    SECURITY_STATUS ret = ERROR_SUCCESS;
++
++    TRACE("(%#Ix, %#lx)\n", key, flags);
++
++    if (!object || object->type != KEY) return NTE_INVALID_HANDLE;
++    if (object->key.name) ret = unstore_key(object->key.name, object->key.machine);
++    /* The handle is freed, as on Windows, whether or not the key was stored. */
++    NCryptFreeObject(key);
++    return ret;
+ }
+ 
+ SECURITY_STATUS WINAPI NCryptEncrypt(NCRYPT_KEY_HANDLE key, BYTE *input, DWORD insize, void *padding,
+@@ -314,6 +449,7 @@
+         return map_ntstatus(status);
+     }
+ 
++    if (object->key.name) return store_key(&object->key);
+     return ERROR_SUCCESS;
+ }
+ 
+@@ -325,6 +461,7 @@
+ 
+ static SECURITY_STATUS free_key_object(struct key *key)
+ {
++    free(key->name);
+     return map_ntstatus( BCryptDestroyKey(key->bcrypt_key) );
+ }
+ 
+@@ -535,8 +672,80 @@
+ SECURITY_STATUS WINAPI NCryptOpenKey(NCRYPT_PROV_HANDLE provider, NCRYPT_KEY_HANDLE *key,
+                                      const WCHAR *name, DWORD keyspec, DWORD flags)
+ {
+-    FIXME("(%#Ix, %p, %s, %#lx, %#lx): stub\n", provider, key, wine_dbgstr_w(name), keyspec, flags);
+-    return NTE_NOT_SUPPORTED;
++    DWORD machine = flags & NCRYPT_MACHINE_KEY_FLAG, size, type, bitlen;
++    BCRYPT_ALG_HANDLE alg_handle;
++    WCHAR alg[64], *sub;
++    DATA_BLOB sealed = {0}, plain = {0};
++    struct object *object = NULL;
++    SECURITY_STATUS ret = NTE_BAD_KEYSET;
++    enum algid algid;
++    HKEY store, hkey;
++    NTSTATUS status;
++
++    TRACE("(%#Ix, %p, %s, %#lx, %#lx)\n", provider, key, wine_dbgstr_w(name), keyspec, flags);
++
++    if (!provider) return NTE_INVALID_HANDLE;
++    if (!key || !name) return NTE_INVALID_PARAMETER;
++    if (!(store = open_key_store(machine, FALSE))) return NTE_BAD_KEYSET;
++    if (!(sub = store_name(name)))
++    {
++        RegCloseKey(store);
++        return NTE_NO_MEMORY;
++    }
++    if (RegOpenKeyExW(store, sub, 0, KEY_READ, &hkey))
++    {
++        free(sub);
++        RegCloseKey(store);
++        return NTE_BAD_KEYSET;
++    }
++    free(sub);
++    RegCloseKey(store);
++
++    size = sizeof(alg);
++    if (RegQueryValueExW(hkey, L"Algorithm", NULL, &type, (BYTE *)alg, &size) || type != REG_SZ) goto done;
++    if (!lstrcmpiW(alg, BCRYPT_RSA_ALGORITHM)) { algid = RSA; alg_handle = BCRYPT_RSA_ALG_HANDLE; }
++    else if (!lstrcmpiW(alg, BCRYPT_ECDSA_P256_ALGORITHM)) { algid = ECDSA_P256; alg_handle = BCRYPT_ECDSA_P256_ALG_HANDLE; }
++    else goto done;
++    if (RegQueryValueExW(hkey, L"Blob", NULL, &type, NULL, &size) || type != REG_BINARY) goto done;
++    if (!(sealed.pbData = malloc(size))) { ret = NTE_NO_MEMORY; goto done; }
++    sealed.cbData = size;
++    if (RegQueryValueExW(hkey, L"Blob", NULL, NULL, sealed.pbData, &size)) goto done;
++    if (!CryptUnprotectData(&sealed, NULL, NULL, NULL, NULL, CRYPTPROTECT_UI_FORBIDDEN, &plain)) goto done;
++
++    if (!(object = create_key_object(algid, provider))) { ret = NTE_NO_MEMORY; goto done; }
++    status = BCryptImportKeyPair(alg_handle, NULL, private_blob_type(algid), &object->key.bcrypt_key,
++                                 plain.pbData, plain.cbData, 0);
++    if (status)
++    {
++        WARN("could not import kept key %s: %#lx\n", wine_dbgstr_w(name), status);
++        free(object);
++        object = NULL;
++        ret = map_ntstatus(status);
++        goto done;
++    }
++    bitlen = algid == RSA ? ((BCRYPT_RSAKEY_BLOB *)plain.pbData)->BitLength : 256;
++    set_object_property(object, NCRYPT_LENGTH_PROPERTY, (BYTE *)&bitlen, sizeof(bitlen));
++    set_object_property(object, BCRYPT_PUBLIC_KEY_LENGTH, (BYTE *)&bitlen, sizeof(bitlen));
++    if (!(object->key.name = wcsdup(name)))
++    {
++        NCryptFreeObject((NCRYPT_HANDLE)object);
++        object = NULL;
++        ret = NTE_NO_MEMORY;
++        goto done;
++    }
++    object->key.machine = machine;
++    *key = (NCRYPT_KEY_HANDLE)object;
++    ret = ERROR_SUCCESS;
++
++done:
++    RegCloseKey(hkey);
++    if (plain.pbData)
++    {
++        SecureZeroMemory(plain.pbData, plain.cbData);
++        LocalFree(plain.pbData);
++    }
++    free(sealed.pbData);
++    return ret;
+ }
+ 
+ SECURITY_STATUS WINAPI NCryptOpenStorageProvider(NCRYPT_PROV_HANDLE *provider, const WCHAR *name, DWORD flags)
+--- a/dlls/ncrypt/ncrypt_internal.h
++++ b/dlls/ncrypt/ncrypt_internal.h
+@@ -33,6 +33,8 @@
+ {
+     enum algid algid;
+     BCRYPT_KEY_HANDLE bcrypt_key;
++    WCHAR *name;        /* a persisted key's name, NULL for an ephemeral one */
++    DWORD machine;      /* NCRYPT_MACHINE_KEY_FLAG: kept for the machine, not the user */
+ };
+ 
+ struct storage_provider
