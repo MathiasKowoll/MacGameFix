@@ -56,7 +56,8 @@ if [ -n "$suffix" ]; then OUT="$here/.build/modules-$ID$suffix"; else OUT="$here
 # holds (41073's: ntdll.so and ntdll.dll from the overlay in sources/, with FH6's exception
 # dispatcher, which this series does not make). It is copied aside before anything here
 # removes a module folder, is not built from the series, and is put back as it was.
-BASELINE="$(sed -n 's/.*"ntdll_baseline": "\(.*\)".*/\1/p' "$OUT/built-for.json" 2>/dev/null)"
+BASELINE=""
+[ -f "$OUT/built-for.json" ] && BASELINE="$(sed -n 's/.*"ntdll_baseline": "\(.*\)".*/\1/p' "$OUT/built-for.json")"
 RETAIN="$here/.build/retained-$ID"
 PAIR="x86_64-unix/ntdll.so x86_64-windows/ntdll.dll"
 if [ -n "$BASELINE" ] && [ -z "$suffix" ]; then

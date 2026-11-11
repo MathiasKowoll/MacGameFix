@@ -1,0 +1,57 @@
+--- a/dlls/ntdll/unix/loader.c
++++ b/dlls/ntdll/unix/loader.c
+@@ -2176,6 +2176,54 @@
+         }
+     }
+ 
++    /* D3DMETAL_FALLBACK: cxcompatdb does not always route a process to D3DMetal (seen with
++     * games started by NotProton's Steam bridge), which then gets wined3d/vkd3d instead.
++     * An explicit CX_GRAPHICS_BACKEND=d3dmetal puts its DLLs first in every 64-bit process.
++     * CrossOver 27 keeps D3DMetal in lib/apple_gptk, and 3.0 in lib/apple_gptk3, chosen by
++     * CX_GRAPHICS_BACKEND_VERSION=3; 26 kept it in lib64/apple_gptk. CX_ACTIVE_GRAPHICS_BACKEND
++     * cannot tell whether the DLLs were routed: a child inherits it from the process that
++     * started it (PBZ's bootstrapper starts the game). */
++    {
++        const char *backend = getenv( "CX_GRAPHICS_BACKEND" ), *active = getenv( "CX_ACTIVE_GRAPHICS_BACKEND" );
++        const char *version = getenv( "CX_GRAPHICS_BACKEND_VERSION" );
++        const char *cx_root = getenv( "CX_ROOT" );
++        const char *dir = (version && !strcmp( version, "3" )) ? "lib/apple_gptk3" : "lib/apple_gptk";
++        char *path = NULL;
++        struct stat st;
++        unsigned int i;
++
++        if (backend && !strcmp( backend, "d3dmetal" ) && cx_root &&
++            main_image_info.Machine == IMAGE_FILE_MACHINE_AMD64 &&
++            asprintf( &path, "%s/%s/wine", cx_root, dir ) > 0)
++        {
++            if (stat( path, &st ))
++            {
++                free( path );
++                if (asprintf( &path, "%s/lib64/apple_gptk/wine", cx_root ) < 0) path = NULL;
++            }
++        }
++        if (path)
++        {
++            for (i = 0; dll_paths[i]; i++) if (!strcmp( dll_paths[i], path )) break;
++            if (dll_paths[i])
++            {
++                TRACE( "d3dmetal-fallback: %s already in the DLL path (active=%s)\n", path, active ? active : "unset" );
++                free( path );
++            }
++            else if (stat( path, &st ) || !S_ISDIR( st.st_mode ))
++            {
++                MESSAGE( "d3dmetal-fallback: %s missing, nothing done\n", path );
++                free( path );
++            }
++            else
++            {
++                prepend_dll_path( path );  /* keeps the string */
++                setenv( "CX_ACTIVE_GRAPHICS_BACKEND", "d3dmetal", 1 );
++                MESSAGE( "d3dmetal-fallback: prepended %s (active was %s)\n", path, active ? active : "unset" );
++            }
++        }
++    }
++
+     server_init_process_done();
+ }
+ 

@@ -1,0 +1,31 @@
+--- a/dlls/winebus.sys/main.c
++++ b/dlls/winebus.sys/main.c
+@@ -762,12 +762,27 @@
+     return status;
+ }
+ 
++/* On macOS a USB device's location ID, which the IOHID bus keeps as its index, names the
++ * port it is plugged into and is shared by all of its functions. winecoreaudio derives the
++ * same container from it for the device's audio endpoints, so that games can pair a
++ * controller with its audio output through DEVPKEY_Device_ContainerId, as they do on
++ * Windows. */
++static BOOL get_usb_container_id(const struct device_desc *desc, GUID *guid)
++{
++    static const GUID usb_location_base = {0, 0x27f2, 0x4948, {0x96, 0x54, 0x15, 0x28, 0x04, 0xaf, 0x63, 0x78}};
++
++    if (desc->bus_type != BUS_TYPE_USB || !desc->index) return FALSE;
++    *guid = usb_location_base;
++    guid->Data1 = desc->index;
++    return TRUE;
++}
++
+ static WCHAR *get_container_id(struct device_extension *ext)
+ {
+     WCHAR *dst;
+     GUID guid;
+ 
+-    memcpy(&guid, ext->parent_hash, sizeof(guid));
++    if (!get_usb_container_id(&ext->desc, &guid)) memcpy(&guid, ext->parent_hash, sizeof(guid));
+ 
+     if ((dst = ExAllocatePool(PagedPool, 39 * sizeof(WCHAR))))
+     {
