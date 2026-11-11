@@ -343,7 +343,7 @@
       ],
       "symptom": "After Xbox sign-in, **Continue** stays in a blurred loading screen and returns to the menu or never ends",
       "cause": "D3DMetal reports a 24-byte CBV/SRV/UAV descriptor where FH5 sizes its descriptor pool for NVIDIA's 32, among other D3D12 gaps",
-      "fix": "A source-built D3D12 proxy reports 32 and translates every handle to D3DMetal's 24; an Xbox UDP proxy keeps the online socket open",
+      "fix": "A source-built D3D12 proxy reports 32 and translates every handle to D3DMetal's 24; an Xbox UDP proxy keeps the online socket open; the prefix gets the Xbox sign-in values. The GPU identity goes in the game's Steam launch options: `NOTPROTON_ENV_D3DM_VENDOR_ID=4318 NOTPROTON_ENV_D3DM_DEVICE_ID=10118 NOTPROTON_ENV_D3DM_DEVICE_DESCRIPTION=\"NVIDIA GeForce RTX 4070\" %command%`",
       "backend": "**D3DMetal** 4, D3D12",
       "crossover": "NotProton's `crossover-27.0.0.41073-fex` runner, Steam Play prefix",
       "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Forza-Horizon-5.md",

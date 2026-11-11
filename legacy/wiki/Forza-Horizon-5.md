@@ -4,7 +4,7 @@
 | --- | --- |
 | Symptom | After Xbox sign-in, **Continue** stays in a blurred loading screen and returns to the menu or never ends |
 | Cause | D3DMetal reports a 24-byte CBV/SRV/UAV descriptor where FH5 sizes its descriptor pool for NVIDIA's 32, among other D3D12 gaps |
-| Fix | A source-built D3D12 proxy reports 32 and translates every handle to D3DMetal's 24; an Xbox UDP proxy keeps the online socket open |
+| Fix | A source-built D3D12 proxy reports 32 and translates every handle to D3DMetal's 24; an Xbox UDP proxy keeps the online socket open; the prefix gets the Xbox sign-in values. The GPU identity goes in the game's Steam launch options: `NOTPROTON_ENV_D3DM_VENDOR_ID=4318 NOTPROTON_ENV_D3DM_DEVICE_ID=10118 NOTPROTON_ENV_D3DM_DEVICE_DESCRIPTION="NVIDIA GeForce RTX 4070" %command%` |
 | Backend | **D3DMetal** 4, D3D12 |
 | CrossOver | NotProton's `crossover-27.0.0.41073-fex` runner, Steam Play prefix |
 
@@ -53,20 +53,39 @@ then proved the proxy creates its D3D12 device and passes Continue.
 
 The sign-in window is FH5's own WebView2 (Edge 91, in the game folder's
 `webview2`). Two settings were needed on this runner before the session reached
-`oauth20_desktop.srf?status=success`, both measured before the D3D12 proxy
-existed and both still in the validated profile:
+`oauth20_desktop.srf?status=success`. Both were measured before the D3D12 proxy
+existed, both were in the validated profile, and the installer writes both into
+the prefix:
 
-- `[Software\\Wine\\AppDefaults\\msedgewebview2.exe]` with
-  `"Version"="win7"` in the prefix's `user.reg`. Without it a NULL `+0x30` read
-  in a WebView2 window message ends the session right after login.
-- `--disable-features=CalculateNativeWinOcclusion` in
-  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` (with NotProton's `NOTPROTON_ENV_`
-  prefix). `--disable-gpu` instead turns the login page black.
+- WebView2 as Windows 7: `"Version"="win7"` under
+  `HKCU\Software\Wine\AppDefaults\msedgewebview2.exe`. Without it a NULL
+  `+0x30` read in a WebView2 window message ends the session right after login.
+- `--disable-features=CalculateNativeWinOcclusion` as WebView2's extra browser
+  arguments. `--disable-gpu` instead turns the login page black. Edge 91 reads
+  these from `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` and also from the policy
+  key `HKCU\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments`,
+  by the host executable's name (both names are in its
+  `EmbeddedBrowserWebView.dll`). The installer writes
+  `"ForzaHorizon5.exe"` there, so the launch option is no longer needed.
 
-The installer prints the variable but does not write the registry value yet.
-Whether either is still needed once the account is signed in is not measured.
-The reference setup used both only for a one-time sign-in through DevTools and
-then removed them.
+A value found there before is kept in the prefix's `.mgf-fh5-signin` and put
+back by `--restore`. Whether either is still needed once the account is signed
+in is not measured. The reference setup used both only for a one-time sign-in
+through DevTools and then removed them.
+
+The GPU identity (`D3DM_VENDOR_ID`, `D3DM_DEVICE_ID`,
+`D3DM_DEVICE_DESCRIPTION`) is a different case. D3DMetal reads it inside
+`D3DMetal.framework`, with the native environment, so no registry value reaches
+it and it stays a launch option. The complete Steam launch options of the
+validated profile are:
+
+```text
+NOTPROTON_ENV_D3DM_VENDOR_ID=4318 NOTPROTON_ENV_D3DM_DEVICE_ID=10118 NOTPROTON_ENV_D3DM_DEVICE_DESCRIPTION="NVIDIA GeForce RTX 4070" %command%
+```
+
+In a CrossOver bottle the same three go without the `NOTPROTON_ENV_` prefix, as
+the bottle's environment variables. The reference setup used them to pass the
+game's GPU checks; running without them has not been tried here.
 
 ## Online socket
 
@@ -109,7 +128,7 @@ known-working profile yet.
   open.
 - Test whether the NVIDIA identity variables can be reduced without bringing
   back FH302 or the loading failure.
-- Decide whether the installer writes the Windows 7 WebView2 value itself.
+- Sign in with the WebView2 launch option removed, to prove the policy key alone.
 
 ## Credits
 
