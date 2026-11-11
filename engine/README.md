@@ -510,8 +510,18 @@ others change what Rosetta shows a game or route a process to D3DMetal, which th
 FEX side does not have. On 41073's Intel side the `ntdll.so` and `ntdll.dll` are the
 retained FH6 pair instead (see "Forza preview baseline" below): `built-for.json` names it
 in `ntdll_baseline`, and `build.sh` keeps it as it is and does not build that side's
-`ntdll.so` from the series. 41303 has no retained pair yet: its Intel `ntdll.so` is the
-series' own (`0017`-`0022`), without FH6's dispatcher.
+`ntdll.so` from the series. 41303 has no retained pair: its Intel `ntdll.so` and
+`ntdll.dll` are built from the series, whose `0023` is the 41073 pair's dispatcher
+ported (`NTDLL_DLL=yes` in `build.conf` makes `build.sh` ship `ntdll.dll` too).
+
+`0023` is the difference between the 41073 pair's source (`Wine-11.17-FH6-corresponding-source`)
+and 11.17 with `0001`-`0021`: FH6's opt-in exception dispatcher, gated on
+`forzahorizon6.exe`'s headers and `WINE_SOFTWARE_EXCEPTION_CHAIN`, its counters, and
+NotProton's Steam client bridge (`notproton_bridge_observer.h`, from NotProton's
+`ntdll-patch/detour.c`, reading `WINE_MODREF` by field rather than by offset). On
+11.21 every hunk applied but one, a mark before `send_debug_event`, which lost an
+argument. The `ntdll.so` exports what CodeWeavers' does; the `ntdll.dll` adds the
+dispatcher's nine `__wine_` diagnostic exports and lacks none.
 
 ### Wine 11.21 (41303)
 

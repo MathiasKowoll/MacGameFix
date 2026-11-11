@@ -2,15 +2,25 @@
 # ntdll is owned by the existing Rosetta improvement, never a new section.
 # SPDX-License-Identifier: GPL-3.0-or-later
 MODULES="${MGVF_MODULES:-$HERE}"
-NT_DLL="$MODULES/engine-27.0.0.41073-x86_64-windows-ntdll.dll"
-NT_UNIX="$MODULES/engine-27.0.0.41073-x86_64-unix-ntdll.so"
-BASELINE_PE=1705a2489f759893865b1ea45343a066184308eb7826eb830cde56fc148fc02d
-BASELINE_UNIX=dd6ef76ff8d51da5e2d246bdb7432a6c0b110668d742b1937e82ffcbb05d3ea0
 GAME_SHA=63791d0b686186c23ade10a1ae02efd785045bd818cc89816f472cad9a69fcb9
 fh6sha() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1; }
-fh6_pe_ok() { [ -f "$1" ] && [ "$(fh6sha "$1")" = "$BASELINE_PE" ]; }
+# The NotProton runners whose Wine modules carry FH6's ntdll pair (ntdll.so with ntdll.dll):
+# Preview 41073's, the retained baseline, and 41303's, the same dispatcher built from
+# engine/patches/wine-11.21's 0023. The pair is the one the modules catalog has for that
+# build. On 41073 the installed baseline's ad hoc ntdll.so is accepted as well.
+case "$RUNNER" in
+  */runners/crossover-27.0.0.41073/CrossOver|*/runners/crossover-27.0.0.41073-fex/CrossOver) FH6_BUILD=27.0.0.41073 ;;
+  */runners/crossover-27.0.0.41303/CrossOver|*/runners/crossover-27.0.0.41303-fex/CrossOver) FH6_BUILD=27.0.0.41303 ;;
+  *) FH6_BUILD="" ;;
+esac
+NT_DLL="$MODULES/engine-${FH6_BUILD:-none}-x86_64-windows-ntdll.dll"
+NT_UNIX="$MODULES/engine-${FH6_BUILD:-none}-x86_64-unix-ntdll.so"
+BASELINE_PE="$(fh6sha "$NT_DLL")"
+BASELINE_UNIX=""
+[ "$FH6_BUILD" = 27.0.0.41073 ] && BASELINE_UNIX=dd6ef76ff8d51da5e2d246bdb7432a6c0b110668d742b1937e82ffcbb05d3ea0
+fh6_pe_ok() { [ -f "$1" ] && [ -n "$BASELINE_PE" ] && [ "$(fh6sha "$1")" = "$BASELINE_PE" ]; }
 fh6_unix_ok() {
-  [ -f "$1" ] && { [ "$(fh6sha "$1")" = "$BASELINE_UNIX" ] || { [ -f "$NT_UNIX" ] && cmp -s "$1" "$NT_UNIX"; }; }
+  [ -f "$1" ] && { { [ -n "$BASELINE_UNIX" ] && [ "$(fh6sha "$1")" = "$BASELINE_UNIX" ]; } || { [ -f "$NT_UNIX" ] && cmp -s "$1" "$NT_UNIX"; }; }
 }
 fh6_runtime_ok() {
   local root="${CLONE:-$RUNNER}"
@@ -18,8 +28,8 @@ fh6_runtime_ok() {
 }
 fh6_options() { /usr/bin/perl "$HERE/fh6-launch-options.pl" "$1" "$PFX"; }
 fh6_preflight() {
-  case "$RUNNER" in */runners/crossover-27.0.0.41073/CrossOver|*/runners/crossover-27.0.0.41073-fex/CrossOver) ;; *)
-    echo 'error: FH6 WIP requires the standard NotProton CrossOver 27.0.0.41073 runner using Rosetta.' >&2; return 1 ;; esac
+  [ -n "$FH6_BUILD" ] || {
+    echo 'error: FH6 WIP requires the standard NotProton runner for CrossOver Preview 27.0.0.41073 or 27.0.0.41303, using Rosetta.' >&2; return 1; }
   [ "$(fh6sha "$GAME/forzahorizon6.exe")" = "$GAME_SHA" ] || { echo 'error: this FH6 executable has not been validated for the WIP runtime. Nothing changed.' >&2; return 1; }
   fh6_pe_ok "$NT_DLL" && [ -f "$NT_UNIX" ] || { echo 'error: download this prerelease’s Wine modules in Improvements first.' >&2; return 1; }
   # All runtime copies must be backed up before an update. Unknown copies are not overwritten.

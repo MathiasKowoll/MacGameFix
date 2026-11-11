@@ -1,0 +1,1772 @@
+--- /dev/null
++++ b/dlls/ntdll/arithmetic_impl.inc
+@@ -0,0 +1,217 @@
++/* Execute register-only arithmetic on temporary values. Seed only arithmetic
++ * flags: never load guest TF/DF/IF or other control bits into the host handler.
++ * The operation and PUSHFQ materialization run in one asm block so undefined
++ * arithmetic bits follow this x86 runtime too, rather than invented C values.
++ * No guest context effects are committed until the existing jump/target checks
++ * succeed. Unsupported widths, memory operands, stack writes and prefixes fall
++ * back unchanged. */
++static void software_bridge_alu(unsigned int operation,unsigned int width,
++                                ULONG64 left,ULONG64 right,DWORD initial_flags,
++                                ULONG64 *result,DWORD *flags)
++{
++    ULONG64 seed, observed;
++    __asm__ volatile("pushfq; popq %0" : "=r"(seed) :: "memory");
++    seed=(seed & ~(ULONG64)0x8d5) | (initial_flags & 0x8d5);
++#define ALU_ASM(insn,suffix,operand) \
++    __asm__ volatile("pushq %[seed]; popfq; " insn suffix " " operand "; pushfq; popq %[flags]" \
++                     : [left] "+&r"(left), [flags] "=&r"(observed) \
++                     : [right] "r"(right), [seed] "r"(seed) : "cc","memory")
++#define ALU_CASE(op,insn) case op: if(width==64){ALU_ASM(insn,"q","%[right],%[left]");} \
++                                  else{ALU_ASM(insn,"l","%k[right],%k[left]");} break
++    switch(operation)
++    {
++        ALU_CASE(0,"add"); ALU_CASE(1,"or"); ALU_CASE(4,"and");
++        ALU_CASE(5,"sub"); ALU_CASE(6,"xor"); ALU_CASE(7,"cmp");
++        ALU_CASE(8,"test");
++        case 9:
++            if(width==64)
++                __asm__ volatile("pushq %[seed]; popfq; shrq %%cl,%[left]; pushfq; popq %[flags]"
++                    : [left] "+&r"(left),[flags] "=&r"(observed)
++                    : "c"(right),[seed] "r"(seed) : "cc","memory");
++            else
++                __asm__ volatile("pushq %[seed]; popfq; shrl %%cl,%k[left]; pushfq; popq %[flags]"
++                    : [left] "+&r"(left),[flags] "=&r"(observed)
++                    : "c"(right),[seed] "r"(seed) : "cc","memory");
++            break;
++        /* Rosetta can materialize undefined OF differently for immediate
++         * versus CL shifts. Execute the original immediate form, including
++         * its complete imm8 value; do not substitute a CL instruction. */
++        case 10:
++#define SHIFT_IMM(n) case n: \
++            if(width==64) \
++                __asm__ volatile("pushq %[seed]; popfq; shrq $" #n ",%[left]; pushfq; popq %[flags]" \
++                    : [left] "+&r"(left),[flags] "=&r"(observed) : [seed] "r"(seed) : "cc","memory"); \
++            else \
++                __asm__ volatile("pushq %[seed]; popfq; shrl $" #n ",%k[left]; pushfq; popq %[flags]" \
++                    : [left] "+&r"(left),[flags] "=&r"(observed) : [seed] "r"(seed) : "cc","memory"); \
++            break
++            switch((unsigned int)right & 255)
++            {
++                SHIFT_IMM(0); SHIFT_IMM(1); SHIFT_IMM(2); SHIFT_IMM(3); SHIFT_IMM(4); SHIFT_IMM(5); SHIFT_IMM(6); SHIFT_IMM(7);
++                SHIFT_IMM(8); SHIFT_IMM(9); SHIFT_IMM(10); SHIFT_IMM(11); SHIFT_IMM(12); SHIFT_IMM(13); SHIFT_IMM(14); SHIFT_IMM(15);
++                SHIFT_IMM(16); SHIFT_IMM(17); SHIFT_IMM(18); SHIFT_IMM(19); SHIFT_IMM(20); SHIFT_IMM(21); SHIFT_IMM(22); SHIFT_IMM(23);
++                SHIFT_IMM(24); SHIFT_IMM(25); SHIFT_IMM(26); SHIFT_IMM(27); SHIFT_IMM(28); SHIFT_IMM(29); SHIFT_IMM(30); SHIFT_IMM(31);
++                SHIFT_IMM(32); SHIFT_IMM(33); SHIFT_IMM(34); SHIFT_IMM(35); SHIFT_IMM(36); SHIFT_IMM(37); SHIFT_IMM(38); SHIFT_IMM(39);
++                SHIFT_IMM(40); SHIFT_IMM(41); SHIFT_IMM(42); SHIFT_IMM(43); SHIFT_IMM(44); SHIFT_IMM(45); SHIFT_IMM(46); SHIFT_IMM(47);
++                SHIFT_IMM(48); SHIFT_IMM(49); SHIFT_IMM(50); SHIFT_IMM(51); SHIFT_IMM(52); SHIFT_IMM(53); SHIFT_IMM(54); SHIFT_IMM(55);
++                SHIFT_IMM(56); SHIFT_IMM(57); SHIFT_IMM(58); SHIFT_IMM(59); SHIFT_IMM(60); SHIFT_IMM(61); SHIFT_IMM(62); SHIFT_IMM(63);
++                SHIFT_IMM(64); SHIFT_IMM(65); SHIFT_IMM(66); SHIFT_IMM(67); SHIFT_IMM(68); SHIFT_IMM(69); SHIFT_IMM(70); SHIFT_IMM(71);
++                SHIFT_IMM(72); SHIFT_IMM(73); SHIFT_IMM(74); SHIFT_IMM(75); SHIFT_IMM(76); SHIFT_IMM(77); SHIFT_IMM(78); SHIFT_IMM(79);
++                SHIFT_IMM(80); SHIFT_IMM(81); SHIFT_IMM(82); SHIFT_IMM(83); SHIFT_IMM(84); SHIFT_IMM(85); SHIFT_IMM(86); SHIFT_IMM(87);
++                SHIFT_IMM(88); SHIFT_IMM(89); SHIFT_IMM(90); SHIFT_IMM(91); SHIFT_IMM(92); SHIFT_IMM(93); SHIFT_IMM(94); SHIFT_IMM(95);
++                SHIFT_IMM(96); SHIFT_IMM(97); SHIFT_IMM(98); SHIFT_IMM(99); SHIFT_IMM(100); SHIFT_IMM(101); SHIFT_IMM(102); SHIFT_IMM(103);
++                SHIFT_IMM(104); SHIFT_IMM(105); SHIFT_IMM(106); SHIFT_IMM(107); SHIFT_IMM(108); SHIFT_IMM(109); SHIFT_IMM(110); SHIFT_IMM(111);
++                SHIFT_IMM(112); SHIFT_IMM(113); SHIFT_IMM(114); SHIFT_IMM(115); SHIFT_IMM(116); SHIFT_IMM(117); SHIFT_IMM(118); SHIFT_IMM(119);
++                SHIFT_IMM(120); SHIFT_IMM(121); SHIFT_IMM(122); SHIFT_IMM(123); SHIFT_IMM(124); SHIFT_IMM(125); SHIFT_IMM(126); SHIFT_IMM(127);
++                SHIFT_IMM(128); SHIFT_IMM(129); SHIFT_IMM(130); SHIFT_IMM(131); SHIFT_IMM(132); SHIFT_IMM(133); SHIFT_IMM(134); SHIFT_IMM(135);
++                SHIFT_IMM(136); SHIFT_IMM(137); SHIFT_IMM(138); SHIFT_IMM(139); SHIFT_IMM(140); SHIFT_IMM(141); SHIFT_IMM(142); SHIFT_IMM(143);
++                SHIFT_IMM(144); SHIFT_IMM(145); SHIFT_IMM(146); SHIFT_IMM(147); SHIFT_IMM(148); SHIFT_IMM(149); SHIFT_IMM(150); SHIFT_IMM(151);
++                SHIFT_IMM(152); SHIFT_IMM(153); SHIFT_IMM(154); SHIFT_IMM(155); SHIFT_IMM(156); SHIFT_IMM(157); SHIFT_IMM(158); SHIFT_IMM(159);
++                SHIFT_IMM(160); SHIFT_IMM(161); SHIFT_IMM(162); SHIFT_IMM(163); SHIFT_IMM(164); SHIFT_IMM(165); SHIFT_IMM(166); SHIFT_IMM(167);
++                SHIFT_IMM(168); SHIFT_IMM(169); SHIFT_IMM(170); SHIFT_IMM(171); SHIFT_IMM(172); SHIFT_IMM(173); SHIFT_IMM(174); SHIFT_IMM(175);
++                SHIFT_IMM(176); SHIFT_IMM(177); SHIFT_IMM(178); SHIFT_IMM(179); SHIFT_IMM(180); SHIFT_IMM(181); SHIFT_IMM(182); SHIFT_IMM(183);
++                SHIFT_IMM(184); SHIFT_IMM(185); SHIFT_IMM(186); SHIFT_IMM(187); SHIFT_IMM(188); SHIFT_IMM(189); SHIFT_IMM(190); SHIFT_IMM(191);
++                SHIFT_IMM(192); SHIFT_IMM(193); SHIFT_IMM(194); SHIFT_IMM(195); SHIFT_IMM(196); SHIFT_IMM(197); SHIFT_IMM(198); SHIFT_IMM(199);
++                SHIFT_IMM(200); SHIFT_IMM(201); SHIFT_IMM(202); SHIFT_IMM(203); SHIFT_IMM(204); SHIFT_IMM(205); SHIFT_IMM(206); SHIFT_IMM(207);
++                SHIFT_IMM(208); SHIFT_IMM(209); SHIFT_IMM(210); SHIFT_IMM(211); SHIFT_IMM(212); SHIFT_IMM(213); SHIFT_IMM(214); SHIFT_IMM(215);
++                SHIFT_IMM(216); SHIFT_IMM(217); SHIFT_IMM(218); SHIFT_IMM(219); SHIFT_IMM(220); SHIFT_IMM(221); SHIFT_IMM(222); SHIFT_IMM(223);
++                SHIFT_IMM(224); SHIFT_IMM(225); SHIFT_IMM(226); SHIFT_IMM(227); SHIFT_IMM(228); SHIFT_IMM(229); SHIFT_IMM(230); SHIFT_IMM(231);
++                SHIFT_IMM(232); SHIFT_IMM(233); SHIFT_IMM(234); SHIFT_IMM(235); SHIFT_IMM(236); SHIFT_IMM(237); SHIFT_IMM(238); SHIFT_IMM(239);
++                SHIFT_IMM(240); SHIFT_IMM(241); SHIFT_IMM(242); SHIFT_IMM(243); SHIFT_IMM(244); SHIFT_IMM(245); SHIFT_IMM(246); SHIFT_IMM(247);
++                SHIFT_IMM(248); SHIFT_IMM(249); SHIFT_IMM(250); SHIFT_IMM(251); SHIFT_IMM(252); SHIFT_IMM(253); SHIFT_IMM(254); SHIFT_IMM(255);
++            }
++#undef SHIFT_IMM
++            break;
++        case 11:
++            if(width==64)
++                __asm__ volatile("pushq %[seed]; popfq; shlq %%cl,%[left]; pushfq; popq %[flags]"
++                    : [left] "+&r"(left),[flags] "=&r"(observed)
++                    : "c"(right),[seed] "r"(seed) : "cc","memory");
++            else
++                __asm__ volatile("pushq %[seed]; popfq; shll %%cl,%k[left]; pushfq; popq %[flags]"
++                    : [left] "+&r"(left),[flags] "=&r"(observed)
++                    : "c"(right),[seed] "r"(seed) : "cc","memory");
++            break;
++        /* Rosetta can materialize undefined OF differently for immediate
++         * versus CL shifts. Execute the original immediate form, including
++         * its complete imm8 value; do not substitute a CL instruction. */
++        case 12:
++#define SHIFT_IMM(n) case n: \
++            if(width==64) \
++                __asm__ volatile("pushq %[seed]; popfq; shlq $" #n ",%[left]; pushfq; popq %[flags]" \
++                    : [left] "+&r"(left),[flags] "=&r"(observed) : [seed] "r"(seed) : "cc","memory"); \
++            else \
++                __asm__ volatile("pushq %[seed]; popfq; shll $" #n ",%k[left]; pushfq; popq %[flags]" \
++                    : [left] "+&r"(left),[flags] "=&r"(observed) : [seed] "r"(seed) : "cc","memory"); \
++            break
++            switch((unsigned int)right & 255)
++            {
++                SHIFT_IMM(0); SHIFT_IMM(1); SHIFT_IMM(2); SHIFT_IMM(3); SHIFT_IMM(4); SHIFT_IMM(5); SHIFT_IMM(6); SHIFT_IMM(7);
++                SHIFT_IMM(8); SHIFT_IMM(9); SHIFT_IMM(10); SHIFT_IMM(11); SHIFT_IMM(12); SHIFT_IMM(13); SHIFT_IMM(14); SHIFT_IMM(15);
++                SHIFT_IMM(16); SHIFT_IMM(17); SHIFT_IMM(18); SHIFT_IMM(19); SHIFT_IMM(20); SHIFT_IMM(21); SHIFT_IMM(22); SHIFT_IMM(23);
++                SHIFT_IMM(24); SHIFT_IMM(25); SHIFT_IMM(26); SHIFT_IMM(27); SHIFT_IMM(28); SHIFT_IMM(29); SHIFT_IMM(30); SHIFT_IMM(31);
++                SHIFT_IMM(32); SHIFT_IMM(33); SHIFT_IMM(34); SHIFT_IMM(35); SHIFT_IMM(36); SHIFT_IMM(37); SHIFT_IMM(38); SHIFT_IMM(39);
++                SHIFT_IMM(40); SHIFT_IMM(41); SHIFT_IMM(42); SHIFT_IMM(43); SHIFT_IMM(44); SHIFT_IMM(45); SHIFT_IMM(46); SHIFT_IMM(47);
++                SHIFT_IMM(48); SHIFT_IMM(49); SHIFT_IMM(50); SHIFT_IMM(51); SHIFT_IMM(52); SHIFT_IMM(53); SHIFT_IMM(54); SHIFT_IMM(55);
++                SHIFT_IMM(56); SHIFT_IMM(57); SHIFT_IMM(58); SHIFT_IMM(59); SHIFT_IMM(60); SHIFT_IMM(61); SHIFT_IMM(62); SHIFT_IMM(63);
++                SHIFT_IMM(64); SHIFT_IMM(65); SHIFT_IMM(66); SHIFT_IMM(67); SHIFT_IMM(68); SHIFT_IMM(69); SHIFT_IMM(70); SHIFT_IMM(71);
++                SHIFT_IMM(72); SHIFT_IMM(73); SHIFT_IMM(74); SHIFT_IMM(75); SHIFT_IMM(76); SHIFT_IMM(77); SHIFT_IMM(78); SHIFT_IMM(79);
++                SHIFT_IMM(80); SHIFT_IMM(81); SHIFT_IMM(82); SHIFT_IMM(83); SHIFT_IMM(84); SHIFT_IMM(85); SHIFT_IMM(86); SHIFT_IMM(87);
++                SHIFT_IMM(88); SHIFT_IMM(89); SHIFT_IMM(90); SHIFT_IMM(91); SHIFT_IMM(92); SHIFT_IMM(93); SHIFT_IMM(94); SHIFT_IMM(95);
++                SHIFT_IMM(96); SHIFT_IMM(97); SHIFT_IMM(98); SHIFT_IMM(99); SHIFT_IMM(100); SHIFT_IMM(101); SHIFT_IMM(102); SHIFT_IMM(103);
++                SHIFT_IMM(104); SHIFT_IMM(105); SHIFT_IMM(106); SHIFT_IMM(107); SHIFT_IMM(108); SHIFT_IMM(109); SHIFT_IMM(110); SHIFT_IMM(111);
++                SHIFT_IMM(112); SHIFT_IMM(113); SHIFT_IMM(114); SHIFT_IMM(115); SHIFT_IMM(116); SHIFT_IMM(117); SHIFT_IMM(118); SHIFT_IMM(119);
++                SHIFT_IMM(120); SHIFT_IMM(121); SHIFT_IMM(122); SHIFT_IMM(123); SHIFT_IMM(124); SHIFT_IMM(125); SHIFT_IMM(126); SHIFT_IMM(127);
++                SHIFT_IMM(128); SHIFT_IMM(129); SHIFT_IMM(130); SHIFT_IMM(131); SHIFT_IMM(132); SHIFT_IMM(133); SHIFT_IMM(134); SHIFT_IMM(135);
++                SHIFT_IMM(136); SHIFT_IMM(137); SHIFT_IMM(138); SHIFT_IMM(139); SHIFT_IMM(140); SHIFT_IMM(141); SHIFT_IMM(142); SHIFT_IMM(143);
++                SHIFT_IMM(144); SHIFT_IMM(145); SHIFT_IMM(146); SHIFT_IMM(147); SHIFT_IMM(148); SHIFT_IMM(149); SHIFT_IMM(150); SHIFT_IMM(151);
++                SHIFT_IMM(152); SHIFT_IMM(153); SHIFT_IMM(154); SHIFT_IMM(155); SHIFT_IMM(156); SHIFT_IMM(157); SHIFT_IMM(158); SHIFT_IMM(159);
++                SHIFT_IMM(160); SHIFT_IMM(161); SHIFT_IMM(162); SHIFT_IMM(163); SHIFT_IMM(164); SHIFT_IMM(165); SHIFT_IMM(166); SHIFT_IMM(167);
++                SHIFT_IMM(168); SHIFT_IMM(169); SHIFT_IMM(170); SHIFT_IMM(171); SHIFT_IMM(172); SHIFT_IMM(173); SHIFT_IMM(174); SHIFT_IMM(175);
++                SHIFT_IMM(176); SHIFT_IMM(177); SHIFT_IMM(178); SHIFT_IMM(179); SHIFT_IMM(180); SHIFT_IMM(181); SHIFT_IMM(182); SHIFT_IMM(183);
++                SHIFT_IMM(184); SHIFT_IMM(185); SHIFT_IMM(186); SHIFT_IMM(187); SHIFT_IMM(188); SHIFT_IMM(189); SHIFT_IMM(190); SHIFT_IMM(191);
++                SHIFT_IMM(192); SHIFT_IMM(193); SHIFT_IMM(194); SHIFT_IMM(195); SHIFT_IMM(196); SHIFT_IMM(197); SHIFT_IMM(198); SHIFT_IMM(199);
++                SHIFT_IMM(200); SHIFT_IMM(201); SHIFT_IMM(202); SHIFT_IMM(203); SHIFT_IMM(204); SHIFT_IMM(205); SHIFT_IMM(206); SHIFT_IMM(207);
++                SHIFT_IMM(208); SHIFT_IMM(209); SHIFT_IMM(210); SHIFT_IMM(211); SHIFT_IMM(212); SHIFT_IMM(213); SHIFT_IMM(214); SHIFT_IMM(215);
++                SHIFT_IMM(216); SHIFT_IMM(217); SHIFT_IMM(218); SHIFT_IMM(219); SHIFT_IMM(220); SHIFT_IMM(221); SHIFT_IMM(222); SHIFT_IMM(223);
++                SHIFT_IMM(224); SHIFT_IMM(225); SHIFT_IMM(226); SHIFT_IMM(227); SHIFT_IMM(228); SHIFT_IMM(229); SHIFT_IMM(230); SHIFT_IMM(231);
++                SHIFT_IMM(232); SHIFT_IMM(233); SHIFT_IMM(234); SHIFT_IMM(235); SHIFT_IMM(236); SHIFT_IMM(237); SHIFT_IMM(238); SHIFT_IMM(239);
++                SHIFT_IMM(240); SHIFT_IMM(241); SHIFT_IMM(242); SHIFT_IMM(243); SHIFT_IMM(244); SHIFT_IMM(245); SHIFT_IMM(246); SHIFT_IMM(247);
++                SHIFT_IMM(248); SHIFT_IMM(249); SHIFT_IMM(250); SHIFT_IMM(251); SHIFT_IMM(252); SHIFT_IMM(253); SHIFT_IMM(254); SHIFT_IMM(255);
++            }
++#undef SHIFT_IMM
++            break;
++        default: *result=left;*flags=initial_flags;return;
++    }
++    *result=left;*flags=(initial_flags & ~0x8d5) | (observed & 0x8d5);
++#undef ALU_CASE
++#undef ALU_ASM
++}
++static BOOL software_bridge_arithmetic(const BYTE *code,CONTEXT *c,struct software_bridge_effect *e)
++{
++    unsigned int p=0,rex=0,op,m,reg,rm,width,operation=0,dst=0,no_write=0;
++    ULONG64 left=0,right=0;LONG imm32; signed char imm8;
++    memset(e,0,sizeof(*e));
++    if(code[p]>=0x40 && code[p]<=0x4f)rex=code[p++];
++    width=(rex&8)?64:32;op=code[p++];
++    if(op>=0xb8 && op<=0xbf)
++    {
++        dst=op-0xb8+((rex&1)?8:0);if(dst==4 || (rex&6))return FALSE;
++        if(width==64){memcpy(&e->value[0],code+p,8);p+=8;}
++        else{ULONG value;memcpy(&value,code+p,4);e->value[0]=value;p+=4;}
++        e->dst=dst;e->length=p;return TRUE;
++    }
++    if(op==0x81 || op==0x83 || op==0xc1 || op==0xd3 || op==0xf7)
++    {
++        m=code[p++];if((m&0xc0)!=0xc0 || (rex&6))return FALSE;
++        operation=(m>>3)&7;dst=(m&7)+((rex&1)?8:0);
++        no_write=(op==0x81 || op==0x83) && operation==7;
++        if(dst==4 && !no_write)return FALSE;
++        left=*software_bridge_gpr(c,dst);
++        if(op==0xf7)
++        {
++            if(operation!=2)return FALSE;
++            e->value[0]=width==64?~left:(ULONG)~left;e->dst=dst;e->length=p;return TRUE;
++        }
++        if(op==0xc1 || op==0xd3)
++        {
++            if(operation!=4 && operation!=5)return FALSE;
++            operation=operation==4?(op==0xc1?12:11):(op==0xc1?10:9);
++            right=op==0xc1?code[p++]:c->Rcx;
++        }
++        else
++        {
++            if(operation==2 || operation==3)return FALSE;
++            if(op==0x83){memcpy(&imm8,code+p,1);p++;right=(LONG64)imm8;}
++            else{memcpy(&imm32,code+p,4);p+=4;right=(LONG64)imm32;}
++        }
++    }
++    else if(op==0x05 || op==0x0d || op==0x25 || op==0x2d || op==0x35 || op==0x3d)
++    {
++        if(rex&7)return FALSE;
++        operation=(op>>3)&7;dst=0;no_write=operation==7;left=c->Rax;
++        memcpy(&imm32,code+p,4);p+=4;right=(LONG64)imm32;
++    }
++    else
++    {
++        switch(op)
++        {
++            case 0x01:case 0x03:operation=0;break;
++            case 0x09:case 0x0b:operation=1;break;
++            case 0x21:case 0x23:operation=4;break;
++            case 0x29:case 0x2b:operation=5;break;
++            case 0x31:case 0x33:operation=6;break;
++            case 0x39:case 0x3b:operation=7;no_write=1;break;
++            case 0x85:operation=8;no_write=1;break;
++            default:return FALSE;
++        }
++        m=code[p++];if((m&0xc0)!=0xc0 || (rex&2))return FALSE;
++        reg=((m>>3)&7)+((rex&4)?8:0);rm=(m&7)+((rex&1)?8:0);
++        dst=(op&2)?reg:rm;right=*software_bridge_gpr(c,(op&2)?rm:reg);
++        if(dst==4 && !no_write)return FALSE;
++        left=*software_bridge_gpr(c,dst);
++    }
++    e->dst=dst;e->length=p;e->no_write=no_write;e->flags_valid=1;
++    software_bridge_alu(operation,width,left,right,c->EFlags,&e->value[0],&e->flags);
++    return TRUE;
++}
+--- a/dlls/ntdll/exception.c
++++ b/dlls/ntdll/exception.c
+@@ -236,6 +236,8 @@
+ /*******************************************************************
+  *		dispatch_exception
+  */
++#include "software_exception_chain.h"
++
+ NTSTATUS WINAPI dispatch_exception( EXCEPTION_RECORD *rec, CONTEXT *context )
+ {
+     NTSTATUS status;
+@@ -293,6 +295,14 @@
+         TRACE( " info[%ld]=%p\n", i, (void *)rec->ExceptionInformation[i] );
+     TRACE_CONTEXT( context );
+ 
++#if defined(__x86_64__) && !defined(__arm64ec__)
++    if (rec->ExceptionCode == EXCEPTION_ILLEGAL_INSTRUCTION && software_chain_enabled())
++    {
++        if (call_vectored_handlers_with_chain(rec, context) == EXCEPTION_CONTINUE_EXECUTION)
++            NtContinue(context, FALSE);
++    }
++    else
++#endif
+     if (call_vectored_handlers( rec, context ) == EXCEPTION_CONTINUE_EXECUTION)
+         NtContinue( context, FALSE );
+ 
+--- /dev/null
++++ b/dlls/ntdll/exception_observer.h
+@@ -0,0 +1,82 @@
++/* Local, bounded diagnostic. Observes dispatch without changing exception semantics.
++ * No game instruction, exception status or supplied CONTEXT is modified. */
++#if defined(__x86_64__) && !defined(__arm64ec__)
++static LONG observation_enabled = -1;
++static void *observation_sites[32];
++static LONG observation_counts[32];
++static LONG observation_sequence;
++
++static LONG observation_begin(EXCEPTION_RECORD *rec)
++{
++    unsigned i;
++    if (rec->ExceptionCode != STATUS_ILLEGAL_INSTRUCTION &&
++        rec->ExceptionCode != STATUS_PRIVILEGED_INSTRUCTION) return 0;
++    if (observation_enabled == -1)
++    {
++        WCHAR buffer[4];
++        UNICODE_STRING key, value;
++        RtlInitUnicodeString(&key, L"FH6_EXCEPTION_OBSERVE");
++        value.Buffer = buffer; value.Length = 0; value.MaximumLength = sizeof(buffer);
++        InterlockedCompareExchange(&observation_enabled,
++            !RtlQueryEnvironmentVariable_U(NULL, &key, &value) &&
++            value.Length == sizeof(WCHAR) && buffer[0] == '1', -1);
++    }
++    if (!observation_enabled) return 0;
++    /* Follow-up is restricted to the seven sites from the prior exception-frequency capture. */
++    {
++        static const ULONG_PTR selected[] = {0x4941fe0,0x494220c,0x44d85ad,0x44d7ff0,0x44d518c,0x44d5090,0x44d7870};
++        ULONG_PTR rva = (ULONG_PTR)rec->ExceptionAddress - (ULONG_PTR)NtCurrentTeb()->Peb->ImageBaseAddress;
++        for (i=0; i<ARRAY_SIZE(selected); ++i) if (rva == selected[i]) break;
++        if (i == ARRAY_SIZE(selected)) return 0;
++    }
++
++    /* Delay this final capture to separate startup work from the later steady workload. */
++    {
++        static LONGLONG first_tick;
++        LARGE_INTEGER tick, frequency;
++        NtQueryPerformanceCounter(&tick, &frequency);
++        InterlockedCompareExchange64(&first_tick, tick.QuadPart, 0);
++        if (tick.QuadPart - first_tick < 100 * frequency.QuadPart) return 0;
++    }
++    for (i = 0; i < ARRAY_SIZE(observation_sites); ++i)
++    {
++        void *previous = InterlockedCompareExchangePointer(&observation_sites[i], rec->ExceptionAddress, NULL);
++        if (!previous || previous == rec->ExceptionAddress)
++            return InterlockedIncrement(&observation_counts[i]) <= 4 ?
++                   InterlockedIncrement(&observation_sequence) : 0;
++    }
++    return 0;
++}
++
++static void observation_code(LONG id, const char *phase, ULONG_PTR address)
++{
++    BYTE bytes[16]; SIZE_T got = 0; unsigned i;
++    char hex[33]; static const char digits[] = "0123456789abcdef";
++    NTSTATUS status = NtReadVirtualMemory(GetCurrentProcess(), (void *)address, bytes, sizeof(bytes), &got);
++    for (i = 0; i < got && i < sizeof(bytes); ++i)
++    { hex[2*i] = digits[bytes[i] >> 4]; hex[2*i+1] = digits[bytes[i] & 15]; }
++    hex[2*i] = 0;
++    MESSAGE("EXOBS id=%ld phase=%s address=%p status=%08lx bytes=%s\n", id, phase, (void *)address, status, hex);
++}
++
++static void observation_context(LONG id, const char *phase, const CONTEXT *ctx, const CONTEXT *before)
++{
++#define OBS_REG(reg) if (!before || ctx->reg != before->reg) \
++    MESSAGE("EXOBS id=%ld phase=%s reg=" #reg " value=%016I64x\n", id, phase, (ULONGLONG)ctx->reg)
++    unsigned i;
++    OBS_REG(Rip); OBS_REG(Rsp); OBS_REG(Rax); OBS_REG(Rbx); OBS_REG(Rcx); OBS_REG(Rdx);
++    OBS_REG(Rsi); OBS_REG(Rdi); OBS_REG(Rbp); OBS_REG(R8); OBS_REG(R9); OBS_REG(R10);
++    OBS_REG(R11); OBS_REG(R12); OBS_REG(R13); OBS_REG(R14); OBS_REG(R15);
++    OBS_REG(EFlags); OBS_REG(MxCsr); OBS_REG(ContextFlags);
++    for (i=0; i<16; ++i)
++    {
++        const M128A *v = &ctx->FltSave.XmmRegisters[i];
++        const M128A *b = before ? &before->FltSave.XmmRegisters[i] : NULL;
++        if (!b || v->Low != b->Low || v->High != b->High)
++            MESSAGE("EXOBS id=%ld phase=%s xmm=%u value=%016I64x%016I64x\n", id, phase, i, (ULONGLONG)v->High, v->Low);
++    }
++#undef OBS_REG
++}
++#else
++static LONG observation_begin(EXCEPTION_RECORD *rec) { return 0; }
++#endif
+--- /dev/null
++++ b/dlls/ntdll/guaranteed_ud.h
+@@ -0,0 +1,24 @@
++/* Unprefixed first-byte proof only, for the guarded 64-bit dispatcher.
++ * D5 is AAD only when APX is absent; with APX it is the REX2 prefix.
++ * Do not add 62/C4/C5 or other prefixes without decoding their full encoding. */
++static int software_guaranteed_ud_byte(unsigned int opcode,int legacy_d5)
++{
++    switch(opcode)
++    {
++        case 0x06:case 0x07:case 0x0e:case 0x16:case 0x17:case 0x1e:case 0x1f:
++        case 0x27:case 0x2f:case 0x37:case 0x3f:case 0x60:case 0x61:case 0xce:
++        case 0xea:case 0x9a:case 0xd4:return 1;
++        case 0xd5:return legacy_d5;
++        default:return 0;
++    }
++}
++static int software_legacy_d5_available(void)
++{
++    unsigned int a,b,c,d;
++    __asm__ volatile("cpuid":"=a"(a),"=b"(b),"=c"(c),"=d"(d):"a"(0),"c"(0));
++    if(a<7)return 1;
++    __asm__ volatile("cpuid":"=a"(a),"=b"(b),"=c"(c),"=d"(d):"a"(7),"c"(0));
++    if(a<1)return 1;
++    __asm__ volatile("cpuid":"=a"(a),"=b"(b),"=c"(c),"=d"(d):"a"(7),"c"(1));
++    return !(d & (1u<<21)); /* Intel APX_F: CPUID.7.1:EDX[21]. */
++}
+--- a/dlls/ntdll/loader.c
++++ b/dlls/ntdll/loader.c
+@@ -2289,6 +2289,10 @@
+  *
+  * Build the module data for a mapped dll.
+  */
++#if defined(__x86_64__) && !defined(__arm64ec__)
++#include "notproton_bridge_observer.h"
++#endif
++
+ static NTSTATUS build_module( LPCWSTR load_path, const UNICODE_STRING *nt_name, void **module,
+                               const SECTION_IMAGE_INFORMATION *image_info, const struct file_id *id,
+                               DWORD flags, BOOL system, BOOL redirected, WINE_MODREF **pwm )
+@@ -2382,6 +2386,14 @@
+     }
+ #endif
+ 
++#if defined(__x86_64__) && !defined(__arm64ec__)
++    {
++        struct ctx bridge_ctx = { (ldr_getdllhandle_t)LdrGetDllHandle,
++                                  (ldr_loaddll_t)LdrLoadDll,
++                                  (nt_protect_t)NtProtectVirtualMemory };
++        detour_build_module(&bridge_ctx, wm, (void *)load_path);
++    }
++#endif
+     wm->ldr.LoadCount = 1;
+     *pwm = wm;
+     *module = NULL;
+--- /dev/null
++++ b/dlls/ntdll/notproton_bridge_observer.h
+@@ -0,0 +1,184 @@
++/* Diagnostic build only. Adapted from NotProton/ntdll-patch/detour.c.
++ * Retains the existing native Steam client bridge; not an exception workaround. */
++// Clever detours
++
++typedef unsigned long long u64;
++typedef unsigned int u32;
++typedef unsigned short u16;
++typedef unsigned char u8;
++
++typedef u32 (*ldr_getdllhandle_t)(void *path, void *unused, void *name_us, void **out);
++typedef u32 (*ldr_loaddll_t)(void *path, void *flags, void *name_us, void **out);
++typedef u32 (*nt_protect_t)(void *proc, void **base, u64 *size, u32 newprot, u32 *oldprot);
++
++struct ctx
++{
++    ldr_getdllhandle_t get_dll_handle;
++    ldr_loaddll_t      load_dll;
++    nt_protect_t       protect;
++};
++
++// PE image structures, minimal subset needed to walk export tables
++struct dos_header  { u16 e_magic; u8 pad[58]; u32 e_lfanew; };
++struct data_dir    { u32 rva; u32 size; };
++struct opt_hdr64   { u16 magic;                 //   0
++                     u8  pad0[14];              //   2
++                     u32 entry_point;           // 16
++                     u8  pad1[36];              //  20
++                     u32 size_of_image;         //  56
++                     u8  pad2[52];              //  60
++                     struct data_dir dir[16]; };// 112
++struct nt_headers  { u32 sig; u8 file_hdr[20]; struct opt_hdr64 opt; };
++struct export_dir  { u32 flags; u32 stamp; u16 maj; u16 min; u32 name;
++                     u32 base; u32 nfuncs; u32 nnames;
++                     u32 addr_funcs; u32 addr_names; u32 addr_ords; };
++
++
++
++// WINE_MODREF, x86_64 layout.
++#define WM_DLLBASE(wm) (((WINE_MODREF *)(wm))->ldr.DllBase)
++#define WM_FLAGS(wm) ((u32 *)&((WINE_MODREF *)(wm))->ldr.Flags)
++
++struct us { u16 len; u16 max; u32 pad; void *buf; };
++
++static const u16 name_lsteam[] = {'l','s','t','e','a','m','c','l','i','e','n','t','.','d','l','l',0};
++
++static void *resolve_lsteam(struct ctx *c, void *load_path)
++{
++    struct us u;
++    void *h = 0;
++    u.len = 32;                 /* "lsteamclient.dll" = 16 wchars */
++    u.max = 34;
++    u.pad = 0;
++    u.buf = (void *)name_lsteam;
++    if (c->get_dll_handle(load_path, 0, &u, &h) == 0 && h)
++        return h;
++    if (c->load_dll(load_path, 0, &u, &h) == 0 && h)
++        return h;
++    return 0;
++}
++
++static struct export_dir *export_of(u8 *mod)
++{
++    struct dos_header *dos = (struct dos_header *)mod;
++    struct nt_headers *nt = (struct nt_headers *)(mod + dos->e_lfanew);
++    u32 rva = nt->opt.dir[0].rva;
++    if (!rva)
++        return 0;
++    return (struct export_dir *)(mod + rva);
++}
++
++static int name_eq(const char *a, const char *b)
++{
++    while (*a && *a == *b) { a++; b++; }
++    return *a == *b;
++}
++
++static void *np_observer_find_named_export(u8 *mod, const char *want)
++{
++    struct export_dir *e = export_of(mod);
++    u32 *names, *funcs, i;
++    u16 *ords;
++
++    if (!e)
++        return 0;
++    names = (u32 *)(mod + e->addr_names);
++    funcs = (u32 *)(mod + e->addr_funcs);
++    ords  = (u16 *)(mod + e->addr_ords);
++    for (i = 0; i < e->nnames; i++)
++        if (name_eq((const char *)(mod + names[i]), want))
++            return mod + funcs[ords[i]];
++    return 0;
++}
++
++// movabs rax, tgt ; jmp rax
++static void write_jump(u8 *src, void *tgt)
++{
++    src[0] = 0x48; src[1] = 0xB8;
++    *(u64 *)(src + 2) = (u64)tgt;
++    src[10] = 0xFF; src[11] = 0xE0;
++}
++
++// mov eax, 1 ; ret
++static void write_true_stub(u8 *src)
++{
++    src[0] = 0xB8; src[1] = 0x01; src[2] = 0x00; src[3] = 0x00; src[4] = 0x00;
++    src[5] = 0xC3;
++}
++
++// Rewrite every named export of sc64 that lsteamclient also exports so it jumps to the
++// lsteamclient one, plus the entry point.
++static void setup_trampolines(struct ctx *c, u8 *sc64, u8 *lsteam)
++{
++    struct nt_headers *snt = (struct nt_headers *)(sc64 + ((struct dos_header *)sc64)->e_lfanew);
++    struct export_dir *se;
++    u32 *snames, *sfuncs, i;
++    u16 *sords;
++    void *base = sc64;
++    u64 size = snt->opt.size_of_image;
++    u32 oldp;
++
++    // make the whole sc64 image writable and executable so export stubs can be overwritten
++    if (c->protect((void *)~0ull, &base, &size, 0x40 /*RWX*/, &oldp) != 0)
++        return;
++
++    se = export_of(sc64);
++    if (!se)
++        return;
++
++    snames = (u32 *)(sc64 + se->addr_names);
++    sfuncs = (u32 *)(sc64 + se->addr_funcs);
++    sords  = (u16 *)(sc64 + se->addr_ords);
++    for (i = 0; i < se->nnames; i++)
++    {
++        void *tgt = np_observer_find_named_export(lsteam, (const char *)(sc64 + snames[i]));
++        if (tgt)
++            write_jump(sc64 + sfuncs[sords[i]], tgt);
++    }
++
++    // Report success instead of forwarding. lsteamclient's DllMain has to run while
++    // Windows is loading lsteamclient, not while it is loading this stub.
++    if (snt->opt.entry_point)
++        write_true_stub(sc64 + snt->opt.entry_point);
++}
++
++// True when the MODREF basename (wm+0x60, a NUL-terminated wide string) is
++// steamclient64.dll
++static int wm_is_sc64(void *wm)
++{
++    static const char want[] = "steamclient64.dll";
++    const u16 *nm = ((WINE_MODREF *)wm)->ldr.BaseDllName.Buffer;
++    unsigned i;
++    if (!nm)
++        return 0;
++    for (i = 0; want[i]; i++)
++    {
++        u16 ch = nm[i];
++        if (ch >= 'A' && ch <= 'Z')
++            ch = (u16)(ch + 32);
++        if (ch != (u16)want[i])
++            return 0;
++    }
++    return nm[i] == 0;
++}
++
++// build_module detour
++void detour_build_module(struct ctx *c, void *wm, void *load_path)
++{
++    u8 *sc64, *lsteam;
++
++    if (!wm || !wm_is_sc64(wm))
++        return;
++
++    sc64 = (u8 *)WM_DLLBASE(wm);
++    if (!sc64)
++        return;
++
++    lsteam = (u8 *)resolve_lsteam(c, load_path);
++    if (!lsteam)
++        return;                                     // let sc64 load normally
++
++    setup_trampolines(c, sc64, lsteam);
++
++    *WM_FLAGS(wm) |= LDR_DONT_RESOLVE_REFS;
++}
+--- a/dlls/ntdll/ntdll.spec
++++ b/dlls/ntdll/ntdll.spec
+@@ -1795,3 +1795,18 @@
+ 
+ # CW HACK 22435
+ @ stdcall __wine_unix_call(int64 long ptr) __wine_unix_call_exported
++
++@ extern -arch=x86_64 __wine_software_exception_chain_stats
++
++@ extern -arch=x86_64 __wine_software_exception_chain_diagnostics
++
++@ extern -arch=x86_64 __wine_software_exception_bridge_census
++
++@ extern -arch=x86_64 __wine_software_exception_chain_configuration
++@ stdcall -arch=x86_64 __wine_software_exception_chain_context_valid(long)
++
++@ extern -arch=x86_64 __wine_exception_burst_control
++@ extern -arch=x86_64 __wine_exception_burst_records
++
++@ extern -arch=x86_64 __wine_bridge_refusal_control
++@ extern -arch=x86_64 __wine_bridge_refusal_records
+--- /dev/null
++++ b/dlls/ntdll/refusal_trace.inc
+@@ -0,0 +1,39 @@
++/* Diagnostic-only bounded trace. Existing validator bytes/results are copied;
++ * no extra guest reads, handler calls, memory queries or context changes.
++ * Publication follows the PE timing recorder: reserve, populate, ready, drain.
++ * control: opt-in, reserved count, dropped, active, capacity, record size,
++ * version, reserved. All storage is prefaulted before the capture window. */
++#define REFUSAL_CAPACITY 262144
++LONG64 __wine_bridge_refusal_control[8]={0,0,0,0,REFUSAL_CAPACITY,80,1,0};
++struct bridge_refusal_record
++{
++    LONG64 begin,end;
++    ULONG64 rip,target;
++    BYTE code[16];
++    ULONG64 detail;
++    ULONG tid,outcome,valid,length,next;
++    LONG ready;
++};
++C_ASSERT(sizeof(struct bridge_refusal_record)==80);
++struct bridge_refusal_record __wine_bridge_refusal_records[REFUSAL_CAPACITY];
++extern LONG64 __wine_exception_burst_control[8];
++static LONG64 burst_clock(void);
++static struct bridge_refusal_record *bridge_refusal_begin(CONTEXT *context)
++{
++    LONG64 index;struct bridge_refusal_record *r;
++    if(!__wine_bridge_refusal_control[0] || !__wine_exception_burst_control[0])return NULL;
++    InterlockedIncrement64(&__wine_bridge_refusal_control[3]);
++    if(!__wine_bridge_refusal_control[0] || !__wine_exception_burst_control[0])goto unreserved;
++    index=InterlockedIncrement64(&__wine_bridge_refusal_control[1])-1;
++    if(index>=REFUSAL_CAPACITY){InterlockedIncrement64(&__wine_bridge_refusal_control[2]);goto unreserved;}
++    r=&__wine_bridge_refusal_records[index];r->begin=burst_clock();r->rip=context->Rip;
++    r->tid=HandleToULong(NtCurrentTeb()->ClientId.UniqueThread);return r;
++unreserved:
++    InterlockedDecrement64(&__wine_bridge_refusal_control[3]);return NULL;
++}
++static void bridge_refusal_end(struct bridge_refusal_record *r,ULONG outcome,ULONG64 detail)
++{
++    if(!r)return;
++    r->outcome=outcome;r->detail=detail;r->end=burst_clock();
++    InterlockedExchange(&r->ready,1);InterlockedDecrement64(&__wine_bridge_refusal_control[3]);
++}
+--- /dev/null
++++ b/dlls/ntdll/software_exception_chain.h
+@@ -0,0 +1,750 @@
++/* Experimental opt-in PE dispatcher optimization, not enabled in normal runners.
++ * Re-dispatch only a known unconditional one-byte #UD after a handled #UD.
++ * Original instructions and handler effects remain intact. No result is cached.
++ * A separate explicit-context prototype does not establish this path's correctness:
++ * nested dispatch, extended state and real-game behavior still require testing. */
++#if defined(__x86_64__) && !defined(__arm64ec__)
++/* Public only in this experimental DLL, for the authored validation probe.
++ * [0] eligible deliveries, [1] synthesized links, [2] bounded-chain exits. */
++LONG64 __wine_software_exception_chain_stats[6];
++/* Readable activation state, even when all hot-path aggregate counters are off. */
++LONG __wine_software_exception_chain_configuration[4] = {-1, -1, -1, -1};
++#define software_chain_mode __wine_software_exception_chain_configuration[0]
++#define software_chain_statistics __wine_software_exception_chain_configuration[1]
++#define software_bridge_resume __wine_software_exception_chain_configuration[2]
++#define software_alu_enabled __wine_software_exception_chain_configuration[3]
++#include "guaranteed_ud.h"
++static LONG software_legacy_d5;
++
++/* The fast path reads every group below; equality of two incomplete contexts
++ * does not make absent fields valid. An unsupported context uses normal dispatch. */
++BOOL WINAPI __wine_software_exception_chain_context_valid( DWORD flags )
++{
++    const DWORD required = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS |
++                           CONTEXT_FLOATING_POINT | CONTEXT_DEBUG_REGISTERS;
++    return (flags & required) == required;
++}
++
++static void software_chain_count( unsigned int index )
++{
++    if (software_chain_statistics) InterlockedIncrement64(&__wine_software_exception_chain_stats[index]);
++}
++
++static void burst_configure(void);
++
++static BOOL software_chain_enabled(void)
++{
++    LONG mode = software_chain_mode;
++    if (mode == -1)
++    {
++        WCHAR buffer[16];
++        UNICODE_STRING name = RTL_CONSTANT_STRING(L"WINE_SOFTWARE_EXCEPTION_CHAIN");
++        UNICODE_STRING value = {0, sizeof(buffer), buffer};
++        IMAGE_NT_HEADERS *nt = RtlImageNtHeader(NtCurrentTeb()->Peb->ImageBaseAddress);
++        UNICODE_STRING *path = &NtCurrentTeb()->Peb->ProcessParameters->ImagePathName;
++        UNICODE_STRING base = *path;
++        UNICODE_STRING probe = RTL_CONSTANT_STRING(L"exception_chain_probe.exe");
++        UNICODE_STRING game = RTL_CONSTANT_STRING(L"forzahorizon6.exe");
++        unsigned int i;
++        LONG statistics = 1, resume_bridge = 0;
++        mode = 0;
++        for (i = 0; i < path->Length / sizeof(WCHAR); ++i)
++            if (path->Buffer[i] == '\\' || path->Buffer[i] == '/')
++            {
++                base.Buffer = path->Buffer + i + 1;
++                base.Length = path->Length - (i + 1) * sizeof(WCHAR);
++            }
++        base.MaximumLength = base.Length;
++        if (nt && !RtlQueryEnvironmentVariable_U(NULL, &name, &value))
++        {
++            if (value.Length == 5 * sizeof(WCHAR) && !memcmp(buffer, L"probe", value.Length)
++                && RtlEqualUnicodeString(&base, &probe, TRUE)) mode = 1;
++            if (value.Length == 11 * sizeof(WCHAR) && !memcmp(buffer, L"probe-clean", value.Length)
++                && RtlEqualUnicodeString(&base, &probe, TRUE)) mode = 3;
++            /* Header guard is additional to deployment's full executable SHA256.
++             * No fixed instruction RVA is used by this optimization. */
++            if (value.Length == 1 * sizeof(WCHAR) && buffer[0] == '1'
++                && RtlEqualUnicodeString(&base, &game, TRUE)
++                && nt->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64
++                && nt->FileHeader.TimeDateStamp == 0x6aea6132
++                && nt->OptionalHeader.SizeOfImage == 0x0b3fd000
++                && nt->OptionalHeader.CheckSum == 0x0afc4fc1) mode = 2;
++        }
++        {
++            UNICODE_STRING stats_name = RTL_CONSTANT_STRING(L"WINE_SOFTWARE_EXCEPTION_STATS");
++            value.Length = 0;
++            if (!RtlQueryEnvironmentVariable_U(NULL, &stats_name, &value)
++                && value.Length == sizeof(WCHAR) && buffer[0] == '0') statistics = 0;
++        }
++        {
++            UNICODE_STRING resume_name = RTL_CONSTANT_STRING(L"WINE_SOFTWARE_BRIDGE_RESUME");
++            value.Length = 0;
++            if (!RtlQueryEnvironmentVariable_U(NULL, &resume_name, &value)
++                && value.Length == sizeof(WCHAR) && buffer[0] == '1') resume_bridge = 1;
++        }
++        {
++            LONG enabled=(mode==1 || mode==3);
++            UNICODE_STRING alu_name = RTL_CONSTANT_STRING(L"WINE_SOFTWARE_ALU_BRIDGE");
++            value.Length=0;
++            if(!RtlQueryEnvironmentVariable_U(NULL,&alu_name,&value) && value.Length==sizeof(WCHAR))
++            {
++                if(buffer[0]=='0')enabled=0;
++                else if(buffer[0]=='1')enabled=1;
++            }
++            InterlockedCompareExchange(&software_alu_enabled,enabled,-1);
++        }
++        InterlockedExchange(&software_legacy_d5,software_legacy_d5_available());
++        InterlockedCompareExchange(&software_bridge_resume, resume_bridge, -1);
++        /* Publish policy before the mode. Every initializer reads the same
++         * immutable startup environment; no per-exception environment lookup. */
++        InterlockedCompareExchange(&software_chain_statistics, statistics, -1);
++        InterlockedCompareExchange(&software_chain_mode, mode, -1);
++        mode = software_chain_mode;
++    }
++    if (mode) burst_configure();
++    return mode != 0 && !NtCurrentTeb()->Peb->BeingDebugged;
++}
++
++
++/* Bounded in-memory diagnostic. No synchronous per-exception log output.
++ * Per row: thread ID, then twenty {count, before RIP, after RIP, a, b} groups.
++ * Reasons are mutually exclusive first-exit reasons, not independent predicates.
++ * These captures are for classification, not unbiased performance measurement. */
++LONG64 __wine_software_exception_chain_diagnostics[64][101];
++static LONG64 *software_chain_diag_row(void)
++{
++    LONG64 tid;
++    unsigned int i;
++    /* Detailed diagnostics are private-probe-only in this build. FH6 keeps
++     * aggregate counters but performs no per-thread scan or opcode census. */
++    if (software_chain_mode != 1) return NULL;
++    tid = HandleToULong(NtCurrentTeb()->ClientId.UniqueThread);
++    for (i=0;i<64;i++)
++    {
++        LONG64 seen=InterlockedCompareExchange64(&__wine_software_exception_chain_diagnostics[i][0],tid,0);
++        if (!seen || seen==tid) return __wine_software_exception_chain_diagnostics[i];
++    }
++    return NULL;
++}
++static void software_chain_diag(LONG64 *row,unsigned int reason,const CONTEXT *before,
++                                const CONTEXT *after,ULONG64 a,ULONG64 b)
++{
++    LONG64 *p;
++    if (!row) return;
++    p=row+1+reason*5;
++    if (InterlockedIncrement64(p)==1)
++    {
++        p[1]=before->Rip; p[2]=after->Rip; p[3]=a; p[4]=b;
++    }
++}
++static unsigned int software_chain_state_reason(const CONTEXT *before,const CONTEXT *after,
++                                                ULONG64 *a,ULONG64 *b)
++{
++    const DWORD arithmetic_and_direction=0xcd5;
++    USHORT current_cs;
++    __asm__("movw %%cs,%0":"=r"(current_cs));
++#define REJECT_IF(test,reason,x,y) if(test){*a=(x);*b=(y);return reason;}
++    REJECT_IF(!__wine_software_exception_chain_context_valid(before->ContextFlags)
++        || !__wine_software_exception_chain_context_valid(after->ContextFlags),7,before->ContextFlags,after->ContextFlags);
++    REJECT_IF(after->SegCs!=current_cs,5,current_cs,after->SegCs);
++    REJECT_IF(before->Rsp!=after->Rsp,6,before->Rsp,after->Rsp);
++    REJECT_IF(before->ContextFlags!=after->ContextFlags,7,before->ContextFlags,after->ContextFlags);
++    REJECT_IF((after->ContextFlags & CONTEXT_XSTATE)==CONTEXT_XSTATE,8,before->ContextFlags,after->ContextFlags);
++    REJECT_IF(after->EFlags & 0x100,9,before->EFlags,after->EFlags);
++    REJECT_IF((before->EFlags ^ after->EFlags) & ~arithmetic_and_direction,10,before->EFlags,after->EFlags);
++    REJECT_IF(after->Dr7 & 0x20ff,11,before->Dr7,after->Dr7);
++    REJECT_IF(before->Dr0!=after->Dr0 || before->Dr1!=after->Dr1 || before->Dr2!=after->Dr2
++        || before->Dr3!=after->Dr3 || before->Dr6!=after->Dr6 || before->Dr7!=after->Dr7,12,before->Dr7,after->Dr7);
++    REJECT_IF(before->SegCs!=after->SegCs || before->SegSs!=after->SegSs || before->SegDs!=after->SegDs
++        || before->SegEs!=after->SegEs || before->SegFs!=after->SegFs || before->SegGs!=after->SegGs,13,before->SegSs,after->SegSs);
++    REJECT_IF(before->MxCsr!=after->MxCsr || memcmp(&before->FltSave,&after->FltSave,sizeof(after->FltSave)),14,before->MxCsr,after->MxCsr);
++#undef REJECT_IF
++    return 0;
++}
++
++
++/* Diagnostic-only bounded trace. Existing validator bytes/results are copied;
++ * no extra guest reads, handler calls, memory queries or context changes.
++ * Publication follows the PE timing recorder: reserve, populate, ready, drain.
++ * control: opt-in, reserved count, dropped, active, capacity, record size,
++ * version, reserved. All storage is prefaulted before the capture window. */
++#define REFUSAL_CAPACITY 262144
++LONG64 __wine_bridge_refusal_control[8]={0,0,0,0,REFUSAL_CAPACITY,80,1,0};
++struct bridge_refusal_record
++{
++    LONG64 begin,end;
++    ULONG64 rip,target;
++    BYTE code[16];
++    ULONG64 detail;
++    ULONG tid,outcome,valid,length,next;
++    LONG ready;
++};
++C_ASSERT(sizeof(struct bridge_refusal_record)==80);
++struct bridge_refusal_record __wine_bridge_refusal_records[REFUSAL_CAPACITY];
++extern LONG64 __wine_exception_burst_control[8];
++static LONG64 burst_clock(void);
++static struct bridge_refusal_record *bridge_refusal_begin(CONTEXT *context)
++{
++    LONG64 index;struct bridge_refusal_record *r;
++    if(!__wine_bridge_refusal_control[0] || !__wine_exception_burst_control[0])return NULL;
++    InterlockedIncrement64(&__wine_bridge_refusal_control[3]);
++    if(!__wine_bridge_refusal_control[0] || !__wine_exception_burst_control[0])goto unreserved;
++    index=InterlockedIncrement64(&__wine_bridge_refusal_control[1])-1;
++    if(index>=REFUSAL_CAPACITY){InterlockedIncrement64(&__wine_bridge_refusal_control[2]);goto unreserved;}
++    r=&__wine_bridge_refusal_records[index];r->begin=burst_clock();r->rip=context->Rip;
++    r->tid=HandleToULong(NtCurrentTeb()->ClientId.UniqueThread);return r;
++unreserved:
++    InterlockedDecrement64(&__wine_bridge_refusal_control[3]);return NULL;
++}
++static void bridge_refusal_end(struct bridge_refusal_record *r,ULONG outcome,ULONG64 detail)
++{
++    if(!r)return;
++    r->outcome=outcome;r->detail=detail;r->end=burst_clock();
++    InterlockedExchange(&r->ready,1);InterlockedDecrement64(&__wine_bridge_refusal_control[3]);
++}
++
++/* Diagnostic census reads bytes at handler-return time. Opcode family buckets
++ * ignore operand-size/REX prefixes for grouping only, not for execution.
++ * [attempts, accepted, template refusal, target refusal, data refusal, RIP, bytes0, bytes1]. */
++LONG64 __wine_software_exception_bridge_census[64][512][8];
++static LONG64 *software_bridge_census(CONTEXT *context,LONG64 *row)
++{
++    BYTE code[16];SIZE_T bytes;unsigned int n=0,key;LONG64 *entry;
++    if(!row || NtReadVirtualMemory(GetCurrentProcess(),(void*)context->Rip,code,sizeof code,&bytes) || bytes!=sizeof code)return NULL;
++    while(n<8 && ((code[n]>=0x40 && code[n]<=0x4f) || code[n]==0x66 || code[n]==0xf2 || code[n]==0xf3))n++;
++    key=code[n]==0x0f?256+code[n+1]:code[n];
++    entry=__wine_software_exception_bridge_census[(row-&__wine_software_exception_chain_diagnostics[0][0])/101][key];
++    if(InterlockedIncrement64(entry)==1){entry[5]=context->Rip;memcpy(entry+6,code,16);}
++    return entry;
++}
++
++/* No-flag-change register bridge evaluator. Supports only complete canonical
++ * legacy encodings with register operands; never executes a memory store.
++ * Effects remain staged until the current relative-jump target is validated. */
++struct software_bridge_effect {unsigned int length,dst,vector,no_write,flags_valid;DWORD flags;ULONG64 value[2];};
++static ULONG64 *software_bridge_gpr(CONTEXT *c,unsigned int n)
++{
++    switch(n){case 0:return &c->Rax;case 1:return &c->Rcx;case 2:return &c->Rdx;case 3:return &c->Rbx;
++    case 4:return &c->Rsp;case 5:return &c->Rbp;case 6:return &c->Rsi;case 7:return &c->Rdi;
++    case 8:return &c->R8;case 9:return &c->R9;case 10:return &c->R10;case 11:return &c->R11;
++    case 12:return &c->R12;case 13:return &c->R13;case 14:return &c->R14;case 15:return &c->R15;default:return NULL;}
++}
++/* Execute register-only arithmetic on temporary values. Seed only arithmetic
++ * flags: never load guest TF/DF/IF or other control bits into the host handler.
++ * The operation and PUSHFQ materialization run in one asm block so undefined
++ * arithmetic bits follow this x86 runtime too, rather than invented C values.
++ * No guest context effects are committed until the existing jump/target checks
++ * succeed. Unsupported widths, memory operands, stack writes and prefixes fall
++ * back unchanged. */
++static void software_bridge_alu(unsigned int operation,unsigned int width,
++                                ULONG64 left,ULONG64 right,DWORD initial_flags,
++                                ULONG64 *result,DWORD *flags)
++{
++    ULONG64 seed, observed;
++    __asm__ volatile("pushfq; popq %0" : "=r"(seed) :: "memory");
++    seed=(seed & ~(ULONG64)0x8d5) | (initial_flags & 0x8d5);
++#define ALU_ASM(insn,suffix,operand) \
++    __asm__ volatile("pushq %[seed]; popfq; " insn suffix " " operand "; pushfq; popq %[flags]" \
++                     : [left] "+&r"(left), [flags] "=&r"(observed) \
++                     : [right] "r"(right), [seed] "r"(seed) : "cc","memory")
++#define ALU_CASE(op,insn) case op: if(width==64){ALU_ASM(insn,"q","%[right],%[left]");} \
++                                  else{ALU_ASM(insn,"l","%k[right],%k[left]");} break
++    switch(operation)
++    {
++        ALU_CASE(0,"add"); ALU_CASE(1,"or"); ALU_CASE(4,"and");
++        ALU_CASE(5,"sub"); ALU_CASE(6,"xor"); ALU_CASE(7,"cmp");
++        ALU_CASE(8,"test");
++        case 9:
++            if(width==64)
++                __asm__ volatile("pushq %[seed]; popfq; shrq %%cl,%[left]; pushfq; popq %[flags]"
++                    : [left] "+&r"(left),[flags] "=&r"(observed)
++                    : "c"(right),[seed] "r"(seed) : "cc","memory");
++            else
++                __asm__ volatile("pushq %[seed]; popfq; shrl %%cl,%k[left]; pushfq; popq %[flags]"
++                    : [left] "+&r"(left),[flags] "=&r"(observed)
++                    : "c"(right),[seed] "r"(seed) : "cc","memory");
++            break;
++        /* Rosetta can materialize undefined OF differently for immediate
++         * versus CL shifts. Execute the original immediate form, including
++         * its complete imm8 value; do not substitute a CL instruction. */
++        case 10:
++#define SHIFT_IMM(n) case n: \
++            if(width==64) \
++                __asm__ volatile("pushq %[seed]; popfq; shrq $" #n ",%[left]; pushfq; popq %[flags]" \
++                    : [left] "+&r"(left),[flags] "=&r"(observed) : [seed] "r"(seed) : "cc","memory"); \
++            else \
++                __asm__ volatile("pushq %[seed]; popfq; shrl $" #n ",%k[left]; pushfq; popq %[flags]" \
++                    : [left] "+&r"(left),[flags] "=&r"(observed) : [seed] "r"(seed) : "cc","memory"); \
++            break
++            switch((unsigned int)right & 255)
++            {
++                SHIFT_IMM(0); SHIFT_IMM(1); SHIFT_IMM(2); SHIFT_IMM(3); SHIFT_IMM(4); SHIFT_IMM(5); SHIFT_IMM(6); SHIFT_IMM(7);
++                SHIFT_IMM(8); SHIFT_IMM(9); SHIFT_IMM(10); SHIFT_IMM(11); SHIFT_IMM(12); SHIFT_IMM(13); SHIFT_IMM(14); SHIFT_IMM(15);
++                SHIFT_IMM(16); SHIFT_IMM(17); SHIFT_IMM(18); SHIFT_IMM(19); SHIFT_IMM(20); SHIFT_IMM(21); SHIFT_IMM(22); SHIFT_IMM(23);
++                SHIFT_IMM(24); SHIFT_IMM(25); SHIFT_IMM(26); SHIFT_IMM(27); SHIFT_IMM(28); SHIFT_IMM(29); SHIFT_IMM(30); SHIFT_IMM(31);
++                SHIFT_IMM(32); SHIFT_IMM(33); SHIFT_IMM(34); SHIFT_IMM(35); SHIFT_IMM(36); SHIFT_IMM(37); SHIFT_IMM(38); SHIFT_IMM(39);
++                SHIFT_IMM(40); SHIFT_IMM(41); SHIFT_IMM(42); SHIFT_IMM(43); SHIFT_IMM(44); SHIFT_IMM(45); SHIFT_IMM(46); SHIFT_IMM(47);
++                SHIFT_IMM(48); SHIFT_IMM(49); SHIFT_IMM(50); SHIFT_IMM(51); SHIFT_IMM(52); SHIFT_IMM(53); SHIFT_IMM(54); SHIFT_IMM(55);
++                SHIFT_IMM(56); SHIFT_IMM(57); SHIFT_IMM(58); SHIFT_IMM(59); SHIFT_IMM(60); SHIFT_IMM(61); SHIFT_IMM(62); SHIFT_IMM(63);
++                SHIFT_IMM(64); SHIFT_IMM(65); SHIFT_IMM(66); SHIFT_IMM(67); SHIFT_IMM(68); SHIFT_IMM(69); SHIFT_IMM(70); SHIFT_IMM(71);
++                SHIFT_IMM(72); SHIFT_IMM(73); SHIFT_IMM(74); SHIFT_IMM(75); SHIFT_IMM(76); SHIFT_IMM(77); SHIFT_IMM(78); SHIFT_IMM(79);
++                SHIFT_IMM(80); SHIFT_IMM(81); SHIFT_IMM(82); SHIFT_IMM(83); SHIFT_IMM(84); SHIFT_IMM(85); SHIFT_IMM(86); SHIFT_IMM(87);
++                SHIFT_IMM(88); SHIFT_IMM(89); SHIFT_IMM(90); SHIFT_IMM(91); SHIFT_IMM(92); SHIFT_IMM(93); SHIFT_IMM(94); SHIFT_IMM(95);
++                SHIFT_IMM(96); SHIFT_IMM(97); SHIFT_IMM(98); SHIFT_IMM(99); SHIFT_IMM(100); SHIFT_IMM(101); SHIFT_IMM(102); SHIFT_IMM(103);
++                SHIFT_IMM(104); SHIFT_IMM(105); SHIFT_IMM(106); SHIFT_IMM(107); SHIFT_IMM(108); SHIFT_IMM(109); SHIFT_IMM(110); SHIFT_IMM(111);
++                SHIFT_IMM(112); SHIFT_IMM(113); SHIFT_IMM(114); SHIFT_IMM(115); SHIFT_IMM(116); SHIFT_IMM(117); SHIFT_IMM(118); SHIFT_IMM(119);
++                SHIFT_IMM(120); SHIFT_IMM(121); SHIFT_IMM(122); SHIFT_IMM(123); SHIFT_IMM(124); SHIFT_IMM(125); SHIFT_IMM(126); SHIFT_IMM(127);
++                SHIFT_IMM(128); SHIFT_IMM(129); SHIFT_IMM(130); SHIFT_IMM(131); SHIFT_IMM(132); SHIFT_IMM(133); SHIFT_IMM(134); SHIFT_IMM(135);
++                SHIFT_IMM(136); SHIFT_IMM(137); SHIFT_IMM(138); SHIFT_IMM(139); SHIFT_IMM(140); SHIFT_IMM(141); SHIFT_IMM(142); SHIFT_IMM(143);
++                SHIFT_IMM(144); SHIFT_IMM(145); SHIFT_IMM(146); SHIFT_IMM(147); SHIFT_IMM(148); SHIFT_IMM(149); SHIFT_IMM(150); SHIFT_IMM(151);
++                SHIFT_IMM(152); SHIFT_IMM(153); SHIFT_IMM(154); SHIFT_IMM(155); SHIFT_IMM(156); SHIFT_IMM(157); SHIFT_IMM(158); SHIFT_IMM(159);
++                SHIFT_IMM(160); SHIFT_IMM(161); SHIFT_IMM(162); SHIFT_IMM(163); SHIFT_IMM(164); SHIFT_IMM(165); SHIFT_IMM(166); SHIFT_IMM(167);
++                SHIFT_IMM(168); SHIFT_IMM(169); SHIFT_IMM(170); SHIFT_IMM(171); SHIFT_IMM(172); SHIFT_IMM(173); SHIFT_IMM(174); SHIFT_IMM(175);
++                SHIFT_IMM(176); SHIFT_IMM(177); SHIFT_IMM(178); SHIFT_IMM(179); SHIFT_IMM(180); SHIFT_IMM(181); SHIFT_IMM(182); SHIFT_IMM(183);
++                SHIFT_IMM(184); SHIFT_IMM(185); SHIFT_IMM(186); SHIFT_IMM(187); SHIFT_IMM(188); SHIFT_IMM(189); SHIFT_IMM(190); SHIFT_IMM(191);
++                SHIFT_IMM(192); SHIFT_IMM(193); SHIFT_IMM(194); SHIFT_IMM(195); SHIFT_IMM(196); SHIFT_IMM(197); SHIFT_IMM(198); SHIFT_IMM(199);
++                SHIFT_IMM(200); SHIFT_IMM(201); SHIFT_IMM(202); SHIFT_IMM(203); SHIFT_IMM(204); SHIFT_IMM(205); SHIFT_IMM(206); SHIFT_IMM(207);
++                SHIFT_IMM(208); SHIFT_IMM(209); SHIFT_IMM(210); SHIFT_IMM(211); SHIFT_IMM(212); SHIFT_IMM(213); SHIFT_IMM(214); SHIFT_IMM(215);
++                SHIFT_IMM(216); SHIFT_IMM(217); SHIFT_IMM(218); SHIFT_IMM(219); SHIFT_IMM(220); SHIFT_IMM(221); SHIFT_IMM(222); SHIFT_IMM(223);
++                SHIFT_IMM(224); SHIFT_IMM(225); SHIFT_IMM(226); SHIFT_IMM(227); SHIFT_IMM(228); SHIFT_IMM(229); SHIFT_IMM(230); SHIFT_IMM(231);
++                SHIFT_IMM(232); SHIFT_IMM(233); SHIFT_IMM(234); SHIFT_IMM(235); SHIFT_IMM(236); SHIFT_IMM(237); SHIFT_IMM(238); SHIFT_IMM(239);
++                SHIFT_IMM(240); SHIFT_IMM(241); SHIFT_IMM(242); SHIFT_IMM(243); SHIFT_IMM(244); SHIFT_IMM(245); SHIFT_IMM(246); SHIFT_IMM(247);
++                SHIFT_IMM(248); SHIFT_IMM(249); SHIFT_IMM(250); SHIFT_IMM(251); SHIFT_IMM(252); SHIFT_IMM(253); SHIFT_IMM(254); SHIFT_IMM(255);
++            }
++#undef SHIFT_IMM
++            break;
++        case 11:
++            if(width==64)
++                __asm__ volatile("pushq %[seed]; popfq; shlq %%cl,%[left]; pushfq; popq %[flags]"
++                    : [left] "+&r"(left),[flags] "=&r"(observed)
++                    : "c"(right),[seed] "r"(seed) : "cc","memory");
++            else
++                __asm__ volatile("pushq %[seed]; popfq; shll %%cl,%k[left]; pushfq; popq %[flags]"
++                    : [left] "+&r"(left),[flags] "=&r"(observed)
++                    : "c"(right),[seed] "r"(seed) : "cc","memory");
++            break;
++        /* Rosetta can materialize undefined OF differently for immediate
++         * versus CL shifts. Execute the original immediate form, including
++         * its complete imm8 value; do not substitute a CL instruction. */
++        case 12:
++#define SHIFT_IMM(n) case n: \
++            if(width==64) \
++                __asm__ volatile("pushq %[seed]; popfq; shlq $" #n ",%[left]; pushfq; popq %[flags]" \
++                    : [left] "+&r"(left),[flags] "=&r"(observed) : [seed] "r"(seed) : "cc","memory"); \
++            else \
++                __asm__ volatile("pushq %[seed]; popfq; shll $" #n ",%k[left]; pushfq; popq %[flags]" \
++                    : [left] "+&r"(left),[flags] "=&r"(observed) : [seed] "r"(seed) : "cc","memory"); \
++            break
++            switch((unsigned int)right & 255)
++            {
++                SHIFT_IMM(0); SHIFT_IMM(1); SHIFT_IMM(2); SHIFT_IMM(3); SHIFT_IMM(4); SHIFT_IMM(5); SHIFT_IMM(6); SHIFT_IMM(7);
++                SHIFT_IMM(8); SHIFT_IMM(9); SHIFT_IMM(10); SHIFT_IMM(11); SHIFT_IMM(12); SHIFT_IMM(13); SHIFT_IMM(14); SHIFT_IMM(15);
++                SHIFT_IMM(16); SHIFT_IMM(17); SHIFT_IMM(18); SHIFT_IMM(19); SHIFT_IMM(20); SHIFT_IMM(21); SHIFT_IMM(22); SHIFT_IMM(23);
++                SHIFT_IMM(24); SHIFT_IMM(25); SHIFT_IMM(26); SHIFT_IMM(27); SHIFT_IMM(28); SHIFT_IMM(29); SHIFT_IMM(30); SHIFT_IMM(31);
++                SHIFT_IMM(32); SHIFT_IMM(33); SHIFT_IMM(34); SHIFT_IMM(35); SHIFT_IMM(36); SHIFT_IMM(37); SHIFT_IMM(38); SHIFT_IMM(39);
++                SHIFT_IMM(40); SHIFT_IMM(41); SHIFT_IMM(42); SHIFT_IMM(43); SHIFT_IMM(44); SHIFT_IMM(45); SHIFT_IMM(46); SHIFT_IMM(47);
++                SHIFT_IMM(48); SHIFT_IMM(49); SHIFT_IMM(50); SHIFT_IMM(51); SHIFT_IMM(52); SHIFT_IMM(53); SHIFT_IMM(54); SHIFT_IMM(55);
++                SHIFT_IMM(56); SHIFT_IMM(57); SHIFT_IMM(58); SHIFT_IMM(59); SHIFT_IMM(60); SHIFT_IMM(61); SHIFT_IMM(62); SHIFT_IMM(63);
++                SHIFT_IMM(64); SHIFT_IMM(65); SHIFT_IMM(66); SHIFT_IMM(67); SHIFT_IMM(68); SHIFT_IMM(69); SHIFT_IMM(70); SHIFT_IMM(71);
++                SHIFT_IMM(72); SHIFT_IMM(73); SHIFT_IMM(74); SHIFT_IMM(75); SHIFT_IMM(76); SHIFT_IMM(77); SHIFT_IMM(78); SHIFT_IMM(79);
++                SHIFT_IMM(80); SHIFT_IMM(81); SHIFT_IMM(82); SHIFT_IMM(83); SHIFT_IMM(84); SHIFT_IMM(85); SHIFT_IMM(86); SHIFT_IMM(87);
++                SHIFT_IMM(88); SHIFT_IMM(89); SHIFT_IMM(90); SHIFT_IMM(91); SHIFT_IMM(92); SHIFT_IMM(93); SHIFT_IMM(94); SHIFT_IMM(95);
++                SHIFT_IMM(96); SHIFT_IMM(97); SHIFT_IMM(98); SHIFT_IMM(99); SHIFT_IMM(100); SHIFT_IMM(101); SHIFT_IMM(102); SHIFT_IMM(103);
++                SHIFT_IMM(104); SHIFT_IMM(105); SHIFT_IMM(106); SHIFT_IMM(107); SHIFT_IMM(108); SHIFT_IMM(109); SHIFT_IMM(110); SHIFT_IMM(111);
++                SHIFT_IMM(112); SHIFT_IMM(113); SHIFT_IMM(114); SHIFT_IMM(115); SHIFT_IMM(116); SHIFT_IMM(117); SHIFT_IMM(118); SHIFT_IMM(119);
++                SHIFT_IMM(120); SHIFT_IMM(121); SHIFT_IMM(122); SHIFT_IMM(123); SHIFT_IMM(124); SHIFT_IMM(125); SHIFT_IMM(126); SHIFT_IMM(127);
++                SHIFT_IMM(128); SHIFT_IMM(129); SHIFT_IMM(130); SHIFT_IMM(131); SHIFT_IMM(132); SHIFT_IMM(133); SHIFT_IMM(134); SHIFT_IMM(135);
++                SHIFT_IMM(136); SHIFT_IMM(137); SHIFT_IMM(138); SHIFT_IMM(139); SHIFT_IMM(140); SHIFT_IMM(141); SHIFT_IMM(142); SHIFT_IMM(143);
++                SHIFT_IMM(144); SHIFT_IMM(145); SHIFT_IMM(146); SHIFT_IMM(147); SHIFT_IMM(148); SHIFT_IMM(149); SHIFT_IMM(150); SHIFT_IMM(151);
++                SHIFT_IMM(152); SHIFT_IMM(153); SHIFT_IMM(154); SHIFT_IMM(155); SHIFT_IMM(156); SHIFT_IMM(157); SHIFT_IMM(158); SHIFT_IMM(159);
++                SHIFT_IMM(160); SHIFT_IMM(161); SHIFT_IMM(162); SHIFT_IMM(163); SHIFT_IMM(164); SHIFT_IMM(165); SHIFT_IMM(166); SHIFT_IMM(167);
++                SHIFT_IMM(168); SHIFT_IMM(169); SHIFT_IMM(170); SHIFT_IMM(171); SHIFT_IMM(172); SHIFT_IMM(173); SHIFT_IMM(174); SHIFT_IMM(175);
++                SHIFT_IMM(176); SHIFT_IMM(177); SHIFT_IMM(178); SHIFT_IMM(179); SHIFT_IMM(180); SHIFT_IMM(181); SHIFT_IMM(182); SHIFT_IMM(183);
++                SHIFT_IMM(184); SHIFT_IMM(185); SHIFT_IMM(186); SHIFT_IMM(187); SHIFT_IMM(188); SHIFT_IMM(189); SHIFT_IMM(190); SHIFT_IMM(191);
++                SHIFT_IMM(192); SHIFT_IMM(193); SHIFT_IMM(194); SHIFT_IMM(195); SHIFT_IMM(196); SHIFT_IMM(197); SHIFT_IMM(198); SHIFT_IMM(199);
++                SHIFT_IMM(200); SHIFT_IMM(201); SHIFT_IMM(202); SHIFT_IMM(203); SHIFT_IMM(204); SHIFT_IMM(205); SHIFT_IMM(206); SHIFT_IMM(207);
++                SHIFT_IMM(208); SHIFT_IMM(209); SHIFT_IMM(210); SHIFT_IMM(211); SHIFT_IMM(212); SHIFT_IMM(213); SHIFT_IMM(214); SHIFT_IMM(215);
++                SHIFT_IMM(216); SHIFT_IMM(217); SHIFT_IMM(218); SHIFT_IMM(219); SHIFT_IMM(220); SHIFT_IMM(221); SHIFT_IMM(222); SHIFT_IMM(223);
++                SHIFT_IMM(224); SHIFT_IMM(225); SHIFT_IMM(226); SHIFT_IMM(227); SHIFT_IMM(228); SHIFT_IMM(229); SHIFT_IMM(230); SHIFT_IMM(231);
++                SHIFT_IMM(232); SHIFT_IMM(233); SHIFT_IMM(234); SHIFT_IMM(235); SHIFT_IMM(236); SHIFT_IMM(237); SHIFT_IMM(238); SHIFT_IMM(239);
++                SHIFT_IMM(240); SHIFT_IMM(241); SHIFT_IMM(242); SHIFT_IMM(243); SHIFT_IMM(244); SHIFT_IMM(245); SHIFT_IMM(246); SHIFT_IMM(247);
++                SHIFT_IMM(248); SHIFT_IMM(249); SHIFT_IMM(250); SHIFT_IMM(251); SHIFT_IMM(252); SHIFT_IMM(253); SHIFT_IMM(254); SHIFT_IMM(255);
++            }
++#undef SHIFT_IMM
++            break;
++        default: *result=left;*flags=initial_flags;return;
++    }
++    *result=left;*flags=(initial_flags & ~0x8d5) | (observed & 0x8d5);
++#undef ALU_CASE
++#undef ALU_ASM
++}
++static BOOL software_bridge_arithmetic(const BYTE *code,CONTEXT *c,struct software_bridge_effect *e)
++{
++    unsigned int p=0,rex=0,op,m,reg,rm,width,operation=0,dst=0,no_write=0;
++    ULONG64 left=0,right=0;LONG imm32; signed char imm8;
++    memset(e,0,sizeof(*e));
++    if(code[p]>=0x40 && code[p]<=0x4f)rex=code[p++];
++    width=(rex&8)?64:32;op=code[p++];
++    if(op>=0xb8 && op<=0xbf)
++    {
++        dst=op-0xb8+((rex&1)?8:0);if(dst==4 || (rex&6))return FALSE;
++        if(width==64){memcpy(&e->value[0],code+p,8);p+=8;}
++        else{ULONG value;memcpy(&value,code+p,4);e->value[0]=value;p+=4;}
++        e->dst=dst;e->length=p;return TRUE;
++    }
++    if(op==0x81 || op==0x83 || op==0xc1 || op==0xd3 || op==0xf7)
++    {
++        m=code[p++];if((m&0xc0)!=0xc0 || (rex&6))return FALSE;
++        operation=(m>>3)&7;dst=(m&7)+((rex&1)?8:0);
++        no_write=(op==0x81 || op==0x83) && operation==7;
++        if(dst==4 && !no_write)return FALSE;
++        left=*software_bridge_gpr(c,dst);
++        if(op==0xf7)
++        {
++            if(operation!=2)return FALSE;
++            e->value[0]=width==64?~left:(ULONG)~left;e->dst=dst;e->length=p;return TRUE;
++        }
++        if(op==0xc1 || op==0xd3)
++        {
++            if(operation!=4 && operation!=5)return FALSE;
++            operation=operation==4?(op==0xc1?12:11):(op==0xc1?10:9);
++            right=op==0xc1?code[p++]:c->Rcx;
++        }
++        else
++        {
++            if(operation==2 || operation==3)return FALSE;
++            if(op==0x83){memcpy(&imm8,code+p,1);p++;right=(LONG64)imm8;}
++            else{memcpy(&imm32,code+p,4);p+=4;right=(LONG64)imm32;}
++        }
++    }
++    else if(op==0x05 || op==0x0d || op==0x25 || op==0x2d || op==0x35 || op==0x3d)
++    {
++        if(rex&7)return FALSE;
++        operation=(op>>3)&7;dst=0;no_write=operation==7;left=c->Rax;
++        memcpy(&imm32,code+p,4);p+=4;right=(LONG64)imm32;
++    }
++    else
++    {
++        switch(op)
++        {
++            case 0x01:case 0x03:operation=0;break;
++            case 0x09:case 0x0b:operation=1;break;
++            case 0x21:case 0x23:operation=4;break;
++            case 0x29:case 0x2b:operation=5;break;
++            case 0x31:case 0x33:operation=6;break;
++            case 0x39:case 0x3b:operation=7;no_write=1;break;
++            case 0x85:operation=8;no_write=1;break;
++            default:return FALSE;
++        }
++        m=code[p++];if((m&0xc0)!=0xc0 || (rex&2))return FALSE;
++        reg=((m>>3)&7)+((rex&4)?8:0);rm=(m&7)+((rex&1)?8:0);
++        dst=(op&2)?reg:rm;right=*software_bridge_gpr(c,(op&2)?rm:reg);
++        if(dst==4 && !no_write)return FALSE;
++        left=*software_bridge_gpr(c,dst);
++    }
++    e->dst=dst;e->length=p;e->no_write=no_write;e->flags_valid=1;
++    software_bridge_alu(operation,width,left,right,c->EFlags,&e->value[0],&e->flags);
++    return TRUE;
++}
++
++static BOOL software_bridge_registers(const BYTE *code,CONTEXT *c,struct software_bridge_effect *e)
++{
++    unsigned int p=0,p66=0,rex=0,op,m,reg,rm,width,i;
++    ULONG64 value,src[2],dst[2];ULONG lanes[4],output[4];
++    memset(e,0,sizeof(*e));
++    if(code[p]==0x66){p66=1;p++;}
++    if(code[p]>=0x40 && code[p]<=0x4f)rex=code[p++];
++    op=code[p++];
++    if(op==0x8b || op==0x89){
++        m=code[p++];if((m&0xc0)!=0xc0)return FALSE;
++        reg=((m>>3)&7)+((rex&4)?8:0);rm=(m&7)+((rex&1)?8:0);
++        e->dst=op==0x8b?reg:rm;if(e->dst==4)return FALSE;
++        value=*software_bridge_gpr(c,op==0x8b?rm:reg);width=(rex&8)?64:p66?16:32;
++        e->value[0]=width==64?value:width==32?(ULONG)value:(*software_bridge_gpr(c,e->dst)&~(ULONG64)0xffff)|(value&0xffff);
++        e->length=p;return TRUE;
++    }
++    if(op!=0x0f || !p66)return FALSE;
++    op=code[p++];m=code[p++];if((m&0xc0)!=0xc0)return FALSE;
++    reg=((m>>3)&7)+((rex&4)?8:0);rm=(m&7)+((rex&1)?8:0);
++    if(op==0x7e){
++        e->dst=rm;if(rm==4)return FALSE;
++        value=c->FltSave.XmmRegisters[reg].Low;e->value[0]=(rex&8)?value:(ULONG)value;e->length=p;return TRUE;
++    }
++    if(op!=0x6f && op!=0x70 && op!=0xd4)return FALSE;
++    memcpy(src,&c->FltSave.XmmRegisters[rm],16);memcpy(dst,&c->FltSave.XmmRegisters[reg],16);
++    e->dst=reg;e->vector=1;
++    if(op==0x6f)memcpy(e->value,src,16);
++    else if(op==0xd4){e->value[0]=dst[0]+src[0];e->value[1]=dst[1]+src[1];}
++    else{unsigned int imm=code[p++];memcpy(lanes,src,16);for(i=0;i<4;i++)output[i]=lanes[(imm>>(2*i))&3];memcpy(e->value,output,16);}
++    e->length=p;return TRUE;
++}
++/* Mode-invalid multi-byte instructions still require their encoded bytes to
++ * be fetchable on this runtime. At a page boundary the real fault can be an
++ * execute access violation, not #UD. Never synthesize over that fault.
++ * Rosetta also faults in fixtures where the nominal 2/7-byte encoding fits
++ * but the following page is inaccessible. Conservatively require the complete
++ * 16-byte decoder window inside one executable region and verify readability.
++ * This is an eligibility guard, not a change to the actual fallback fault. */
++static BOOL software_chain_target_ud(BYTE opcode,ULONG_PTR address,const MEMORY_BASIC_INFORMATION *info)
++{
++    SIZE_T size=1,bytes=0;BYTE code[16];ULONG_PTR offset=address-(ULONG_PTR)info->BaseAddress;
++    if(!software_guaranteed_ud_byte(opcode,software_legacy_d5))return FALSE;
++    if(opcode==0xd4 || opcode==0xd5 || opcode==0x9a)size=sizeof code;
++    if(size==1)return TRUE;
++    if(offset>info->RegionSize || info->RegionSize-offset<size)return FALSE;
++    if(NtReadVirtualMemory(GetCurrentProcess(),(void*)address,code,size,&bytes) || bytes!=size)return FALSE;
++    return code[0]==opcode;
++}
++
++/* The seven-byte byte-load bridge remains supported. New register/SIMD cases
++ * read fresh code and preserve legacy SIMD upper lanes, MXCSR and EFLAGS.
++ * VEX/EVEX, memory SIMD operands, memory writes and stack destinations remain
++ * unsupported. Supported arithmetic stages its flags before validation; all
++ * refusal paths leave the original guest context intact. */
++/* 0: fallback unchanged; 1: next real opcode is #UD; 2: resume normal code. */
++static unsigned int software_chain_load_bridge(CONTEXT *context,LONG64 *row)
++{
++    MEMORY_BASIC_INFORMATION info;SIZE_T bytes;BYTE code[16],next,value;
++    LONG64 *entry;LONG displacement;struct software_bridge_effect effect;NTSTATUS status;
++    BOOL byte_load, next_is_ud=TRUE;ULONG_PTR base=(ULONG_PTR)NtCurrentTeb()->Peb->ImageBaseAddress,target;
++    IMAGE_NT_HEADERS *nt=RtlImageNtHeader((void*)base);
++    struct bridge_refusal_record *trace;
++    software_chain_count(3);trace=bridge_refusal_begin(context);
++#define REFUSE_EARLY(reason,detail) do{bridge_refusal_end(trace,reason,detail);return FALSE;}while(0)
++    if(!nt)REFUSE_EARLY(3,0);
++    status=NtQueryVirtualMemory(GetCurrentProcess(),(void*)context->Rip,MemoryBasicInformation,&info,sizeof info,NULL);
++    if(status)REFUSE_EARLY(4,(ULONG)status);
++    if(info.State!=MEM_COMMIT || info.Type!=MEM_PRIVATE || (info.Protect&(PAGE_GUARD|PAGE_NOACCESS)))REFUSE_EARLY(5,((ULONG64)info.State<<32)|info.Protect);
++    if((info.Protect&0xff)!=PAGE_EXECUTE_READ && (info.Protect&0xff)!=PAGE_EXECUTE_READWRITE)REFUSE_EARLY(6,info.Protect);
++    if(context->Rip-(ULONG_PTR)info.BaseAddress>info.RegionSize || info.RegionSize-(context->Rip-(ULONG_PTR)info.BaseAddress)<sizeof code)REFUSE_EARLY(7,info.RegionSize);
++    status=NtReadVirtualMemory(GetCurrentProcess(),(void*)context->Rip,code,sizeof code,&bytes);
++    if(status || bytes!=sizeof code)REFUSE_EARLY(8,(ULONG)status);
++    if(trace){memcpy(trace->code,code,sizeof code);trace->valid|=1;}
++    entry=software_bridge_census(context,row);
++#define BRIDGE_REFUSE(k,reason,detail) do{if(entry)InterlockedIncrement64(entry+(k));REFUSE_EARLY(reason,detail);}while(0)
++    byte_load=code[0]==0x8a && code[1]==0x01;
++    if(byte_load){memset(&effect,0,sizeof effect);effect.length=2;}
++    else if(!(software_alu_enabled && software_bridge_arithmetic(code,context,&effect)) && !software_bridge_registers(code,context,&effect))BRIDGE_REFUSE(2,9,0);
++    if(trace)trace->length=effect.length;
++    if(effect.length+5>sizeof code || code[effect.length]!=0xe9)BRIDGE_REFUSE(2,10,0);
++    memcpy(&displacement,code+effect.length+1,4);target=context->Rip+effect.length+5+(LONG_PTR)displacement;
++    if(trace){trace->target=target;trace->valid|=2;}
++    if(target<base || target-base>=nt->OptionalHeader.SizeOfImage)BRIDGE_REFUSE(3,11,0);
++    status=NtQueryVirtualMemory(GetCurrentProcess(),(void*)target,MemoryBasicInformation,&info,sizeof info,NULL);
++    if(status)BRIDGE_REFUSE(3,12,(ULONG)status);
++    if(info.State!=MEM_COMMIT || (info.Protect&(PAGE_GUARD|PAGE_NOACCESS)))BRIDGE_REFUSE(3,13,((ULONG64)info.State<<32)|info.Protect);
++    if((info.Protect&0xff)!=PAGE_EXECUTE_READ && (info.Protect&0xff)!=PAGE_EXECUTE_READWRITE && (info.Protect&0xff)!=PAGE_EXECUTE_WRITECOPY)BRIDGE_REFUSE(3,14,info.Protect);
++    status=NtReadVirtualMemory(GetCurrentProcess(),(void*)target,&next,1,&bytes);
++    if(status || bytes!=1)BRIDGE_REFUSE(3,15,(ULONG)status);
++    if(trace){trace->next=next;trace->valid|=4;}
++    next_is_ud=software_chain_target_ud(next,target,&info);
++    if(!next_is_ud && !software_bridge_resume)BRIDGE_REFUSE(3,16,0);
++    if(byte_load){
++        status=NtQueryVirtualMemory(GetCurrentProcess(),(void*)context->Rcx,MemoryBasicInformation,&info,sizeof info,NULL);
++        if(status)BRIDGE_REFUSE(4,17,(ULONG)status);
++        if(info.State!=MEM_COMMIT || (info.Type!=MEM_PRIVATE && info.Type!=MEM_IMAGE) || (info.Protect&(PAGE_GUARD|PAGE_NOACCESS)))BRIDGE_REFUSE(4,18,((ULONG64)info.State<<32)|info.Protect);
++        switch(info.Protect&0xff){case PAGE_READONLY:case PAGE_READWRITE:case PAGE_WRITECOPY:case PAGE_EXECUTE_READ:case PAGE_EXECUTE_READWRITE:case PAGE_EXECUTE_WRITECOPY:break;default:BRIDGE_REFUSE(4,19,info.Protect);}
++        status=NtReadVirtualMemory(GetCurrentProcess(),(void*)context->Rcx,&value,1,&bytes);
++        if(status || bytes!=1)BRIDGE_REFUSE(4,20,(ULONG)status);
++        context->Rax=(context->Rax&~(ULONG64)0xff)|value;
++    }else if(effect.vector)memcpy(&context->FltSave.XmmRegisters[effect.dst],effect.value,16);
++    else if(!effect.no_write)*software_bridge_gpr(context,effect.dst)=effect.value[0];
++    if(effect.flags_valid)context->EFlags=effect.flags;
++    context->Rip=target;
++    software_chain_count(4);if(entry)InterlockedIncrement64(entry+1);
++    if(!next_is_ud)software_chain_count(5);
++    bridge_refusal_end(trace,next_is_ud?1:2,0);
++#undef BRIDGE_REFUSE
++#undef REFUSE_EARLY
++    return next_is_ud ? 1 : 2;
++}
++static unsigned int software_chain_next_reason(CONTEXT *context,ULONG64 *a,ULONG64 *b,LONG64 *row)
++{
++    MEMORY_BASIC_INFORMATION info;
++    SIZE_T bytes=0;
++    BYTE opcode;
++    NTSTATUS status;
++    ULONG_PTR base=(ULONG_PTR)NtCurrentTeb()->Peb->ImageBaseAddress;
++    IMAGE_NT_HEADERS *nt=RtlImageNtHeader((void*)base);
++    if(!nt || context->Rip<base || context->Rip-base>=nt->OptionalHeader.SizeOfImage)
++    {
++        unsigned int bridge=software_chain_load_bridge(context,row);
++        if(bridge==1)return 0;
++        /* The bridge's real effects are committed, but the destination is not
++         * a #UD. Return through the ordinary NtContinue path, without making
++         * an exception record or invoking VEH for that valid instruction. */
++        if(bridge==2){*a=context->Rip;*b=2;return 19;}
++        *a=base;*b=context->Rip;return 15;
++    }
++    status=NtQueryVirtualMemory(GetCurrentProcess(),(void*)context->Rip,MemoryBasicInformation,&info,sizeof(info),NULL);
++    if(status){*a=status;return 16;}
++    *a=info.State;*b=info.Protect;
++    if(info.State!=MEM_COMMIT || (info.Protect & (PAGE_GUARD|PAGE_NOACCESS)))return 17;
++    switch(info.Protect & 0xff){case PAGE_EXECUTE_READ:case PAGE_EXECUTE_READWRITE:case PAGE_EXECUTE_WRITECOPY:break;default:return 17;}
++    status=NtReadVirtualMemory(GetCurrentProcess(),(void*)context->Rip,&opcode,1,&bytes);
++    if(status || bytes!=1){*a=status;*b=bytes;return 18;}
++    *a=opcode;*b=0;
++    return software_chain_target_ud(opcode,context->Rip,&info)?0:19;
++}
++
++/* Bounded diagnostic only. The controller prefaults storage before arming.
++ * One record covers one outer PE delivery, including synthetic links. Nested
++ * deliveries have independent records, so totals can double-count nesting.
++ * No log, allocation, instruction read or additional handler is introduced.
++ * control: enabled, reserved, dropped, active, capacity; remaining reserved. */
++#define BURST_CAPACITY 262144
++LONG64 __wine_exception_burst_control[8] = {0,0,0,0,BURST_CAPACITY};
++struct exception_burst_record
++{
++    LONG64 begin, end, handler, policy;
++    ULONG64 rip_begin, rip_end;
++    ULONG tid, links, reason;
++    LONG ready;
++};
++struct exception_burst_record __wine_exception_burst_records[BURST_CAPACITY];
++static LONG64 burst_clock(void)
++{
++    LARGE_INTEGER q;
++    NtQueryPerformanceCounter(&q, NULL);
++    return q.QuadPart;
++}
++
++/* Automatic bounded activation avoids cross-process writes while FH6 runs.
++ * QPC gating itself remains present in the reference window and is documented. */
++static LONG burst_initialized, burst_gate;
++static LONG64 burst_deadline, burst_duration;
++static void burst_configure(void)
++{
++    WCHAR buffer[16];
++    UNICODE_STRING name = RTL_CONSTANT_STRING(L"WINE_EXCEPTION_BURST_AUTO");
++    UNICODE_STRING value = {0, sizeof(buffer), buffer};
++    LARGE_INTEGER q, frequency;
++    BOOL probe = FALSE;
++    if (burst_initialized || InterlockedCompareExchange(&burst_initialized, 1, 0)) return;
++    if (RtlQueryEnvironmentVariable_U(NULL, &name, &value)) return;
++    if (value.Length == 5*sizeof(WCHAR) && !memcmp(buffer,L"probe",value.Length)) probe=TRUE;
++    else if (value.Length != sizeof(WCHAR) || buffer[0] != '1') return;
++    NtQueryPerformanceCounter(&q, &frequency);
++    memset(__wine_exception_burst_records,0,sizeof(__wine_exception_burst_records));
++    {
++        WCHAR trace_value[4];UNICODE_STRING trace_name=RTL_CONSTANT_STRING(L"WINE_BRIDGE_REFUSAL_TRACE");
++        UNICODE_STRING value={0,sizeof(trace_value),trace_value};
++        if(!RtlQueryEnvironmentVariable_U(NULL,&trace_name,&value) && value.Length==sizeof(WCHAR) && trace_value[0]=='1')
++        {
++            memset(__wine_bridge_refusal_records,0,sizeof(__wine_bridge_refusal_records));
++            InterlockedCompareExchange64(&__wine_bridge_refusal_control[0],1,0);
++        }
++    }
++    __wine_exception_burst_control[5]=frequency.QuadPart;
++    burst_deadline=q.QuadPart+(probe?0:240*frequency.QuadPart);
++    if (!probe)
++    {
++        WCHAR digits[32]; unsigned int i; ULONG64 parsed=0;
++        UNICODE_STRING start_name=RTL_CONSTANT_STRING(L"FH6_TRACE_START");
++        UNICODE_STRING start_value={0,sizeof(digits),digits};
++        if (!RtlQueryEnvironmentVariable_U(NULL,&start_name,&start_value) && start_value.Length && start_value.Length<=20*sizeof(WCHAR))
++        {
++            for(i=0;i<start_value.Length/sizeof(WCHAR);i++)
++            {
++                if(digits[i]<'0'||digits[i]>'9'||parsed>922337203685477580ULL)break;
++                parsed=parsed*10+digits[i]-'0';
++            }
++            if(i==start_value.Length/sizeof(WCHAR) && parsed>q.QuadPart && parsed-q.QuadPart<600*frequency.QuadPart)burst_deadline=parsed;
++        }
++    }
++    burst_duration=probe?frequency.QuadPart/100:20*frequency.QuadPart;
++    InterlockedExchange(&burst_gate,1);
++}
++static void burst_check_gate(void)
++{
++    LONG gate=burst_gate;
++    LONG64 now;
++    if (!gate) return;
++    now=burst_clock();
++    if (gate==1 && now>=burst_deadline && InterlockedCompareExchange(&burst_gate,3,1)==1)
++    {
++        __wine_exception_burst_control[6]=now;
++        __wine_exception_burst_control[7]=now+burst_duration;
++        InterlockedCompareExchange64(&__wine_exception_burst_control[0],1,0);
++        InterlockedExchange(&burst_gate,2);
++    }
++    else if (gate==2 && now>=__wine_exception_burst_control[7])
++    {
++        InterlockedCompareExchange64(&__wine_exception_burst_control[0],0,1);
++        InterlockedExchange(&burst_gate,0);
++    }
++}
++
++static LONG call_vectored_handlers_chain_body(EXCEPTION_RECORD *rec, CONTEXT *context, struct exception_burst_record *timing)
++{
++    unsigned int links = 0;
++    LONG64 *row=software_chain_diag_row();
++    software_chain_diag(row,0,context,context,0,0);
++    software_chain_count(0);
++    for (;;)
++    {
++        CONTEXT before = *context;
++        ULONG64 a=0,b=0;
++        unsigned int reason;
++        LONG64 stamp = timing ? burst_clock() : 0;
++        LONG ret = call_vectored_handlers(rec, context);
++        if (timing) {timing->handler += burst_clock() - stamp; timing->links = links; timing->reason = 3;}
++        if (ret != EXCEPTION_CONTINUE_EXECUTION) {software_chain_diag(row,3,&before,context,ret,0);return ret;}
++        if (links == 64)
++        {
++            if (timing) timing->reason = 2;
++            software_chain_count(2);
++            software_chain_diag(row,2,&before,context,0,0);
++            return ret;
++        }
++        if (rec->ExceptionCode != EXCEPTION_ILLEGAL_INSTRUCTION || rec->ExceptionFlags)
++        {if (timing) timing->reason = 4;software_chain_diag(row,4,&before,context,rec->ExceptionCode,rec->ExceptionFlags);return ret;}
++        stamp = timing ? burst_clock() : 0;
++        reason=software_chain_state_reason(&before,context,&a,&b);
++        if(!reason)reason=software_chain_next_reason(context,&a,&b,row);
++        if (timing) {timing->policy += burst_clock() - stamp; timing->reason = reason;}
++        if(reason){software_chain_diag(row,reason,&before,context,a,b);return ret;}
++        software_chain_diag(row,1,&before,context,a,b);
++        memset(rec, 0, sizeof(*rec));
++        rec->ExceptionCode = EXCEPTION_ILLEGAL_INSTRUCTION;
++        rec->ExceptionAddress = (void *)context->Rip;
++        ++links;
++        software_chain_count(1);
++        /* The next iteration runs the real complete VEH chain. If it declines,
++         * dispatch_exception proceeds to SEH/second chance exactly once. */
++    }
++}
++static LONG call_vectored_handlers_with_chain(EXCEPTION_RECORD *rec, CONTEXT *context)
++{
++    struct exception_burst_record *timing = NULL;
++    LONG ret;
++    burst_check_gate();
++    if (__wine_exception_burst_control[0])
++    {
++        LONG64 index;
++        InterlockedIncrement64(&__wine_exception_burst_control[3]);
++        if (__wine_exception_burst_control[0])
++        {
++            index = InterlockedIncrement64(&__wine_exception_burst_control[1]) - 1;
++            if (index < BURST_CAPACITY)
++            {
++                timing = &__wine_exception_burst_records[index];
++                timing->tid = HandleToULong(NtCurrentTeb()->ClientId.UniqueThread);
++                timing->rip_begin = context->Rip;
++                timing->begin = burst_clock();
++            }
++            else InterlockedIncrement64(&__wine_exception_burst_control[2]);
++        }
++        if (!timing) InterlockedDecrement64(&__wine_exception_burst_control[3]);
++    }
++    ret = call_vectored_handlers_chain_body(rec, context, timing);
++    if (timing)
++    {
++        timing->end = burst_clock();
++        timing->rip_end = context->Rip;
++        InterlockedExchange(&timing->ready, 1);
++        InterlockedDecrement64(&__wine_exception_burst_control[3]);
++    }
++    return ret;
++}
++#endif
+--- /dev/null
++++ b/dlls/ntdll/unix/first_fault_record.h
+@@ -0,0 +1,61 @@
++/* Opt-in first-fault evidence. No allocation, formatting, locks or symbolication
++ * in signal context. The observer never changes exception handling. */
++#include <stdint.h>
++#include <unistd.h>
++#include <fcntl.h>
++#include <sys/stat.h>
++#include <errno.h>
++
++#define FF_MAGIC UINT64_C(0x31464c5446364846)
++#define FF_WORDS 48
++struct first_fault_packet { uint64_t value[FF_WORDS]; };
++_Static_assert(sizeof(struct first_fault_packet) == 384, "stable evidence format");
++_Static_assert(__atomic_always_lock_free(sizeof(unsigned int), 0), "signal-safe claim must be lock-free");
++static int first_fault_fd = -1;
++static unsigned int first_fault_claimed;
++static uint64_t first_fault_pid;
++static struct first_fault_packet first_fault_packet;
++
++/* Called during ordinary startup, before handlers are installed. Only regular
++ * files are accepted. O_APPEND gives each single write a separate file range. */
++static int first_fault_open(const char *path)
++{
++    struct stat st;
++    struct first_fault_packet armed = {{0}};
++    int fd;
++    if (!path || path[0] != '/') return 0;
++    fd = open(path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK, 0600);
++    if (fd < 0) return 0;
++    if (fstat(fd, &st) || !S_ISREG(st.st_mode)) { close(fd); return 0; }
++    first_fault_pid = (uint64_t)getpid();
++    armed.value[0] = FF_MAGIC;
++    armed.value[1] = 1;
++    armed.value[2] = sizeof(armed);
++    armed.value[3] = 0; /* armed, not a fault */
++    armed.value[4] = first_fault_pid;
++    if (write(fd, &armed, sizeof(armed)) != sizeof(armed)) { close(fd); return 0; }
++    first_fault_fd = fd;
++    return 1;
++}
++
++/* The caller checks the exact fatal-stack condition before claiming. A second
++ * thread or reentrant signal cannot modify the first recorder's storage. */
++static struct first_fault_packet *first_fault_begin(void)
++{
++    if (first_fault_fd < 0 || __atomic_exchange_n(&first_fault_claimed, 1, __ATOMIC_RELAXED)) return 0;
++    first_fault_packet.value[0] = FF_MAGIC;
++    first_fault_packet.value[1] = 1;
++    first_fault_packet.value[2] = sizeof(first_fault_packet);
++    first_fault_packet.value[3] = 1;
++    first_fault_packet.value[4] = first_fault_pid;
++    return &first_fault_packet;
++}
++
++static void first_fault_commit(void)
++{
++    int saved_errno = errno;
++    /* One bounded best-effort write. An incomplete record is detectable by the
++     * decoder; no retry, blocking lock or recovery is introduced in the game. */
++    (void)write(first_fault_fd, &first_fault_packet, sizeof(first_fault_packet));
++    errno = saved_errno;
++}
+--- /dev/null
++++ b/dlls/ntdll/unix/native_timing.h
+@@ -0,0 +1,79 @@
++/* Diagnostic only: prefaulted bounded storage, lock-free publication and a
++ * native worker flushing only after the common capture window. Signal paths
++ * perform no allocation, file access, formatting or dynamic symbol lookup. */
++#include <mach/mach_time.h>
++#include <stdint.h>
++#include <errno.h>
++#include <fcntl.h>
++#include <sys/stat.h>
++#include <time.h>
++#define NT_CAPACITY 2097152
++struct native_timing_record {uint64_t qpc,rip,rsp,aux;uint32_t tid,kind,ready,pad;};
++struct native_timing_header {uint64_t magic,version,record_size,capacity,count,dropped,active,pid,start,end,frequency,complete,reserved[4];};
++_Static_assert(sizeof(struct native_timing_record)==48,"native record ABI");
++_Static_assert(sizeof(struct native_timing_header)==128,"native header ABI");
++_Static_assert(__atomic_always_lock_free(8,0),"signal-safe counters");
++static struct native_timing_header nt_header;
++static struct native_timing_record *nt_records;
++static mach_timebase_info_data_t nt_timebase;
++static unsigned int nt_enabled;
++static int nt_fd=-1;
++static uint64_t nt_clock(void) {return mach_continuous_time()*nt_timebase.numer/nt_timebase.denom/100;}
++static int nt_write_all(const void *data,size_t n)
++{
++    const char *p=data;
++    while(n){ssize_t w=write(nt_fd,p,n);if(w<0&&errno==EINTR)continue;if(w<=0)return 0;p+=w;n-=w;}
++    return 1;
++}
++static void nt_wait_until(uint64_t target)
++{
++    uint64_t now;
++    while((now=nt_clock())<target){uint64_t ticks=target-now;struct timespec ts={(time_t)(ticks/10000000),(long)(ticks%10000000)*100};nanosleep(&ts,NULL);}
++}
++static void *nt_worker(void *unused)
++{
++    (void)unused;nt_wait_until(nt_header.start);__atomic_store_n(&nt_enabled,1,__ATOMIC_RELEASE);
++    nt_wait_until(nt_header.end);__atomic_store_n(&nt_enabled,0,__ATOMIC_RELEASE);
++    while(__atomic_load_n(&nt_header.active,__ATOMIC_ACQUIRE)){struct timespec ts={0,1000000};nanosleep(&ts,NULL);}
++    if(nt_header.count>NT_CAPACITY)nt_header.count=NT_CAPACITY;
++    nt_header.complete=1;lseek(nt_fd,0,SEEK_SET);
++    if(!nt_write_all(&nt_header,sizeof nt_header)||!nt_write_all(nt_records,nt_header.count*sizeof(*nt_records)))nt_header.complete=2;
++    if(nt_header.complete==2){lseek(nt_fd,0,SEEK_SET);nt_write_all(&nt_header,sizeof nt_header);}
++    close(nt_fd);nt_fd=-1;return NULL;
++}
++void fh6_native_mark(unsigned int kind,unsigned int tid,UINT64 rip,UINT64 rsp,UINT64 aux)
++{
++    uint64_t i,q;int saved_errno;
++    struct native_timing_record *r;
++    if(!__atomic_load_n(&nt_enabled,__ATOMIC_RELAXED))return;
++    saved_errno=errno;__atomic_add_fetch(&nt_header.active,1,__ATOMIC_ACQUIRE);
++    if(!__atomic_load_n(&nt_enabled,__ATOMIC_ACQUIRE))goto done;
++    q=nt_clock();if(q<nt_header.start||q>=nt_header.end)goto done;
++    i=__atomic_fetch_add(&nt_header.count,1,__ATOMIC_RELAXED);
++    if(i>=NT_CAPACITY){__atomic_add_fetch(&nt_header.dropped,1,__ATOMIC_RELAXED);goto done;}
++    r=&nt_records[i];r->qpc=q;r->rip=rip;r->rsp=rsp;r->aux=aux;r->tid=tid;r->kind=kind;
++    __atomic_store_n(&r->ready,1,__ATOMIC_RELEASE);
++done:__atomic_sub_fetch(&nt_header.active,1,__ATOMIC_RELEASE);errno=saved_errno;
++}
++static void native_timing_init(void)
++{
++    const char *dir=getenv("FH6_TRACE_DIR"),*start=getenv("FH6_TRACE_START"),*name,*p;
++    uint64_t now;char path[2048],*end;pthread_t worker;struct stat st;
++    if(!dir||dir[0]!='/'||!start||main_argc<1)return;
++    /* init_startup_info has already removed Wine argv[0]. */
++    name=main_argv[0];for(p=name;*p;p++)if(*p=='/'||*p=='\\')name=p+1;
++    if(strcasecmp(name,"forzahorizon6.exe")&&strcasecmp(name,"exception_chain_probe.exe")&&strcasecmp(name,"timer_probe.exe"))return;
++    mach_timebase_info(&nt_timebase);now=nt_clock();
++    nt_header.start=strtoull(start,&end,10);
++    if(*end||nt_header.start<=now||nt_header.start-now>6000000000ULL)return;
++    nt_header.end=nt_header.start+200000000ULL;nt_header.frequency=10000000;nt_header.capacity=NT_CAPACITY;
++    nt_header.magic=UINT64_C(0x4648364e41544956);nt_header.version=1;nt_header.record_size=sizeof(*nt_records);nt_header.pid=getpid();
++    if(snprintf(path,sizeof path,"%s/native-%d.bin",dir,(int)getpid())>=(int)sizeof path)return;
++    nt_fd=open(path,O_WRONLY|O_CREAT|O_EXCL|O_CLOEXEC|O_NOFOLLOW,0600);if(nt_fd<0)return;
++    if(fstat(nt_fd,&st)||!S_ISREG(st.st_mode)){close(nt_fd);nt_fd=-1;return;}
++    nt_records=mmap(NULL,NT_CAPACITY*sizeof(*nt_records),PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANON,-1,0);
++    if(nt_records==MAP_FAILED){nt_records=NULL;close(nt_fd);nt_fd=-1;return;}
++    memset(nt_records,0,NT_CAPACITY*sizeof(*nt_records));
++    if(!nt_write_all(&nt_header,sizeof nt_header)||pthread_create(&worker,NULL,nt_worker,NULL)){close(nt_fd);nt_fd=-1;return;}
++    pthread_detach(worker);
++}
+--- a/dlls/ntdll/unix/server.c
++++ b/dlls/ntdll/unix/server.c
+@@ -851,6 +851,7 @@
+     NTSTATUS status;
+     BOOL alertable;
+ 
++    fh6_native_mark(4,GetCurrentThreadId(),context->Rip,context->Rsp,0);
+     if ((UINT_PTR)args > 0xff)
+         alertable = args->ContinueFlags & KCONTINUE_FLAG_TEST_ALERT;
+     else
+@@ -861,7 +862,9 @@
+         status = server_select( NULL, 0, SELECT_INTERRUPTIBLE | SELECT_ALERTABLE, 0, NULL, &apc );
+         if (status == STATUS_USER_APC) return invoke_user_apc( context, &apc, status );
+     }
+-    return signal_set_full_context( context );
++    status = signal_set_full_context( context );
++    fh6_native_mark(5,GetCurrentThreadId(),context->Rip,context->Rsp,status);
++    return status;
+ }
+ 
+ 
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -78,6 +78,8 @@
+ #include "wine/asm.h"
+ #include "unix_private.h"
+ #include "wine/debug.h"
++#include "first_fault_record.h"
++#include "native_timing.h"
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(unwind);
+ WINE_DECLARE_DEBUG_CHANNEL(seh);
+@@ -1466,8 +1468,56 @@
+ /***********************************************************************
+  *           setup_raise_exception
+  */
++/* Diagnostic only: record the first fatal alternate-stack delivery before
++ * virtual_setup_exception aborts the thread. Never change its decision. */
++static void first_fault_observe( struct thread_data *data, ucontext_t *sigcontext,
++                                 const EXCEPTION_RECORD *rec, int signal, const siginfo_t *info )
++{
++    struct first_fault_packet *packet;
++    ULONG_PTR rsp;
++    uint64_t *v;
++    if (first_fault_fd < 0 || !data->teb || is_16bit(sigcontext)) return;
++    rsp = RSP_sig(sigcontext) & ~(ULONG_PTR)15;
++    if (!virtual_is_fatal_signal_stack(data, (void *)rsp)) return;
++    if (!(packet = first_fault_begin())) return;
++    v = packet->value;
++    v[5] = data->tid;
++    v[6] = signal;
++    v[7] = info ? (int64_t)info->si_code : 0;
++    v[8] = info ? (uintptr_t)info->si_addr : 0;
++    v[9] = TRAP_sig(sigcontext);
++    v[10] = ERROR_sig(sigcontext);
++    v[11] = RIP_sig(sigcontext);
++    v[12] = RSP_sig(sigcontext);
++    v[13] = EFL_sig(sigcontext);
++    v[14] = (uintptr_t)data->teb;
++    v[15] = (uintptr_t)data->teb->DeallocationStack;
++    v[16] = (uintptr_t)data->teb->Tib.StackLimit;
++    v[17] = (uintptr_t)data->teb->Tib.StackBase;
++    v[18] = (uintptr_t)data->signal_stack;
++    v[19] = (uintptr_t)(data->signal_stack + signal_stack_size);
++    v[20] = rec->ExceptionCode;
++    v[21] = rec->ExceptionFlags;
++    v[22] = (uintptr_t)rec->ExceptionAddress;
++    v[23] = rec->NumberParameters;
++    v[24] = rec->NumberParameters > 0 ? rec->ExceptionInformation[0] : 0;
++    v[25] = rec->NumberParameters > 1 ? rec->ExceptionInformation[1] : 0;
++    v[26] = (uintptr_t)data->pthread_id; /* opaque pthread token, not Mach thread ID */
++    v[27] = RAX_sig(sigcontext); v[28] = RBX_sig(sigcontext);
++    v[29] = RCX_sig(sigcontext); v[30] = RDX_sig(sigcontext);
++    v[31] = RSI_sig(sigcontext); v[32] = RDI_sig(sigcontext);
++    v[33] = RBP_sig(sigcontext); v[34] = R8_sig(sigcontext);
++    v[35] = R9_sig(sigcontext); v[36] = R10_sig(sigcontext);
++    v[37] = R11_sig(sigcontext); v[38] = R12_sig(sigcontext);
++    v[39] = R13_sig(sigcontext); v[40] = R14_sig(sigcontext);
++    v[41] = R15_sig(sigcontext);
++    v[42] = !!info; /* full signal metadata versus common-path fallback */
++    first_fault_commit();
++}
++
+ static void setup_raise_exception( struct thread_data *data, ucontext_t *sigcontext,
+-                                   EXCEPTION_RECORD *rec, struct xcontext *xcontext )
++                                   EXCEPTION_RECORD *rec, struct xcontext *xcontext,
++                                   int signal, const siginfo_t *info )
+ {
+     ULONG_PTR rsp;
+     CONTEXT *context = &xcontext->c;
+@@ -1477,6 +1527,7 @@
+     XSAVE_AREA_HEADER *src_xs;
+     void *callback;
+ 
++    fh6_native_mark(2,HandleToULong(data->teb->ClientId.UniqueThread),context->Rip,context->Rsp,rec->ExceptionCode);
+     status = send_debug_event( data, rec, context, TRUE );
+     if (status == DBG_CONTINUE || status == DBG_EXCEPTION_HANDLED)
+     {
+@@ -1490,6 +1541,7 @@
+     rsp = is_16bit(sigcontext) ? get_wow_teb(data->teb)->SystemReserved1[0] : RSP_sig(sigcontext);
+     rsp &= ~(ULONG_PTR)15;
+     stack_size = rsp - ((rsp - sizeof(*stack) - xstate_size) & ~(ULONG_PTR)63);
++    first_fault_observe( data, sigcontext, rec, signal, info );
+     stack = virtual_setup_exception( data, (void *)rsp, stack_size, rec );
+     stack->rec               = *rec;
+     stack->context           = *context;
+@@ -1520,6 +1572,7 @@
+         R10_sig(sigcontext) = RIP_sig(sigcontext);
+         RIP_sig(sigcontext) = (ULONG64)callback;
+     }
++    fh6_native_mark(3,HandleToULong(data->teb->ClientId.UniqueThread),context->Rip,context->Rsp,rec->ExceptionCode);
+     leave_handler( data, sigcontext );
+ }
+ 
+@@ -2134,7 +2187,7 @@
+     default:
+         return FALSE;
+     }
+-    setup_raise_exception( data, sigcontext, rec, xcontext );
++    setup_raise_exception( data, sigcontext, rec, xcontext, 0, NULL );
+     return TRUE;
+ }
+ 
+@@ -2617,7 +2670,7 @@
+     rec->ExceptionCode = EXCEPTION_SINGLE_STEP;
+     rec->ExceptionAddress = (void *)addr;
+     rec->NumberParameters = 0;
+-    setup_raise_exception( thread, ucontext, rec, xcontext );
++    setup_raise_exception( thread, ucontext, rec, xcontext, 0, NULL );
+ }
+ 
+ /* a fault on entering a guarded breakpoint page */
+@@ -2724,7 +2777,7 @@
+         rec->ExceptionCode = EXCEPTION_SINGLE_STEP;
+         rec->ExceptionAddress = (void *)RIP_sig(ucontext);
+         rec->NumberParameters = 0;
+-        setup_raise_exception( thread, ucontext, rec, xcontext );
++        setup_raise_exception( thread, ucontext, rec, xcontext, 0, NULL );
+         return TRUE;
+     }
+     return FALSE;
+@@ -2743,6 +2796,7 @@
+     struct xcontext context;
+     EXCEPTION_RECORD rec = { .ExceptionAddress = (void *)RIP_sig(sigcontext) };
+ 
++    fh6_native_mark(1,HandleToULong(data->teb->ClientId.UniqueThread),RIP_sig(sigcontext),RSP_sig(sigcontext),signal);
+     save_context( data, &context, sigcontext );
+ 
+ #ifdef __APPLE__
+@@ -2858,7 +2912,7 @@
+         break;
+     }
+     if (handle_syscall_fault( data, sigcontext, &rec, &context.c )) return;
+-    setup_raise_exception( data, sigcontext, &rec, &context );
++    setup_raise_exception( data, sigcontext, &rec, &context, signal, siginfo );
+ }
+ 
+ 
+@@ -2913,7 +2967,7 @@
+         rec.ExceptionInformation[0] = 0;
+         break;
+     }
+-    setup_raise_exception( data, sigcontext, &rec, &context );
++    setup_raise_exception( data, sigcontext, &rec, &context, signal, siginfo );
+ }
+ 
+ 
+@@ -2929,6 +2983,7 @@
+     struct xcontext context;
+     EXCEPTION_RECORD rec = { .ExceptionAddress = (void *)RIP_sig(sigcontext) };
+ 
++    fh6_native_mark(1,HandleToULong(data->teb->ClientId.UniqueThread),RIP_sig(sigcontext),RSP_sig(sigcontext),signal);
+     save_context( data, &context, sigcontext );
+ 
+     switch (siginfo->si_code)
+@@ -2988,7 +3043,7 @@
+             }
+         }
+     }
+-    setup_raise_exception( data, sigcontext, &rec, &context );
++    setup_raise_exception( data, sigcontext, &rec, &context, signal, siginfo );
+ }
+ 
+ 
+@@ -3028,7 +3083,7 @@
+                              .ExceptionAddress = (void *)RIP_sig(sigcontext) };
+ 
+     save_context( data, &context, sigcontext );
+-    setup_raise_exception( data, sigcontext, &rec, &context );
++    setup_raise_exception( data, sigcontext, &rec, &context, signal, siginfo );
+ }
+ 
+ 
+@@ -3580,6 +3635,9 @@
+         sequoia_or_later = TRUE;
+ #endif
+ 
++    first_fault_open( getenv("WINE_FIRST_FAULT_FILE") );
++    native_timing_init();
++
+     sig_act.sa_mask = server_block_set;
+     sig_act.sa_flags = SA_SIGINFO | SA_RESTART | SA_ONSTACK;
+ 
+--- a/dlls/ntdll/unix/unix_private.h
++++ b/dlls/ntdll/unix/unix_private.h
+@@ -337,6 +337,7 @@
+ extern ssize_t virtual_locked_pread( int fd, void *addr, size_t size, off_t offset );
+ extern ssize_t virtual_locked_recvmsg( int fd, struct msghdr *hdr, int flags );
+ extern BOOL virtual_is_valid_code_address( const void *addr, SIZE_T size );
++extern BOOL virtual_is_fatal_signal_stack( struct thread_data *data, void *ptr );
+ extern void *virtual_setup_exception( struct thread_data *data, void *stack_ptr, size_t size, EXCEPTION_RECORD *rec );
+ extern BOOL virtual_check_buffer_for_read( const void *ptr, SIZE_T size );
+ extern BOOL virtual_check_buffer_for_write( void *ptr, SIZE_T size );
+@@ -758,4 +759,6 @@
+ 
+ #endif  /* defined(__i386__) || defined(__x86_64__) */
+ 
++extern void fh6_native_mark(unsigned int kind,unsigned int tid,UINT64 rip,UINT64 rsp,UINT64 aux);
++
+ #endif /* __NTDLL_UNIX_PRIVATE_H */
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -4272,6 +4272,14 @@
+ }
+ 
+ 
++/* Diagnostic predicate: share the exact fatal alternate-stack condition
++ * with virtual_setup_exception without changing its original behavior. */
++BOOL virtual_is_fatal_signal_stack( struct thread_data *data, void *ptr )
++{
++    struct thread_stack_info stack;
++    return is_inside_signal_stack( data, ptr ) && !is_inside_thread_stack( data, ptr, &stack );
++}
++
+ /***********************************************************************
+  *           grow_thread_stack
+  */
