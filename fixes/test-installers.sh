@@ -526,4 +526,61 @@ fhdo --restore > "$fh/restore.log" 2>&1 \
   && say ok "fh5 on a fake prefix: originals, runner and the earlier WebView2 Version restored" \
   || say FAIL "fh5: restore ($(fhst), $(tail -2 "$fh/restore.log" | tr '\n' ' '))"
 
+# FH6 uses its own profile of the shared D3D12 source. It deliberately has no
+# FH5 network proxy or descriptor translation, but has the same reversible
+# private-alias layout.
+f6="$W/fh6"; f6home="$f6/home"; f6run="$f6/home/Library/Application Support/notproton/runners/crossover-27.0.0.41073-fex/CrossOver"; f6pfx="$f6/pfx"; f6game="$f6/game"
+mkdir -p "$f6home" "$f6run/bin" \
+  "$f6run/lib/apple_gptk/wine/x86_64-windows" "$f6run/lib/apple_gptk/wine/x86_64-unix" \
+  "$f6run/lib/wine/x86_64-windows" "$f6run/lib/wine/x86_64-unix" \
+  "$f6pfx/drive_c/windows/system32" "$f6game"
+printf '#!/bin/sh\nexit 0\n' > "$f6run/bin/wine"; chmod +x "$f6run/bin/wine"
+cp "$FIX/d3d12-fh5.dll" "$f6run/lib/apple_gptk/wine/x86_64-windows/d3d12.dll"
+touch "$f6run/lib/apple_gptk/wine/x86_64-unix/d3d12.so"
+printf 'WINE REGISTRY Version 2\n' > "$f6pfx/user.reg"
+printf 'WINE REGISTRY Version 2\n' > "$f6pfx/system.reg"
+printf 'fake executable\n' > "$f6game/forzahorizon6.exe"
+printf 'original game d3d12\n' > "$f6game/d3d12.dll"
+printf 'original prefix apd12\n' > "$f6pfx/drive_c/windows/system32/apd12.dll"
+cp "$f6game/d3d12.dll" "$f6/orig-d3d12"
+cp "$f6pfx/drive_c/windows/system32/apd12.dll" "$f6/orig-apd12"
+# Exercise the exact installer on a fake executable, substituting only the fixture hash
+# in a disposable copy. Production has no environment switch to bypass the build gate.
+f6fix="$f6/fixes"; mkdir -p "$f6fix"
+for n in install-fh6-fix.sh fh6-runtime.sh fh6-launch-options.pl bottles.sh pe.pl d3d12-fh6.dll fh5-THIRD-PARTY-LICENCES.md notproton-rosetta-trap-boost.dylib; do cp "$FIX/$n" "$f6fix/$n"; done
+# The separate launch-options tests exercise the running-Steam refusal. This fixture
+# substitutes only process discovery so the real user's open Steam is irrelevant.
+sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$f6fix/fh6-launch-options.pl"
+fixturesha="$(shasum -a 256 "$f6game/forzahorizon6.exe" | cut -d' ' -f1)"
+sed -i '' "s/^GAME_SHA=.*/GAME_SHA=$fixturesha/" "$f6fix/fh6-runtime.sh"
+f6modules="$f6/modules"; mkdir -p "$f6modules"
+python3 "$FIX/../app/bundle-engine.py" "$FIX/../engine/modules" "$f6modules" >/dev/null
+cp "$FIX/../engine/engine-modules.sh" "$f6modules/engine-modules.sh"
+cp "$f6modules/engine-27.0.0.41073-x86_64-unix-ntdll.so" "$f6run/lib/wine/x86_64-unix/ntdll.so"
+printf 'original runner PE\n' > "$f6run/lib/wine/x86_64-windows/ntdll.dll"
+printf 'original prefix PE\n' > "$f6pfx/drive_c/windows/system32/ntdll.dll"
+f6config="$f6home/Library/Application Support/Steam/userdata/1/config"; mkdir -p "$f6config"
+printf '"UserLocalConfigStore" { "Software" { "Valve" { "Steam" { "apps" { "2483190" { "LaunchOptions" "PERSONAL=keep %%command%%" } } } } } }\n' > "$f6config/localconfig.vdf"
+f6do() { HOME="$f6home" MGVF_MODULES="$f6modules" MGVF_CX="$f6run" MGVF_BOTTLE="$f6pfx" /bin/bash "$f6fix/install-fh6-fix.sh" "$f6game" "$@"; }
+f6st() { f6do --status 2>/dev/null | /usr/bin/grep -E '^(installed|absent|half)$' | tail -1; }
+[ "$(f6st)" = absent ] && say ok "fh6 on a fake prefix: absent before" || say FAIL "fh6: absent before ($(f6st))"
+f6do --install > "$f6/install.log" 2>&1 \
+  && [ "$(f6st)" = installed ] \
+  && cmp -s "$f6game/d3d12.dll" "$FIX/d3d12-fh6.dll" \
+  && [ -f "$f6game/d3d12.dll.mgf-original" ] \
+  && [ -f "$f6pfx/drive_c/windows/system32/apd12.dll.mgf-original" ] \
+  && [ ! -e "$f6pfx/drive_c/windows/system32/ws2_32.dll.mgf-stock" ] \
+  && say ok "fh6 on a fake prefix: source-built profile and private runner alias installed" \
+  || say FAIL "fh6: install ($(f6st), $(tail -2 "$f6/install.log" | tr '\n' ' '))"
+f6do --install > "$f6/reinstall.log" 2>&1 && [ "$(f6st)" = installed ] \
+  && say ok "fh6 on a fake prefix: installing again is safe" || say FAIL "fh6: reinstall ($(f6st))"
+f6do --restore > "$f6/restore.log" 2>&1 \
+  && [ "$(f6st)" = absent ] \
+  && cmp -s "$f6game/d3d12.dll" "$f6/orig-d3d12" \
+  && cmp -s "$f6pfx/drive_c/windows/system32/apd12.dll" "$f6/orig-apd12" \
+  && [ ! -e "$f6run/lib/wine/x86_64-windows/apd12.dll" ] \
+  && [ ! -e "$f6run/lib/wine/x86_64-unix/apd12.so" ] \
+  && say ok "fh6 on a fake prefix: originals and runner restored byte for byte" \
+  || say FAIL "fh6: restore ($(f6st), $(tail -2 "$f6/restore.log" | tr '\n' ' '))"
+
 if [ "$fails" = 0 ]; then echo "==> every installer: installed, outdated, updated, restored; Cyberpunk 2077's app patched, signed and put back"; else echo "==> $fails failed"; exit 1; fi

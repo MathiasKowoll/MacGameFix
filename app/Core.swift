@@ -180,6 +180,8 @@ struct Game: Decodable, Identifiable, Hashable {
     /// For a fix still being tested, who is testing it (the installer's MGVF-TESTING
     /// line); absent for a validated fix and from catalogs older than the field.
     let testing: String?
+    /// WIP can have played evidence without claiming complete support.
+    var supportStatus: String? = nil
     /// The work it stands on, as "name | url" (the installer's MGVF-CREDIT lines);
     /// absent from catalogs older than the field.
     let credits: [String]?
@@ -733,7 +735,7 @@ enum Fixer {
         let lock = InstallLock()
         defer { lock.release() }
         let script = catalog.appendingPathComponent(game.script).path
-        var env: [String: String] = [:]
+        var env: [String: String] = ["MGVF_MODULES": Catalog.active(.modules).dir.path]
         if game.needsPrefix, let prefix { env["MGVF_BOTTLE"] = prefix }
         // Where a fix that changes a game's app keeps its original.
         if game.inApp { env["MGVF_APP_BACKUP"] = Paths.appBackup.path }

@@ -1,0 +1,37 @@
+--- a/dlls/ntdll/unix/unix_private.h
++++ b/dlls/ntdll/unix/unix_private.h
+@@ -544,19 +544,34 @@
+      *                               |
+      *                (paired with)  `-> ReadAcquire(Status)
+      *                                   read Information
++     *
++     * On aarch64 a release store is stlr, which faults when its four bytes cross a
++     * 16-byte boundary. An x86 game under FEX can put its OVERLAPPED there (Phantom
++     * Blade Zero lost a thread to it), so there the release is a barrier and a plain
++     * store, which may sit anywhere.
+      */
+ 
+     if (in_wow64_call())
+     {
+         IO_STATUS_BLOCK32 *io = wine_server_get_ptr( iosb );
+         io->Information = info;
++#ifdef __aarch64__
++        __atomic_thread_fence( __ATOMIC_RELEASE );
++        *(volatile LONG *)&io->Status = status;
++#else
+         WriteRelease( &io->Status, status );
++#endif
+     }
+     else
+     {
+         IO_STATUS_BLOCK *io = wine_server_get_ptr( iosb );
+         io->Information = info;
++#ifdef __aarch64__
++        __atomic_thread_fence( __ATOMIC_RELEASE );
++        *(volatile LONG *)&io->Status = status;
++#else
+         WriteRelease( &io->Status, status );
++#endif
+     }
+ }
+ 

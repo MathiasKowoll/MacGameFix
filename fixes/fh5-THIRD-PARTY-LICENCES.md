@@ -1,4 +1,4 @@
-# Forza Horizon 5 D3DMetal and network fixes
+# Forza Horizon 5 and 6 D3DMetal fixes, and the FH5 network fix
 
 The files under `fh5-d3d12/` are derived from Highball's `tsshim` by Gauthier
 Piarrette and from xvferxedd's Forza Horizon 5 work, `fh5-d3dmetal-fix`
@@ -6,10 +6,12 @@ Piarrette and from xvferxedd's Forza Horizon 5 work, `fh5-d3dmetal-fix`
 preserved in `Andytizer/fh5-crossover-steam-fix` v1.0.1. They are GPL-3.0. The precise
 provenance and MacGameFix's path adaptation are in `fh5-d3d12/ORIGIN.md`.
 
-`d3d12-fh5.dll` is built from those sources by `build-fh5-d3d12.sh`. It is not
-the published release DLL. The installer builds the private `apd12.dll` alias
-from the user's selected runner, so MacGameFix does not redistribute Apple's
-D3DMetal module.
+`d3d12-fh5.dll` and `d3d12-fh6.dll` are built from those sources by their
+respective builders. They are not published release DLLs. FH6 is a separate
+compile-time profile that retains the general `tsshim` compatibility paths and
+FH6 shader fixes while omitting FH5's descriptor translation and guards. Each
+installer builds the private `apd12.dll` alias from the user's selected runner,
+so MacGameFix does not redistribute Apple's D3DMetal module.
 
 `fh5-netfix.c` is derived from the `ws2_32-netfix` component of
 `xvferxedd/fh5-d3dmetal-fix`, commit

@@ -1,6 +1,6 @@
 #!/bin/bash
 # engine-modules.sh by improvement, offline: a fake runner and a fake catalog carrying
-# both improvements (the controls' modules and the Intel side's ntdll.so).
+# both improvements (the controls' modules and ntdll.so).
 #
 #   /bin/bash engine/tests/improvements/run.sh
 #
@@ -81,5 +81,20 @@ chmod 755 "$R/lib/wine/x86_64-unix/ntdll.so"
 E >/dev/null
 check '[ "$(stat -f %Lp "$R/lib/wine/x86_64-unix/ntdll.so")" = 755 ] && [ -z "$(find "$R/lib/wine" -name "*.mgvf-new")" ]' "a module keeps the mode of the file it replaces, and nothing is left beside it"
 E --restore >/dev/null
+
+# A runner with a FEX side, and a catalog whose ntdll.so (the timer fix) is on both sides:
+# Rosetta's improvement puts both in and takes both out.
+A="aarch64-windows/winebus.sys aarch64-windows/mmdevapi.dll aarch64-unix/winecoreaudio.so aarch64-unix/ntdll.so"
+mkdir -p "$R/lib/wine/aarch64-unix" "$R/lib/wine/aarch64-windows"
+for f in $A; do
+  printf 'ours %s wine-11.17-1\n' "$f" >"$CAT/engine-$B-$(printf '%s' "$f" | tr / -)"
+  printf "CodeWeavers' %s wine-11.17-1\n" "$f" >"$R/lib/wine/$f"
+done
+E --part=rosetta >/dev/null
+check 'ours x86_64-unix/ntdll.so && ours aarch64-unix/ntdll.so && cw aarch64-unix/winecoreaudio.so' "Rosetta's improvement installs ntdll.so on both sides and nothing else"
+E --restore --part=rosetta >/dev/null
+check 'cw x86_64-unix/ntdll.so && cw aarch64-unix/ntdll.so && [ "$(st --part=rosetta)" = absent ]' "and taking it out puts CrossOver's ntdll.so back on both"
+E >/dev/null; E --restore >/dev/null
+check 'cw aarch64-unix/ntdll.so && cw aarch64-windows/winebus.sys && ! [ -d "$MGVF_ENGINE_BACKUP/crossover-$B-fex" ]' "a plain restore takes the FEX side's out too"
 echo "==> $fails failed"
 exit $((fails > 0))

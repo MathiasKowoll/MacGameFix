@@ -54,7 +54,7 @@ enum EnginePart: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .controls: return "Haptics, adaptive triggers, Bluetooth as a cable, and XInput's vibration."
-        case .rosetta: return "Lets Denuvo-protected games start on the Intel side, such as Phantom Blade Zero and Persona 4 Golden."
+        case .rosetta: return "CPU compatibility under Rosetta, plus corrected timers and guarded exception acceleration for FH6 (WIP) on Preview 41073."
         }
     }
 
@@ -66,9 +66,11 @@ enum EnginePart: String, CaseIterable, Identifiable {
                 + "Games find the pad's haptic output, set its trigger effects and rumble it as on Windows; "
                 + "Game Feel sets the options per game."
         case .rosetta:
-            return "A patched ntdll.so for the Intel side. It runs a cpuid Rosetta skips after self-modifying code, "
+            return "Paired ntdll.so and ntdll.dll on Preview 41073's Intel side; ntdll.so on older supported builds. It runs a cpuid Rosetta skips after self-modifying code, "
                 + "emulates CLWB, RDPID and hardware breakpoints, and reports faults as Windows does. "
-                + "The CPUID bits a game asks for stay per game (its fix writes them). Changes nothing else."
+                + "On Preview 41073 it also keeps the threadpool's timer thread from waking in a loop, on both sides, and on the FEX side "
+                + "it stores async I/O status wherever a game puts it. "
+                + "FH6 exception acceleration remains opt-in and game-build guarded; its fix applies the options. Other builds retain their existing CPU fixes."
         }
     }
 
@@ -84,7 +86,7 @@ enum EnginePart: String, CaseIterable, Identifiable {
     var footer: String {
         switch self {
         case .controls: return "Game Feel sets its options per game. Quit a CrossOver's games before changing it."
-        case .rosetta: return "Intel side only. The CPUID bits a game asks for come with that game's fix."
+        case .rosetta: return "The CPU changes are for the Intel side only. The CPUID bits a game asks for come with that game's fix."
         }
     }
 

@@ -462,7 +462,11 @@ enum Updater {
     /// The key catalogs are signed with (Ed25519). Its private half stays with
     /// whoever publishes the releases; build-app.sh signs with it.
     static let publicKey = "Sbhi1/RDnZXimFuFHqskaAkEABp+Uuigo/uIscg19SU="
-    static let releases = URL(string: "https://api.github.com/repos/MathiasKowoll/MacGameFix/releases/latest")!
+    static var releases: URL {
+        let tag = Bundle.main.object(forInfoDictionaryKey: "MacGameFixPrereleaseTag") as? String ?? ""
+        let suffix = tag.isEmpty ? "latest" : "tags/" + tag.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!
+        return URL(string: "https://api.github.com/repos/MathiasKowoll/MacGameFix/releases/" + suffix)!
+    }
 
     enum Failure: LocalizedError {
         case missing(String), signature, hash(String), unsafe(String), app(String)

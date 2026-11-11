@@ -6,9 +6,11 @@ NotProton runner. They give a DualSense or DualSense Edge its haptics on a
 cable, the same pad on Bluetooth as if it were on a cable, XInput (its vibration
 on the motors, or the pad as an XInput controller), trigger effects for a game
 that sets none, and options per game that the app's **Game Feel** tab sets.
-One more, the Intel side's `ntdll.so`, is not about the pad: it lets copy
+One more, `ntdll.so`, is not about the pad: on the Intel side it lets copy
 protection that checks the CPU start under Rosetta (see
-[Rosetta's CPU, for copy protection](#rosettas-cpu-for-copy-protection)).
+[Rosetta's CPU, for copy protection](#rosettas-cpu-for-copy-protection)), and on
+both sides it stops Wine's threadpool timer thread from spinning (see
+[The threadpool's timer thread](#the-threadpools-timer-thread)).
 
 ## What they fix
 
@@ -325,6 +327,79 @@ later on an assertion in its DirectStorage texture loader
 `DStorageCore.dll` on its stack; without `dstoragecore.dll` it stops earlier, so it
 has no path without DirectStorage. Not yet explained.
 
+## The threadpool's timer thread
+
+Wine 11.17's threadpool keeps its timers in two queues, absolute and relative,
+and its timer thread waits on one Wine timer for each. When no relative timer is
+pending it arms that one with `rel_now - MAXLONGLONG`, as good as never. wineserver
+turns a relative expiry into a deadline by subtracting its monotonic clock
+(`timeout_to_abstime`), which overflows for that value, and the timer is signalled
+at once. A program whose threadpool timers all have an absolute due time then keeps
+the thread waking and re-arming both timers, two `set_timer` requests and a wait each
+turn, until its next timer is due. Wine 11.0 (CrossOver 26.3) has the older timer
+thread, which waits on a condition variable, and is not affected.
+
+| Patch | Module | Change |
+|---|---|---|
+| `0021-ntdll-timer-relative-overflow.patch` | `ntdll.so` | `NtSetTimer` sends wineserver a relative expiry of at most 2^62 (about 14,600 years), which cannot overflow, instead of one closer to `-MAXLONGLONG`. |
+
+Measured on 2026-11-10, an M4 Max with macOS 27.2, Preview 41073's NotProton
+runner (Intel side), with a probe that re-arms a one-shot threadpool timer with an
+absolute due time from its own callback, and counts of the requests the process
+sends wineserver:
+
+| Due time | Before: `set_timer`/s | Before: waits/s | After: `set_timer`/s | After: waits/s |
+|---|---|---|---|---|
+| now + 16 ms | 75,022 | 37,449 | 226 | 57 |
+| now + 1 ms | 58,982 | 28,724 | 3,058 | 765 |
+
+A timer set with a relative expiry of `-MAXLONGLONG`, or of `rel_now - MAXLONGLONG`,
+was signalled within 100 ms before; it is not after. Relative and periodic
+threadpool timers were already fine (a 1 ms periodic timer: about 1,600 to 2,000
+`set_timer` a second for 1,000 callbacks, before and after). The absolute timer now
+fires when wineserver wakes, about 0.3 to 1 ms after its due time, as any Wine
+timer does; the spinning thread had caught it a little sooner, so the 1 ms probe
+runs 764 callbacks a second instead of 983.
+
+Forza Horizon 6 at its title screen, D3DMetal, the same day: before, 88,000
+`set_timer` requests a second, all from the `wine_threadpool_timerqueue` thread,
+which used half a core, and wineserver at 57% of a core. After (this `ntdll.so` in
+its runner only): no `set_timer` among the requests it sends most, 12,000 requests a
+second in all (registry reads from one of its own threads), the timer thread under
+20 ms of CPU in 5 s, wineserver at 8%. The process makes 850,000 system calls a
+second instead of 1,100,000. Its hitch about once a second is the copy protection's
+work under Rosetta and stays; in one 3-minute run its frames lost 38 ms a second
+to it, against 45 before, which one run does not establish.
+
+On the FEX side (the same runner's arm64 Wine, the same day) the overflow is the
+same: both expiries were signalled within 100 ms before and are not after. The probe
+re-arming a 16 ms absolute timer for 3 s used 1.6 s of CPU (0.39 user, 1.22 system)
+and wineserver 1.6 s before; after, 0.07 s and 0.17 s, at 57 callbacks a second
+instead of 62.
+
+Not fixed here: `NtDelayExecution` with a relative timeout of `-MAXLONGLONG`
+returns at once too (the same probe, 2026-11-10); waits with such a timeout do not.
+
+## The FEX side's async I/O status
+
+Wine completes an asynchronous read or write by storing its `IO_STATUS_BLOCK`'s
+`Information`, then its `Status` with release semantics (`set_async_iosb`), which
+clang emits on arm64 as `stlr`. On Apple silicon `stlr` faults when its four bytes
+cross a 16-byte boundary, and an x86 game under FEX may put its `OVERLAPPED` there:
+Phantom Blade Zero lost an early thread to it, in two runs, on NotProton's FEX
+runner. The Intel side stores with an x86 `mov` and is not affected.
+
+| Patch | Module | Change |
+|---|---|---|
+| `0022-ntdll-aarch64-unaligned-iosb-status.patch` | `ntdll.so` (FEX side) | On aarch64, a release barrier (`dmb ish`) and a plain store, which may sit anywhere, in place of the store-release: the same ordering. |
+
+It does in source what NotProton's experimental binary patch of 41073's FEX
+`ntdll.so` (`6fbdff6` on its `experiment/fex-d3dmetal-bridge` branch) did, so that
+installing this `ntdll.so` over that one loses nothing. Measured on 2026-11-10 with
+that branch's probe, an overlapped pipe read whose `Status` sits at a given offset
+of a 16-byte granule: CodeWeavers' own `ntdll.so` dies at offset 14; this one passes
+at offsets 0, 2, 13, 14 and 15.
+
 ## Measured
 
 Measured on 2026-10-18 on CrossOver Preview 27.0.0.41069, in a NotProton runner,
@@ -428,8 +503,14 @@ Not played yet: the FEX (arm64) side, `xinput=pad` with God of War Ragnarök and
 CrossOver 27 runs a bottle either on the Intel side, under Rosetta (x86_64), or
 on the FEX side, where Wine runs natively on arm64 and FEX translates only the
 game's code. Each side has its own copy of these modules, so both are built.
-CrossOver 26.3 has only the Intel side. `ntdll.so` is built for the Intel side
-only; 41069's modules do not carry it yet.
+CrossOver 26.3 has only the Intel side. 41069's modules do not carry `ntdll.so`
+yet. The FEX side's `ntdll.so` (41073) is built from a tree of its own with the
+patches `NTDLL_ARM64` names in the series' `build.conf`, `0021` and `0022`: the
+others change what Rosetta shows a game or route a process to D3DMetal, which the
+FEX side does not have. On 41073's Intel side the `ntdll.so` and `ntdll.dll` are the
+retained FH6 pair instead (see "Forza preview baseline" below): `built-for.json` names it
+in `ntdll_baseline`, and `build.sh` keeps it as it is and does not build that side's
+`ntdll.so` from the series.
 
 | CrossOver | Sources | Wine | Intel (x86_64) | FEX (arm64) |
 |---|---|---|---|---|
@@ -530,7 +611,8 @@ The app's **Improvements** tab lists every CrossOver app (in `/Applications`
 and `~/Applications`) and every NotProton runner by its release, under each of
 the two improvements the modules make, says what is in each, and installs or
 removes that improvement with a switch: the DualSense controllers (every module
-but `ntdll.so`) and copy protection under Rosetta (the Intel side's `ntdll.so`).
+but `ntdll.so`) and copy protection under Rosetta (`ntdll.so`, which also carries
+the timer fix, on both sides where the build has it).
 It runs `engine-modules.sh` with `--part=controls` or `--part=rosetta`, which the catalog
 carries with the modules (flat, as `engine-<build>-<dir>-<file>`, with
 `engine-modules.json`). They travel in their own signed catalog (`modules.zip`,
@@ -580,3 +662,13 @@ backups under `.build/runner-backup/`, separate from the app's.
 Wine is LGPL-2.1-or-later, and so are these modules. Their source is
 CodeWeavers' `crossover-sources-<id>.tar.gz` for the build they target, plus the
 patches in `patches/`. `build.sh` is the whole recipe.
+
+### Forza preview baseline (2026-11-11)
+
+Preview 41073's existing **Copy protection under Rosetta** improvement now includes
+both `x86_64-unix/ntdll.so` and `x86_64-windows/ntdll.dll`, with timer patch 0021 and
+the opt-in, build-guarded FH6 dispatcher. Other runner builds are unchanged.
+See the [retained source overlay](sources/fh6-20261111/README.md) and
+[prerelease validation and limits](../docs/releases/1.6.1-pre.1.md).
+Do not replace this pair with a controller-only rebuild's ntdll. Use the dedicated
+source archive/build script for subsequent ntdll work and validate it separately.
