@@ -106,15 +106,14 @@ Forza Horizon 5's fix is made from source in this repository. It puts the
 D3D12 proxy in the game folder, makes `apd12.dll` from the runner's own
 D3DMetal DLL, adds that private alias to the runner and prefix, and applies the
 override only to `ForzaHorizon5.exe`. It also installs the Xbox UDP proxy used
-for Horizon Life. NotProton presently still needs these variables in the
-game's Steam launch options:
+for Horizon Life, and the two prefix values the Xbox sign-in window needs. The
+GPU identity cannot go into the prefix, because D3DMetal reads it from the
+native environment, so NotProton still needs these variables in the game's
+Steam launch options:
 
 ```text
-NOTPROTON_ENV_D3DM_VENDOR_ID=4318 NOTPROTON_ENV_D3DM_DEVICE_ID=10118 NOTPROTON_ENV_D3DM_DEVICE_DESCRIPTION="NVIDIA GeForce RTX 4070" NOTPROTON_ENV_WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--disable-features=CalculateNativeWinOcclusion"
+NOTPROTON_ENV_D3DM_VENDOR_ID=4318 NOTPROTON_ENV_D3DM_DEVICE_ID=10118 NOTPROTON_ENV_D3DM_DEVICE_DESCRIPTION="NVIDIA GeForce RTX 4070"
 ```
-
-The last one, and WebView2 running as Windows 7 in the prefix, are for the
-Xbox sign-in window; the game's page says why.
 
 The first successful run may spend several minutes at **Optimizing for your
 PC**. The exact diagnosis, the files and the reversible layout are in

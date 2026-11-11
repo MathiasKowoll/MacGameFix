@@ -485,7 +485,8 @@ cp "$FIX/d3d12-fh5.dll" "$fhrun/lib/apple_gptk/wine/x86_64-windows/d3d12.dll"
 touch "$fhrun/lib/apple_gptk/wine/x86_64-unix/d3d12.so"
 cp "$FIX/ws2_32-fh5.dll" "$fhrun/lib/wine/x86_64-windows/ws2_32.dll"
 touch "$fhrun/lib/wine/x86_64-unix/ws2_32.so"
-printf 'WINE REGISTRY Version 2\n' > "$fhpfx/user.reg"
+# A WebView2 Version set before the fix must come back after --restore.
+printf 'WINE REGISTRY Version 2\n\n[Software\\\\Wine\\\\AppDefaults\\\\msedgewebview2.exe] 1700000000\n#time=1d9e0a1b2c3d4e5\n"Version"="winxp"\n' > "$fhpfx/user.reg"
 printf 'WINE REGISTRY Version 2\n' > "$fhpfx/system.reg"
 printf 'fake executable\n' > "$fhgame/ForzaHorizon5.exe"
 printf 'original game d3d12\n' > "$fhgame/d3d12.dll"
@@ -496,6 +497,7 @@ cp "$fhpfx/drive_c/windows/system32/apd12.dll" "$fh/orig-apd12"
 cp "$fhpfx/drive_c/windows/system32/ws2_32.dll" "$fh/orig-ws2"
 fhdo() { HOME="$fhhome" MGVF_CX="$fhrun" MGVF_BOTTLE="$fhpfx" /bin/bash "$FIX/install-fh5-fix.sh" "$fhgame" "$@"; }
 fhst() { fhdo --status 2>/dev/null | /usr/bin/grep -E '^(installed|absent|half)$' | tail -1; }
+fhreg() { /usr/bin/grep -c -F "$1" "$fhpfx/user.reg" || true; }
 [ "$(fhst)" = absent ] && say ok "fh5 on a fake prefix: absent before" || say FAIL "fh5: absent before ($(fhst))"
 fhdo --install > "$fh/install.log" 2>&1 \
   && [ "$(fhst)" = installed ] \
@@ -503,7 +505,10 @@ fhdo --install > "$fh/install.log" 2>&1 \
   && [ -f "$fhgame/d3d12.dll.mgf-original" ] \
   && [ -f "$fhpfx/drive_c/windows/system32/apd12.dll.mgf-original" ] \
   && [ -f "$fhpfx/drive_c/windows/system32/ws2_32.dll.mgf-stock" ] \
-  && say ok "fh5 on a fake prefix: both source-built proxies and the runner alias installed" \
+  && [ "$(fhreg '"Version"="win7"')" = 1 ] && [ "$(fhreg '"Version"="winxp"')" = 0 ] \
+  && [ "$(fhreg '"ForzaHorizon5.exe"="--disable-features=CalculateNativeWinOcclusion"')" = 1 ] \
+  && /usr/bin/grep -q -F '[Software\\Policies\\Microsoft\\Edge\\WebView2\\AdditionalBrowserArguments] ' "$fhpfx/user.reg" \
+  && say ok "fh5 on a fake prefix: both source-built proxies, the runner alias and the sign-in values installed" \
   || say FAIL "fh5: install ($(fhst), $(tail -2 "$fh/install.log" | tr '\n' ' '))"
 fhdo --install > "$fh/reinstall.log" 2>&1 && [ "$(fhst)" = installed ] \
   && say ok "fh5 on a fake prefix: installing again is safe" || say FAIL "fh5: reinstall ($(fhst))"
@@ -516,7 +521,9 @@ fhdo --restore > "$fh/restore.log" 2>&1 \
   && [ ! -e "$fhrun/lib/wine/x86_64-unix/apd12.so" ] \
   && [ ! -e "$fhrun/lib/wine/x86_64-windows/ws2_o.dll" ] \
   && [ ! -e "$fhrun/lib/wine/x86_64-unix/ws2_o.so" ] \
-  && say ok "fh5 on a fake prefix: originals and runner restored byte for byte" \
+  && [ "$(fhreg '"Version"="winxp"')" = 1 ] && [ "$(fhreg '"Version"="win7"')" = 0 ] \
+  && [ "$(fhreg 'CalculateNativeWinOcclusion')" = 0 ] && [ ! -e "$fhpfx/.mgf-fh5-signin" ] \
+  && say ok "fh5 on a fake prefix: originals, runner and the earlier WebView2 Version restored" \
   || say FAIL "fh5: restore ($(fhst), $(tail -2 "$fh/restore.log" | tr '\n' ' '))"
 
 # FH6 uses its own profile of the shared D3D12 source. It deliberately has no
