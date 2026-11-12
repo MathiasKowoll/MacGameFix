@@ -544,6 +544,16 @@
           ],
           "commit": "6e08bff2ce080164fa70002f11d295aceed5b4df",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/6e08bff2ce080164fa70002f11d295aceed5b4df/engine/patches/wine-11.21/0024-ntdll-fh6-bridge-lea-inc-mul.patch"
+        },
+        {
+          "name": "0025-ntdll-fh6-chain-on-by-default.patch",
+          "file": "engine/patches/wine-11.21/0025-ntdll-fh6-chain-on-by-default.patch",
+          "subject": "For the build-guarded FH6 executable the exception chain and the ALU bridge are on by default, so its launch options no longer need them; =0 still turns either off; Intel side, ntdll.dll only",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "5e74061b6f33cdfdc719860e3035d77f0d89523a",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/5e74061b6f33cdfdc719860e3035d77f0d89523a/engine/patches/wine-11.21/0025-ntdll-fh6-chain-on-by-default.patch"
         }
       ]
     }

@@ -7,6 +7,14 @@ die "usage: fh6-launch-options.pl status|preflight|install|restore|diagnostics-o
 my $steam="$ENV{HOME}/Library/Application Support/Steam";
 my $journal="$prefix/.mgf-fh6-launch-options.json";
 my %required=(NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_CHAIN=>'1',NOTPROTON_ENV_WINE_SOFTWARE_BRIDGE_RESUME=>'0',NOTPROTON_ENV_WINE_SOFTWARE_ALU_BRIDGE=>'1',NOTPROTON_ROSETTA_TRAP_BOOST=>'1');
+# MGF_FH6_CHAIN_IN_NTDLL=1: the ntdll.dll being installed (engine patch wine-11.21/0025) turns
+# the exception chain and the ALU bridge on by itself for the guarded FH6 build, and the
+# bridge resume was always off by default. Only the priority plugin's switch is still needed,
+# and the variables an earlier install wrote are taken out again, each only with the exact
+# value MacGameFix wrote. Any other ntdll keeps all four, as before.
+my $in_ntdll=($ENV{MGF_FH6_CHAIN_IN_NTDLL}//'') eq '1';
+my %ours=(NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_CHAIN=>'1',NOTPROTON_ENV_WINE_SOFTWARE_BRIDGE_RESUME=>'0',NOTPROTON_ENV_WINE_SOFTWARE_ALU_BRIDGE=>'1',NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_STATS=>'0');
+%required=(NOTPROTON_ROSETTA_TRAP_BOOST=>'1') if $in_ntdll;
 sub readfile { my($f)=@_;open my $h,'<',$f or die "$f: $!\n";local $/;return <$h>; }
 sub decode_vdf { my($s)=@_;$s =~ s/\\([\\"])/$1/g;return $s; }
 sub encode_vdf { my($s)=@_;$s =~ s/([\\"])/\\$1/g;return '"'.$s.'"'; }
@@ -26,7 +34,7 @@ sub locate {
  return $matches[0] if @matches;return defined($insert)?[$insert,$insert,'']:undef;
 }
 sub options {
- my($old,$overrides,$defaults)=@_;my $s=$old; $s='%command%' unless $s =~ /\S/;
+ my($old,$overrides,$defaults,$remove)=@_;$remove//={};my $s=$old; $s='%command%' unless $s =~ /\S/;
  # Only leading environment assignments are managed; a custom wrapper is retained but refused.
  my @tokens;pos($s)=0;
  while($s =~ /\G\s*((?:[^\s"'\\]|"(?:\\.|[^"\\])*"|'[^']*'|\\.)+)/gc){push @tokens,[$-[1],$+[1],$1];}
@@ -35,6 +43,7 @@ sub options {
   die "FH6 has a custom launch wrapper; keep it and configure the compatibility variables manually.\n" unless $w =~ /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s;
   my($k,$v)=($1,$2);die "Duplicate FH6 launch variable: $k\n" if $seen{$k}++ && exists $overrides->{$k};
   push @edits,[$t->[0],$t->[1],"$k=$overrides->{$k}"] if exists $overrides->{$k} && $v ne $overrides->{$k};
+  if(!exists $overrides->{$k} && exists $remove->{$k} && $v eq $remove->{$k}){my $e=$t->[1];pos($s)=$e;$e=$+[0] if $s =~ /\G\s+/gc;push @edits,[$t->[0],$e,''];$seen{$k}=0;}
  }
  die "FH6 launch options have no %command% placeholder\n" unless $command;
  for my $e(reverse @edits){substr($s,$e->[0],$e->[1]-$e->[0],$e->[2]);}
@@ -55,8 +64,9 @@ for my $f(sort @files){my $text=readfile($f);my $loc=locate($text);next unless $
  } else {
   my %set=%required;my %default;
   if($mode =~ /^diagnostics-(on|off)$/){my $v=$1 eq 'on'?'1':'0';$set{NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_STATS}=$v;$set{MTL_HUD_ENABLED}=$v;$set{MTL_HUD_LOG_ENABLED}=$v;}
-  elsif($mode ne 'status'){$default{NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_STATS}='0';}
-  $new=options($old,\%set,\%default);
+  elsif($mode ne 'status' && !$in_ntdll){$default{NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_STATS}='0';}
+  my %remove;%remove=%ours if $in_ntdll && $mode ne 'status';
+  $new=options($old,\%set,\%default,\%remove);
  }
  next if $new eq $old;
  my $replacement=encode_vdf($new);$replacement='"LaunchOptions" '.$replacement."\n\t\t\t\t\t" if $loc->[0]==$loc->[1];

@@ -23,7 +23,7 @@
     "x86_64-unix/winecoreaudio.so": "a70ae015fd2aec5e184db98684f5f29bc7eb52420c7ce67be7397ab6614614b5",
     "x86_64-windows/hidclass.sys": "ec78e018225b15263b5afb31fb40615945e8a1072be7206fae46571fa9942a2f",
     "x86_64-windows/mmdevapi.dll": "1dd3c7667d2707da5155c89e21419832ac0e216ee846b18e459cb61d06b1cbe5",
-    "x86_64-windows/ntdll.dll": "6664770a4c9fa70e0dbfbd28f0bb5af37754f84f708045b30c9b9fd4754f479b",
+    "x86_64-windows/ntdll.dll": "0e5f9579d9a84396b1c5761a1b7bb9d6f46bb010a768f88316a34ed06a696b48",
     "x86_64-windows/setupapi.dll": "6bed6b6d031e7a7441e218ef1603d3cdca3c77a62b6e47200bda2af1d71f2980",
     "x86_64-windows/winebus.sys": "49f199987c62879d5ed066cb5546bf99a90bcf82964d0de00200d07a78be1266",
     "x86_64-windows/xaudio2_9.dll": "a7fc850c0767686759378f9baa52e01f2383db821a4caaeba497c9dfbe078311",

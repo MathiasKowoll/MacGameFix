@@ -1,6 +1,6 @@
 # Current status: WIP with validated progress
 
-Since MacGameFix 1.6.2 (2026-11-12) the improvement targets NotProton's CrossOver Preview 27.0.0.41303 runner under Rosetta, with D3DMetal 4: the paired `ntdll` (timers 0021, exception dispatcher 0023, register bridge 0024), the priority plugin, and an `advapi32` that keeps the Xbox sign-in across starts (held over four starts in a row). Sign-in, menu and driving are validated on NotProton only. Short stutters remain; see [Frame pacing](#frame-pacing-2026-11-12). The 41073 notes below describe earlier investigation. Earlier release evidence: [1.6.1-pre.1](../../docs/releases/1.6.1-pre.1.md).
+Since MacGameFix 1.6.2 (2026-11-12) the improvement targets NotProton's CrossOver Preview 27.0.0.41303 runner under Rosetta, with D3DMetal 4: the paired `ntdll` (timers 0021, exception dispatcher 0023, register bridge 0024, and since 0025 the dispatcher's switches built in, so only `NOTPROTON_ROSETTA_TRAP_BOOST=1` is left in the launch options), the priority plugin, and an `advapi32` that keeps the Xbox sign-in across starts (held over four starts in a row). Sign-in, menu and driving are validated on NotProton only. Short stutters remain; see [Frame pacing](#frame-pacing-2026-11-12). The 41073 notes below describe earlier investigation. Earlier release evidence: [1.6.1-pre.1](../../docs/releases/1.6.1-pre.1.md).
 
 # Forza Horizon 6
 
@@ -104,8 +104,9 @@ cap from 48 to 60 held 48 and a cap of 70 held 60. That is why 48 and 60 can
 behave alike here; a cap above the rate to hold has not been tried with FH6.
 
 The exception statistics of the dispatcher (`WINE_SOFTWARE_EXCEPTION_STATS`)
-are on by default: only `=0` turns them off, and `=1` changes nothing. Whether
-turning them off changes the stutter has not been measured.
+are on by default: only `=0` turns them off, and `=1` changes nothing. The
+measurement above had them on. Whether turning them off changes the stutter has
+not been measured.
 
 Not known yet: which thread or wait holds the frame back. Candidates are an
 exception burst, the bridge's own cost, contention on its counters, a runnable
