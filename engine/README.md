@@ -523,6 +523,16 @@ NotProton's Steam client bridge (`notproton_bridge_observer.h`, from NotProton's
 argument. The `ntdll.so` exports what CodeWeavers' does; the `ntdll.dll` adds the
 dispatcher's nine `__wine_` diagnostic exports and lacks none.
 
+`0024` is the register bridge's next step, from the experiment that carried the
+dispatcher (its 11.21 forward port, `preview-41303-mul-20261111`): with the ALU path on,
+the bridge also evaluates LEA, INC, byte XOR and TEST (`register_extra.inc`) and
+register MUL (`register_mul.inc`), and stages MUL's second result beside the first, so
+that neither is written before the jump and target checks pass. It touches only the PE
+half: `ntdll.so` is the one built with `0023`, unchanged. The `ntdll.dll` built here
+disassembles the same as the experiment's and differs only in the source paths its
+strings carry. The experiment's probe (`exception_chain_probe.c`) and its refusal
+validator are test tools, not part of the DLL, and stay with it.
+
 ### Wine 11.21 (41303)
 
 `wine-11.21` is `wine-11.17` ported, one commit per patch, every patch applying

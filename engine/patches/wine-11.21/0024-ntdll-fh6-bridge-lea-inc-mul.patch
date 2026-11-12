@@ -1,0 +1,159 @@
+--- /dev/null
++++ b/dlls/ntdll/register_extra.inc
+@@ -0,0 +1,78 @@
++/* Staged register-only extensions. No guest memory access or context mutation.
++ * A single canonical REX and default 64-bit address size are supported; other
++ * prefixes and stack destinations retain ordinary execution. */
++static BOOL software_bridge_extra(const BYTE *code, CONTEXT *c, struct software_bridge_effect *e)
++{
++    unsigned int p=0,rex=0,op,m,mod,reg,rm,dst,width,shift=0,srcshift=0;
++    ULONG64 value=0,left,right=0,seed,observed;
++    LONG disp32; signed char disp8;
++    memset(e,0,sizeof(*e));
++    if(code[p]>=0x40 && code[p]<=0x4f)rex=code[p++];
++    op=code[p++];
++    if(op!=0x8d && op!=0xff && op!=0x30 && op!=0x32 && op!=0x84)return FALSE;
++    m=code[p++];mod=m>>6;reg=((m>>3)&7)+((rex&4)?8:0);rm=(m&7)+((rex&1)?8:0);
++    if(op==0x8d)
++    {
++        BOOL rip_relative=FALSE;
++        if(mod==3 || reg==4)return FALSE;
++        if((m&7)==4)
++        {
++            unsigned int sib=code[p++],base=(sib&7)+((rex&1)?8:0);
++            unsigned int index=((sib>>3)&7)+((rex&2)?8:0);
++            if(index!=4)value=*software_bridge_gpr(c,index) << (sib>>6);
++            if(mod==0 && (sib&7)==5)
++            {memcpy(&disp32,code+p,4);p+=4;value+=(LONG64)disp32;}
++            else value+=*software_bridge_gpr(c,base);
++        }
++        else if(mod==0 && (m&7)==5)
++        {memcpy(&disp32,code+p,4);p+=4;value=(LONG64)disp32;rip_relative=TRUE;}
++        else value=*software_bridge_gpr(c,rm);
++        if(mod==1){memcpy(&disp8,code+p,1);p++;value+=(LONG64)disp8;}
++        else if(mod==2){memcpy(&disp32,code+p,4);p+=4;value+=(LONG64)disp32;}
++        if(rip_relative)value+=c->Rip+p;
++        e->length=p;e->dst=reg;e->value[0]=(rex&8)?value:(ULONG)value;
++        return TRUE;
++    }
++    if(mod!=3)return FALSE;
++    if(op==0xff)
++    {
++        if(((m>>3)&7)!=0 || (rex&6) || rm==4)return FALSE;
++        dst=rm;width=(rex&8)?64:32;left=*software_bridge_gpr(c,dst);
++    }
++    else
++    {
++        unsigned int src;
++        dst=op==0x32?reg:rm;src=op==0x32?rm:reg;
++        if(!rex && dst>=4){dst-=4;shift=8;}
++        if(!rex && src>=4){src-=4;srcshift=8;}
++        if(dst==4 && op!=0x84)return FALSE;
++        left=(*software_bridge_gpr(c,dst)>>shift)&255;
++        right=(*software_bridge_gpr(c,src)>>srcshift)&255;width=8;
++    }
++    __asm__ volatile("pushfq; popq %0":"=r"(seed)::"memory");
++    seed=(seed & ~(ULONG64)0x8d5) | (c->EFlags & 0x8d5);
++    if(op==0xff)
++    {
++        if(width==64)
++            __asm__ volatile("pushq %[seed]; popfq; incq %[left]; pushfq; popq %[flags]"
++                :[left]"+&r"(left),[flags]"=&r"(observed):[seed]"r"(seed):"cc","memory");
++        else
++            __asm__ volatile("pushq %[seed]; popfq; incl %k[left]; pushfq; popq %[flags]"
++                :[left]"+&r"(left),[flags]"=&r"(observed):[seed]"r"(seed):"cc","memory");
++        e->value[0]=width==64?left:(ULONG)left;
++    }
++    else
++    {
++        if(op==0x84)
++            __asm__ volatile("pushq %[seed]; popfq; testb %b[right],%b[left]; pushfq; popq %[flags]"
++                :[left]"+&r"(left),[flags]"=&r"(observed):[right]"r"(right),[seed]"r"(seed):"cc","memory");
++        else
++            __asm__ volatile("pushq %[seed]; popfq; xorb %b[right],%b[left]; pushfq; popq %[flags]"
++                :[left]"+&r"(left),[flags]"=&r"(observed):[right]"r"(right),[seed]"r"(seed):"cc","memory");
++        e->value[0]=(*software_bridge_gpr(c,dst)&~((ULONG64)255<<shift))|((left&255)<<shift);
++        e->no_write=op==0x84;
++    }
++    e->length=p;e->dst=dst;e->flags_valid=1;
++    e->flags=(c->EFlags&~0x8d5)|(observed&0x8d5);
++    return TRUE;
++}
+--- /dev/null
++++ b/dlls/ntdll/register_mul.inc
+@@ -0,0 +1,35 @@
++/* Experimental register-only unsigned MUL. No guest memory access and no
++ * context mutation. Both implicit destinations and flags are staged together.
++ * Execute MUL on temporary operands so runtime-observed undefined arithmetic
++ * flags are captured as well; full equivalence still requires the real-opcode
++ * oracle under the target Wine/Rosetta runtime before deployment. */
++static BOOL software_bridge_mul(const BYTE *code, CONTEXT *c, struct software_bridge_effect *e)
++{
++    unsigned int p=0,rex=0,m,src,width;
++    ULONG64 low,high,right,seed,observed;
++    memset(e,0,sizeof(*e));
++    if(code[p]>=0x40 && code[p]<=0x4f)rex=code[p++];
++    if(code[p++]!=0xf7)return FALSE;
++    m=code[p++];
++    /* F7 /4, canonical REX.W/B only. Memory, other operations, operand-size
++     * prefixes and stack-source forms remain on the ordinary path. */
++    if((m&0xf8)!=0xe0 || (rex&6))return FALSE;
++    src=(m&7)+((rex&1)?8:0);
++    if(src==4)return FALSE;
++    width=(rex&8)?64:32;
++    low=c->Rax;right=*software_bridge_gpr(c,src);
++    __asm__ volatile("pushfq; popq %0":"=r"(seed)::"memory");
++    seed=(seed&~(ULONG64)0x8d5)|(c->EFlags&0x8d5);
++    if(width==64)
++        __asm__ volatile("pushq %[seed]; popfq; mulq %[right]; pushfq; popq %[flags]"
++            :[low]"+&a"(low),[high]"=&d"(high),[flags]"=&r"(observed)
++            :[right]"r"(right),[seed]"r"(seed):"cc","memory");
++    else
++        __asm__ volatile("pushq %[seed]; popfq; mull %k[right]; pushfq; popq %[flags]"
++            :[low]"+&a"(low),[high]"=&d"(high),[flags]"=&r"(observed)
++            :[right]"r"(right),[seed]"r"(seed):"cc","memory");
++    e->length=p;e->dst=0;e->value[0]=width==64?low:(ULONG)low;
++    e->gpr2_valid=1;e->gpr2_dst=2;e->gpr2_value=width==64?high:(ULONG)high;
++    e->flags_valid=1;e->flags=(c->EFlags&~0x8d5)|(observed&0x8d5);
++    return TRUE;
++}
+--- a/dlls/ntdll/software_exception_chain.h
++++ b/dlls/ntdll/software_exception_chain.h
+@@ -221,7 +221,7 @@ static LONG64 *software_bridge_census(CONTEXT *context,LONG64 *row)
+ /* No-flag-change register bridge evaluator. Supports only complete canonical
+  * legacy encodings with register operands; never executes a memory store.
+  * Effects remain staged until the current relative-jump target is validated. */
+-struct software_bridge_effect {unsigned int length,dst,vector,no_write,flags_valid;DWORD flags;ULONG64 value[2];};
++struct software_bridge_effect {unsigned int length,dst,vector,no_write,flags_valid;DWORD flags;ULONG64 value[2];unsigned int gpr2_valid,gpr2_dst;ULONG64 gpr2_value;};
+ static ULONG64 *software_bridge_gpr(CONTEXT *c,unsigned int n)
+ {
+     switch(n){case 0:return &c->Rax;case 1:return &c->Rcx;case 2:return &c->Rdx;case 3:return &c->Rbx;
+@@ -229,6 +229,9 @@ static ULONG64 *software_bridge_gpr(CONTEXT *c,unsigned int n)
+     case 8:return &c->R8;case 9:return &c->R9;case 10:return &c->R10;case 11:return &c->R11;
+     case 12:return &c->R12;case 13:return &c->R13;case 14:return &c->R14;case 15:return &c->R15;default:return NULL;}
+ }
++#include "register_extra.inc"
++#include "register_mul.inc"
++
+ /* Execute register-only arithmetic on temporary values. Seed only arithmetic
+  * flags: never load guest TF/DF/IF or other control bits into the host handler.
+  * The operation and PUSHFQ materialization run in one asm block so undefined
+@@ -524,7 +527,7 @@ static unsigned int software_chain_load_bridge(CONTEXT *context,LONG64 *row)
+ #define BRIDGE_REFUSE(k,reason,detail) do{if(entry)InterlockedIncrement64(entry+(k));REFUSE_EARLY(reason,detail);}while(0)
+     byte_load=code[0]==0x8a && code[1]==0x01;
+     if(byte_load){memset(&effect,0,sizeof effect);effect.length=2;}
+-    else if(!(software_alu_enabled && software_bridge_arithmetic(code,context,&effect)) && !software_bridge_registers(code,context,&effect))BRIDGE_REFUSE(2,9,0);
++    else if(!(software_alu_enabled && (software_bridge_mul(code,context,&effect) || software_bridge_extra(code,context,&effect) || software_bridge_arithmetic(code,context,&effect))) && !software_bridge_registers(code,context,&effect))BRIDGE_REFUSE(2,9,0);
+     if(trace)trace->length=effect.length;
+     if(effect.length+5>sizeof code || code[effect.length]!=0xe9)BRIDGE_REFUSE(2,10,0);
+     memcpy(&displacement,code+effect.length+1,4);target=context->Rip+effect.length+5+(LONG_PTR)displacement;
+@@ -549,6 +552,9 @@ static unsigned int software_chain_load_bridge(CONTEXT *context,LONG64 *row)
+         context->Rax=(context->Rax&~(ULONG64)0xff)|value;
+     }else if(effect.vector)memcpy(&context->FltSave.XmmRegisters[effect.dst],effect.value,16);
+     else if(!effect.no_write)*software_bridge_gpr(context,effect.dst)=effect.value[0];
++    /* Both MUL results remain staged until every code/target check passes.
++     * No fallible guest-memory operation occurs between these commits. */
++    if(effect.gpr2_valid)*software_bridge_gpr(context,effect.gpr2_dst)=effect.gpr2_value;
+     if(effect.flags_valid)context->EFlags=effect.flags;
+     context->Rip=target;
+     software_chain_count(4);if(entry)InterlockedIncrement64(entry+1);
