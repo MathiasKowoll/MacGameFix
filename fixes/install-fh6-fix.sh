@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Install or remove the source-built Forza Horizon 6 D3DMetal compatibility
-# proxy in a NotProton Steam Play prefix.
+# proxy in a NotProton Steam Play prefix. In a CrossOver bottle, or with another
+# runner, only the Xbox sign-in fix (fh6-signin.sh) is installed or removed.
 #
 #   MGVF_BOTTLE=/path/to/pfx install-fh6-fix.sh <game folder>
 #   MGVF_BOTTLE=/path/to/pfx install-fh6-fix.sh <game folder> --status
@@ -11,7 +12,7 @@
 # MGVF-NEEDS: rosetta
 # MGVF-STATUS: WIP
 # MGVF-GAME: Forza Horizon 6 | forzahorizon6.exe |
-# MGVF-WHY: WIP: sign-in and driving validated on Rosetta with the paired ntdll, timers and exception acceleration. Further routes and hardware remain unvalidated. The game starts on D3DMetal 4, but its shaders hit unsupported SV_ShadingRate paths and several pipelines use D3D12 layouts D3DMetal translates incorrectly; a source-built game-specific proxy fixes those paths without FH5's descriptor-stride translation.
+# MGVF-WHY: WIP: sign-in and driving validated on Rosetta with the paired ntdll, timers and exception acceleration. Further routes and hardware remain unvalidated. The game starts on D3DMetal 4, but its shaders hit unsupported SV_ShadingRate paths and several pipelines use D3D12 layouts D3DMetal translates incorrectly; a source-built game-specific proxy fixes those paths without FH5's descriptor-stride translation. Xbox sign-in persists across starts: a fixed advapi32 in the prefix, for forzahorizon6.exe alone; in a CrossOver bottle that is the only part installed.
 # MGVF-CREDIT: Gauthier Piarrette (Highball tsshim and FH6 measurements) | https://github.com/gauthierpiarrette/highball
 # MGVF-CREDIT: xvferxedd, FH6 D3DMetal extensions preserved with fh5-d3dmetal-fix (repository no longer online) | https://github.com/Andytizer/fh5-crossover-steam-fix/tree/main/upstream/source
 #
@@ -75,6 +76,55 @@ RUNNER="$(find_runner)" || {
   exit 1
 }
 
+SYS="$PFX/drive_c/windows/system32"
+KEY="Software\\Wine\\AppDefaults\\forzahorizon6.exe\\DllOverrides"
+
+stopped() {
+  local rc=0
+  bottle_server_alive "$PFX" || rc=$?
+  case "$rc" in
+    1) return 0 ;;
+    0) echo "error: something is running in this prefix: $PFX" >&2
+       echo "       Quit Forza and Steam, then try again. Nothing was changed." >&2 ;;
+    *) echo "error: cannot tell whether this prefix is stopped. Nothing was changed." >&2 ;;
+  esac
+  return 1
+}
+
+. "$HERE/fh6-signin.sh"
+# Bundled dependencies used by fh6-signin.sh:
+# $HERE/advapi32-fh6-26.3.0.39832.dll $HERE/advapi32-fh6-27.0.0.41073.dll $HERE/advapi32-fh6-27.0.0.41303.dll
+
+# The whole improvement needs NotProton's runner for CrossOver Preview 41073 or 41303. In any
+# other bottle or prefix (CrossOver's own, or another runner) only the Xbox sign-in fix goes in.
+case "$RUNNER" in
+  */runners/crossover-27.0.0.41073/CrossOver|*/runners/crossover-27.0.0.41073-fex/CrossOver) ;;
+  */runners/crossover-27.0.0.41303/CrossOver|*/runners/crossover-27.0.0.41303-fex/CrossOver) ;;
+  *)
+    case "$MODE" in
+      --status)
+        read -r sp st < <(signin_parts)
+        echo "looking at $PFX and $RUNNER"
+        if [ "$st" = 0 ]; then
+          echo "Why: this bottle's advapi32.dll is not one the Xbox sign-in fix was built for"
+          echo norecipe
+        elif [ "$sp" = "$st" ]; then echo installed
+        elif [ "$sp" -gt 0 ]; then
+          echo "Why: $sp of $st Xbox sign-in components are in place (advapi32 and its override)" >&2
+          echo half
+        else echo absent; fi
+        exit 0 ;;
+      --restore) stopped || exit 1; signin_restore; echo "restored Wine's own advapi32 for forzahorizon6.exe"; echo restored; exit 0 ;;
+      --install|install)
+        stopped || exit 1
+        signin_install || exit 1
+        echo "note: in this bottle only the Xbox sign-in fix is installed; FH6's D3D12 and ntdll parts need NotProton's runner for CrossOver Preview."
+        echo installed; exit 0 ;;
+      --diagnostics-on|--diagnostics-off) echo "error: FH6's diagnostics need NotProton's runner for CrossOver Preview." >&2; exit 1 ;;
+      *) usage ;;
+    esac ;;
+esac
+
 find_d3dmetal() {
   local root="$1" name
   for name in apple_gptk apple_gptk3; do
@@ -100,13 +150,11 @@ R_ALIAS="$W/apd12.dll"
 U_ALIAS="$U/apd12.so"
 U_TARGET="../../$BACKEND/wine/x86_64-unix/d3d12.so"
 OWNERS="$W/.mgf-fh6-d3d12-owners"
-SYS="$PFX/drive_c/windows/system32"
 P_ALIAS="$SYS/apd12.dll"
 P_KEPT="$SYS/apd12.dll.mgf-original"
 PROXY="$HERE/d3d12-fh6.dll"
 LIVE="$GAME/d3d12.dll"
 KEPT="$GAME/d3d12.dll.mgf-original"
-KEY="Software\\Wine\\AppDefaults\\forzahorizon6.exe\\DllOverrides"
 VALUE="*d3d12"
 NOTICES="$HERE/fh5-THIRD-PARTY-LICENCES.md"
 
@@ -146,49 +194,6 @@ if [ -n "$CLONE" ]; then
 fi
 
 . "$HERE/fh6-runtime.sh"
-# Xbox sign-in. XAL looks its device key up with CredEnumerateW("Xbl|DeviceKey*"). On macOS
-# Wine's CredEnumerateW also asks the host keychain through mountmgr, which answers
-# STATUS_NOT_FOUND when nothing there matches, and CredEnumerateW took that as the failure of
-# the whole call although the registry held the key. XAL then made a new device at every
-# start, and Xbox asked for sign-in again. advapi32-fh6-<build>.dll is that build's advapi32
-# with the host's "not found" taken as no host credential (fh6-advapi32/). It is a Wine
-# builtin and replaces the runner's advapi32.dll, kept as advapi32.dll.mgf-fh6-original, and
-# only where that file is the one it was built against. It goes in the base runner because
-# NotProton makes FH6's runner clone again from it whenever the base runner's folders change:
-# a file only in the clone was gone at the next start (measured 2026-11-11). The clone gets
-# it too, for a clone that is not made again. Every game on the runner then has this
-# CredEnumerateW, which differs only where the host answers "not found". Beside the game as a
-# native DLL it does not load: every importer of advapi32 then failed with c0000135
-# (measured 2026-11-11 on 41303).
-# Bundled: $HERE/advapi32-fh6-27.0.0.41073.dll $HERE/advapi32-fh6-27.0.0.41303.dll
-A_SRC="${HERE}/advapi32-fh6-${FH6_BUILD:-none}.dll"
-A_LIVE="$W/advapi32.dll"
-A_KEPT="$A_LIVE.mgf-fh6-original"
-A_CLONE=""
-[ -z "$CLONE" ] || A_CLONE="$CLONE/lib/wine/x86_64-windows/advapi32.dll"
-case "$FH6_BUILD" in
-  27.0.0.41073) A_BASE_SHA=7c5e5f2f573e001eabfc39d252428dfcc79c773262b7d00b46301f53fb143dab ;;
-  27.0.0.41303) A_BASE_SHA=8790c1b25ce4805c6f5fe1f5f103ea51c9439869c04297763652f2970b94febc ;;
-  *) A_BASE_SHA="" ;;
-esac
-is_advapi() { [ -f "$A_SRC" ] && [ -f "$1" ] && cmp -s "$1" "$A_SRC"; }
-is_any_advapi() { cmp -s "$1" "$HERE/advapi32-fh6-27.0.0.41073.dll" 2>/dev/null || cmp -s "$1" "$HERE/advapi32-fh6-27.0.0.41303.dll" 2>/dev/null; }
-is_base_advapi() { [ -n "$A_BASE_SHA" ] && [ "$(fh6sha "$1")" = "$A_BASE_SHA" ]; }
-# A runner file is CodeWeavers' own, or ours over a kept CodeWeavers' own.
-advapi_fits_at() { is_base_advapi "$1" || { is_advapi "$1" && is_base_advapi "$1.mgf-fh6-original"; }; }
-advapi_fits() { [ -f "$A_SRC" ] && advapi_fits_at "$A_LIVE"; }
-# A clone file that is neither ours nor CodeWeavers' is NotProton's to make again; it is left.
-advapi_ok() { is_advapi "$A_LIVE" && { [ -z "$A_CLONE" ] || [ ! -f "$A_CLONE" ] || is_advapi "$A_CLONE" || ! advapi_fits_at "$A_CLONE"; }; }
-advapi_put() {
-  is_advapi "$1" && return 0
-  advapi_fits_at "$1" || return 0
-  cp -p "$1" "$1.mgf-fh6-original"
-  cp -p "$A_SRC" "$1.mgf-new" && mv -f "$1.mgf-new" "$1"
-}
-advapi_back() {
-  [ -n "$1" ] && [ -f "$1.mgf-fh6-original" ] && ! is_any_advapi "$1.mgf-fh6-original" && is_any_advapi "$1" || return 0
-  mv -f "$1.mgf-fh6-original" "$1"
-}
 # Bundled dependencies used by fh6-runtime.sh:
 # $HERE/fh6-launch-options.pl $HERE/notproton-rosetta-trap-boost.dylib
 
@@ -203,18 +208,6 @@ pair_ok() {
     && [ -e "$root/lib/wine/x86_64-unix/apd12.so" ]
 }
 
-stopped() {
-  local rc=0
-  bottle_server_alive "$PFX" || rc=$?
-  case "$rc" in
-    1) return 0 ;;
-    0) echo "error: something is running in this prefix: $PFX" >&2
-       echo "       Quit Forza and Steam, then try again. Nothing was changed." >&2 ;;
-    *) echo "error: cannot tell whether this prefix is stopped. Nothing was changed." >&2 ;;
-  esac
-  return 1
-}
-
 parts() {
   local pieces=0 total=4
   is_proxy "$LIVE" && pieces=$((pieces + 1))
@@ -225,10 +218,9 @@ parts() {
     total=5
     pair_ok "$CLONE" "$CLONE_BACKEND" && pieces=$((pieces + 1))
   fi
-  if advapi_fits; then
-    total=$((total + 1))
-    advapi_ok && pieces=$((pieces + 1))
-  fi
+  local sp st
+  read -r sp st < <(signin_parts)
+  pieces=$((pieces + sp)); total=$((total + st))
   total=$((total + 2))
   fh6_runtime_ok && pieces=$((pieces + 1)) || true
   fh6_options status >/dev/null 2>&1 && pieces=$((pieces + 1)) || true
@@ -314,7 +306,7 @@ case "$MODE" in
       if [ -f "$KEPT" ] && ! is_proxy "$KEPT"; then mv -f "$KEPT" "$LIVE"
       else rm -f "$LIVE" "$KEPT"; fi
     else [ ! -f "$LIVE" ] || echo "the game's d3d12.dll is not ours; it stays"; fi
-    advapi_back "$A_LIVE"; advapi_back "$A_CLONE"
+    signin_restore
     if is_alias "$P_ALIAS"; then rm -f "$P_ALIAS"; fi
     if [ ! -e "$P_ALIAS" ] && [ -f "$P_KEPT" ]; then mv -f "$P_KEPT" "$P_ALIAS"; fi
     user_reg_edit "$PFX" delete "$KEY" "$VALUE" || true
@@ -379,17 +371,7 @@ is_proxy "$LIVE" && is_alias "$P_ALIAS" && pair_ok "$RUNNER" "$BACKEND" && overr
 }
 if [ -n "$CLONE" ]; then pair_ok "$CLONE" "$CLONE_BACKEND" || exit 1; fi
 
-if advapi_fits; then
-  advapi_put "$A_LIVE"
-  [ -z "$A_CLONE" ] || [ ! -f "$A_CLONE" ] || advapi_put "$A_CLONE"
-  advapi_ok && is_base_advapi "$A_KEPT" || {
-    echo "error: the Xbox sign-in fix did not verify" >&2
-    exit 1
-  }
-  echo "installed the Xbox sign-in fix (advapi32 CredEnumerateW) in the runner"
-else
-  echo "note: this runner's advapi32.dll is not one the Xbox sign-in fix was built for; FH6 asks for sign-in at each start."
-fi
+signin_install || exit 1
 
 : > "$PFX/.mgf-fh6-managed"
 echo "installed the source-built FH6 D3DMetal compatibility proxy"

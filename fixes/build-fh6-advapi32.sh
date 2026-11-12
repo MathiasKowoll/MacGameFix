@@ -6,11 +6,14 @@
 #   build-fh6-advapi32.sh 27.0.0.41303 ~/Development/sources-cx-20261111/sources/wine
 #
 # The source is wine/ from the crossover-sources tarball the build was made from
-# (27.0.0.41073: 20261015, Wine 11.17; 27.0.0.41303: 20261111, Wine 11.21). The patch is
+# (26.3.0.39832: 26.3.0, Wine 11.0; 27.0.0.41073: 20261015, Wine 11.17; 27.0.0.41303:
+# 20261111, Wine 11.21). The patch is
 # fh6-advapi32/; only the x86_64 half is built (FH6 runs on the Intel side), configured as
-# engine/build.sh configures CrossOver's modules. It stays a Wine builtin, signature at 0x40
-# kept: install-fh6-fix.sh puts it in place of the runner's builtin advapi32.dll. It writes advapi32-fh6-<build>.dll beside this script and prints its sha256, which
-# fh6-advapi32/ORIGIN.md records.
+# engine/build.sh configures CrossOver's modules. The 32-byte Wine builtin signature at 0x40
+# is cleared: install-fh6-fix.sh puts the file in the bottle's system32, where Wine loads it
+# as a native DLL for forzahorizon6.exe alone, and Wine refuses a native DLL that says it is
+# a builtin. It writes advapi32-fh6-<build>.dll beside this script and prints its sha256,
+# which fh6-advapi32/ORIGIN.md records.
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 # SPDX-License-Identifier: LGPL-2.1-or-later
@@ -20,6 +23,7 @@ BUILD="${1:?the CrossOver build id}"
 SRC="$(cd "${2:?the Wine source of that build}" && pwd)"
 WORK="${3:-$(mktemp -d)}"
 case "$BUILD" in
+  26.3.0.39832) want='Wine version 11.0' ;;
   27.0.0.41073) want='Wine version 11.17' ;;
   27.0.0.41303) want='Wine version 11.21' ;;
   *) echo "no recipe for build $BUILD" >&2; exit 1 ;;
@@ -46,6 +50,8 @@ make -j10 dlls/advapi32/all > make.log 2>&1
 OUT="$HERE/advapi32-fh6-$BUILD.dll"
 llvm-strip -o "$OUT" dlls/advapi32/x86_64-windows/advapi32.dll
 /usr/bin/python3 -I -c 'import sys
-b = open(sys.argv[1], "rb").read()
-assert b[0x40:0x50] == b"Wine builtin DLL", "no builtin signature where it was expected"' "$OUT"
+b = bytearray(open(sys.argv[1], "rb").read())
+assert b[0x40:0x50] == b"Wine builtin DLL", "no builtin signature where it was expected"
+b[0x40:0x60] = bytes(32)
+open(sys.argv[1], "wb").write(b)' "$OUT"
 shasum -a 256 "$OUT"

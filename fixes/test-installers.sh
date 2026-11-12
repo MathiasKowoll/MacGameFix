@@ -547,10 +547,12 @@ cp "$f6pfx/drive_c/windows/system32/apd12.dll" "$f6/orig-apd12"
 # Exercise the exact installer on a fake executable, substituting only the fixture hash
 # in a disposable copy. Production has no environment switch to bypass the build gate.
 f6fix="$f6/fixes"; mkdir -p "$f6fix"
-for n in install-fh6-fix.sh fh6-runtime.sh fh6-launch-options.pl bottles.sh pe.pl d3d12-fh6.dll fh5-THIRD-PARTY-LICENCES.md notproton-rosetta-trap-boost.dylib advapi32-fh6-27.0.0.41073.dll advapi32-fh6-27.0.0.41303.dll; do cp "$FIX/$n" "$f6fix/$n"; done
-# The runner's own advapi32.dll stands for 41073's: the copy's base hash is the fake's.
-printf "CodeWeavers' advapi32\n" > "$f6run/lib/wine/x86_64-windows/advapi32.dll"
-sed -i '' "s/^  27.0.0.41073) A_BASE_SHA=.*/  27.0.0.41073) A_BASE_SHA=$(shasum -a 256 "$f6run/lib/wine/x86_64-windows/advapi32.dll" | cut -d' ' -f1) ;;/" "$f6fix/install-fh6-fix.sh"
+for n in install-fh6-fix.sh fh6-runtime.sh fh6-launch-options.pl bottles.sh pe.pl d3d12-fh6.dll fh5-THIRD-PARTY-LICENCES.md notproton-rosetta-trap-boost.dylib fh6-signin.sh advapi32-fh6-26.3.0.39832.dll advapi32-fh6-27.0.0.41073.dll advapi32-fh6-27.0.0.41303.dll; do cp "$FIX/$n" "$f6fix/$n"; done
+# The prefix's own advapi32.dll stands for 41073's: that build's hash is the fake's. The
+# runner's must stay as it is.
+printf "CodeWeavers' advapi32\n" > "$f6pfx/drive_c/windows/system32/advapi32.dll"
+printf "runner advapi32\n" > "$f6run/lib/wine/x86_64-windows/advapi32.dll"
+sed -i '' "s/^    7c5e5f2f573e001eabfc39d252428dfcc79c773262b7d00b46301f53fb143dab)/    $(shasum -a 256 "$f6pfx/drive_c/windows/system32/advapi32.dll" | cut -d' ' -f1))/" "$f6fix/fh6-signin.sh"
 # The separate launch-options tests exercise the running-Steam refusal. This fixture
 # substitutes only process discovery so the real user's open Steam is irrelevant.
 sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$f6fix/fh6-launch-options.pl"
@@ -562,8 +564,7 @@ cp "$FIX/../engine/engine-modules.sh" "$f6modules/engine-modules.sh"
 cp "$f6modules/engine-27.0.0.41073-x86_64-unix-ntdll.so" "$f6run/lib/wine/x86_64-unix/ntdll.so"
 printf 'original runner PE\n' > "$f6run/lib/wine/x86_64-windows/ntdll.dll"
 printf 'original prefix PE\n' > "$f6pfx/drive_c/windows/system32/ntdll.dll"
-# FH6's own runner clone, as NotProton's Game Mode makes it: the sign-in fix goes in the base
-# runner, which NotProton makes the clone from, and in the clone as it is.
+# FH6's own runner clone, as NotProton's Game Mode makes it.
 f6clone="$f6home/Library/Application Support/notproton/launchers/2483190/runner"
 mkdir -p "$(dirname "$f6clone")"; cp -R "$f6run" "$f6clone"
 printf '27.0.0.41073-fex\n' > "$f6/notproton-build"
@@ -578,12 +579,13 @@ f6do --install > "$f6/install.log" 2>&1 \
   && [ -f "$f6game/d3d12.dll.mgf-original" ] \
   && [ -f "$f6pfx/drive_c/windows/system32/apd12.dll.mgf-original" ] \
   && [ ! -e "$f6pfx/drive_c/windows/system32/ws2_32.dll.mgf-stock" ] \
-  && cmp -s "$f6run/lib/wine/x86_64-windows/advapi32.dll" "$FIX/advapi32-fh6-27.0.0.41073.dll" \
-  && [ "$(cat "$f6run/lib/wine/x86_64-windows/advapi32.dll.mgf-fh6-original")" = "CodeWeavers' advapi32" ] \
-  && cmp -s "$f6clone/lib/wine/x86_64-windows/advapi32.dll" "$FIX/advapi32-fh6-27.0.0.41073.dll" \
-  && [ "$(cat "$f6clone/lib/wine/x86_64-windows/advapi32.dll.mgf-fh6-original")" = "CodeWeavers' advapi32" ] \
-  && [ ! -e "$f6game/advapi32.dll" ] && ! /usr/bin/grep -q '^"advapi32"=' "$f6pfx/user.reg" \
-  && say ok "fh6 on a fake prefix: source-built profile, private runner alias and sign-in fix in runner and clone" \
+  && cmp -s "$f6pfx/drive_c/windows/system32/advapi32.dll" "$FIX/advapi32-fh6-27.0.0.41073.dll" \
+  && [ "$(cat "$f6pfx/drive_c/windows/system32/advapi32.dll.mgf-fh6-original")" = "CodeWeavers' advapi32" ] \
+  && /usr/bin/grep -q '^"advapi32"="native,builtin"' "$f6pfx/user.reg" \
+  && [ "$(cat "$f6run/lib/wine/x86_64-windows/advapi32.dll")" = "runner advapi32" ] \
+  && [ "$(cat "$f6clone/lib/wine/x86_64-windows/advapi32.dll")" = "runner advapi32" ] \
+  && [ ! -e "$f6game/advapi32.dll" ] \
+  && say ok "fh6 on a fake prefix: source-built profile, private runner alias and sign-in fix in the prefix" \
   || say FAIL "fh6: install ($(f6st), $(tail -2 "$f6/install.log" | tr '\n' ' '))"
 f6do --install > "$f6/reinstall.log" 2>&1 && [ "$(f6st)" = installed ] \
   && say ok "fh6 on a fake prefix: installing again is safe" || say FAIL "fh6: reinstall ($(f6st))"
@@ -593,21 +595,52 @@ f6do --restore > "$f6/restore.log" 2>&1 \
   && cmp -s "$f6pfx/drive_c/windows/system32/apd12.dll" "$f6/orig-apd12" \
   && [ ! -e "$f6run/lib/wine/x86_64-windows/apd12.dll" ] \
   && [ ! -e "$f6run/lib/wine/x86_64-unix/apd12.so" ] \
-  && [ "$(cat "$f6run/lib/wine/x86_64-windows/advapi32.dll")" = "CodeWeavers' advapi32" ] \
-  && [ ! -e "$f6run/lib/wine/x86_64-windows/advapi32.dll.mgf-fh6-original" ] \
-  && [ "$(cat "$f6clone/lib/wine/x86_64-windows/advapi32.dll")" = "CodeWeavers' advapi32" ] \
-  && [ ! -e "$f6clone/lib/wine/x86_64-windows/advapi32.dll.mgf-fh6-original" ] \
+  && [ "$(cat "$f6pfx/drive_c/windows/system32/advapi32.dll")" = "CodeWeavers' advapi32" ] \
+  && [ ! -e "$f6pfx/drive_c/windows/system32/advapi32.dll.mgf-fh6-original" ] \
+  && ! /usr/bin/grep -q '^"advapi32"=' "$f6pfx/user.reg" \
   && say ok "fh6 on a fake prefix: originals, runner and clone restored byte for byte" \
   || say FAIL "fh6: restore ($(f6st), $(tail -2 "$f6/restore.log" | tr '\n' ' '))"
-# Another advapi32.dll in the runner: the D3D12 fix goes in, the sign-in fix does not.
-printf "another advapi32\n" > "$f6run/lib/wine/x86_64-windows/advapi32.dll"
+# Another advapi32.dll in the prefix: the D3D12 fix goes in, the sign-in fix does not.
+printf "another advapi32\n" > "$f6pfx/drive_c/windows/system32/advapi32.dll"
 f6do --install > "$f6/other.log" 2>&1 && [ "$(f6st)" = installed ] \
-  && [ "$(cat "$f6run/lib/wine/x86_64-windows/advapi32.dll")" = "another advapi32" ] \
-  && [ ! -e "$f6run/lib/wine/x86_64-windows/advapi32.dll.mgf-fh6-original" ] \
-  && [ ! -e "$f6clone/lib/wine/x86_64-windows/advapi32.dll.mgf-fh6-original" ] \
+  && [ "$(cat "$f6pfx/drive_c/windows/system32/advapi32.dll")" = "another advapi32" ] \
+  && [ ! -e "$f6pfx/drive_c/windows/system32/advapi32.dll.mgf-fh6-original" ] \
+  && ! /usr/bin/grep -q '^"advapi32"=' "$f6pfx/user.reg" \
   && /usr/bin/grep -q 'not one the Xbox sign-in fix was built for' "$f6/other.log" \
-  && say ok "fh6 on a fake prefix: another runner advapi32 gets no sign-in fix" \
+  && say ok "fh6 on a fake prefix: another prefix advapi32 gets no sign-in fix" \
   || say FAIL "fh6: other advapi32 ($(f6st), $(tail -2 "$f6/other.log" | tr '\n' ' '))"
 f6do --restore > /dev/null 2>&1
+
+# A CrossOver bottle: only the Xbox sign-in fix, nothing in CrossOver itself.
+f6cx="$f6/cx/CrossOver.app/Contents/SharedSupport/CrossOver"; f6b="$f6/bottle"; mkdir -p "$f6cx/bin" "$f6cx/lib/wine/x86_64-windows" "$f6b/drive_c/windows/system32" "$f6/cxgame"
+printf '#!/bin/sh\nexit 0\n' > "$f6cx/bin/wine"; chmod +x "$f6cx/bin/wine"
+printf 'cx advapi32\n' > "$f6cx/lib/wine/x86_64-windows/advapi32.dll"
+printf 'WINE REGISTRY Version 2\n' > "$f6b/user.reg"; printf 'WINE REGISTRY Version 2\n' > "$f6b/system.reg"
+printf "CodeWeavers' advapi32\n" > "$f6b/drive_c/windows/system32/advapi32.dll"
+printf 'any build\n' > "$f6/cxgame/forzahorizon6.exe"
+f6bdo() { HOME="$f6home" MGVF_CX="$f6cx" MGVF_BOTTLE="$f6b" /bin/bash "$f6fix/install-fh6-fix.sh" "$f6/cxgame" "$@"; }
+f6bst() { f6bdo --status 2>/dev/null | /usr/bin/grep -E '^(installed|absent|half|norecipe)$' | tail -1; }
+[ "$(f6bst)" = absent ] && say ok "fh6 in a CrossOver bottle: absent before" || say FAIL "fh6 bottle: absent before ($(f6bst))"
+f6bdo --install > "$f6/bottle.log" 2>&1 && [ "$(f6bst)" = installed ] \
+  && cmp -s "$f6b/drive_c/windows/system32/advapi32.dll" "$FIX/advapi32-fh6-27.0.0.41073.dll" \
+  && /usr/bin/grep -q '^"advapi32"="native,builtin"' "$f6b/user.reg" \
+  && ! /usr/bin/grep -q 'd3d12' "$f6b/user.reg" && [ ! -e "$f6/cxgame/d3d12.dll" ] \
+  && [ "$(cat "$f6cx/lib/wine/x86_64-windows/advapi32.dll")" = "cx advapi32" ] \
+  && /usr/bin/grep -q 'only the Xbox sign-in fix' "$f6/bottle.log" \
+  && say ok "fh6 in a CrossOver bottle: the sign-in fix alone, CrossOver untouched" \
+  || say FAIL "fh6 bottle: install ($(f6bst), $(tail -2 "$f6/bottle.log" | tr '\n' ' '))"
+# An update of the bottle puts Wine's copy back: half, and installing again mends it.
+printf "CodeWeavers' advapi32\n" > "$f6b/drive_c/windows/system32/advapi32.dll"
+[ "$(f6bst)" = half ] && f6bdo --install >/dev/null 2>&1 && [ "$(f6bst)" = installed ] \
+  && say ok "fh6 in a CrossOver bottle: a bottle update shows half, installing again mends it" \
+  || say FAIL "fh6 bottle: after an update ($(f6bst))"
+f6bdo --restore > "$f6/bottle-restore.log" 2>&1 && [ "$(f6bst)" = absent ] \
+  && [ "$(cat "$f6b/drive_c/windows/system32/advapi32.dll")" = "CodeWeavers' advapi32" ] \
+  && [ ! -e "$f6b/drive_c/windows/system32/advapi32.dll.mgf-fh6-original" ] \
+  && ! /usr/bin/grep -q '^"advapi32"=' "$f6b/user.reg" \
+  && say ok "fh6 in a CrossOver bottle: restored byte for byte" \
+  || say FAIL "fh6 bottle: restore ($(f6bst), $(tail -2 "$f6/bottle-restore.log" | tr '\n' ' '))"
+printf "another advapi32\n" > "$f6b/drive_c/windows/system32/advapi32.dll"
+[ "$(f6bst)" = norecipe ] && say ok "fh6 in a CrossOver bottle: another advapi32 has no recipe" || say FAIL "fh6 bottle: other advapi32 ($(f6bst))"
 
 if [ "$fails" = 0 ]; then echo "==> every installer: installed, outdated, updated, restored; Cyberpunk 2077's app patched, signed and put back"; else echo "==> $fails failed"; exit 1; fi
