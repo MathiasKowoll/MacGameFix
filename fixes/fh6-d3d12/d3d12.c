@@ -51,6 +51,7 @@
 #include <string.h>
 #include "dxil_shadingrate.h"
 #include "inspect.h"
+#include "pso_reuse.h"
 #ifndef MGF_FH6_PROFILE
 #define MGF_FH6_PROFILE 0
 #endif
@@ -889,9 +890,15 @@ static HRESULT (STDMETHODCALLTYPE *real_CreateComputePipelineState)(ID3D12Device
 static HRESULT STDMETHODCALLTYPE hook_CreateGraphicsPipelineState(ID3D12Device *dev, const D3D12_GRAPHICS_PIPELINE_STATE_DESC *d, REFIID riid, void **out)
 {
     D3D12_GRAPHICS_PIPELINE_STATE_DESC copy; Fixups fx; HRESULT hr; unsigned n; const D3D12_GRAPHICS_PIPELINE_STATE_DESC *game = d;
+    PrKey key; UINT64 key_hash = 0; BOOL keyed = pso_reuse && out && !dbg && !inspect_on && !inspect_serial && pr_key_graphics(d, &key);
+    if (keyed) {   // the game's own description, before any fix: the same one always gets the same fixes
+        key_hash = pr_hash(&key);
+        if (pr_lookup(&key, key_hash, riid, out, &hr)) { pr_free(&key); return hr; }
+    }
     d = fix_graphics_desc(d, &copy, &fx);
     if (!dbg && !inspect_serial) {
         hr = real_CreateGraphicsPipelineState(dev, d, riid, out);
+        if (keyed) { if (SUCCEEDED(hr)) pr_insert(&key, key_hash, *out, game->pRootSignature); pr_free(&key); }
         if (inspect_on) inspect_graphics(SUCCEEDED(hr) && out ? *out : NULL, inspect_next_id(), game, d, dev, hr);
         free_fixups(&fx); return hr;
     }
@@ -1209,6 +1216,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
         DisableThreadLibraryCalls(inst);
         InitializeCriticalSection(&ring_lock);
         InitializeCriticalSection(&pso_lock);
+        pr_init();
 #if !MGF_FH6_PROFILE
         ug_init();
 #endif
