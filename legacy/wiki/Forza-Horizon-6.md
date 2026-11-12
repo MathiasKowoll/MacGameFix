@@ -1,6 +1,6 @@
 # Current status: WIP with validated progress
 
-The retained 2026-11-11 Rosetta baseline passed sign-in, menu and actual driving. It is included in MacGameFix 1.6.1-pre.1, with timers and guarded exception acceleration under the existing Rosetta improvement. See [current release evidence and limits](../../docs/releases/1.6.1-pre.1.md). The notes below describe earlier investigation and do not supersede that baseline.
+Since MacGameFix 1.6.2 (2026-11-12) the improvement targets NotProton's CrossOver Preview 27.0.0.41303 runner under Rosetta, with D3DMetal 4: the paired `ntdll` (timers 0021, exception dispatcher 0023, register bridge 0024), the priority plugin, and an `advapi32` that keeps the Xbox sign-in across starts (held over four starts in a row). Sign-in, menu and driving are validated on NotProton only. Short stutters remain; see [Frame pacing](#frame-pacing-2026-11-12). The 41073 notes below describe earlier investigation. Earlier release evidence: [1.6.1-pre.1](../../docs/releases/1.6.1-pre.1.md).
 
 # Forza Horizon 6
 
@@ -72,15 +72,56 @@ successful install.
 The base-runner alias is shared safely with FH5 through separate ownership
 records. Removing either fix leaves the alias while the other still owns it.
 
+## Frame pacing (2026-11-12)
+
+The steadiest play so far comes from unlocking the frame rate in the game's own
+settings and capping it with D3DMetal 4's `D3DM_MAX_FPS` (48 or 60) in the
+launch options. Short stutters remain.
+
+Measured with the car nearly still (1 km/h), cap in effect, Game Mode on for
+the whole minute, from Metal's presentation telemetry:
+
+| | |
+| --- | --- |
+| Frames in 60 s | 2,848, 47.47 FPS on average |
+| Longest presentation interval | 95.83 ms (about 4.6 frames at 48 FPS) |
+| One-second windows with an interval over 50 ms | 8 (66.67 to 95.83 ms); none over 100 ms |
+| New shader compilations | none recorded |
+
+These are aggregated windows, not single frames: they place a stall, they do
+not name it. GPU time in the affected windows was no higher than in the others
+(median of the window maxima 31.41 ms against 33.06 ms), which points at
+work submission or synchronisation rather than GPU load, without ruling the GPU
+out. The intervals between affected windows vary; nothing supports a fixed
+period. An earlier slow phase (29 to 35 FPS for the first half minute) is a
+separate effect: it coincided with a cold Mac and with Game Mode being paused
+and switched off and on, and is not explained by either alone.
+
+`D3DM_MAX_FPS` is a no-sooner-than interval (`presentDrawable:afterMinimumDuration:`),
+and the MacBook Pro's ProMotion panel shows frames only at 240/n Hz (120, 80,
+60, 48, 40...). On this Mac in September, with another D3DMetal 4 title, every
+cap from 48 to 60 held 48 and a cap of 70 held 60. That is why 48 and 60 can
+behave alike here; a cap above the rate to hold has not been tried with FH6.
+
+The exception statistics of the dispatcher (`WINE_SOFTWARE_EXCEPTION_STATS`)
+are on by default: only `=0` turns them off, and `=1` changes nothing. Whether
+turning them off changes the stutter has not been measured.
+
+Not known yet: which thread or wait holds the frame back. Candidates are an
+exception burst, the bridge's own cost, contention on its counters, a runnable
+thread not getting a core, a synchronisation wait, file or memory activity,
+and thermal or scheduler changes. A diagnostic that records the dispatcher's
+timings in-process is prepared outside MacGameFix and has not run on FH6. It
+ships with nothing here. A system trace attached to FH6 earlier preceded a
+critical-section hang and the game's own watchdog crash, so profilers on the
+live game are weighed against that.
+
 ## Open
 
-- Complete Xbox sign-in and reach gameplay with the FH6 profile installed.
-- Decide whether to set the NVIDIA RTX 4070 identity from Highball's recipe or
-  keep the measured **Ignore** path for the unsupported-GPU dialog.
-- Test whether Wine's empty-Keychain `CredEnumerate` result prevents the Xbox
-  account from being remembered on a later launch.
-- Exercise install, reinstall and byte-for-byte restore in the offline
-  installer test and then build the MacGameFix app.
+- Find what holds the frame back in the stutters above, then fix that one
+  thing, with one change at a time against the working baseline.
+- CrossOver bottles: only the sign-in fix installs there, untested.
+- FEX/Mullion and hardware beyond this Mac.
 
 ## Sources and credits
 
