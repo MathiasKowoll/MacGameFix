@@ -12,7 +12,7 @@
 # MGVF-NEEDS: rosetta
 # MGVF-STATUS: WIP
 # MGVF-GAME: Forza Horizon 6 | forzahorizon6.exe |
-# MGVF-WHY: WIP: sign-in and driving validated on Rosetta with the paired ntdll, timers and exception acceleration. Further routes and hardware remain unvalidated. The game starts on D3DMetal 4, but its shaders hit unsupported SV_ShadingRate paths and several pipelines use D3D12 layouts D3DMetal translates incorrectly; a source-built game-specific proxy fixes those paths without FH5's descriptor-stride translation. Xbox sign-in persists across starts: a fixed advapi32 in the prefix, for forzahorizon6.exe alone; in a CrossOver bottle that is the only part installed.
+# MGVF-WHY: WIP: sign-in and driving validated on Rosetta with the paired ntdll, timers and exception acceleration. Further routes and hardware remain unvalidated. The game starts on D3DMetal 4, but its shaders hit unsupported SV_ShadingRate paths and several pipelines use D3D12 layouts D3DMetal translates incorrectly; a source-built game-specific proxy fixes those paths without FH5's descriptor-stride translation. Xbox sign-in persists across starts: a fixed advapi32 in the prefix, for forzahorizon6.exe alone; in a CrossOver bottle that is the only part installed. Tested on NotProton only; CrossOver bottles are untested.
 # MGVF-CREDIT: Gauthier Piarrette (Highball tsshim and FH6 measurements) | https://github.com/gauthierpiarrette/highball
 # MGVF-CREDIT: xvferxedd, FH6 D3DMetal extensions preserved with fh5-d3dmetal-fix (repository no longer online) | https://github.com/Andytizer/fh5-crossover-steam-fix/tree/main/upstream/source
 #
@@ -119,6 +119,7 @@ case "$RUNNER" in
         stopped || exit 1
         signin_install || exit 1
         echo "note: in this bottle only the Xbox sign-in fix is installed; FH6's D3D12 and ntdll parts need NotProton's runner for CrossOver Preview."
+        echo "note: the sign-in fix is tested on NotProton only; in a CrossOver bottle it is untested."
         echo installed; exit 0 ;;
       --diagnostics-on|--diagnostics-off) echo "error: FH6's diagnostics need NotProton's runner for CrossOver Preview." >&2; exit 1 ;;
       *) usage ;;
