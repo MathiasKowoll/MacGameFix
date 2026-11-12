@@ -185,6 +185,9 @@ struct Game: Decodable, Identifiable, Hashable {
     /// The work it stands on, as "name | url" (the installer's MGVF-CREDIT lines);
     /// absent from catalogs older than the field.
     let credits: [String]?
+    /// Special instructions the user needs, as Markdown (the installer's MGVF-INSTRUCTIONS
+    /// file); absent for most fixes and from catalogs older than the field.
+    let instructions: String?
 
     var id: String { name }
 

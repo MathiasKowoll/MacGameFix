@@ -11,6 +11,7 @@
 # MGVF-SCOPE: prefix
 # MGVF-NEEDS: rosetta
 # MGVF-STATUS: WIP
+# MGVF-INSTRUCTIONS: fh6-instructions.md
 # MGVF-GAME: Forza Horizon 6 | forzahorizon6.exe |
 # MGVF-WHY: WIP: less buggy and far more playable than before, though not yet smooth. Sign-in and driving validated on Rosetta with the paired ntdll, timers and exception acceleration. Further routes and hardware remain unvalidated. The game starts on D3DMetal 4, but its shaders hit unsupported SV_ShadingRate paths and several pipelines use D3D12 layouts D3DMetal translates incorrectly; a source-built game-specific proxy fixes those paths without FH5's descriptor-stride translation. Xbox sign-in persists across starts: a fixed advapi32 in the prefix, for forzahorizon6.exe alone; in a CrossOver bottle that is the only part installed. Tested on NotProton only; CrossOver bottles are untested. It also needs four environment options in FH6's Steam launch options (NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_CHAIN=1, NOTPROTON_ENV_WINE_SOFTWARE_BRIDGE_RESUME=0, NOTPROTON_ENV_WINE_SOFTWARE_ALU_BRIDGE=1, NOTPROTON_ROSETTA_TRAP_BOOST=1): the improvement writes them itself when Steam is closed and keeps your own options, so quit Steam before installing and leave them in place.
 # MGVF-CREDIT: Gauthier Piarrette (Highball tsshim and FH6 measurements) | https://github.com/gauthierpiarrette/highball
