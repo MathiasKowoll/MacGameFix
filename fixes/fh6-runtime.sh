@@ -66,7 +66,14 @@ fh6_install_runtime() {
   fh6_put "$NT_DLL" "$SYS/ntdll.dll"
   local plugins="$HOME/Library/Application Support/notproton/plugins"
   mkdir -p "$plugins"
-  # Keep an existing user plugin; our descriptor is only needed on a fresh installation.
+  # Keep an existing user plugin; our descriptor is only needed on a fresh installation. An
+  # earlier MacGameFix build of the plugin (28315251, with the census and syscall reporting) is
+  # replaced by the quiet one beside this installer.
+  local live="$plugins/notproton-rosetta-trap-boost.dylib"
+  if [ -f "$plugins/rosetta-trap-boost.conf" ] && [ -f "$live" ] \
+     && [ "$(fh6sha "$live")" = 28315251485196c816b3579c90a8e9fa81a4bb7b9b61d87c4269c8972c9f4197 ]; then
+    cp -p "$HERE/notproton-rosetta-trap-boost.dylib" "$live.mgf-new" && mv -f "$live.mgf-new" "$live"
+  fi
   if [ ! -f "$plugins/rosetta-trap-boost.conf" ]; then
     cp -p "$HERE/notproton-rosetta-trap-boost.dylib" "$plugins/notproton-rosetta-trap-boost.dylib"
     cat > "$plugins/rosetta-trap-boost.conf" <<'CONF'

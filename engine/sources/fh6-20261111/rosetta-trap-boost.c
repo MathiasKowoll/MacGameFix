@@ -64,6 +64,7 @@ static void *worker(void *arg) {
     }
     static struct seen prev[4096]; int nprev = 0;
     int boosted = 0, applied = -1, trapmode = 0;
+    int tracking_ready = 0;
     static uint64_t raised_id[64]; int nraised = 0;
     static uint64_t prev_ill[ST];
     char modepath[1024] = "";
@@ -80,9 +81,18 @@ static void *worker(void *arg) {
         uint64_t hot[16]; int nhot = 0;
         for (int k = 0; k < ST; k++) { uint64_t v = atomic_load(&st_n[k]); if (v - prev_ill[k] > 200 && nhot < 16) hot[nhot++] = atomic_load(&st_id[k]); prev_ill[k] = v; }
         static struct seen cur[4096]; int ncur = 0;
-        if (census && !log && home && n > (getenv("MGF_RBOOST_MINTHREADS") ? atoi(getenv("MGF_RBOOST_MINTHREADS")) : 30)) {   /* only processes with a game's thread count */
+        if (MGF_RBOOST_TELEMETRY && census && !log && home && n > (mach_msg_type_number_t)(getenv("MGF_RBOOST_MINTHREADS") ? atoi(getenv("MGF_RBOOST_MINTHREADS")) : 30)) {   /* only processes with a game's thread count */
             log = fopen(path, "a");
             if (log) fprintf(log, "# pid %d mode %s\n", getpid(), boost ? "boost" : "log");
+        }
+        /* Keep the original signal-counter activation cadence and game-thread
+         * threshold without opening a census file. SIGILL thread counts still
+         * drive the unchanged trap-mode priority policy. */
+        if (!MGF_RBOOST_TELEMETRY && census) {
+            if (!tracking_ready && home && n > (mach_msg_type_number_t)(getenv("MGF_RBOOST_MINTHREADS") ? atoi(getenv("MGF_RBOOST_MINTHREADS")) : 30))
+                tracking_ready = 1;
+            if (tracking_ready && (getenv("MGF_RBOOST_FAULTS") || faults_file_on()) && tick > 20)
+                wrap_handlers();
         }
         if (census && log) {
             static task_events_info_data_t pe; static int have;
@@ -162,7 +172,7 @@ static void *worker(void *arg) {
                         if (log) { time_t t = time(NULL); fprintf(log, "! %.8s trapping thread %llx back to normal\n", ctime(&t) + 11, id.thread_id); fflush(log); }
                     }
                 }
-                if (census && ncur < 4096) {
+                if (MGF_RBOOST_TELEMETRY && census && ncur < 4096) {
                     uint64_t cpu = x.pth_user_time + x.pth_system_time, was = 0, swas = 0;
                     for (int k = 0; k < nprev; k++) if (prev[k].id == id.thread_id) { was = prev[k].cpu_ns; swas = prev[k].sys_ns; break; }
                     cur[ncur].id = id.thread_id; cur[ncur].cpu_ns = cpu; cur[ncur].sys_ns = x.pth_system_time; ncur++;
@@ -174,15 +184,43 @@ static void *worker(void *arg) {
             mach_port_deallocate(mach_task_self(), th[i]);
         }
         vm_deallocate(mach_task_self(), (vm_address_t)th, n * sizeof(thread_t));
-        if (census) { memcpy(prev, cur, ncur * sizeof *cur); nprev = ncur; if (log) fflush(log); }
+        if (MGF_RBOOST_TELEMETRY && census) { memcpy(prev, cur, ncur * sizeof *cur); nprev = ncur; if (log) fflush(log); }
     }
     return NULL;
 }
 
+/* DIAGNOSTIC: Wine's debug output to a file. NotProton starts a game with open -a, so what Wine
+ * writes to stderr is lost. When ~/Library/Logs/MacGameFix/wine-debug.channels exists, its first
+ * line becomes WINEDEBUG (read here, before the loader brings up ntdll, which reads it once) and
+ * stderr goes to ~/Library/Logs/MacGameFix/wine-debug-<pid>.log. Without the file nothing changes. */
+#include <fcntl.h>
+static void wine_debug_to_file(void) {
+    const char *home = getenv("HOME");
+    char path[1024], channels[512] = {0};
+    FILE *f;
+    int fd;
+    if (!home) return;
+    snprintf(path, sizeof(path), "%s/Library/Logs/MacGameFix/wine-debug.channels", home);
+    if (!(f = fopen(path, "r"))) return;
+    if (!fgets(channels, sizeof(channels), f)) channels[0] = 0;
+    fclose(f);
+    channels[strcspn(channels, "\r\n")] = 0;
+    if (channels[0]) setenv("WINEDEBUG", channels, 1);
+    snprintf(path, sizeof(path), "%s/Library/Logs/MacGameFix/wine-debug-%d.log", home, (int)getpid());
+    if ((fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0600)) < 0) return;
+    dup2(fd, 2);
+    close(fd);
+    fprintf(stderr, "mgf: WINEDEBUG=%s pid %d\n", channels, (int)getpid());
+}
+
+#ifndef MGF_RBOOST_TEST
 __attribute__((constructor)) static void start(void) {
+    if (MGF_RBOOST_TELEMETRY) wine_debug_to_file();
     if (!translated()) return;
     pthread_attr_t a; pthread_attr_init(&a);
     pthread_attr_setdetachstate(&a, PTHREAD_CREATE_DETACHED);
     pthread_t t; pthread_create(&t, &a, worker, NULL);
     pthread_attr_destroy(&a);
 }
+
+#endif /* MGF_RBOOST_TEST */
