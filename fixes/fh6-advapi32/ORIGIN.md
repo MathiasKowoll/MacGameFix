@@ -15,7 +15,10 @@ writes `MgfTest|DeviceKey` and enumerates `MgfTest|DeviceKey*` fails with 1168 o
 CodeWeavers' 41073 and 41303 `advapi32` and succeeds, count 1, with these. With the
 41303 one in place of the builtin `advapi32.dll` of FH6's runner clone, FH6 started without
 asking for sign-in, and `Xbl|DeviceKey`, the device token and the account ticket were not
-rewritten. The same file with its builtin signature cleared, beside the game as a native DLL
+rewritten. A file only in the clone does not last: NotProton makes the clone again from the
+base runner whenever the base runner's folders change, and the next start ran CodeWeavers'
+`advapi32` and asked for sign-in. The installer puts it in the base runner, and in the clone
+as it is. The same file with its builtin signature cleared, beside the game as a native DLL
 with `advapi32=native` for `forzahorizon6.exe`, does not load: every importer of `advapi32`
 failed and FH6 stopped with `c0000135` before its first window.
 

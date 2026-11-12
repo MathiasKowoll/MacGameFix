@@ -152,15 +152,20 @@ fi
 # the whole call although the registry held the key. XAL then made a new device at every
 # start, and Xbox asked for sign-in again. advapi32-fh6-<build>.dll is that build's advapi32
 # with the host's "not found" taken as no host credential (fh6-advapi32/). It is a Wine
-# builtin and replaces the advapi32.dll of FH6's own runner clone, so every other game keeps
-# CodeWeavers' file, and only where that file is the one it was built against. Beside the
-# game as a native DLL it does not load: every importer of advapi32 then failed with
-# c0000135 (measured 2026-11-11 on 41303).
+# builtin and replaces the runner's advapi32.dll, kept as advapi32.dll.mgf-fh6-original, and
+# only where that file is the one it was built against. It goes in the base runner because
+# NotProton makes FH6's runner clone again from it whenever the base runner's folders change:
+# a file only in the clone was gone at the next start (measured 2026-11-11). The clone gets
+# it too, for a clone that is not made again. Every game on the runner then has this
+# CredEnumerateW, which differs only where the host answers "not found". Beside the game as a
+# native DLL it does not load: every importer of advapi32 then failed with c0000135
+# (measured 2026-11-11 on 41303).
 # Bundled: $HERE/advapi32-fh6-27.0.0.41073.dll $HERE/advapi32-fh6-27.0.0.41303.dll
 A_SRC="${HERE}/advapi32-fh6-${FH6_BUILD:-none}.dll"
-A_LIVE=""
-[ -z "$CLONE" ] || A_LIVE="$CLONE/lib/wine/x86_64-windows/advapi32.dll"
+A_LIVE="$W/advapi32.dll"
 A_KEPT="$A_LIVE.mgf-fh6-original"
+A_CLONE=""
+[ -z "$CLONE" ] || A_CLONE="$CLONE/lib/wine/x86_64-windows/advapi32.dll"
 case "$FH6_BUILD" in
   27.0.0.41073) A_BASE_SHA=7c5e5f2f573e001eabfc39d252428dfcc79c773262b7d00b46301f53fb143dab ;;
   27.0.0.41303) A_BASE_SHA=8790c1b25ce4805c6f5fe1f5f103ea51c9439869c04297763652f2970b94febc ;;
@@ -169,10 +174,20 @@ esac
 is_advapi() { [ -f "$A_SRC" ] && [ -f "$1" ] && cmp -s "$1" "$A_SRC"; }
 is_any_advapi() { cmp -s "$1" "$HERE/advapi32-fh6-27.0.0.41073.dll" 2>/dev/null || cmp -s "$1" "$HERE/advapi32-fh6-27.0.0.41303.dll" 2>/dev/null; }
 is_base_advapi() { [ -n "$A_BASE_SHA" ] && [ "$(fh6sha "$1")" = "$A_BASE_SHA" ]; }
-# The clone's file is CodeWeavers' own, or ours over a kept CodeWeavers' own.
-advapi_fits() {
-  [ -n "$A_LIVE" ] && [ -f "$A_SRC" ] || return 1
-  is_base_advapi "$A_LIVE" || { is_advapi "$A_LIVE" && is_base_advapi "$A_KEPT"; }
+# A runner file is CodeWeavers' own, or ours over a kept CodeWeavers' own.
+advapi_fits_at() { is_base_advapi "$1" || { is_advapi "$1" && is_base_advapi "$1.mgf-fh6-original"; }; }
+advapi_fits() { [ -f "$A_SRC" ] && advapi_fits_at "$A_LIVE"; }
+# A clone file that is neither ours nor CodeWeavers' is NotProton's to make again; it is left.
+advapi_ok() { is_advapi "$A_LIVE" && { [ -z "$A_CLONE" ] || [ ! -f "$A_CLONE" ] || is_advapi "$A_CLONE" || ! advapi_fits_at "$A_CLONE"; }; }
+advapi_put() {
+  is_advapi "$1" && return 0
+  advapi_fits_at "$1" || return 0
+  cp -p "$1" "$1.mgf-fh6-original"
+  cp -p "$A_SRC" "$1.mgf-new" && mv -f "$1.mgf-new" "$1"
+}
+advapi_back() {
+  [ -n "$1" ] && [ -f "$1.mgf-fh6-original" ] && ! is_any_advapi "$1.mgf-fh6-original" && is_any_advapi "$1" || return 0
+  mv -f "$1.mgf-fh6-original" "$1"
 }
 # Bundled dependencies used by fh6-runtime.sh:
 # $HERE/fh6-launch-options.pl $HERE/notproton-rosetta-trap-boost.dylib
@@ -212,7 +227,7 @@ parts() {
   fi
   if advapi_fits; then
     total=$((total + 1))
-    is_advapi "$A_LIVE" && pieces=$((pieces + 1))
+    advapi_ok && pieces=$((pieces + 1))
   fi
   total=$((total + 2))
   fh6_runtime_ok && pieces=$((pieces + 1)) || true
@@ -299,9 +314,7 @@ case "$MODE" in
       if [ -f "$KEPT" ] && ! is_proxy "$KEPT"; then mv -f "$KEPT" "$LIVE"
       else rm -f "$LIVE" "$KEPT"; fi
     else [ ! -f "$LIVE" ] || echo "the game's d3d12.dll is not ours; it stays"; fi
-    if [ -n "$A_LIVE" ] && [ -f "$A_KEPT" ] && ! is_any_advapi "$A_KEPT" && is_any_advapi "$A_LIVE"; then
-      mv -f "$A_KEPT" "$A_LIVE"
-    fi
+    advapi_back "$A_LIVE"; advapi_back "$A_CLONE"
     if is_alias "$P_ALIAS"; then rm -f "$P_ALIAS"; fi
     if [ ! -e "$P_ALIAS" ] && [ -f "$P_KEPT" ]; then mv -f "$P_KEPT" "$P_ALIAS"; fi
     user_reg_edit "$PFX" delete "$KEY" "$VALUE" || true
@@ -367,17 +380,13 @@ is_proxy "$LIVE" && is_alias "$P_ALIAS" && pair_ok "$RUNNER" "$BACKEND" && overr
 if [ -n "$CLONE" ]; then pair_ok "$CLONE" "$CLONE_BACKEND" || exit 1; fi
 
 if advapi_fits; then
-  is_advapi "$A_LIVE" || {
-    cp -p "$A_LIVE" "$A_KEPT"
-    cp -p "$A_SRC" "$A_LIVE.mgf-new" && mv -f "$A_LIVE.mgf-new" "$A_LIVE"
-  }
-  is_advapi "$A_LIVE" && is_base_advapi "$A_KEPT" || {
+  advapi_put "$A_LIVE"
+  [ -z "$A_CLONE" ] || [ ! -f "$A_CLONE" ] || advapi_put "$A_CLONE"
+  advapi_ok && is_base_advapi "$A_KEPT" || {
     echo "error: the Xbox sign-in fix did not verify" >&2
     exit 1
   }
-  echo "installed the Xbox sign-in fix (advapi32 CredEnumerateW) in FH6's runner clone"
-elif [ -z "$A_LIVE" ]; then
-  echo "note: FH6 has no runner clone of its own here, and the Xbox sign-in fix goes only there; FH6 asks for sign-in at each start."
+  echo "installed the Xbox sign-in fix (advapi32 CredEnumerateW) in the runner"
 else
   echo "note: this runner's advapi32.dll is not one the Xbox sign-in fix was built for; FH6 asks for sign-in at each start."
 fi

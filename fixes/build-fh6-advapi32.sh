@@ -9,8 +9,7 @@
 # (27.0.0.41073: 20261015, Wine 11.17; 27.0.0.41303: 20261111, Wine 11.21). The patch is
 # fh6-advapi32/; only the x86_64 half is built (FH6 runs on the Intel side), configured as
 # engine/build.sh configures CrossOver's modules. It stays a Wine builtin, signature at 0x40
-# kept: install-fh6-fix.sh puts it in place of the builtin advapi32.dll of FH6's runner
-# clone. It writes advapi32-fh6-<build>.dll beside this script and prints its sha256, which
+# kept: install-fh6-fix.sh puts it in place of the runner's builtin advapi32.dll. It writes advapi32-fh6-<build>.dll beside this script and prints its sha256, which
 # fh6-advapi32/ORIGIN.md records.
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
