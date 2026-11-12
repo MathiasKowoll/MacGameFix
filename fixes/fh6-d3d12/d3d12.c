@@ -52,6 +52,7 @@
 #include "dxil_shadingrate.h"
 #include "inspect.h"
 #include "pso_trace.h"
+#include "pso_reuse.h"
 #ifndef MGF_FH6_PROFILE
 #define MGF_FH6_PROFILE 0
 #endif
@@ -890,9 +891,19 @@ static HRESULT (STDMETHODCALLTYPE *real_CreateComputePipelineState)(ID3D12Device
 static HRESULT STDMETHODCALLTYPE hook_CreateGraphicsPipelineState(ID3D12Device *dev, const D3D12_GRAPHICS_PIPELINE_STATE_DESC *d, REFIID riid, void **out)
 {
     D3D12_GRAPHICS_PIPELINE_STATE_DESC copy; Fixups fx; HRESULT hr; unsigned n; const D3D12_GRAPHICS_PIPELINE_STATE_DESC *game = d;
+    PrKey key; UINT64 key_hash = 0; BOOL keyed = pso_reuse && out && !dbg && !inspect_on && !inspect_serial && pr_key_graphics(d, &key);
+    if (keyed) {   // the game's own description, before any fix: the same one always gets the same fixes
+        LONGLONG pt_t = pso_trace ? pt_now() : 0;
+        key_hash = pr_hash(&key);
+        if (pr_lookup(&key, key_hash, riid, out, &hr)) {
+            if (pso_trace) pt_add(PT_REUSE, pt_t, bytecode_hash(game->VS), bytecode_hash(game->PS), hr, game, PT_OBJ(hr, out));
+            pr_free(&key); return hr;
+        }
+    }
     d = fix_graphics_desc(d, &copy, &fx);
     if (!dbg && !inspect_serial) {
         { LONGLONG pt_t = pso_trace ? pt_now() : 0; hr = real_CreateGraphicsPipelineState(dev, d, riid, out); if (pso_trace) pt_add(PT_GRAPHICS, pt_t, game ? bytecode_hash(game->VS) : 0, game ? bytecode_hash(game->PS) : 0, hr, game, PT_OBJ(hr, out)); }
+        if (keyed) { if (SUCCEEDED(hr)) pr_insert(&key, key_hash, *out, game->pRootSignature); pr_free(&key); }
         if (inspect_on) inspect_graphics(SUCCEEDED(hr) && out ? *out : NULL, inspect_next_id(), game, d, dev, hr);
         free_fixups(&fx); return hr;
     }
@@ -1211,6 +1222,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
         InitializeCriticalSection(&ring_lock);
         InitializeCriticalSection(&pso_lock);
         pt_init();   // MGF_FH6_PSO_TRACE=1 only
+        pr_init();
 #if !MGF_FH6_PROFILE
         ug_init();
 #endif

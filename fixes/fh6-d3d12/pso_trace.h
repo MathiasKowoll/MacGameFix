@@ -11,8 +11,8 @@
 #ifndef MGF_PSO_TRACE_H
 #define MGF_PSO_TRACE_H
 
-enum { PT_GRAPHICS, PT_COMPUTE, PT_STREAM, PT_LOAD_GRAPHICS, PT_LOAD_STREAM };
-static const char pt_kind[] = "GCSLM";   // L/M: loaded from an ID3D12PipelineLibrary
+enum { PT_GRAPHICS, PT_COMPUTE, PT_STREAM, PT_LOAD_GRAPHICS, PT_LOAD_STREAM, PT_REUSE };
+static const char pt_kind[] = "GCSLMR";   // L/M: loaded from an ID3D12PipelineLibrary; R: handed back by pso_reuse
 #define PT_CAPACITY 262144
 struct pt_record { LONGLONG start, ticks; UINT64 vs, ps, desc, obj; DWORD tid; LONG hr; LONG kind; volatile LONG ready; };
 static struct pt_record *pt_records;
@@ -91,7 +91,7 @@ static UINT64 pt_hash_compute(const D3D12_COMPUTE_PIPELINE_STATE_DESC *d)
 static void pt_add(int kind, LONGLONG start, UINT64 vs, UINT64 ps, HRESULT hr, const void *d, UINT64 obj)
 {
     LONGLONG end = pt_now();
-    UINT64 desc = kind == PT_GRAPHICS || kind == PT_LOAD_GRAPHICS ? pt_hash_graphics(d) : kind == PT_COMPUTE ? pt_hash_compute(d) : 0;
+    UINT64 desc = kind == PT_GRAPHICS || kind == PT_LOAD_GRAPHICS || kind == PT_REUSE ? pt_hash_graphics(d) : kind == PT_COMPUTE ? pt_hash_compute(d) : 0;
     LONG i = InterlockedIncrement(&pt_next) - 1;
     struct pt_record *r;
     if (i >= PT_CAPACITY) { InterlockedIncrement(&pt_dropped); return; }
