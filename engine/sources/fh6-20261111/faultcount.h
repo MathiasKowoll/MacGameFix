@@ -1,3 +1,6 @@
+#ifndef MGF_RBOOST_TELEMETRY
+#define MGF_RBOOST_TELEMETRY 0
+#endif
 /* faultcount.h (diagnostic): counts the signals Wine's own handlers take, and the blocking or
  * yielding calls the process makes, so the census can show work the game never sees as an exception. */
 #include <signal.h>
@@ -49,10 +52,12 @@ static boolean_t my_swtch_pri(int p) { atomic_fetch_add_explicit(&c_count[C_SWTC
 static kern_return_t my_thread_switch(mach_port_name_t t, int o, mach_msg_timeout_t m) { atomic_fetch_add_explicit(&c_count[C_THSWITCH], 1, memory_order_relaxed); return thread_switch(t, o, m); }
 
 #define INTERPOSE(r, o) __attribute__((used)) static const struct { const void *rep; const void *orig; } _ip_##o __attribute__((section("__DATA,__interpose"))) = { (const void *)r, (const void *)o };
+#if MGF_RBOOST_TELEMETRY && !defined(MGF_RBOOST_TEST)
 INTERPOSE(my_sched_yield, sched_yield) INTERPOSE(my_nanosleep, nanosleep) INTERPOSE(my_usleep, usleep)
 INTERPOSE(my_select, select) INTERPOSE(my_poll, poll) INTERPOSE(my_kevent, kevent) INTERPOSE(my_kevent64, kevent64)
 INTERPOSE(my_read, read) INTERPOSE(my_write, write) INTERPOSE(my_writev, writev) INTERPOSE(my_mach_msg, mach_msg)
 INTERPOSE(my_swtch_pri, swtch_pri) INTERPOSE(my_thread_switch, thread_switch)
+#endif
 
 /* signal wrappers: count, remember the faulting page, then run Wine's handler unchanged */
 #define NSIGW 4
@@ -79,8 +84,8 @@ static void note_ill_thread(void) {
         if (k == t || (!k && atomic_compare_exchange_strong(&st_id[h], &k, t)) || k == t) { atomic_fetch_add_explicit(&st_n[h], 1, memory_order_relaxed); return; }
     }
 }
-#define W(i) static void w_##i(int s, siginfo_t *si, void *uc) { atomic_fetch_add_explicit(&w_count[i], 1, memory_order_relaxed); \
-    if (i < 2 && si) note_page((uint64_t)si->si_addr); if (i == 2) note_ill_thread(); w_orig[i](s, si, uc); }
+#define W(i) static void w_##i(int s, siginfo_t *si, void *uc) { if (MGF_RBOOST_TELEMETRY) atomic_fetch_add_explicit(&w_count[i], 1, memory_order_relaxed); \
+    if (MGF_RBOOST_TELEMETRY && i < 2 && si) note_page((uint64_t)si->si_addr); if (i == 2) note_ill_thread(); w_orig[i](s, si, uc); }
 W(0) W(1) W(2) W(3)
 static void (*w_fn[NSIGW])(int, siginfo_t *, void *) = { w_0, w_1, w_2, w_3 };
 

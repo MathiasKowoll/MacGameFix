@@ -16,5 +16,8 @@
     "fixes/d3d12-fh6.dll": "f63d708ab2c630961a42340e630896d788b31b3413b7fe1ac0814d63891042c0",
     "fixes/notproton-rosetta-trap-boost.dylib": "28315251485196c816b3579c90a8e9fa81a4bb7b9b61d87c4269c8972c9f4197"
   },
+  "distribution_files_later": {
+    "2026-11-12, fixes/notproton-rosetta-trap-boost.dylib": "the quiet build of engine/sources/fh6-20261111/rosetta-trap-boost.c; ad hoc 882d6a31ff083c1478559c002447b58c4cb96eb855af8c4683511c2f4651d0f7, as played"
+  },
   "distribution_signing": "Mach-O copies only: Developer ID signature and timestamp; otool -t unchanged. Installed binaries untouched."
 }

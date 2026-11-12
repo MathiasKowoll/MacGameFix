@@ -611,6 +611,22 @@ f6do --install > "$f6/other.log" 2>&1 && [ "$(f6st)" = installed ] \
   || say FAIL "fh6: other advapi32 ($(f6st), $(tail -2 "$f6/other.log" | tr '\n' ' '))"
 f6do --restore > /dev/null 2>&1
 
+# The priority plugin: an earlier MacGameFix build is replaced by the one beside the installer,
+# a user's own is kept. The fixture's "earlier build" is a fake whose hash stands for 28315251.
+f6pl="$f6home/Library/Application Support/notproton/plugins"; mkdir -p "$f6pl"
+printf 'earlier MacGameFix plugin\n' > "$f6pl/notproton-rosetta-trap-boost.dylib"; printf '[x]\n' > "$f6pl/rosetta-trap-boost.conf"
+sed -i '' "s/28315251485196c816b3579c90a8e9fa81a4bb7b9b61d87c4269c8972c9f4197/$(shasum -a 256 "$f6pl/notproton-rosetta-trap-boost.dylib" | cut -d' ' -f1)/" "$f6fix/fh6-runtime.sh"
+f6do --install > "$f6/plugin.log" 2>&1 && cmp -s "$f6pl/notproton-rosetta-trap-boost.dylib" "$FIX/notproton-rosetta-trap-boost.dylib" \
+  && [ "$(cat "$f6pl/rosetta-trap-boost.conf")" = "[x]" ] \
+  && say ok "fh6 on a fake prefix: an earlier MacGameFix priority plugin is updated" \
+  || say FAIL "fh6: plugin update ($(tail -2 "$f6/plugin.log" | tr '\n' ' '))"
+f6do --restore > /dev/null 2>&1
+printf 'my own plugin\n' > "$f6pl/notproton-rosetta-trap-boost.dylib"
+f6do --install > "$f6/plugin2.log" 2>&1 && [ "$(cat "$f6pl/notproton-rosetta-trap-boost.dylib")" = "my own plugin" ] \
+  && say ok "fh6 on a fake prefix: a user's own priority plugin is kept" \
+  || say FAIL "fh6: own plugin ($(tail -2 "$f6/plugin2.log" | tr '\n' ' '))"
+f6do --restore > /dev/null 2>&1
+
 # A CrossOver bottle: only the Xbox sign-in fix, nothing in CrossOver itself.
 f6cx="$f6/cx/CrossOver.app/Contents/SharedSupport/CrossOver"; f6b="$f6/bottle"; mkdir -p "$f6cx/bin" "$f6cx/lib/wine/x86_64-windows" "$f6b/drive_c/windows/system32" "$f6/cxgame"
 printf '#!/bin/sh\nexit 0\n' > "$f6cx/bin/wine"; chmod +x "$f6cx/bin/wine"
