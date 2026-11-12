@@ -52,6 +52,7 @@
 #include "dxil_shadingrate.h"
 #include "inspect.h"
 #include "pso_trace.h"
+#include "frame_trace.h"
 #ifndef MGF_FH6_PROFILE
 #define MGF_FH6_PROFILE 0
 #endif
@@ -290,14 +291,18 @@ static void log_resource(const char *what, const D3D12_RESOURCE_DESC *d, HRESULT
 static HRESULT STDMETHODCALLTYPE hook_CreateCommittedResource(ID3D12Device *dev, const D3D12_HEAP_PROPERTIES *hp, D3D12_HEAP_FLAGS hf, const D3D12_RESOURCE_DESC *d, D3D12_RESOURCE_STATES st, const D3D12_CLEAR_VALUE *cv, REFIID riid, void **out)
 {
     if (dbg) { log_resource("CreateCommittedResource begin", d, 0); }
+    LONGLONG ft_t = frame_trace ? ft_now() : 0;
     HRESULT hr = real_CreateCommittedResource(dev, hp, hf, d, st, cv, riid, out);
+    ft_resource('C', ft_t, d);
     if (dbg) { log_resource("CreateCommittedResource done", d, hr); if (d && d->Dimension != D3D12_RESOURCE_DIMENSION_BUFFER) LOG("  -> res=%p", out ? *out : NULL); }
     return hr;
 }
 static HRESULT STDMETHODCALLTYPE hook_CreatePlacedResource(ID3D12Device *dev, ID3D12Heap *heap, UINT64 off, const D3D12_RESOURCE_DESC *d, D3D12_RESOURCE_STATES st, const D3D12_CLEAR_VALUE *cv, REFIID riid, void **out)
 {
     if (dbg) { log_resource("CreatePlacedResource begin", d, 0); }
+    LONGLONG ft_t = frame_trace ? ft_now() : 0;
     HRESULT hr = real_CreatePlacedResource(dev, heap, off, d, st, cv, riid, out);
+    ft_resource('P', ft_t, d);
     if (dbg) { log_resource("CreatePlacedResource done", d, hr); if (d && d->Dimension != D3D12_RESOURCE_DIMENSION_BUFFER) LOG("  -> res=%p", out ? *out : NULL); }
     return hr;
 }
@@ -305,7 +310,9 @@ static HRESULT (STDMETHODCALLTYPE *real_CreateReservedResource)(ID3D12Device *, 
 static HRESULT STDMETHODCALLTYPE hook_CreateReservedResource(ID3D12Device *dev, const D3D12_RESOURCE_DESC *d, D3D12_RESOURCE_STATES st, const D3D12_CLEAR_VALUE *cv, REFIID riid, void **out)
 {
     if (dbg) { log_resource("CreateReservedResource begin", d, 0); }
+    LONGLONG ft_t = frame_trace ? ft_now() : 0;
     HRESULT hr = real_CreateReservedResource(dev, d, st, cv, riid, out);
+    ft_resource('R', ft_t, d);
     if (dbg) { log_resource("CreateReservedResource done", d, hr); if (d && d->Dimension != D3D12_RESOURCE_DIMENSION_BUFFER) LOG("  -> res=%p", out ? *out : NULL); }
     return hr;
 }
@@ -1029,10 +1036,13 @@ static void patch_device_vtbl(void *iface)
     patch_slot((void **)&vt->CheckFeatureSupport, (void *)hook_CheckFeatureSupport, (void **)&real_CheckFeatureSupport);
     patch_slot((void **)&vt->CreateGraphicsPipelineState, (void *)hook_CreateGraphicsPipelineState, (void **)&real_CreateGraphicsPipelineState);
     if (dbg || inspect_on || pso_trace) patch_slot((void **)&vt->CreateComputePipelineState, (void *)hook_CreateComputePipelineState, (void **)&real_CreateComputePipelineState);
-    if (dbg >= 2) {
+    if (dbg >= 2 || frame_trace) {   // the resource hooks log with dbg >= 2 and time with frame_trace
         patch_slot((void **)&vt->CreateCommittedResource, (void *)hook_CreateCommittedResource, (void **)&real_CreateCommittedResource);
         patch_slot((void **)&vt->CreatePlacedResource, (void *)hook_CreatePlacedResource, (void **)&real_CreatePlacedResource);
         patch_slot((void **)&vt->CreateReservedResource, (void *)hook_CreateReservedResource, (void **)&real_CreateReservedResource);
+    }
+    ft_patch_device(vt, inspect_on);
+    if (dbg >= 2) {
         patch_slot((void **)&vt->CreateShaderResourceView, (void *)hook_CreateShaderResourceView, (void **)&real_CreateShaderResourceView);
         patch_slot((void **)&vt->CreateUnorderedAccessView, (void *)hook_CreateUnorderedAccessView, (void **)&real_CreateUnorderedAccessView);
         patch_slot((void **)&vt->CreateRenderTargetView, (void *)hook_CreateRenderTargetView, (void **)&real_CreateRenderTargetView);
@@ -1058,6 +1068,7 @@ static void patch_queue_vtbl(void *iface)
     patch_slot((void **)&vt->GetClockCalibration, (void *)hook_GetClockCalibration, (void **)&real_GetClockCalibration);
     inspect_patch_queue(iface);
     qt_patch_queue(iface);
+    ft_patch_queue(iface);   // MGF_FH6_FRAME_TRACE=1 only
 }
 
 #include <stdarg.h>
@@ -1211,6 +1222,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
         InitializeCriticalSection(&ring_lock);
         InitializeCriticalSection(&pso_lock);
         pt_init();   // MGF_FH6_PSO_TRACE=1 only
+        ft_init();   // MGF_FH6_FRAME_TRACE=1 only
 #if !MGF_FH6_PROFILE
         ug_init();
 #endif
