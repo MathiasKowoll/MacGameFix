@@ -52,8 +52,8 @@ APP="$HERE/MacGameFix.app"
 MACOS="$APP/Contents/MacOS"
 RES="$APP/Contents/Resources"
 CACHE="${TMPDIR:-/tmp}/mgf-swift-cache"
-VERSION="1.6.1"
-PRERELEASE_TAG="v1.6.1-pre.1"
+VERSION="1.6.2"
+PRERELEASE_TAG=""
 # The oldest app that can use the catalog this build writes: the first with a
 # catalog it can take from a release.
 CATALOG_MIN_APP="1.6.1"
@@ -104,6 +104,10 @@ for script in sorted((root / "fixes").glob("install-*.sh")):
     # registry values alone (MGVF-IN-PREFIX: registry) rather than DLLs as well.
     needs = re.search(r"^# MGVF-NEEDS: (.*)$", text, re.M)
     in_prefix = re.search(r"^# MGVF-IN-PREFIX: (\S+)", text, re.M)
+    # Special instructions the user needs (MGVF-INSTRUCTIONS: <file> in fixes/): their
+    # Markdown goes into games.json, and the app shows it from the game's row.
+    instructions = re.search(r"^# MGVF-INSTRUCTIONS: (\S+)$", text, re.M)
+    instructions_text = (root / "fixes" / instructions.group(1)).read_text() if instructions else None
     # A fix nobody has played here yet names who is testing it (MGVF-TESTING:
     # macprotips): it goes into games.json's "testing" table, which only an app
     # with the testing switch on reads. Its credits are "name | url" lines.
@@ -156,6 +160,7 @@ for script in sorted((root / "fixes").glob("install-*.sh")):
             "notNeededFrom": p.get("not_needed_from_gptk", ""),
             "why": why.group(1).strip() if why else "",
             "credits": credits,
+            **({"instructions": instructions_text} if instructions_text else {}),
             **({"testing": in_testing.group(1).strip()} if in_testing else {}),
         })
 games.sort(key=lambda g: g["name"].lower())
@@ -195,7 +200,7 @@ rm -rf "$APP"
 mkdir -p "$MACOS" "$RES" "$CACHE"
 
 echo "==> compiling"
-swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Probe.swift" "$HERE/Automation.swift" "$HERE/MenuBar.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
+swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Probe.swift" "$HERE/Automation.swift" "$HERE/MenuBar.swift" "$HERE/Instructions.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
   -o "$MACOS/MacGameFix" \
   -framework SwiftUI -framework AppKit -framework IOKit -framework UserNotifications -framework GameController \
   -framework AVFoundation -framework CoreAudio -framework AudioToolbox \

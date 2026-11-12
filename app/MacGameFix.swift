@@ -936,6 +936,8 @@ struct GamesView: View {
     @ObservedObject var model: Model
     /// Every supported game on this Mac first, whatever was chosen last time.
     @State private var filter = GamesFilter.all
+    /// The game whose special instructions are open.
+    @State private var instructionsFor: Game?
 
     /// Fixed: the game has its fix in place. All fixes adds the fixes for games not on this Mac.
     enum GamesFilter: String, CaseIterable, Identifiable {
@@ -1053,6 +1055,11 @@ struct GamesView: View {
                                 }
                             }
                             Text(row.game.symptom).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                            if row.game.instructions != nil {
+                                Button("Special instructions…") { instructionsFor = row.game }
+                                    .buttonStyle(.link).font(.caption)
+                                    .help("What this fix needs from you besides installing it, such as launch options.")
+                            }
                         }
                         .padding(.vertical, 3)
                         .help((row.hit.map { $0.folder.path + "\n\n" } ?? "") + row.game.why + row.game.aboutTesting)
@@ -1126,6 +1133,7 @@ struct GamesView: View {
                           + "filled in. Remove the fix and play the moment it was for first.")
             }
         }
+        .sheet(item: $instructionsFor) { InstructionsSheet(game: $0) }
     }
 }
 
