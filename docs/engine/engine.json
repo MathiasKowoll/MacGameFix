@@ -534,6 +534,16 @@
           ],
           "commit": "243116fc8a500e072876f46168c88e877f12c3bf",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/243116fc8a500e072876f46168c88e877f12c3bf/engine/patches/wine-11.21/0023-ntdll-fh6-exception-dispatcher.patch"
+        },
+        {
+          "name": "0024-ntdll-fh6-bridge-lea-inc-mul.patch",
+          "file": "engine/patches/wine-11.21/0024-ntdll-fh6-bridge-lea-inc-mul.patch",
+          "subject": "FH6's register bridge also stages LEA, INC, byte XOR and TEST and register MUL, committing both MUL results only after the jump checks pass; Intel side, ntdll.dll only",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "6e08bff2ce080164fa70002f11d295aceed5b4df",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/6e08bff2ce080164fa70002f11d295aceed5b4df/engine/patches/wine-11.21/0024-ntdll-fh6-bridge-lea-inc-mul.patch"
         }
       ]
     }
