@@ -1,23 +1,16 @@
 # Launch options
 
-FH6's improvement needs these four in the game's Steam launch options. MacGameFix writes them there itself when you install the improvement, and keeps the options you already had. Quit Steam first, or it cannot save them, and do not remove them afterwards.
-
-| Variable and value | What it does |
-|---|---|
-| `NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_CHAIN=1` | Turns on accelerated handling of supported exception chains in FH6. Needs MacGameFix's `ntdll`. |
-| `NOTPROTON_ENV_WINE_SOFTWARE_ALU_BRIDGE=1` | Turns on the operations the fast path supports, including LEA, INC, XOR, TEST and MUL. Result and flag checks are kept. |
-| `NOTPROTON_ENV_WINE_SOFTWARE_BRIDGE_RESUME=0` | Keeps the extended resume into normal code off. This is the conservative setting that was validated. |
-| `NOTPROTON_ROSETTA_TRAP_BOOST=1` | Turns on the priority plugin, which cuts scheduling waits while exceptions are handled under Rosetta. Independent of Game Mode. |
-
-The same four as one line, for Steam's Launch Options field:
+FH6's improvement needs one variable in the game's Steam launch options, `NOTPROTON_ROSETTA_TRAP_BOOST=1`. It turns on the priority plugin, which cuts scheduling waits while exceptions are handled under Rosetta. MacGameFix writes it itself when you install the improvement, and keeps the options you already had. Quit Steam first, or it cannot save them, and do not remove it afterwards.
 
 ```
-NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_CHAIN=1 NOTPROTON_ENV_WINE_SOFTWARE_ALU_BRIDGE=1 NOTPROTON_ENV_WINE_SOFTWARE_BRIDGE_RESUME=0 NOTPROTON_ROSETTA_TRAP_BOOST=1 %command%
+NOTPROTON_ROSETTA_TRAP_BOOST=1 %command%
 ```
+
+On NotProton's runner for CrossOver Preview 41303, FH6's exception handling is now built into the improvement's `ntdll`, so it needs no variables of its own. Installing the improvement again takes out what earlier versions wrote for it (`NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_CHAIN=1`, `NOTPROTON_ENV_WINE_SOFTWARE_ALU_BRIDGE=1`, `NOTPROTON_ENV_WINE_SOFTWARE_BRIDGE_RESUME=0` and `NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_STATS=0`), each only while it still has the value MacGameFix gave it. On the 41073 runner the first three are still needed, and MacGameFix keeps writing them there.
 
 # Frame rate
 
-The steadiest play so far: set the frame rate to unlimited in the game's own video settings, and cap it with D3DMetal 4 instead, by adding one of these before `%command%` in the same launch options:
+The steadiest play so far: set the frame rate to unlimited in the game's own video settings, and cap it with D3DMetal 4 instead, by adding one of these before `%command%` in the same launch options, for example `D3DM_MAX_FPS=48 NOTPROTON_ROSETTA_TRAP_BOOST=1 %command%`:
 
 | Variable and value | What it does |
 |---|---|

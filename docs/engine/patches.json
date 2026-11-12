@@ -51,5 +51,6 @@
   "wine-11.21/0021-ntdll-timer-relative-overflow.patch": "A relative timer expiry near -MAXLONGLONG, which wineserver's deadline overflows on, is sent as 2^62: the threadpool's timer thread no longer spins",
   "wine-11.21/0022-ntdll-aarch64-unaligned-iosb-status.patch": "On the FEX side, an async I/O status is stored with a barrier and a plain store instead of stlr, which faults on an OVERLAPPED that crosses 16 bytes",
   "wine-11.21/0023-ntdll-fh6-exception-dispatcher.patch": "Forza Horizon 6's opt-in, build-guarded exception dispatcher and NotProton's Steam client bridge in ntdll, ported from the 41073 pair; Intel side, with ntdll.dll",
-  "wine-11.21/0024-ntdll-fh6-bridge-lea-inc-mul.patch": "FH6's register bridge also stages LEA, INC, byte XOR and TEST and register MUL, committing both MUL results only after the jump checks pass; Intel side, ntdll.dll only"
+  "wine-11.21/0024-ntdll-fh6-bridge-lea-inc-mul.patch": "FH6's register bridge also stages LEA, INC, byte XOR and TEST and register MUL, committing both MUL results only after the jump checks pass; Intel side, ntdll.dll only",
+  "wine-11.21/0025-ntdll-fh6-chain-on-by-default.patch": "For the build-guarded FH6 executable the exception chain and the ALU bridge are on by default, so its launch options no longer need them; =0 still turns either off; Intel side, ntdll.dll only"
 }

@@ -1,0 +1,38 @@
+--- a/dlls/ntdll/software_exception_chain.h
++++ b/dlls/ntdll/software_exception_chain.h
+@@ -55,15 +55,20 @@
+                 base.Length = path->Length - (i + 1) * sizeof(WCHAR);
+             }
+         base.MaximumLength = base.Length;
+-        if (nt && !RtlQueryEnvironmentVariable_U(NULL, &name, &value))
++        if (nt)
+         {
+-            if (value.Length == 5 * sizeof(WCHAR) && !memcmp(buffer, L"probe", value.Length)
++            NTSTATUS chain_status = RtlQueryEnvironmentVariable_U(NULL, &name, &value);
++            BOOL chain_set = !chain_status;
++            if (chain_set && value.Length == 5 * sizeof(WCHAR) && !memcmp(buffer, L"probe", value.Length)
+                 && RtlEqualUnicodeString(&base, &probe, TRUE)) mode = 1;
+-            if (value.Length == 11 * sizeof(WCHAR) && !memcmp(buffer, L"probe-clean", value.Length)
++            if (chain_set && value.Length == 11 * sizeof(WCHAR) && !memcmp(buffer, L"probe-clean", value.Length)
+                 && RtlEqualUnicodeString(&base, &probe, TRUE)) mode = 3;
+             /* Header guard is additional to deployment's full executable SHA256.
+-             * No fixed instruction RVA is used by this optimization. */
+-            if (value.Length == 1 * sizeof(WCHAR) && buffer[0] == '1'
++             * No fixed instruction RVA is used by this optimization.
++             * The guarded FH6 build has the chain by default: the variable
++             * absent or "1" turns it on, any other value ("0") leaves it off. */
++            if ((chain_status == STATUS_VARIABLE_NOT_FOUND
++                 || (chain_set && value.Length == 1 * sizeof(WCHAR) && buffer[0] == '1'))
+                 && RtlEqualUnicodeString(&base, &game, TRUE)
+                 && nt->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64
+                 && nt->FileHeader.TimeDateStamp == 0x6aea6132
+@@ -83,7 +88,8 @@
+                 && value.Length == sizeof(WCHAR) && buffer[0] == '1') resume_bridge = 1;
+         }
+         {
+-            LONG enabled=(mode==1 || mode==3);
++            /* On wherever the chain is on; WINE_SOFTWARE_ALU_BRIDGE=0 or 1 overrides. */
++            LONG enabled=(mode==1 || mode==2 || mode==3);
+             UNICODE_STRING alu_name = RTL_CONSTANT_STRING(L"WINE_SOFTWARE_ALU_BRIDGE");
+             value.Length=0;
+             if(!RtlQueryEnvironmentVariable_U(NULL,&alu_name,&value) && value.Length==sizeof(WCHAR))

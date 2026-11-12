@@ -533,6 +533,20 @@ disassembles the same as the experiment's and differs only in the source paths i
 strings carry. The experiment's probe (`exception_chain_probe.c`) and its refusal
 validator are test tools, not part of the DLL, and stay with it.
 
+`0025` moves the dispatcher's switches into the DLL. For the build-guarded
+`forzahorizon6.exe` (its name, machine, timestamp, image size and checksum, as before)
+the chain is on unless `WINE_SOFTWARE_EXCEPTION_CHAIN` is set to something other than
+`1`, and the ALU bridge is on wherever the chain is (`mode == 2` joins the probe's
+modes); `WINE_SOFTWARE_EXCEPTION_CHAIN=0` still turns both off, and
+`WINE_SOFTWARE_ALU_BRIDGE=0` the bridge alone. The
+bridge resume was already off and the counters already on by default. So FH6 needs no
+chain variables in its launch options on 41303; only the priority plugin's
+`NOTPROTON_ROSETTA_TRAP_BOOST=1` stays, as NotProton loads a plugin only when its
+variable is set. With the variables FH6 had (`CHAIN=1 ALU_BRIDGE=1 BRIDGE_RESUME=0`), the
+DLL behaves as before. Built in the same tree, the DLL before `0025` strips to
+`6664770a`, the one shipped; the one with it differs in that one function's code
+only. PE half only; `ntdll.so` is unchanged.
+
 ### Wine 11.21 (41303)
 
 `wine-11.21` is `wine-11.17` ported, one commit per patch, every patch applying
