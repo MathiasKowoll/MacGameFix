@@ -892,12 +892,12 @@ static HRESULT STDMETHODCALLTYPE hook_CreateGraphicsPipelineState(ID3D12Device *
     D3D12_GRAPHICS_PIPELINE_STATE_DESC copy; Fixups fx; HRESULT hr; unsigned n; const D3D12_GRAPHICS_PIPELINE_STATE_DESC *game = d;
     d = fix_graphics_desc(d, &copy, &fx);
     if (!dbg && !inspect_serial) {
-        { LONGLONG pt_t = pso_trace ? pt_now() : 0; hr = real_CreateGraphicsPipelineState(dev, d, riid, out); if (pso_trace) pt_add(PT_GRAPHICS, pt_t, game ? bytecode_hash(game->VS) : 0, game ? bytecode_hash(game->PS) : 0, hr); }
+        { LONGLONG pt_t = pso_trace ? pt_now() : 0; hr = real_CreateGraphicsPipelineState(dev, d, riid, out); if (pso_trace) pt_add(PT_GRAPHICS, pt_t, game ? bytecode_hash(game->VS) : 0, game ? bytecode_hash(game->PS) : 0, hr, game, PT_OBJ(hr, out)); }
         if (inspect_on) inspect_graphics(SUCCEEDED(hr) && out ? *out : NULL, inspect_next_id(), game, d, dev, hr);
         free_fixups(&fx); return hr;
     }
     EnterCriticalSection(&pso_lock);
-    { LONGLONG pt_t = pso_trace ? pt_now() : 0; hr = real_CreateGraphicsPipelineState(dev, d, riid, out); if (pso_trace) pt_add(PT_GRAPHICS, pt_t, game ? bytecode_hash(game->VS) : 0, game ? bytecode_hash(game->PS) : 0, hr); }
+    { LONGLONG pt_t = pso_trace ? pt_now() : 0; hr = real_CreateGraphicsPipelineState(dev, d, riid, out); if (pso_trace) pt_add(PT_GRAPHICS, pt_t, game ? bytecode_hash(game->VS) : 0, game ? bytecode_hash(game->PS) : 0, hr, game, PT_OBJ(hr, out)); }
     n = pso_seq++;
     LeaveCriticalSection(&pso_lock);
     if (inspect_on) inspect_graphics(SUCCEEDED(hr) && out ? *out : NULL, n, game, d, dev, hr);
@@ -921,12 +921,12 @@ static HRESULT STDMETHODCALLTYPE hook_CreateComputePipelineState(ID3D12Device *d
 {
     HRESULT hr; unsigned n;
     if (!dbg && !inspect_serial) {
-        { LONGLONG pt_t = pso_trace ? pt_now() : 0; hr = real_CreateComputePipelineState(dev, d, riid, out); if (pso_trace) pt_add(PT_COMPUTE, pt_t, d ? bytecode_hash(d->CS) : 0, 0, hr); }
+        { LONGLONG pt_t = pso_trace ? pt_now() : 0; hr = real_CreateComputePipelineState(dev, d, riid, out); if (pso_trace) pt_add(PT_COMPUTE, pt_t, d ? bytecode_hash(d->CS) : 0, 0, hr, d, PT_OBJ(hr, out)); }
         if (inspect_on) inspect_compute(SUCCEEDED(hr) && out ? *out : NULL, inspect_next_id(), d, hr);
         return hr;
     }
     EnterCriticalSection(&pso_lock);
-    { LONGLONG pt_t = pso_trace ? pt_now() : 0; hr = real_CreateComputePipelineState(dev, d, riid, out); if (pso_trace) pt_add(PT_COMPUTE, pt_t, d ? bytecode_hash(d->CS) : 0, 0, hr); }
+    { LONGLONG pt_t = pso_trace ? pt_now() : 0; hr = real_CreateComputePipelineState(dev, d, riid, out); if (pso_trace) pt_add(PT_COMPUTE, pt_t, d ? bytecode_hash(d->CS) : 0, 0, hr, d, PT_OBJ(hr, out)); }
     n = pso_seq++;
     LeaveCriticalSection(&pso_lock);
     if (inspect_on) inspect_compute(SUCCEEDED(hr) && out ? *out : NULL, n, d, hr);
@@ -939,12 +939,12 @@ static HRESULT STDMETHODCALLTYPE hook_CreatePipelineState(ID3D12Device2 *dev, co
     D3D12_PIPELINE_STATE_STREAM_DESC copy; Fixups fx; HRESULT hr; unsigned n; const D3D12_PIPELINE_STATE_STREAM_DESC *game = d;
     if (rewrite_stream(d, &copy, &fx)) d = &copy;
     if (!dbg && !inspect_serial) {
-        { LONGLONG pt_t = pso_trace ? pt_now() : 0; hr = real_CreatePipelineState(dev, d, riid, out); if (pso_trace) pt_add(PT_STREAM, pt_t, fx.hash[0], fx.hash[1], hr); }
+        { LONGLONG pt_t = pso_trace ? pt_now() : 0; hr = real_CreatePipelineState(dev, d, riid, out); if (pso_trace) pt_add(PT_STREAM, pt_t, fx.hash[0], fx.hash[1], hr, NULL, PT_OBJ(hr, out)); }
         if (inspect_on) inspect_stream(SUCCEEDED(hr) && out ? *out : NULL, inspect_next_id(), game, d, (ID3D12Device *)dev, hr);
         free_fixups(&fx); return hr;
     }
     EnterCriticalSection(&pso_lock);   // counted with the others, so the numbers stay D3DMetal's
-    { LONGLONG pt_t = pso_trace ? pt_now() : 0; hr = real_CreatePipelineState(dev, d, riid, out); if (pso_trace) pt_add(PT_STREAM, pt_t, fx.hash[0], fx.hash[1], hr); }
+    { LONGLONG pt_t = pso_trace ? pt_now() : 0; hr = real_CreatePipelineState(dev, d, riid, out); if (pso_trace) pt_add(PT_STREAM, pt_t, fx.hash[0], fx.hash[1], hr, NULL, PT_OBJ(hr, out)); }
     n = pso_seq++;
     LeaveCriticalSection(&pso_lock);
     if (inspect_on) inspect_stream(SUCCEEDED(hr) && out ? *out : NULL, n, game, d, (ID3D12Device *)dev, hr);
@@ -964,7 +964,7 @@ static HRESULT STDMETHODCALLTYPE hook_LoadGraphicsPipeline(ID3D12PipelineLibrary
 {
     D3D12_GRAPHICS_PIPELINE_STATE_DESC copy; Fixups fx; HRESULT hr; const D3D12_GRAPHICS_PIPELINE_STATE_DESC *game = d;
     d = fix_graphics_desc(d, &copy, &fx);
-    { LONGLONG pt_t = pso_trace ? pt_now() : 0; hr = real_LoadGraphicsPipeline(lib, name, d, riid, out); if (pso_trace) pt_add(PT_LOAD_GRAPHICS, pt_t, game ? bytecode_hash(game->VS) : 0, game ? bytecode_hash(game->PS) : 0, hr); }
+    { LONGLONG pt_t = pso_trace ? pt_now() : 0; hr = real_LoadGraphicsPipeline(lib, name, d, riid, out); if (pso_trace) pt_add(PT_LOAD_GRAPHICS, pt_t, game ? bytecode_hash(game->VS) : 0, game ? bytecode_hash(game->PS) : 0, hr, game, PT_OBJ(hr, out)); }
     if (inspect_on) {
         ID3D12Device *dev = NULL;
         if (FAILED(lib->lpVtbl->GetDevice(lib, &IID_ID3D12Device, (void **)&dev))) dev = NULL;
@@ -979,7 +979,7 @@ static HRESULT STDMETHODCALLTYPE hook_LoadPipeline(ID3D12PipelineLibrary1 *lib, 
 {
     D3D12_PIPELINE_STATE_STREAM_DESC copy; Fixups fx; HRESULT hr; const D3D12_PIPELINE_STATE_STREAM_DESC *game = d;
     if (rewrite_stream(d, &copy, &fx)) d = &copy;
-    { LONGLONG pt_t = pso_trace ? pt_now() : 0; hr = real_LoadPipeline(lib, name, d, riid, out); if (pso_trace) pt_add(PT_LOAD_STREAM, pt_t, fx.hash[0], fx.hash[1], hr); }
+    { LONGLONG pt_t = pso_trace ? pt_now() : 0; hr = real_LoadPipeline(lib, name, d, riid, out); if (pso_trace) pt_add(PT_LOAD_STREAM, pt_t, fx.hash[0], fx.hash[1], hr, NULL, PT_OBJ(hr, out)); }
     if (inspect_on) {
         ID3D12Device *dev = NULL;
         if (FAILED(lib->lpVtbl->GetDevice(lib, &IID_ID3D12Device, (void **)&dev))) dev = NULL;
@@ -1028,7 +1028,7 @@ static void patch_device_vtbl(void *iface)
     patch_slot((void **)&vt->CreateQueryHeap, (void *)hook_CreateQueryHeap, (void **)&real_CreateQueryHeap);
     patch_slot((void **)&vt->CheckFeatureSupport, (void *)hook_CheckFeatureSupport, (void **)&real_CheckFeatureSupport);
     patch_slot((void **)&vt->CreateGraphicsPipelineState, (void *)hook_CreateGraphicsPipelineState, (void **)&real_CreateGraphicsPipelineState);
-    if (dbg || inspect_on) patch_slot((void **)&vt->CreateComputePipelineState, (void *)hook_CreateComputePipelineState, (void **)&real_CreateComputePipelineState);
+    if (dbg || inspect_on || pso_trace) patch_slot((void **)&vt->CreateComputePipelineState, (void *)hook_CreateComputePipelineState, (void **)&real_CreateComputePipelineState);
     if (dbg >= 2) {
         patch_slot((void **)&vt->CreateCommittedResource, (void *)hook_CreateCommittedResource, (void **)&real_CreateCommittedResource);
         patch_slot((void **)&vt->CreatePlacedResource, (void *)hook_CreatePlacedResource, (void **)&real_CreatePlacedResource);
