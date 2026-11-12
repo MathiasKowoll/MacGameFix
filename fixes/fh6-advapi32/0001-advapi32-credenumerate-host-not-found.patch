@@ -1,0 +1,24 @@
+--- a/dlls/advapi32/cred.c
++++ b/dlls/advapi32/cred.c
+@@ -1059,7 +1059,11 @@
+     if (ret == ERROR_SUCCESS)
+     {
+         ret = host_enumerate_credentials(Filter, NULL, NULL, &len, Count);
+-        if (ret == ERROR_NOT_SUPPORTED) ret = ERROR_SUCCESS;
++        /* mountmgr answers STATUS_NOT_FOUND when no item of the host's keychain matches the
++         * filter: the host adds no credential, which is not a failure of the whole call. Taken
++         * as one, a filter that only the registry matches ("Xbl|DeviceKey*", Xbox's XAL) found
++         * nothing at all. */
++        if (ret == ERROR_NOT_SUPPORTED || ret == ERROR_NOT_FOUND) ret = ERROR_SUCCESS;
+     }
+     if (ret == ERROR_SUCCESS && *Count == 0)
+         ret = ERROR_NOT_FOUND;
+@@ -1085,7 +1089,7 @@
+             if (ret == ERROR_SUCCESS)
+             {
+                 ret = host_enumerate_credentials(Filter, *Credentials, buffer, &len, Count);
+-                if (ret == ERROR_NOT_SUPPORTED) ret = ERROR_SUCCESS;
++                if (ret == ERROR_NOT_SUPPORTED || ret == ERROR_NOT_FOUND) ret = ERROR_SUCCESS;
+             }
+         }
+         else ret = ERROR_OUTOFMEMORY;

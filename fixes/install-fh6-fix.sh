@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Install or remove the source-built Forza Horizon 6 D3DMetal compatibility
-# proxy in a NotProton Steam Play prefix.
+# proxy in a NotProton Steam Play prefix. In a CrossOver bottle, or with another
+# runner, only the Xbox sign-in fix (fh6-signin.sh) is installed or removed.
 #
 #   MGVF_BOTTLE=/path/to/pfx install-fh6-fix.sh <game folder>
 #   MGVF_BOTTLE=/path/to/pfx install-fh6-fix.sh <game folder> --status
@@ -11,7 +12,7 @@
 # MGVF-NEEDS: rosetta
 # MGVF-STATUS: WIP
 # MGVF-GAME: Forza Horizon 6 | forzahorizon6.exe |
-# MGVF-WHY: WIP: sign-in and driving validated on Rosetta with the paired ntdll, timers and exception acceleration. Further routes and hardware remain unvalidated. The game starts on D3DMetal 4, but its shaders hit unsupported SV_ShadingRate paths and several pipelines use D3D12 layouts D3DMetal translates incorrectly; a source-built game-specific proxy fixes those paths without FH5's descriptor-stride translation.
+# MGVF-WHY: WIP: sign-in and driving validated on Rosetta with the paired ntdll, timers and exception acceleration. Further routes and hardware remain unvalidated. The game starts on D3DMetal 4, but its shaders hit unsupported SV_ShadingRate paths and several pipelines use D3D12 layouts D3DMetal translates incorrectly; a source-built game-specific proxy fixes those paths without FH5's descriptor-stride translation. Xbox sign-in persists across starts: a fixed advapi32 in the prefix, for forzahorizon6.exe alone; in a CrossOver bottle that is the only part installed. Tested on NotProton only; CrossOver bottles are untested.
 # MGVF-CREDIT: Gauthier Piarrette (Highball tsshim and FH6 measurements) | https://github.com/gauthierpiarrette/highball
 # MGVF-CREDIT: xvferxedd, FH6 D3DMetal extensions preserved with fh5-d3dmetal-fix (repository no longer online) | https://github.com/Andytizer/fh5-crossover-steam-fix/tree/main/upstream/source
 #
@@ -75,6 +76,56 @@ RUNNER="$(find_runner)" || {
   exit 1
 }
 
+SYS="$PFX/drive_c/windows/system32"
+KEY="Software\\Wine\\AppDefaults\\forzahorizon6.exe\\DllOverrides"
+
+stopped() {
+  local rc=0
+  bottle_server_alive "$PFX" || rc=$?
+  case "$rc" in
+    1) return 0 ;;
+    0) echo "error: something is running in this prefix: $PFX" >&2
+       echo "       Quit Forza and Steam, then try again. Nothing was changed." >&2 ;;
+    *) echo "error: cannot tell whether this prefix is stopped. Nothing was changed." >&2 ;;
+  esac
+  return 1
+}
+
+. "$HERE/fh6-signin.sh"
+# Bundled dependencies used by fh6-signin.sh:
+# $HERE/advapi32-fh6-26.3.0.39832.dll $HERE/advapi32-fh6-27.0.0.41073.dll $HERE/advapi32-fh6-27.0.0.41303.dll
+
+# The whole improvement needs NotProton's runner for CrossOver Preview 41073 or 41303. In any
+# other bottle or prefix (CrossOver's own, or another runner) only the Xbox sign-in fix goes in.
+case "$RUNNER" in
+  */runners/crossover-27.0.0.41073/CrossOver|*/runners/crossover-27.0.0.41073-fex/CrossOver) ;;
+  */runners/crossover-27.0.0.41303/CrossOver|*/runners/crossover-27.0.0.41303-fex/CrossOver) ;;
+  *)
+    case "$MODE" in
+      --status)
+        read -r sp st < <(signin_parts)
+        echo "looking at $PFX and $RUNNER"
+        if [ "$st" = 0 ]; then
+          echo "Why: this bottle's advapi32.dll is not one the Xbox sign-in fix was built for"
+          echo norecipe
+        elif [ "$sp" = "$st" ]; then echo installed
+        elif [ "$sp" -gt 0 ]; then
+          echo "Why: $sp of $st Xbox sign-in components are in place (advapi32 and its override)" >&2
+          echo half
+        else echo absent; fi
+        exit 0 ;;
+      --restore) stopped || exit 1; signin_restore; echo "restored Wine's own advapi32 for forzahorizon6.exe"; echo restored; exit 0 ;;
+      --install|install)
+        stopped || exit 1
+        signin_install || exit 1
+        echo "note: in this bottle only the Xbox sign-in fix is installed; FH6's D3D12 and ntdll parts need NotProton's runner for CrossOver Preview."
+        echo "note: the sign-in fix is tested on NotProton only; in a CrossOver bottle it is untested."
+        echo installed; exit 0 ;;
+      --diagnostics-on|--diagnostics-off) echo "error: FH6's diagnostics need NotProton's runner for CrossOver Preview." >&2; exit 1 ;;
+      *) usage ;;
+    esac ;;
+esac
+
 find_d3dmetal() {
   local root="$1" name
   for name in apple_gptk apple_gptk3; do
@@ -100,13 +151,11 @@ R_ALIAS="$W/apd12.dll"
 U_ALIAS="$U/apd12.so"
 U_TARGET="../../$BACKEND/wine/x86_64-unix/d3d12.so"
 OWNERS="$W/.mgf-fh6-d3d12-owners"
-SYS="$PFX/drive_c/windows/system32"
 P_ALIAS="$SYS/apd12.dll"
 P_KEPT="$SYS/apd12.dll.mgf-original"
 PROXY="$HERE/d3d12-fh6.dll"
 LIVE="$GAME/d3d12.dll"
 KEPT="$GAME/d3d12.dll.mgf-original"
-KEY="Software\\Wine\\AppDefaults\\forzahorizon6.exe\\DllOverrides"
 VALUE="*d3d12"
 NOTICES="$HERE/fh5-THIRD-PARTY-LICENCES.md"
 
@@ -160,18 +209,6 @@ pair_ok() {
     && [ -e "$root/lib/wine/x86_64-unix/apd12.so" ]
 }
 
-stopped() {
-  local rc=0
-  bottle_server_alive "$PFX" || rc=$?
-  case "$rc" in
-    1) return 0 ;;
-    0) echo "error: something is running in this prefix: $PFX" >&2
-       echo "       Quit Forza and Steam, then try again. Nothing was changed." >&2 ;;
-    *) echo "error: cannot tell whether this prefix is stopped. Nothing was changed." >&2 ;;
-  esac
-  return 1
-}
-
 parts() {
   local pieces=0 total=4
   is_proxy "$LIVE" && pieces=$((pieces + 1))
@@ -182,6 +219,9 @@ parts() {
     total=5
     pair_ok "$CLONE" "$CLONE_BACKEND" && pieces=$((pieces + 1))
   fi
+  local sp st
+  read -r sp st < <(signin_parts)
+  pieces=$((pieces + sp)); total=$((total + st))
   total=$((total + 2))
   fh6_runtime_ok && pieces=$((pieces + 1)) || true
   fh6_options status >/dev/null 2>&1 && pieces=$((pieces + 1)) || true
@@ -198,7 +238,7 @@ status() {
   echo "looking at $PFX and $RUNNER"
   if [ "$pieces" -eq "$total" ]; then echo installed
   elif [ "$pieces" -gt 0 ]; then
-    echo "Why: $pieces of $total compatibility components are in place (D3D12, ntdll and launch options)" >&2
+    echo "Why: $pieces of $total compatibility components are in place (D3D12, ntdll, Xbox sign-in and launch options)" >&2
     echo half
   else echo absent; fi
 }
@@ -267,6 +307,7 @@ case "$MODE" in
       if [ -f "$KEPT" ] && ! is_proxy "$KEPT"; then mv -f "$KEPT" "$LIVE"
       else rm -f "$LIVE" "$KEPT"; fi
     else [ ! -f "$LIVE" ] || echo "the game's d3d12.dll is not ours; it stays"; fi
+    signin_restore
     if is_alias "$P_ALIAS"; then rm -f "$P_ALIAS"; fi
     if [ ! -e "$P_ALIAS" ] && [ -f "$P_KEPT" ]; then mv -f "$P_KEPT" "$P_ALIAS"; fi
     user_reg_edit "$PFX" delete "$KEY" "$VALUE" || true
@@ -330,6 +371,8 @@ is_proxy "$LIVE" && is_alias "$P_ALIAS" && pair_ok "$RUNNER" "$BACKEND" && overr
   exit 1
 }
 if [ -n "$CLONE" ]; then pair_ok "$CLONE" "$CLONE_BACKEND" || exit 1; fi
+
+signin_install || exit 1
 
 : > "$PFX/.mgf-fh6-managed"
 echo "installed the source-built FH6 D3DMetal compatibility proxy"

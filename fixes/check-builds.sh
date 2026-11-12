@@ -98,8 +98,12 @@ for dll in "$HERE"/*.dll; do
   # nothing useful about them -- and reported as unknown they read like drift.
   # What is checked instead is that they still hash to what was published.
   case "$name" in
-    ng3-*.dll|mgvf-asf-reader.dll|d3d11-wolf.dll)
+    ng3-*.dll|mgvf-asf-reader.dll|d3d11-wolf.dll|advapi32-fh6-*.dll)
+      # advapi32-fh6-<build>.dll is Wine's own advapi32, built from a full CrossOver source
+      # tree by build-fh6-advapi32.sh (minutes, and the tree is not in this repository): it is
+      # checked against the sha256 fh6-advapi32/ORIGIN.md records.
       case "$name" in
+        advapi32-fh6-*.dll) record="$HERE/fh6-advapi32/ORIGIN.md" ;;
         ng3-*) record="$HERE/ng3-THIRD-PARTY-LICENCES.md" ;;
         d3d11-wolf.dll) record="$HERE/wolffix-LICENCES.md" ;;
         *)     record="$HERE/mgvf-asf-reader-LICENCES.md" ;;

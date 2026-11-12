@@ -121,6 +121,10 @@ fi
 # is told it is missing, as CodeWeavers' build is (no pipe2 in their ntdll.so).
 UNWIND_FLAG=--without-unwind; [ "${UNWIND:-no}" = yes ] && UNWIND_FLAG=
 NTDLL=""; [ "$ARCH" = x86_64 ] && [ -z "$BASELINE" ] && NTDLL=dlls/ntdll/all
+# A series whose build.conf says NTDLL_DLL=yes ships the Intel side's ntdll.dll as well:
+# its patches change the PE half too (FH6's exception dispatcher), and the two halves
+# go together.
+NTDLL_DLL_PE=""; [ -n "$NTDLL" ] && [ "${NTDLL_DLL:-}" = yes ] && NTDLL_DLL_PE="dlls/ntdll/$PE/ntdll.dll"
 configure() {  # <tree> <build directory> [more LDFLAGS]
   echo "==> configuring $ARCH in $(basename "$2") (log: $2/configure.log)"
   mkdir -p "$2"
@@ -184,7 +188,7 @@ fi
 # they are committed.
 rm -rf "${OUT:?}/$PE" "${OUT:?}/$UNIX" && mkdir -p "$OUT/$PE" "$OUT/$UNIX"
 for f in dlls/winebus.sys/$PE/winebus.sys dlls/mmdevapi/$PE/mmdevapi.dll dlls/hidclass.sys/$PE/hidclass.sys dlls/setupapi/$PE/setupapi.dll dlls/xaudio2_9/$PE/xaudio2_9.dll \
-         $(for x in $XINPUT; do printf 'dlls/%s/%s/%s.dll ' "$x" "$PE" "$x"; done); do
+         $(for x in $XINPUT; do printf 'dlls/%s/%s/%s.dll ' "$x" "$PE" "$x"; done) $NTDLL_DLL_PE; do
   llvm-strip -o "$OUT/$PE/$(basename "$f")" "$BUILD/$f"
 done
 IDENTITY="${MACGAMEFIX_CODESIGN_IDENTITY:-}"

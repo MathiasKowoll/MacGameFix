@@ -524,6 +524,26 @@
           ],
           "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0022-ntdll-aarch64-unaligned-iosb-status.patch"
+        },
+        {
+          "name": "0023-ntdll-fh6-exception-dispatcher.patch",
+          "file": "engine/patches/wine-11.21/0023-ntdll-fh6-exception-dispatcher.patch",
+          "subject": "Forza Horizon 6's opt-in, build-guarded exception dispatcher and NotProton's Steam client bridge in ntdll, ported from the 41073 pair; Intel side, with ntdll.dll",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "243116fc8a500e072876f46168c88e877f12c3bf",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/243116fc8a500e072876f46168c88e877f12c3bf/engine/patches/wine-11.21/0023-ntdll-fh6-exception-dispatcher.patch"
+        },
+        {
+          "name": "0024-ntdll-fh6-bridge-lea-inc-mul.patch",
+          "file": "engine/patches/wine-11.21/0024-ntdll-fh6-bridge-lea-inc-mul.patch",
+          "subject": "FH6's register bridge also stages LEA, INC, byte XOR and TEST and register MUL, committing both MUL results only after the jump checks pass; Intel side, ntdll.dll only",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "6e08bff2ce080164fa70002f11d295aceed5b4df",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/6e08bff2ce080164fa70002f11d295aceed5b4df/engine/patches/wine-11.21/0024-ntdll-fh6-bridge-lea-inc-mul.patch"
         }
       ]
     }
