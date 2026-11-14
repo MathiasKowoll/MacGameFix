@@ -1,0 +1,194 @@
+--- a/dlls/ntdll/unix/socket.c
++++ b/dlls/ntdll/unix/socket.c
+@@ -1602,6 +1602,111 @@
+ }
+ 
+ 
++/* Windows applies IPPROTO_IP options on an AF_INET6 socket to its IPv4 traffic (a dual-stack socket's
++ * IPv4-mapped peers). macOS refuses them there with EINVAL, so a program that sets one on a dual-stack
++ * socket sees WSAEINVAL. Forza Horizon 6 binds its UDP game socket to [::]:3074 with IPV6_V6ONLY off,
++ * sets IP_DONTFRAGMENT and IP_TTL, and closes the socket when either fails: no session is ever joined.
++ * Where the host refuses the option on an AF_INET6 socket, its IPv6 counterpart is set instead. On macOS
++ * that one does reach IPv4-mapped traffic: a datagram sent to ::ffff:127.0.0.1 with IPV6_UNICAST_HOPS 200
++ * arrives with TTL 200. It reaches the socket's IPv6 traffic too, which an IPv4 option does not on
++ * Windows; on an IPV6_V6ONLY socket, which has no IPv4 traffic, that is all it does. A host that accepts
++ * the IPv4 option never takes this path. */
++static int ipv4_option_counterpart( int option )
++{
++    switch (option)
++    {
++#if defined(IP_DONTFRAG) && defined(IPV6_DONTFRAG)
++    case IP_DONTFRAG:       return IPV6_DONTFRAG;
++#endif
++    case IP_TTL:            return IPV6_UNICAST_HOPS;
++    case IP_MULTICAST_TTL:  return IPV6_MULTICAST_HOPS;
++    case IP_MULTICAST_LOOP: return IPV6_MULTICAST_LOOP;
++    }
++    return -1;
++}
++
++static BOOL is_inet6_socket( int fd )
++{
++    struct sockaddr_storage addr;
++    socklen_t len = sizeof(addr);
++
++    return !getsockname( fd, (struct sockaddr *)&addr, &len ) && addr.ss_family == AF_INET6;
++}
++
++static NTSTATUS do_set_ipv4_option( HANDLE handle, IO_STATUS_BLOCK *io, int option,
++                                    const void *optval, socklen_t optlen )
++{
++    int fd, needs_close = FALSE, option6, value, err = 0;
++    unsigned char byte;
++    NTSTATUS status;
++
++    if ((status = server_get_unix_fd( handle, 0, &fd, &needs_close, NULL, NULL )))
++        return status;
++
++    if (setsockopt( fd, IPPROTO_IP, option, optval, optlen )) err = errno;
++    if (err == EINVAL && (option6 = ipv4_option_counterpart( option )) != -1
++        && optlen >= 1 && is_inet6_socket( fd ))
++    {
++        /* the IPv6 options take an int; Windows' take a DWORD, and a few hosts' IPv4 ones a byte */
++        if (optlen >= sizeof(value)) memcpy( &value, optval, sizeof(value) );
++        else
++        {
++            memcpy( &byte, optval, 1 );
++            value = byte;
++        }
++        err = setsockopt( fd, IPPROTO_IPV6, option6, &value, sizeof(value) ) ? errno : 0;
++        TRACE( "IPv4 option %d on an IPv6 socket: IPv6 option %d = %d, %s\n",
++               option, option6, value, err ? strerror( err ) : "applied" );
++    }
++    if (needs_close) close( fd );
++    if (err) return sock_errno_to_status( err );
++    if (io) io->Status = STATUS_SUCCESS;
++    return STATUS_SUCCESS;
++}
++
++static NTSTATUS do_get_ipv4_option( HANDLE handle, IO_STATUS_BLOCK *io, int option,
++                                    void *out_buffer, ULONG out_size )
++{
++    int fd, needs_close = FALSE, option6, value, err = 0;
++    socklen_t len = out_size;
++    NTSTATUS status;
++
++    if ((status = server_get_unix_fd( handle, 0, &fd, &needs_close, NULL, NULL )))
++        return status;
++
++    if (getsockopt( fd, IPPROTO_IP, option, out_buffer, &len )) err = errno;
++    if (err == EINVAL && (option6 = ipv4_option_counterpart( option )) != -1
++        && out_size >= 1 && is_inet6_socket( fd ))
++    {
++        socklen_t len6 = sizeof(value);
++
++        if (getsockopt( fd, IPPROTO_IPV6, option6, &value, &len6 )) err = errno;
++        else
++        {
++            err = 0;
++            if (out_size >= sizeof(value))
++            {
++                memcpy( out_buffer, &value, sizeof(value) );
++                len = sizeof(value);
++            }
++            else
++            {
++                *(unsigned char *)out_buffer = value;
++                len = 1;
++            }
++        }
++    }
++    if (needs_close) close( fd );
++    if (err) return sock_errno_to_status( err );
++    if (io)
++    {
++        io->Status = STATUS_SUCCESS;
++        io->Information = len;
++    }
++    return STATUS_SUCCESS;
++}
++
++
+ static int get_sock_type( HANDLE handle )
+ {
+     int sock_type;
+@@ -2140,6 +2245,9 @@
+ #endif
+ 
+         case IOCTL_AFD_WINE_GET_IP_DONTFRAGMENT:
++#ifdef IP_DONTFRAG
++            return do_get_ipv4_option( handle, io, IP_DONTFRAG, out_buffer, out_size );
++#else
+         {
+             socklen_t len = out_size;
+             int ret;
+@@ -2147,9 +2255,7 @@
+             if ((status = server_get_unix_fd( handle, 0, &fd, &needs_close, NULL, NULL )))
+                 return status;
+ 
+-#ifdef IP_DONTFRAG
+-            ret = getsockopt( fd, IPPROTO_IP, IP_DONTFRAG, out_buffer, &len );
+-#elif defined(IP_MTU_DISCOVER) && defined(IP_PMTUDISC_DONT)
++#if defined(IP_MTU_DISCOVER) && defined(IP_PMTUDISC_DONT)
+             {
+                 int value;
+ 
+@@ -2177,10 +2283,11 @@
+             }
+             break;
+         }
++#endif
+ 
+         case IOCTL_AFD_WINE_SET_IP_DONTFRAGMENT:
+ #ifdef IP_DONTFRAG
+-            return do_setsockopt( handle, io, IPPROTO_IP, IP_DONTFRAG, in_buffer, in_size );
++            return do_set_ipv4_option( handle, io, IP_DONTFRAG, in_buffer, in_size );
+ #elif defined(IP_MTU_DISCOVER) && defined(IP_PMTUDISC_DO) && defined(IP_PMTUDISC_DONT)
+         {
+             int value = *(DWORD *)in_buffer ? IP_PMTUDISC_DO : IP_PMTUDISC_DONT;
+@@ -2234,28 +2341,28 @@
+         {
+             int sock_type = get_sock_type( handle );
+             if (sock_type != SOCK_DGRAM && sock_type != SOCK_RAW) return STATUS_INVALID_PARAMETER;
+-            return do_getsockopt( handle, io, IPPROTO_IP, IP_MULTICAST_LOOP, out_buffer, out_size );
++            return do_get_ipv4_option( handle, io, IP_MULTICAST_LOOP, out_buffer, out_size );
+         }
+ 
+         case IOCTL_AFD_WINE_SET_IP_MULTICAST_LOOP:
+         {
+             int sock_type = get_sock_type( handle );
+             if (sock_type != SOCK_DGRAM && sock_type != SOCK_RAW) return STATUS_INVALID_PARAMETER;
+-            return do_setsockopt( handle, io, IPPROTO_IP, IP_MULTICAST_LOOP, in_buffer, in_size );
++            return do_set_ipv4_option( handle, io, IP_MULTICAST_LOOP, in_buffer, in_size );
+         }
+ 
+         case IOCTL_AFD_WINE_GET_IP_MULTICAST_TTL:
+         {
+             int sock_type = get_sock_type( handle );
+             if (sock_type != SOCK_DGRAM && sock_type != SOCK_RAW) return STATUS_INVALID_PARAMETER;
+-            return do_getsockopt( handle, io, IPPROTO_IP, IP_MULTICAST_TTL, out_buffer, out_size );
++            return do_get_ipv4_option( handle, io, IP_MULTICAST_TTL, out_buffer, out_size );
+         }
+ 
+         case IOCTL_AFD_WINE_SET_IP_MULTICAST_TTL:
+         {
+             int sock_type = get_sock_type( handle );
+             if (sock_type != SOCK_DGRAM && sock_type != SOCK_RAW) return STATUS_INVALID_PARAMETER;
+-            return do_setsockopt( handle, io, IPPROTO_IP, IP_MULTICAST_TTL, in_buffer, in_size );
++            return do_set_ipv4_option( handle, io, IP_MULTICAST_TTL, in_buffer, in_size );
+         }
+ 
+         case IOCTL_AFD_WINE_GET_IP_OPTIONS:
+@@ -2333,10 +2440,10 @@
+             return do_setsockopt( handle, io, IPPROTO_IP, IP_TOS, in_buffer, in_size );
+ 
+         case IOCTL_AFD_WINE_GET_IP_TTL:
+-            return do_getsockopt( handle, io, IPPROTO_IP, IP_TTL, out_buffer, out_size );
++            return do_get_ipv4_option( handle, io, IP_TTL, out_buffer, out_size );
+ 
+         case IOCTL_AFD_WINE_SET_IP_TTL:
+-            return do_setsockopt( handle, io, IPPROTO_IP, IP_TTL, in_buffer, in_size );
++            return do_set_ipv4_option( handle, io, IP_TTL, in_buffer, in_size );
+ 
+ #ifdef IP_UNBLOCK_SOURCE
+         case IOCTL_AFD_WINE_SET_IP_UNBLOCK_SOURCE:

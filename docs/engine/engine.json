@@ -554,6 +554,16 @@
           ],
           "commit": "5e74061b6f33cdfdc719860e3035d77f0d89523a",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/5e74061b6f33cdfdc719860e3035d77f0d89523a/engine/patches/wine-11.21/0025-ntdll-fh6-chain-on-by-default.patch"
+        },
+        {
+          "name": "0026-ntdll-dualstack-ipv4-options.patch",
+          "file": "engine/patches/wine-11.21/0026-ntdll-dualstack-ipv4-options.patch",
+          "subject": "An IPv4 option macOS refuses on an IPv6 socket (IP_DONTFRAGMENT, IP_TTL, IP_MULTICAST_TTL, IP_MULTICAST_LOOP) is set as its IPv6 counterpart, which reaches the socket's IPv4-mapped traffic: FH6 keeps its dual-stack UDP game socket and joins online sessions; both sides, ntdll.so",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "0f28a0ecad6208d4624bddbf4421f2fcc33fefd3",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/0f28a0ecad6208d4624bddbf4421f2fcc33fefd3/engine/patches/wine-11.21/0026-ntdll-dualstack-ipv4-options.patch"
         }
       ]
     }
