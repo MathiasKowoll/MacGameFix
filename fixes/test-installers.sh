@@ -655,6 +655,8 @@ f6cxdo --install > "$f6/cx.log" 2>&1 \
   && [ "$(readlink "$f6cx/lib/wine/x86_64-unix/apd12.so")" = ../../apple_gptk/wine/x86_64-unix/d3d12.so ] \
   && cmp -s "$f6bt/drive_c/windows/system32/apd12.dll" "$f6cx/lib/wine/x86_64-windows/apd12.dll" \
   && /usr/bin/grep -q '^"\*d3d12"="native"' "$f6bt/user.reg" \
+  && /usr/bin/grep -q '^"concrt140"="native,builtin"' "$f6bt/user.reg" \
+  && ! /usr/bin/grep -q '^"concrt140"=' "$f6pfx/user.reg" \
   && cmp -s "$f6bt/drive_c/windows/system32/ntdll.dll" "$f6modules/engine-27.0.0.41303-x86_64-windows-ntdll.dll" \
   && ls -lR "$f6home/Library/Application Support/notproton/plugins" 2>&1 | cmp -s - "$f6/plugins.before" \
   && cmp -s "$f6config/localconfig.vdf" "$f6/localconfig.before" \
@@ -665,6 +667,7 @@ f6cxdo --restore > "$f6/cxrestore.log" 2>&1 \
   && [ ! -e "$f6cx/lib/wine/x86_64-windows/apd12.dll" ] && [ ! -L "$f6cx/lib/wine/x86_64-unix/apd12.so" ] \
   && [ ! -e "$f6bt/drive_c/windows/system32/apd12.dll" ] \
   && ! /usr/bin/grep -q '^"\*d3d12"=' "$f6bt/user.reg" \
+  && ! /usr/bin/grep -q '^"concrt140"=' "$f6bt/user.reg" \
   && say ok "fh6 in a CrossOver Preview 41303 bottle: removed again" \
   || say FAIL "fh6: CrossOver bottle restore ($(f6cxst), $(tail -2 "$f6/cxrestore.log" | tr '\n' ' '))"
 # Another CrossOver build keeps the sign-in-only behaviour.

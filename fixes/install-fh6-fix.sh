@@ -214,7 +214,17 @@ fi
 
 is_proxy() { [ -f "$1" ] && cmp -s "$1" "$PROXY"; }
 is_alias() { [ -f "$1" ] && cmp -s "$1" "$EXPECTED"; }
-override_present() { user_reg_has_value "$PFX" "$KEY" "$VALUE"; }
+# NotProton loads the Visual C++ runtime the game ships natively through WINEDLLOVERRIDES;
+# CrossOver does not, and FH6 dies in Wine's concrt140 (an unimplemented
+# _Concurrent_queue_iterator_base_v4 constructor). In a CrossOver bottle the same list is
+# set for forzahorizon6.exe alone.
+VCRT="concrt140 msvcp140 msvcp140_1 msvcp140_2 msvcp140_atomic_wait msvcp140_codecvt_ids vcamp140 vccorlib140 vcomp140 vcruntime140 vcruntime140_1"
+override_present() {
+  user_reg_has_value "$PFX" "$KEY" "$VALUE" || return 1
+  [ -n "$FH6_APP" ] || return 0
+  local d
+  for d in $VCRT; do user_reg_has_value "$PFX" "$KEY" "$d" || return 1; done
+}
 pair_ok() {
   local root="$1" backend="$2"
   is_alias "$root/lib/wine/x86_64-windows/apd12.dll" \
@@ -337,6 +347,7 @@ case "$MODE" in
     if is_alias "$P_ALIAS"; then rm -f "$P_ALIAS"; fi
     if [ ! -e "$P_ALIAS" ] && [ -f "$P_KEPT" ]; then mv -f "$P_KEPT" "$P_ALIAS"; fi
     user_reg_edit "$PFX" delete "$KEY" "$VALUE" || true
+    if [ -n "$FH6_APP" ]; then for d in $VCRT; do user_reg_edit "$PFX" delete "$KEY" "$d" || true; done; fi
     if [ -n "$CLONE" ]; then
       cw="$CLONE/lib/wine/x86_64-windows/apd12.dll"
       cu="$CLONE/lib/wine/x86_64-unix/apd12.so"
@@ -393,6 +404,11 @@ user_reg_edit "$PFX" set "$KEY" "$VALUE" native || {
   echo "error: files are in place, but the FH6-only d3d12 override could not be written" >&2
   exit 1
 }
+if [ -n "$FH6_APP" ]; then
+  for d in $VCRT; do
+    user_reg_edit "$PFX" set "$KEY" "$d" native,builtin || { echo "error: the FH6-only $d override could not be written" >&2; exit 1; }
+  done
+fi
 
 is_proxy "$LIVE" && is_alias "$P_ALIAS" && pair_ok "$RUNNER" "$BACKEND" && override_present || {
   echo "error: the D3D installation did not verify; --status reports the missing part" >&2
