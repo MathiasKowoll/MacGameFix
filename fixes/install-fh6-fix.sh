@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
 # Install or remove the source-built Forza Horizon 6 D3DMetal compatibility
-# proxy in a NotProton Steam Play prefix. In a CrossOver bottle, or with another
-# runner, only the Xbox sign-in fix (fh6-signin.sh) is installed or removed.
+# proxy in a NotProton Steam Play prefix or a CrossOver Preview 41303 bottle. In
+# any other bottle, or with another runner, only the Xbox sign-in fix
+# (fh6-signin.sh) is installed or removed.
 #
 #   MGVF_BOTTLE=/path/to/pfx install-fh6-fix.sh <game folder>
 #   MGVF_BOTTLE=/path/to/pfx install-fh6-fix.sh <game folder> --status
@@ -13,7 +14,7 @@
 # MGVF-STATUS: WIP
 # MGVF-INSTRUCTIONS: fh6-instructions.md
 # MGVF-GAME: Forza Horizon 6 | forzahorizon6.exe |
-# MGVF-WHY: WIP: less buggy and far more playable than before, though not yet smooth. Sign-in and driving validated on Rosetta with the paired ntdll, timers and exception acceleration. Further routes and hardware remain unvalidated. The game starts on D3DMetal 4, but its shaders hit unsupported SV_ShadingRate paths and several pipelines use D3D12 layouts D3DMetal translates incorrectly; a source-built game-specific proxy fixes those paths without FH5's descriptor-stride translation. Xbox sign-in persists across starts: a fixed advapi32 in the prefix, for forzahorizon6.exe alone; in a CrossOver bottle that is the only part installed. Tested on NotProton only; CrossOver bottles are untested. It also needs NOTPROTON_ROSETTA_TRAP_BOOST=1 in FH6's Steam launch options (on the 41073 runner, three more): the improvement writes it itself when Steam is closed and keeps your own options, so quit Steam before installing and leave it in place. On 41303 the exception handling is built into its ntdll.
+# MGVF-WHY: WIP: less buggy and far more playable than before, though not yet smooth. Sign-in and driving validated on Rosetta with the paired ntdll, timers and exception acceleration. Further routes and hardware remain unvalidated. The game starts on D3DMetal 4, but its shaders hit unsupported SV_ShadingRate paths and several pipelines use D3D12 layouts D3DMetal translates incorrectly; a source-built game-specific proxy fixes those paths without FH5's descriptor-stride translation. Xbox sign-in persists across starts: a fixed advapi32 in the prefix, for forzahorizon6.exe alone. In a CrossOver Preview 41303 bottle the D3D12 and ntdll parts go in too, into the app and the bottle, without the priority plugin; in any other CrossOver bottle only the sign-in fix does. Tested on NotProton; CrossOver Preview 41303 is not yet validated in game. It also needs NOTPROTON_ROSETTA_TRAP_BOOST=1 in FH6's Steam launch options (on the 41073 runner, three more): the improvement writes it itself when Steam is closed and keeps your own options, so quit Steam before installing and leave it in place. On 41303 the exception handling is built into its ntdll.
 # MGVF-CREDIT: Gauthier Piarrette (Highball tsshim and FH6 measurements) | https://github.com/gauthierpiarrette/highball
 # MGVF-CREDIT: xvferxedd, FH6 D3DMetal extensions preserved with fh5-d3dmetal-fix (repository no longer online) | https://github.com/Andytizer/fh5-crossover-steam-fix/tree/main/upstream/source
 #
@@ -28,7 +29,7 @@ GAME="${1:-}"
 MODE="${2:---install}"
 if [ "${MGVF_STATUS_ONLY:-0}" = 1 ]; then MODE=--status; fi
 
-usage() { sed -n '3,10p' "$0" >&2; exit 1; }
+usage() { sed -n '3,11p' "$0" >&2; exit 1; }
 [ -n "$GAME" ] || usage
 [ -f "$GAME/forzahorizon6.exe" ] || {
   echo "error: no forzahorizon6.exe in $GAME" >&2
@@ -77,6 +78,16 @@ RUNNER="$(find_runner)" || {
   exit 1
 }
 
+# CrossOver Preview 41303 itself (the app, with a bottle of its own) takes the whole D3D12 part
+# too: its D3DMetal and its Wine modules' ntdll pair are the ones NotProton's 41303 runner has.
+# NotProton's priority plugin and its launch-option switch have no CrossOver counterpart.
+FH6_APP=""
+case "$RUNNER" in
+  */Contents/SharedSupport/CrossOver)
+    [ "$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "${RUNNER%/SharedSupport/CrossOver}/Info.plist" 2>/dev/null)" = 27.0.0.41303 ] \
+      && FH6_APP="${RUNNER%/Contents/SharedSupport/CrossOver}" ;;
+esac
+
 SYS="$PFX/drive_c/windows/system32"
 KEY="Software\\Wine\\AppDefaults\\forzahorizon6.exe\\DllOverrides"
 
@@ -96,12 +107,9 @@ stopped() {
 # Bundled dependencies used by fh6-signin.sh:
 # $HERE/advapi32-fh6-26.3.0.39832.dll $HERE/advapi32-fh6-27.0.0.41073.dll $HERE/advapi32-fh6-27.0.0.41303.dll
 
-# The whole improvement needs NotProton's runner for CrossOver Preview 41073 or 41303. In any
-# other bottle or prefix (CrossOver's own, or another runner) only the Xbox sign-in fix goes in.
-case "$RUNNER" in
-  */runners/crossover-27.0.0.41073/CrossOver|*/runners/crossover-27.0.0.41073-fex/CrossOver) ;;
-  */runners/crossover-27.0.0.41303/CrossOver|*/runners/crossover-27.0.0.41303-fex/CrossOver) ;;
-  *)
+# The whole improvement needs NotProton's runner for CrossOver Preview 41073 or 41303, or
+# CrossOver Preview 41303 itself. In any other bottle or prefix only the Xbox sign-in fix goes in.
+fh6_signin_only() {
     case "$MODE" in
       --status)
         read -r sp st < <(signin_parts)
@@ -119,12 +127,17 @@ case "$RUNNER" in
       --install|install)
         stopped || exit 1
         signin_install || exit 1
-        echo "note: in this bottle only the Xbox sign-in fix is installed; FH6's D3D12 and ntdll parts need NotProton's runner for CrossOver Preview."
+        echo "note: in this bottle only the Xbox sign-in fix is installed; FH6's D3D12 and ntdll parts need CrossOver Preview 41303 or NotProton's runner for CrossOver Preview."
         echo "note: the sign-in fix is tested on NotProton only; in a CrossOver bottle it is untested."
         echo installed; exit 0 ;;
       --diagnostics-on|--diagnostics-off) echo "error: FH6's diagnostics need NotProton's runner for CrossOver Preview." >&2; exit 1 ;;
       *) usage ;;
-    esac ;;
+    esac
+}
+case "$RUNNER" in
+  */runners/crossover-27.0.0.41073/CrossOver|*/runners/crossover-27.0.0.41073-fex/CrossOver) ;;
+  */runners/crossover-27.0.0.41303/CrossOver|*/runners/crossover-27.0.0.41303-fex/CrossOver) ;;
+  *) [ -n "$FH6_APP" ] || fh6_signin_only ;;
 esac
 
 find_d3dmetal() {
@@ -223,9 +236,13 @@ parts() {
   local sp st
   read -r sp st < <(signin_parts)
   pieces=$((pieces + sp)); total=$((total + st))
-  total=$((total + 2))
+  total=$((total + 1))
   fh6_runtime_ok && pieces=$((pieces + 1)) || true
-  fh6_options status >/dev/null 2>&1 && pieces=$((pieces + 1)) || true
+  # CrossOver has no launch options of ours to count.
+  if [ -z "$FH6_APP" ]; then
+    total=$((total + 1))
+    fh6_options status >/dev/null 2>&1 && pieces=$((pieces + 1)) || true
+  fi
   printf '%s %s\n' "$pieces" "$total"
 }
 
@@ -291,6 +308,14 @@ place_pair() {
   pair_ok "$root" "$backend"
 }
 
+# Files added to or taken out of CrossOver's app leave CodeWeavers' seal behind, as the Wine
+# modules installer does; it signs the app again ad hoc in the same way.
+resign_app() {
+  [ -n "${FH6_APP:-}" ] || return 0
+  codesign --force --deep --sign - "$FH6_APP" >/dev/null 2>&1 || echo "note: could not sign $FH6_APP again" >&2
+  xattr -cr "$FH6_APP" 2>/dev/null || true
+}
+
 case "$MODE" in
   --status) status; exit 0 ;;
   --diagnostics-on|--diagnostics-off)
@@ -319,6 +344,7 @@ case "$MODE" in
       [ -L "$cu" ] && [ "$(readlink "$cu")" = "../../$CLONE_BACKEND/wine/x86_64-unix/d3d12.so" ] && rm -f "$cu"
     fi
     drop_owner
+    resign_app
     echo "restored the game's original D3D12 path"
     rm -f "$PFX/.mgf-fh6-managed"
     echo restored
@@ -354,6 +380,7 @@ made_dll=0; made_so=0
 [ -e "$U_ALIAS" ] || [ -L "$U_ALIAS" ] || made_so=1
 place_pair "$RUNNER" "$BACKEND"
 add_owner "$made_dll" "$made_so" || { echo "error: runner ownership record is malformed" >&2; exit 1; }
+if [ "$made_dll$made_so" != 00 ]; then resign_app; fi
 if [ -n "$CLONE" ]; then place_pair "$CLONE" "$CLONE_BACKEND"; fi
 
 if [ -f "$P_ALIAS" ] && ! is_alias "$P_ALIAS"; then mv -f "$P_ALIAS" "$P_KEPT"; fi

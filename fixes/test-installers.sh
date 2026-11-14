@@ -630,6 +630,50 @@ f6do --restore > /dev/null 2>&1
 # 41303 with engine patch 0025: the chain's switches are in ntdll.dll, so the launch options
 # need only the plugin's, and the build shipped before it (6664770a) counts as MacGameFix's own
 # when an update replaces it. The real DLLs: the new one from the modules, the old from git.
+# CrossOver Preview 41303 itself, with a bottle of its own: the D3D12 part goes into the app and
+# the bottle, with no NotProton plugin or launch options.
+f6app="$f6/Apps/CrossOver Preview.app"; f6cx="$f6app/Contents/SharedSupport/CrossOver"; f6bt="$f6/bottle"
+mkdir -p "$f6cx/bin" "$f6cx/lib/apple_gptk/wine/x86_64-windows" "$f6cx/lib/apple_gptk/wine/x86_64-unix" \
+  "$f6cx/lib/wine/x86_64-windows" "$f6cx/lib/wine/x86_64-unix" "$f6bt/drive_c/windows/system32"
+/usr/libexec/PlistBuddy -c 'Add :CFBundleVersion string 27.0.0.41303' "$f6app/Contents/Info.plist" >/dev/null
+printf '#!/bin/sh\nexit 0\n' > "$f6cx/bin/wine"; chmod +x "$f6cx/bin/wine"
+cp "$FIX/d3d12-fh5.dll" "$f6cx/lib/apple_gptk/wine/x86_64-windows/d3d12.dll"
+touch "$f6cx/lib/apple_gptk/wine/x86_64-unix/d3d12.so"
+cp "$f6modules/engine-27.0.0.41303-x86_64-unix-ntdll.so" "$f6cx/lib/wine/x86_64-unix/ntdll.so"
+printf 'original app PE\n' > "$f6cx/lib/wine/x86_64-windows/ntdll.dll"
+printf 'WINE REGISTRY Version 2\n' > "$f6bt/user.reg"; printf 'WINE REGISTRY Version 2\n' > "$f6bt/system.reg"
+printf 'original bottle PE\n' > "$f6bt/drive_c/windows/system32/ntdll.dll"
+printf "bottle advapi32\n" > "$f6bt/drive_c/windows/system32/advapi32.dll"
+cp "$f6config/localconfig.vdf" "$f6/localconfig.before"
+ls -lR "$f6home/Library/Application Support/notproton/plugins" > "$f6/plugins.before" 2>&1
+f6cxdo() { HOME="$f6home" MGVF_MODULES="$f6modules" MGVF_CX="$f6cx" MGVF_BOTTLE="$f6bt" /bin/bash "$f6fix/install-fh6-fix.sh" "$f6game" "$@"; }
+f6cxst() { f6cxdo --status 2>/dev/null | /usr/bin/grep -E '^(installed|absent|half)$' | tail -1; }
+f6cxdo --install > "$f6/cx.log" 2>&1 \
+  && [ "$(f6cxst)" = installed ] \
+  && cmp -s "$f6game/d3d12.dll" "$FIX/d3d12-fh6.dll" \
+  && [ -f "$f6cx/lib/wine/x86_64-windows/apd12.dll" ] \
+  && [ "$(readlink "$f6cx/lib/wine/x86_64-unix/apd12.so")" = ../../apple_gptk/wine/x86_64-unix/d3d12.so ] \
+  && cmp -s "$f6bt/drive_c/windows/system32/apd12.dll" "$f6cx/lib/wine/x86_64-windows/apd12.dll" \
+  && /usr/bin/grep -q '^"\*d3d12"="native"' "$f6bt/user.reg" \
+  && cmp -s "$f6bt/drive_c/windows/system32/ntdll.dll" "$f6modules/engine-27.0.0.41303-x86_64-windows-ntdll.dll" \
+  && ls -lR "$f6home/Library/Application Support/notproton/plugins" 2>&1 | cmp -s - "$f6/plugins.before" \
+  && cmp -s "$f6config/localconfig.vdf" "$f6/localconfig.before" \
+  && say ok "fh6 in a CrossOver Preview 41303 bottle: D3D12 part in the app and the bottle, no NotProton plugin or options" \
+  || say FAIL "fh6: CrossOver bottle install ($(f6cxst), $(tail -2 "$f6/cx.log" | tr '\n' ' '))"
+f6cxdo --restore > "$f6/cxrestore.log" 2>&1 \
+  && [ "$(f6cxst)" = absent ] \
+  && [ ! -e "$f6cx/lib/wine/x86_64-windows/apd12.dll" ] && [ ! -L "$f6cx/lib/wine/x86_64-unix/apd12.so" ] \
+  && [ ! -e "$f6bt/drive_c/windows/system32/apd12.dll" ] \
+  && ! /usr/bin/grep -q '^"\*d3d12"=' "$f6bt/user.reg" \
+  && say ok "fh6 in a CrossOver Preview 41303 bottle: removed again" \
+  || say FAIL "fh6: CrossOver bottle restore ($(f6cxst), $(tail -2 "$f6/cxrestore.log" | tr '\n' ' '))"
+# Another CrossOver build keeps the sign-in-only behaviour.
+/usr/libexec/PlistBuddy -c 'Set :CFBundleVersion 27.0.0.41073' "$f6app/Contents/Info.plist"
+f6cxdo --install > "$f6/cxold.log" 2>&1; /usr/bin/grep -q 'only the Xbox sign-in fix is installed' "$f6/cxold.log" \
+  && [ ! -e "$f6cx/lib/wine/x86_64-windows/apd12.dll" ] \
+  && say ok "fh6 in another CrossOver's bottle: only the sign-in fix" \
+  || say FAIL "fh6: other CrossOver ($(tail -2 "$f6/cxold.log" | tr '\n' ' '))"
+
 f6n="$W/fh6-41303"; mkdir -p "$f6n/m"
 cp "$FIX/../engine/modules/27.0.0.41303/x86_64-windows/ntdll.dll" "$f6n/m/engine-27.0.0.41303-x86_64-windows-ntdll.dll"
 git -C "$FIX/.." show 6373a11:engine/modules/27.0.0.41303/x86_64-windows/ntdll.dll > "$f6n/old.dll" 2>/dev/null

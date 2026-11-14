@@ -13,6 +13,8 @@ case "$RUNNER" in
   */runners/crossover-27.0.0.41303/CrossOver|*/runners/crossover-27.0.0.41303-fex/CrossOver) FH6_BUILD=27.0.0.41303 ;;
   *) FH6_BUILD="" ;;
 esac
+# CrossOver Preview 41303 itself carries the same pair once its Wine modules are installed.
+[ -z "${FH6_APP:-}" ] || FH6_BUILD=27.0.0.41303
 NT_DLL="$MODULES/engine-${FH6_BUILD:-none}-x86_64-windows-ntdll.dll"
 NT_UNIX="$MODULES/engine-${FH6_BUILD:-none}-x86_64-unix-ntdll.so"
 BASELINE_PE="$(fh6sha "$NT_DLL")"
@@ -37,10 +39,20 @@ fh6_runtime_ok() {
   local root="${CLONE:-$RUNNER}"
   fh6_pe_ok "$root/lib/wine/x86_64-windows/ntdll.dll" && fh6_unix_ok "$root/lib/wine/x86_64-unix/ntdll.so" && fh6_pe_ok "$SYS/ntdll.dll"
 }
-fh6_options() { MGF_FH6_CHAIN_IN_NTDLL="$(fh6_chain_in_ntdll)" /usr/bin/perl "$HERE/fh6-launch-options.pl" "$1" "$PFX"; }
+fh6_options() {
+  # The launch options only switch on NotProton's priority plugin, which CrossOver has no way
+  # to load; in a CrossOver bottle there is nothing to write, check or take out.
+  if [ -n "${FH6_APP:-}" ]; then
+    case "$1" in
+      diagnostics-*) echo "error: in CrossOver, put FH6's diagnostic variables in the game's Steam launch options yourself." >&2; return 1 ;;
+    esac
+    return 0
+  fi
+  MGF_FH6_CHAIN_IN_NTDLL="$(fh6_chain_in_ntdll)" /usr/bin/perl "$HERE/fh6-launch-options.pl" "$1" "$PFX"
+}
 fh6_preflight() {
   [ -n "$FH6_BUILD" ] || {
-    echo 'error: FH6 WIP requires the standard NotProton runner for CrossOver Preview 27.0.0.41073 or 27.0.0.41303, using Rosetta.' >&2; return 1; }
+    echo 'error: FH6 WIP requires the standard NotProton runner for CrossOver Preview 27.0.0.41073 or 27.0.0.41303, using Rosetta, or CrossOver Preview 27.0.0.41303 itself.' >&2; return 1; }
   [ "$(fh6sha "$GAME/forzahorizon6.exe")" = "$GAME_SHA" ] || { echo 'error: this FH6 executable has not been validated for the WIP runtime. Nothing changed.' >&2; return 1; }
   fh6_pe_ok "$NT_DLL" && [ -f "$NT_UNIX" ] || { echo 'error: download this prerelease’s Wine modules in Improvements first.' >&2; return 1; }
   # All runtime copies must be backed up before an update. Unknown copies are not overwritten.
@@ -75,6 +87,7 @@ fh6_install_runtime() {
     fh6_put "$NT_UNIX" "$CLONE/lib/wine/x86_64-unix/ntdll.so"
   fi
   fh6_put "$NT_DLL" "$SYS/ntdll.dll"
+  [ -z "${FH6_APP:-}" ] || return 0
   local plugins="$HOME/Library/Application Support/notproton/plugins"
   mkdir -p "$plugins"
   # Keep an existing user plugin; our descriptor is only needed on a fresh installation. An
