@@ -223,6 +223,7 @@ Below the rows:
 **"Per game" area** (1446-1451)
 - A **"Search"** field: matches part of a name (any case) or an exact app ID (1422).
 - **"Look Again"**: reads the Steam games and the modules' log again, and asks the Steam store about games it hasn't asked about yet (585-613).
+- The list holds every Steam game with an appmanifest, and every game outside Steam the user added to Steam ("Add a Non-Steam Game"), read from each account's `userdata/<id>/config/shortcuts.vdf` (`SteamShortcuts`, Pad.swift). Such a game is listed under the game id Steam starts it with, `(app id << 32) | 0x02000000`, which is the id the modules log and read `pad.d/<id>.conf` by. Its cover is the art the user gave it in Steam (`config/grid/<app id>p`); the Steam store is not asked about it, and its sheet says "Added to Steam as a non-Steam game, game id …".
 - **"Export…"**: tooltip "The settings and what was seen of each game, to share. No paths or accounts."
 
 **Table** (1453-1463). A single click on a row opens that game's sheet (1464-1466).
@@ -565,7 +566,7 @@ The "Control-Command-F" in the Game Mode footer is advice for full screen in gam
 
 **Network.** Users may want to know about these:
 - The GitHub API at `releases/latest`, for catalog checks.
-- Steam's public store API, once per installed game, to learn whether it lists the DualSense: `https://store.steampowered.com/api/appdetails?appids=<id>&filters=categories` (Pad.swift:389). It runs from Game Feel and from the agent.
+- Steam's public store API, once per installed Steam game (never for a game added to Steam from outside it), to learn whether it lists the DualSense: `https://store.steampowered.com/api/appdetails?appids=<id>&filters=categories` (Pad.swift:389). It runs from Game Feel and from the agent.
 
 **Permission prompts**
 - **App Management**

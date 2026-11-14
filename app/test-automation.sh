@@ -458,6 +458,39 @@ padwrite
 check 'has "$(cat "$P/pad-exes.conf")" "new.exe=4747" && ! has "$(cat "$P/pad-exes.conf")" "# kept"' "a new game is"
 rm -rf "$OX" "$SUPPORT/Steam/steamapps/common/New Exe" "$GAME/Shared.exe" \
   "$SUPPORT/Steam/steamapps/appmanifest_4646.acf" "$SUPPORT/Steam/steamapps/appmanifest_4747.acf"
+# A game outside Steam the user added to it: listed by its shortcut, under the game id
+# Steam starts it with, which is the id the modules log and read pad.d/ by.
+SC="$SUPPORT/Steam/userdata/12345/config"
+mkdir -p "$SC"
+/usr/bin/python3 - "$SC/shortcuts.vdf" <<'PY3'
+import struct, sys
+def s(k, v): return b"\x01" + k.encode() + b"\x00" + v.encode() + b"\x00"
+def i(k, v): return b"\x02" + k.encode() + b"\x00" + struct.pack("<I", v)
+def m(k, body): return b"\x00" + k.encode() + b"\x00" + body + b"\x08"
+one = i("appid", 4227251710) + s("AppName", "FC 27") + s("Exe", '"/x/FC27.app"') + m("tags", s("0", "Football"))
+two = i("appid", 100) + s("appname", "Lower Game")
+zero = i("appid", 0) + s("AppName", "No Id")
+open(sys.argv[1], "wb").write(m("shortcuts", m("0", one) + m("1", two) + m("2", zero)) + b"\x08")
+PY3
+FC=18155907846443630592
+/usr/bin/python3 - "$P/pad.json" "$FC" <<'PY4'
+import json, sys
+d = json.load(open(sys.argv[1])); d["games"][sys.argv[2]] = {"name": sys.argv[2], "options": {"hapticsGain": 2.5}}
+json.dump(d, open(sys.argv[1], "w"))
+PY4
+printf '10:07:00 [13] game=%s observed: the game rumbles the DualSense%ss motors\n' "$FC" "'" >> "$MACGAMEFIX_PAD_LOG"
+padwrite
+check 'has "$(cat "$P/pad.d/$FC.conf")" "# FC 27" && has "$(cat "$P/pad.d/$FC.conf")" "haptics_gain_cable=2.50"' "a game added to Steam gets its own file under its game id, named by its shortcut"
+check 'has "$(padreport)" "$FC | FC 27 | " && has "$(padreport)" "seen motors"' "what the modules saw of it is kept under its name"
+check '! /usr/bin/python3 -c "import json,sys; g=json.load(open(sys.argv[1]))[\"games\"][sys.argv[2]]; sys.exit(0 if \"storeUnknown\" in g or \"dualSense\" in g else 1)" "$P/pad.json" "$FC"' "and the Steam store is not asked about it"
+"$BIN" --pad-game-report "$FC" "$T/fc-report.md" >/dev/null 2>&1
+check 'has "$(cat "$T/fc-report.md")" "FC 27, a non-Steam game added to Steam, game id $FC" && ! has "$(cat "$T/fc-report.md")" "Steam app $FC"' "its report says what it is, not a Steam app"
+rm -rf "$SUPPORT/Steam/userdata" "$P/pad.d/$FC.conf"
+/usr/bin/python3 - "$P/pad.json" "$FC" <<'PY5'
+import json, sys
+d = json.load(open(sys.argv[1])); d["games"].pop(sys.argv[2], None)
+json.dump(d, open(sys.argv[1], "w"))
+PY5
 # The settings form's link, its fields read as GitHub reads them: a bare + is a space.
 shareform() {
     /usr/bin/python3 - "$("$BIN" --pad-share-url "$1")" <<'PY3'

@@ -671,7 +671,7 @@ extension Model {
         guard savePadReport(game, as: "MacGameFix report") else { return }
         if let link = Issue.new(template: "controller.yml",
                                 ["title": "[Controller] \(game.name)",
-                                 "game": "\(game.name) (Steam app \(game.appid))"]) {
+                                 "game": "\(game.name) (\(SteamGames.label(game.appid)))"]) {
             NSWorkspace.shared.open(link)
         }
     }
@@ -760,7 +760,7 @@ extension Model {
         guard saveReport(text, as: "MacGameFix game report", for: game.name) else { return }
         if let link = Issue.new(template: "game-report.yml",
                                 ["title": "[Game] \(game.name)",
-                                 "game": "\(game.name) (Steam app \(game.appid))",
+                                 "game": "\(game.name) (\(SteamGames.label(game.appid)))",
                                  "what": symptom.rawValue + ". "]) {
             NSWorkspace.shared.open(link)
         }
@@ -1596,7 +1596,7 @@ struct ControllersView: View {
                     if let id, let game = model.padGames.first(where: { $0.id == id }) { editing = game }
                 }
                 HStack {
-                    Text(model.padGames.isEmpty ? "No Steam game found."
+                    Text(model.padGames.isEmpty ? "No Steam game, or game added to Steam, found."
                          : filtered.isEmpty ? "No game matches." : "\(filtered.count) game(s)")
                         .font(.caption).foregroundStyle(.secondary)
                     Spacer()
@@ -1959,9 +1959,19 @@ final class PadCovers {
     func image(_ appid: String) -> NSImage? {
         if let image = images[appid] { return image }
         if none.contains(appid) { return nil }
-        let dir = Paths.home.appendingPathComponent("Library/Application Support/Steam/appcache/librarycache/\(appid)")
-        let names = ["library_600x900.jpg", "header.jpg"]
-        guard let url = names.map({ dir.appendingPathComponent($0) }).first(where: { FileManager.default.fileExists(atPath: $0.path) }),
+        let steam = Paths.home.appendingPathComponent("Library/Application Support/Steam")
+        let dir = steam.appendingPathComponent("appcache/librarycache/\(appid)")
+        var candidates = ["library_600x900.jpg", "header.jpg"].map { dir.appendingPathComponent($0) }
+        // A game added to Steam has only the art the user gave it, in each account's
+        // config/grid, named by the shortcut's own app id: <id>p for the portrait one.
+        if SteamShortcuts.isGameID(appid), let id = UInt64(appid).map({ String($0 >> 32) }) {
+            let userdata = steam.appendingPathComponent("userdata")
+            for user in ((try? FileManager.default.contentsOfDirectory(atPath: userdata.path)) ?? []).sorted() {
+                let grid = userdata.appendingPathComponent(user).appendingPathComponent("config/grid")
+                candidates += ["\(id)p.png", "\(id)p.jpg", "\(id).png", "\(id).jpg"].map { grid.appendingPathComponent($0) }
+            }
+        }
+        guard let url = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }),
               let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let thumb = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                   kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -2178,11 +2188,12 @@ struct PadGameSheet: View {
                         switch model.pad.games[game.appid]?.dualSense {
                         case true?: Text("The Steam store lists it as supporting the DualSense.")
                         case false?: Text("The Steam store does not list it as supporting the DualSense, so it gets the pad as an XInput controller.")
-                        case nil: Text("Not asked of the Steam store yet.")
+                        case nil: Text(game.nonSteam ? "A game outside Steam's store: it gets every game's options until you give it its own."
+                                       : "Not asked of the Steam store yet.")
                         }
                         let seen = (model.pad.games[game.appid]?.seen.keys.sorted() ?? []).map(\.label)
                         if !seen.isEmpty { Text("Seen: " + seen.joined(separator: ", ") + ".") }
-                        Text("Steam app \(game.appid)")
+                        Text(game.nonSteam ? "Added to Steam as a non-Steam game, game id \(game.appid)" : "Steam app \(game.appid)")
                     }
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

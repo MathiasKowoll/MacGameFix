@@ -421,10 +421,12 @@ enum SteamStore {
     }
 }
 
-/// A Steam game on this Mac.
+/// A Steam game on this Mac, or a game outside Steam the user added to it.
 struct InstalledGame: Hashable, Identifiable {
     let appid: String
     let name: String
+    /// Added to Steam as a non-Steam game: appid is the game id Steam gives it.
+    var nonSteam = false
     var id: String { appid }
 }
 
@@ -432,9 +434,11 @@ enum SteamGames {
     /// Steamworks' redistributables and such, which are not games.
     static let notGames: Set<String> = ["228980"]
 
-    /// Every app the Steam libraries hold, by its appmanifest, by name.
+    /// Every app the Steam libraries hold, by its appmanifest, and every game
+    /// outside Steam the user added to it, by name.
     static func installed(extra: [URL] = []) -> [InstalledGame] {
         var found: [String: InstalledGame] = [:]
+        for game in SteamShortcuts.all() { found[game.appid] = game }
         for common in Libraries.all(extra: extra) {
             let steamapps = common.deletingLastPathComponent()
             let files = (try? FileManager.default.contentsOfDirectory(at: steamapps, includingPropertiesForKeys: nil)) ?? []
@@ -448,6 +452,12 @@ enum SteamGames {
         return found.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
+    /// How a report or an issue names a game: its Steam app id, or what it is
+    /// when it is a game outside Steam.
+    static func label(_ appid: String) -> String {
+        SteamShortcuts.isGameID(appid) ? "a non-Steam game added to Steam, game id \(appid)" : "Steam app \(appid)"
+    }
+
     /// The top-level "key" "value" pairs of an appmanifest.
     static func manifest(_ text: String) -> [String: String] {
         var fields: [String: String] = [:]
@@ -458,6 +468,77 @@ enum SteamGames {
             if fields[key] == nil { fields[key] = String(parts[3]) }
         }
         return fields
+    }
+}
+
+/// The games outside Steam the user added to Steam ("Add a Non-Steam Game"), from
+/// each account's config/shortcuts.vdf. Steam starts one with SteamGameId set to
+/// the shortcut's game id, (app id << 32) | 0x02000000, and that is the id the
+/// modules log and read pad.d/<id>.conf by (measured 2026-11-13: FC 27, app id
+/// 4227251710, logged as game=18155907846443630592).
+enum SteamShortcuts {
+    static func all() -> [InstalledGame] {
+        let userdata = Paths.home.appendingPathComponent("Library/Application Support/Steam/userdata")
+        var found: [String: InstalledGame] = [:]
+        for user in ((try? FileManager.default.contentsOfDirectory(atPath: userdata.path)) ?? []).sorted() {
+            let file = userdata.appendingPathComponent(user).appendingPathComponent("config/shortcuts.vdf")
+            guard let data = try? Data(contentsOf: file) else { continue }
+            for game in games(in: data) where found[game.appid] == nil { found[game.appid] = game }
+        }
+        return Array(found.values)
+    }
+
+    static func gameID(_ appid: UInt32) -> String { String((UInt64(appid) << 32) | 0x0200_0000) }
+
+    /// Whether an id is a shortcut's game id rather than a Steam app id.
+    static func isGameID(_ id: String) -> Bool {
+        guard let n = UInt64(id), n > UInt64(UInt32.max) else { return false }
+        return n & 0xFFFF_FFFF == 0x0200_0000
+    }
+
+    /// Each shortcut of a binary shortcuts.vdf with an app id and a name.
+    static func games(in data: Data) -> [InstalledGame] {
+        let bytes = [UInt8](data)
+        var i = 0
+        func cstring() -> String? {
+            guard let end = bytes[i...].firstIndex(of: 0) else { return nil }
+            let s = String(decoding: bytes[i..<end], as: UTF8.self)
+            i = end + 1
+            return s
+        }
+        // A map's fields, by key in lower case; a nested map's own fields are
+        // gathered in maps, by its key, for the shortcuts under "shortcuts".
+        func map(depth: Int) -> (fields: [String: Any], maps: [[String: Any]])? {
+            var fields: [String: Any] = [:], maps: [[String: Any]] = []
+            while i < bytes.count {
+                let type = bytes[i]; i += 1
+                if type == 0x08 { return (fields, maps) }
+                guard let key = cstring()?.lowercased() else { return nil }
+                switch type {
+                case 0x00:
+                    guard depth < 8, let inner = map(depth: depth + 1) else { return nil }
+                    maps.append(inner.fields)
+                    if key == "shortcuts" { return (fields, inner.maps) }
+                case 0x01:
+                    guard let value = cstring() else { return nil }
+                    fields[key] = value
+                case 0x02:
+                    guard i + 4 <= bytes.count else { return nil }
+                    fields[key] = UInt32(bytes[i]) | UInt32(bytes[i + 1]) << 8 | UInt32(bytes[i + 2]) << 16 | UInt32(bytes[i + 3]) << 24
+                    i += 4
+                default:
+                    return nil
+                }
+            }
+            return (fields, maps)
+        }
+        guard let top = map(depth: 0) else { return [] }
+        return top.maps.compactMap { entry in
+            guard let appid = entry["appid"] as? UInt32, appid != 0,
+                  let name = (entry["appname"] as? String)?.trimmingCharacters(in: .whitespaces), !name.isEmpty
+            else { return nil }
+            return InstalledGame(appid: gameID(appid), name: name, nonSteam: true)
+        }
     }
 }
 
@@ -531,7 +612,8 @@ struct PadStore: Codable, Equatable {
     /// Returns whether anything was learned.
     mutating func learnStore(_ installed: [InstalledGame]) async -> Bool {
         var learned = false
-        for game in installed where games[game.appid]?.dualSense == nil && games[game.appid]?.storeUnknown != true {
+        // A game outside Steam has no store page to ask.
+        for game in installed where !game.nonSteam && games[game.appid]?.dualSense == nil && games[game.appid]?.storeUnknown != true {
             // No answer: the network is down or the store is busy; ask again next time.
             guard let answer = await SteamStore.dualSense(game.appid) else { break }
             var entry = games[game.appid] ?? PadGame(name: game.name)
@@ -659,7 +741,7 @@ extension PadStore {
         out += "- Made: \(stamp)\n"
         out += "- MacGameFix \(Catalog.appVersion); macOS \(ProcessInfo.processInfo.operatingSystemVersionString); "
             + "\(shell(["/usr/sbin/sysctl", "-n", "hw.model"]))\n"
-        out += "- Game: \(name), Steam app \(appid)\n"
+        out += "- Game: \(name), \(SteamGames.label(appid))\n"
         switch games[appid]?.dualSense {
         case true?: out += "- Steam store: lists the DualSense (category 57)\n"
         case false?: out += "- Steam store: does not list the DualSense\n"
@@ -716,7 +798,7 @@ extension PadStore {
     func shareIssue(appid: String, name: String, presets: [String: PadPreset]) -> URL? {
         Issue.new(template: "game-feel-settings.yml",
                   ["title": "[Settings] \(name)",
-                   "game": "\(name) (Steam app \(appid))",
+                   "game": "\(name) (\(SteamGames.label(appid)))",
                    "settings": effective(appid, presets: presets).lines.joined(separator: "\n")])
     }
 
@@ -734,7 +816,7 @@ extension PadStore {
             .joined(separator: " · ")
         return Issue.new(template: "vibration-works.yml",
                          ["title": title,
-                          "game": "\(name) (Steam app \(appid))",
+                          "game": "\(name) (\(SteamGames.label(appid)))",
                           "controller": session.controller ?? "",
                           "connection": session.connection ?? "",
                           "shown-as": session.shownAs ?? "",
