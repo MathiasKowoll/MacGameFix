@@ -400,6 +400,57 @@ that branch's probe, an overlapped pipe read whose `Status` sits at a given offs
 of a 16-byte granule: CodeWeavers' own `ntdll.so` dies at offset 14; this one passes
 at offsets 0, 2, 13, 14 and 15.
 
+## IPv4 options on a dual-stack socket
+
+Windows applies an `IPPROTO_IP` option set on an `AF_INET6` socket to the socket's
+IPv4 traffic, which on a dual-stack socket (`IPV6_V6ONLY` off) is its IPv4-mapped
+peers. macOS refuses every `IPPROTO_IP` option on an `AF_INET6` socket with
+`EINVAL`, and Wine hands that on as `WSAEINVAL` (10022). Linux is said to accept
+them, which would leave Proton unaffected; that was not measured here.
+
+Forza Horizon 6 opens its UDP game socket that way before matchmaking: `[::]`, port
+3074, `IPV6_V6ONLY` 0, `SIO_UDP_CONNRESET` and `SIO_UDP_NETRESET` (both accepted),
+then `IP_DONTFRAGMENT` 1 and `IP_TTL` 255. Both options fail, the game closes the
+socket, tries 5250 and later 5002 the same way, and never joins a session: no UDP
+socket stays open, and the online session search fails with or without a VPN
+(`WINEDEBUG=+winsock`, Steam edition on NotProton's 41303 Rosetta runner,
+2026-11-13).
+
+| Patch | Module | Change |
+|---|---|---|
+| `0026-ntdll-dualstack-ipv4-options.patch` | `ntdll.so` (both sides) | When the host refuses `IP_DONTFRAGMENT`, `IP_TTL`, `IP_MULTICAST_TTL` or `IP_MULTICAST_LOOP` on an `AF_INET6` socket with `EINVAL`, the option is set, or read, as its IPv6 counterpart (`IPV6_DONTFRAG`, `IPV6_UNICAST_HOPS`, `IPV6_MULTICAST_HOPS`, `IPV6_MULTICAST_LOOP`). A host that accepts the IPv4 option never takes this path. `IP_TOS` is left as it was: no game here needs it, and Windows ignores it by default. |
+
+The counterpart is not a stand-in: on macOS it reaches IPv4-mapped traffic. A
+native probe (macOS 27.3 beta, arm64 and x86_64 under Rosetta) sent a datagram to
+`::ffff:127.0.0.1` from a dual-stack socket with `IPV6_UNICAST_HOPS` 200, and the
+IPv4 receiver read TTL 200 (`IP_RECVTTL`; the default is 64). It also reaches the
+socket's IPv6 traffic, which an IPv4 option does not on Windows, and on an
+`IPV6_V6ONLY` socket that is all it reaches. It is not Rosetta's or FEX's: both sides'
+Wine meet the same kernel, so `NTDLL_ARM64` names it too.
+
+`tests/dualstack-udp/run.sh` runs both probes. Without arguments it builds `dsprobe.c`
+for arm64 and x86_64 and checks the kernel's side above (26 checks). Given a runner's
+`CrossOver` folder and a side, it builds `udpopts.c` with llvm-mingw and runs it under
+that side's Wine in a throwaway prefix: a Windows program that opens the socket as FH6
+does, sets and reads back each of the four options, sends to `::ffff:127.0.0.1`, and
+checks that an `AF_INET` socket's own options still work (23 checks). In copies of the
+41303 NotProton runner on 2026-11-13, the runner's own `ntdll.so` failed the four
+options, set and read, with 10022 (8 checks) on both sides; with `0026`, none failed on
+either side. The `AF_INET` socket's checks passed every time.
+
+The FEX side's `ntdll.so` was built from `NTDLL_ARM64`'s tree with `build.sh`'s
+configure line, on its own: `build.sh 27.0.0.41303 … arm64` stops before that step, in
+`0023`'s `context->Rip` in `dlls/ntdll/unix/server.c`, which the main arm64 tree
+compiles and `0023` writes for x86_64 only.
+
+Played the same day: Forza Horizon 6, Steam edition, build 483970, with this pair in
+the runner (`+winsock` on). Both UDP sockets took the counterparts
+(`IPv4 option 28 on an IPv6 socket: IPv6 option 62 = 1, applied`, and option 4 = 255)
+and stayed open, port 3074 carried 27,643 sends in a 15-minute session, and an online
+Eliminator event was played to its end. FH6 also sets `IPPROTO_IP` option 76
+(`IP_USER_MTU`, 1384), which Wine's `ws2_32` does not know (a FIXME); the game carries
+on without it. The FEX side was not played.
+
 ## Measured
 
 Measured on 2026-10-18 on CrossOver Preview 27.0.0.41069, in a NotProton runner,
