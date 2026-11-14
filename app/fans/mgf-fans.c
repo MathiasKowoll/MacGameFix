@@ -10,6 +10,9 @@
 //   mgf-fans --status     read only: fan mode, target, speed, and whether a game asks (no root)
 //   mgf-fans --test       root: full speed for 20 s, then automatic again, printing the speeds
 //   mgf-fans --auto       root: back to automatic now
+//   mgf-fans --install    root: copies this program to /Library/PrivilegedHelperTools, writes its
+//                         LaunchDaemon and starts it (again, when it was there already)
+//   mgf-fans --remove     root: fans back to automatic, the daemon stopped, both files removed
 //   mgf-fans --asked <log> <exe>      the NotProton rule against a log file, for the tests
 //   mgf-fans --listed <list> <path>   the list rule against a list file and a path, for the tests
 //
@@ -37,6 +40,8 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/sysctl.h>
+#include <sys/wait.h>
+#include <fcntl.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -235,10 +240,73 @@ static int wanted(void) {
 
 static void stop(int sig) { (void)sig; quit = 1; }
 
+#define LABEL "io.github.macgamefix.fans"
+static const char *PLIST =
+  "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+  "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
+  "<plist version=\"1.0\"><dict>\n"
+  "  <key>Label</key><string>" LABEL "</string>\n"
+  "  <key>ProgramArguments</key><array><string>%s</string></array>\n"
+  "  <key>RunAtLoad</key><true/>\n"
+  "  <key>KeepAlive</key><true/>\n"
+  "  <key>StandardOutPath</key><string>/var/log/" LABEL ".log</string>\n"
+  "  <key>StandardErrorPath</key><string>/var/log/" LABEL ".log</string>\n"
+  "</dict></plist>\n";
+
+static int launchctl(const char *verb, const char *what) {
+  pid_t pid = fork();
+  if (!pid) {
+    int null = open("/dev/null", O_WRONLY);
+    if (null >= 0) { dup2(null, 1); dup2(null, 2); }
+    execl("/bin/launchctl", "launchctl", verb, "system", what, (char *)NULL);
+    _exit(127);
+  }
+  int status = 0;
+  return pid < 0 || waitpid(pid, &status, 0) < 0 ? -1 : WEXITSTATUS(status);
+}
+
+// MGF_FANS_PREFIX stands in for / in the tests, where nothing is started.
+static int install(const char *self, int remove_it) {
+  const char *prefix = getenv("MGF_FANS_PREFIX");
+  char bin[1024], plist[1024], tmp[1100];
+  snprintf(bin, sizeof bin, "%s/Library/PrivilegedHelperTools/" LABEL, prefix ? prefix : "");
+  snprintf(plist, sizeof plist, "%s/Library/LaunchDaemons/" LABEL ".plist", prefix ? prefix : "");
+  if (!prefix) launchctl("bootout", plist);
+  if (remove_it) {
+    if (!prefix) set_auto();
+    unlink(bin); unlink(plist);
+    return 0;
+  }
+  FILE *in = fopen(self, "rb");
+  snprintf(tmp, sizeof tmp, "%s.new", bin);
+  FILE *out = in ? fopen(tmp, "wb") : NULL;
+  if (!out) { if (in) fclose(in); fprintf(stderr, "cannot write %s\n", tmp); return 1; }
+  char block[65536]; size_t n; int bad = 0;
+  while ((n = fread(block, 1, sizeof block, in)) > 0) if (fwrite(block, 1, n, out) != n) bad = 1;
+  fclose(in); if (fclose(out)) bad = 1;
+  if (bad || chmod(tmp, 0755) || (!prefix && chown(tmp, 0, 0)) || rename(tmp, bin)) { unlink(tmp); fprintf(stderr, "cannot install %s\n", bin); return 1; }
+  FILE *f = fopen(plist, "w");
+  if (!f) { fprintf(stderr, "cannot write %s\n", plist); return 1; }
+  fprintf(f, PLIST, "/Library/PrivilegedHelperTools/" LABEL);
+  if (fclose(f) || chmod(plist, 0644) || (!prefix && chown(plist, 0, 0))) return 1;
+  if (!prefix && launchctl("bootstrap", plist)) { fprintf(stderr, "launchctl could not start it\n"); return 1; }
+  return 0;
+}
+
 int main(int argc, char **argv) {
   const char *mode = argc > 1 ? argv[1] : "";
   if (!strcmp(mode, "--asked") && argc == 4) { puts(asked_in_log(argv[2], argv[3]) ? "yes" : "no"); return 0; }
   if (!strcmp(mode, "--listed") && argc == 4) { puts(listed(argv[2], argv[3]) ? "yes" : "no"); return 0; }
+  if (!strcmp(mode, "--install") || !strcmp(mode, "--remove")) {
+    if (geteuid() && !getenv("MGF_FANS_PREFIX")) { fprintf(stderr, "this needs root\n"); return 1; }
+    char self[PROC_PIDPATHINFO_MAXSIZE];
+    if (proc_pidpath(getpid(), self, sizeof self) <= 0) return 1;
+    if (!getenv("MGF_FANS_PREFIX")) {
+      io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSMC"));
+      if (svc) IOServiceOpen(svc, mach_task_self(), 0, &smc);
+    }
+    return install(self, mode[2] == 'r');
+  }
   io_service_t s = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSMC"));
   if (!s || IOServiceOpen(s, mach_task_self(), 0, &smc)) { fprintf(stderr, "no SMC\n"); return 1; }
   if (!strcmp(mode, "--status")) { show(); say("a game asks for full speed: %s", wanted() ? "yes" : "no"); return 0; }
