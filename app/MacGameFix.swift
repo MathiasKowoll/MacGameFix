@@ -43,10 +43,9 @@ final class Model: ObservableObject {
     @Published var settings = AutoSettings.load()
     /// Which CrossOvers Game Mode covers, or why none (GameMode.swift).
     @Published var gameModeLine = ""
-    /// The fan helper (Fans.swift): whether it is in place, the folders of the games that ask,
-    /// what it last said, and what went wrong the last time it was installed or removed.
+    /// The fan helper (Fans.swift): whether it is in place, what it last said, and what went
+    /// wrong the last time it was installed or removed.
     @Published var fansState = Fans.state()
-    @Published var fansGames = Set(Fans.games())
     @Published var fansLine = Fans.lastLine()
     @Published var fansError = ""
     @Published var agentOn = LaunchAgent.enabled
@@ -217,14 +216,8 @@ final class Model: ObservableObject {
         }
     }
 
-    /// A game asks for the fans, or stops asking.
-    func setFansGame(_ folder: URL, on: Bool) {
-        fansGames = Set(Fans.set(folder, on: on))
-    }
-
     func refreshFans() {
         fansState = Fans.state()
-        fansGames = Set(Fans.games())
         fansLine = Fans.lastLine()
     }
 
@@ -1240,7 +1233,6 @@ struct GamePrefixCell: View {
 /// updates they share.
 struct EngineView: View {
     @ObservedObject var model: Model
-    @State private var choosingFans = false
 
     var body: some View {
         Form {
@@ -1285,29 +1277,21 @@ struct EngineView: View {
             }
 
             Section {
-                Toggle("Run the fans at full speed for the games I choose", isOn: Binding(
+                Toggle("Run the fans at full speed for the games that ask", isOn: Binding(
                     get: { model.fansState != .absent }, set: { model.setFans($0) }))
                     .disabled(model.busy)
-                    .help("Installs a small helper that turns both fans to their maximum when one of the games you "
-                          + "choose starts, and hands them back to macOS when it closes. macOS asks for your "
-                          + "password, because only an administrator can set the fans. It can only raise them.")
+                    .help("Installs a small helper that turns both fans to their maximum when a game that asks for it "
+                          + "starts, and hands them back to macOS when it closes. A game asks in NotProton's panel in "
+                          + "Steam. macOS asks for your password, because only an administrator can set the fans. "
+                          + "It can only raise them.")
                 if model.fansState == .outdated {
                     LabeledContent("This MacGameFix carries a newer helper") {
                         Button("Update…") { model.setFans(true) }.disabled(model.busy)
                     }
                     .foregroundStyle(.orange)
                 }
-                if model.fansState != .absent {
-                    LabeledContent("Games") {
-                        HStack {
-                            Text(model.fansGames.isEmpty ? String(localized: "None chosen")
-                                 : String(localized: "\(model.fansGames.count) chosen")).foregroundStyle(.secondary)
-                            Button("Choose…") { choosingFans = true }
-                        }
-                    }
-                    if !model.fansLine.isEmpty {
-                        Text(model.fansLine).font(.caption).foregroundStyle(.secondary)
-                    }
+                if model.fansState != .absent && !model.fansLine.isEmpty {
+                    Text(model.fansLine).font(.caption).foregroundStyle(.secondary)
                 }
                 if !model.fansError.isEmpty {
                     Text(model.fansError).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
@@ -1317,7 +1301,7 @@ struct EngineView: View {
                                   summary: "macOS raises the fans about a minute late; by then it has cut the processor to less than half its speed. With the fans already turning, it does not.",
                                   count: model.fansState == .absent ? "Off" : "On")
             } footer: {
-                Text("A NotProton game can also be chosen in NotProton's panel in Steam: Fans at full speed. Apple silicon only.")
+                Text("Choose the games in NotProton's panel in Steam: Fans at full speed, or MGF_FANS=max in a game's launch options. Apple silicon only.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
@@ -1365,56 +1349,6 @@ struct EngineView: View {
             if model.engineRows.isEmpty { model.scanEngine() }
             model.refreshFans()
         }
-        .sheet(isPresented: $choosingFans) { FansGamesSheet(model: model) }
-    }
-}
-
-/// The games that ask for the fans: every game in the Steam libraries, each with a switch.
-struct FansGamesSheet: View {
-    @ObservedObject var model: Model
-    @Environment(\.dismiss) private var dismiss
-    @State private var search = ""
-
-    private var games: [ProbeGame] {
-        let all = model.probeGames.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        return search.isEmpty ? all : all.filter { $0.name.localizedCaseInsensitiveContains(search) }
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Form {
-                Section {
-                    TextField("Search", text: $search)
-                    if model.probeGames.isEmpty {
-                        Text("No game found in the Steam libraries.").foregroundStyle(.secondary)
-                    }
-                    ForEach(games) { game in
-                        Toggle(isOn: Binding(
-                            get: { model.fansGames.contains(game.folder.standardizedFileURL.path) },
-                            set: { model.setFansGame(game.folder, on: $0) })) {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(game.name)
-                                Text(game.folder.path).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-                            }
-                        }
-                    }
-                } header: {
-                    Text("Fans at full speed while these games run")
-                } footer: {
-                    Text("The fans start when the game does and go back to macOS when it closes.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            .formStyle(.grouped)
-            Divider()
-            HStack {
-                Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
-            }
-            .padding(12)
-        }
-        .frame(minWidth: 520, minHeight: 460)
-        .onAppear { if model.probeGames.isEmpty { model.scanProbe() } }
     }
 }
 
@@ -2644,15 +2578,11 @@ enum Entry {
             exit(0)
         }
         if let i = args.firstIndex(where: { $0.hasPrefix("--fans-") }) {
-            // The fan helper (Fans.swift), for the tests: installed, removed, a game added or taken out, its state.
-            switch args[i] {
-            case "--fans-install", "--fans-remove":
+            // The fan helper (Fans.swift), for the tests: installed, removed, its state.
+            if args[i] == "--fans-install" || args[i] == "--fans-remove" {
                 if let error = Fans.change(install: args[i] == "--fans-install") { print(error); exit(1) }
-            case "--fans-game" where i + 2 < args.count:
-                Fans.set(URL(fileURLWithPath: args[i + 1]), on: args[i + 2] == "on")
-            default: break
             }
-            print("\(Fans.state().rawValue) | \(Fans.games().count) game(s)")
+            print(Fans.state().rawValue)
             exit(0)
         }
         if args.contains("--game-mode-keep") || args.contains("--game-mode-remove") || args.contains("--game-mode-report") {

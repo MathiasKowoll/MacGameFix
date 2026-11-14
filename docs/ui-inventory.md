@@ -270,13 +270,12 @@ Below the rows:
 
 **"Fans"** (Improvements tab, after Game Mode)
 - Header: fan symbol, "Fans", "macOS raises the fans about a minute late; by then it has cut the processor to less than half its speed. With the fans already turning, it does not.", and "On" or "Off".
-- Toggle **"Run the fans at full speed for the games I choose"** (default off). On installs the helper and off removes it; either way macOS shows its own password prompt, and cancelling it changes nothing. Disabled while the app is busy.
-  - Tooltip: "Installs a small helper that turns both fans to their maximum when one of the games you choose starts, and hands them back to macOS when it closes. macOS asks for your password, because only an administrator can set the fans. It can only raise them."
+- Toggle **"Run the fans at full speed for the games that ask"** (default off). On installs the helper and off removes it; either way macOS shows its own password prompt, and cancelling it changes nothing. Disabled while the app is busy.
+  - Tooltip: "Installs a small helper that turns both fans to their maximum when a game that asks for it starts, and hands them back to macOS when it closes. A game asks in NotProton's panel in Steam. macOS asks for your password, because only an administrator can set the fans. It can only raise them."
 - **"This MacGameFix carries a newer helper"** with **"Update…"**, in orange, when the installed helper is not the one in the app.
-- With the helper in place: **"Games"** with "None chosen" or "<n> chosen" and **"Choose…"**, which opens a sheet; below it, the helper's last log line when there is one.
+- With the helper in place, its last log line when there is one.
 - An error from installing or removing, in red.
-- Footer: "A NotProton game can also be chosen in NotProton's panel in Steam: Fans at full speed. Apple silicon only."
-- Sheet **"Fans at full speed while these games run"**: a search field, then every game in the Steam libraries by name, each a toggle with its folder underneath; "No game found in the Steam libraries." when there is none; footer "The fans start when the game does and go back to macOS when it closes."; **"Done"**.
+- Footer: "Choose the games in NotProton's panel in Steam: Fans at full speed, or MGF_FANS=max in a game's launch options. Apple silicon only."
 
 **"Game fix updates"** (2145-2167)
 - Picker **"Game fixes"**: "Automatic" / "Ask first" / "Off" (default Automatic).

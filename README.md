@@ -207,7 +207,7 @@ Turning the option off removes the agent. Its settings and what it did are in
 `~/Library/Application Support/MacGameFix`, and its log is in
 `~/Library/Logs/MacGameFix-agent.log`.
 
-## Fans at full speed for chosen games
+## Fans at full speed for the games that ask
 
 macOS raises the fans about a minute after a game starts to load its world. By
 then the chip is at 73-78 °C, and the kernel's power manager sets a thermal power
@@ -218,8 +218,8 @@ logs it once a second
 (`log show --predicate 'process == "kernel" AND eventMessage CONTAINS "Thermal Budget"'`).
 
 With **Improvements › Fans** on, MacGameFix installs a small helper that turns
-both fans to their maximum when a game you chose starts, and hands them back to
-macOS when it closes. Measured on 2026-11-14 with Forza Horizon 6 on a MacBook
+both fans to their maximum when a game that asks for it starts, and hands them
+back to macOS when it closes. Measured on 2026-11-14 with Forza Horizon 6 on a MacBook
 Pro M4 Max, under NotProton:
 
 | | Fans as macOS runs them | Fans at full speed from launch |
@@ -237,14 +237,17 @@ run each, standing still. The fans are loud at their maximum.
 The helper is a LaunchDaemon, `/Library/PrivilegedHelperTools/io.github.macgamefix.fans`,
 because only root can set the fans; macOS asks for your password when the switch
 installs or removes it. It can only raise the fans, and puts them back to
-automatic when no chosen game is running, when it is stopped, and when it is
+automatic when no such game is running, when it is stopped, and when it is
 removed. Apple silicon only.
 
-A game is chosen in **Improvements › Fans › Choose…**, by its folder, which
-covers any game in the Steam libraries: a Mac game, one in a CrossOver bottle,
-one NotProton runs. A NotProton game can also be chosen in NotProton's panel in
-Steam, **Fans at full speed**, which writes `MGF_FANS=max` into its launch
-options; MacGameFix puts that row there with the helper.
+A game asks for the fans in NotProton's panel in Steam, **Fans at full speed**,
+which writes `MGF_FANS=max` into its launch options; MacGameFix puts that row
+there with the helper. The fans start within a few seconds of the game's launch.
+
+The fans raise what the Mac can shed; they do not lower what a game draws. A
+game that drew about 96 W uncapped was cut all the same after 2 min 40 s. With
+it, cap the frame rate, turn the game's upscaler to a performance mode, and show
+the game 8 processors (`NOTPROTON_ENV_WINENCPU=8`).
 
 ## Game Mode for CrossOver's games
 

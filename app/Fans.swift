@@ -10,9 +10,8 @@
 // The fans are the SMC's, and writing to it needs root. fans/mgf-fans.c is the
 // helper: a LaunchDaemon, installed and removed here through macOS's own password
 // prompt. It forces the fans while a game that asked is running and hands them back
-// to macOS when none is. A game asks by its folder being a line of fans.list, which
-// this file writes, or by MGF_FANS=max in its NotProton launch options, for which a
-// row goes into NotProton's panel in Steam.
+// to macOS when none is. A game asks with MGF_FANS=max in its NotProton launch options;
+// a row for it goes into NotProton's panel in Steam, where a game's other options are.
 //
 // Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -29,8 +28,6 @@ enum Fans {
     static var log: URL { URL(fileURLWithPath: prefix + "/var/log/" + label + ".log") }
     /// The helper this app carries.
     static var bundled: URL? { Bundle.main.resourceURL?.appendingPathComponent("fans/" + label) }
-    /// The folders of the games that ask, one a line; the helper reads it as root.
-    static var list: URL { Paths.support.appendingPathComponent("fans.list") }
     /// NotProton's panel row, in its plugins folder.
     static var notProtonRow: URL { Engine.notproton.appendingPathComponent("plugins/mgf-fans.conf") }
 
@@ -61,7 +58,7 @@ enum Fans {
             let quoted = "\"" + bundled.path.replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "\"", with: "\\\"") + "\""
             let script = "do shell script (quoted form of \(quoted)) & \" \(verb)\" with prompt "
-                + "\"MacGameFix \(install ? "installs" : "removes") the helper that runs the fans at full speed for the games you choose.\" "
+                + "\"MacGameFix \(install ? "installs" : "removes") the helper that runs the fans at full speed for the games that ask.\" "
                 + "with administrator privileges"
             (status, output) = run("/usr/bin/osascript", ["-e", script], environment: [:])
         }
@@ -110,24 +107,6 @@ enum Fans {
         if (try? String(contentsOf: notProtonRow, encoding: .utf8)) != row {
             try? row.write(to: notProtonRow, atomically: true, encoding: .utf8)
         }
-    }
-
-    /// The folders of the games that ask.
-    static func games() -> [String] {
-        guard let text = try? String(contentsOf: list, encoding: .utf8) else { return [] }
-        return text.split(separator: "\n").map(String.init).filter { $0.hasPrefix("/") }
-    }
-
-    /// Adds a game's folder to the list or takes it out; the list as it then is.
-    @discardableResult
-    static func set(_ folder: URL, on: Bool) -> [String] {
-        let path = folder.standardizedFileURL.path
-        var folders = games().filter { $0 != path }
-        if on { folders.append(path) }
-        folders.sort()
-        try? FileManager.default.createDirectory(at: Paths.support, withIntermediateDirectories: true)
-        try? (folders.joined(separator: "\n") + (folders.isEmpty ? "" : "\n")).write(to: list, atomically: true, encoding: .utf8)
-        return folders
     }
 
     /// What the helper last said: "a game asks: full speed on", "no game asks: automatic".

@@ -14,15 +14,11 @@
 //                         LaunchDaemon and starts it (again, when it was there already)
 //   mgf-fans --remove     root: fans back to automatic, the daemon stopped, both files removed
 //   mgf-fans --asked <log> <exe>      the NotProton rule against a log file, for the tests
-//   mgf-fans --listed <list> <path>   the list rule against a list file and a path, for the tests
 //
-// A game asks in one of two ways:
-//   - its folder is a line of ~/Library/Application Support/MacGameFix/fans.list, which the app
-//     writes: a process whose executable is inside that folder, or a Wine process whose exe is;
-//   - NotProton started it with MGF_FANS=max in its launch options. macOS gives nobody another
-//     process's environment, root included, so that is read from NotProton's log: the last
-//     "[launch] handed to /bin/sh -c:" line naming the exe of the running `run` script.
-// Both are files the user can write. All they can ask for is more cooling.
+// A game asks by NotProton starting it with MGF_FANS=max in its launch options. macOS gives
+// nobody another process's environment, root included, so that is read from NotProton's log:
+// the last "[launch] handed to /bin/sh -c:" line naming the exe of the running `run` script.
+// The log is a file the user can write. All it can ask for is more cooling.
 //
 // It can only raise the fans. SMC keys: FNum, F<i>Md (0 automatic, 1 forced), F<i>Tg (target rpm),
 // F<i>Mx (maximum), Ftst (the unlock some Apple Silicon needs before a forced mode is taken).
@@ -30,7 +26,6 @@
 // Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <IOKit/IOKitLib.h>
-#include <ctype.h>
 #include <libproc.h>
 #include <pwd.h>
 #include <signal.h>
@@ -153,33 +148,6 @@ static int asked_in_log(const char *path, const char *exe) {
   return asked;
 }
 
-// Is path inside a folder of the list? A Mac path is compared as it is; a Windows one (a Wine
-// process's argv[0], "S:\\steamapps\\common\\Game\\bin\\game.exe") by the folder's own name.
-static int listed(const char *list, const char *path) {
-  FILE *f = fopen(list, "r");
-  if (!f) return 0;
-  char line[2048], norm[2048]; int hit = 0;
-  size_t n = 0;
-  for (; path[n] && n < sizeof norm - 1; n++) norm[n] = path[n] == '\\' ? '/' : (char)tolower((unsigned char)path[n]);
-  norm[n] = 0;
-  int windows = strchr(path, '\\') != NULL || (path[0] && path[1] == ':');
-  while (!hit && fgets(line, sizeof line, f)) {
-    size_t len = strcspn(line, "\r\n");
-    while (len > 1 && line[len - 1] == '/') len--;
-    line[len] = 0;
-    if (line[0] != '/' || len < 2) continue;
-    if (!windows) { hit = !strncmp(path, line, len) && path[len] == '/'; continue; }
-    const char *base = strrchr(line, '/') + 1;
-    char want[1024]; size_t w = 0;
-    want[w++] = '/';
-    for (const char *c = base; *c && w < sizeof want - 2; c++) want[w++] = (char)tolower((unsigned char)*c);
-    want[w++] = '/'; want[w] = 0;
-    hit = w > 2 && strstr(norm, want) != NULL;
-  }
-  fclose(f);
-  return hit;
-}
-
 static int argv0(pid_t pid, char *out, size_t size, char *buf, size_t bufsize, int *argc_out, char **args_out, char **end_out) {
   int mib[3] = { CTL_KERN, KERN_PROCARGS2, pid }; size_t len = bufsize;
   if (sysctl(mib, 3, buf, &len, NULL, 0) || len < sizeof(int)) return -1;
@@ -201,24 +169,14 @@ static int wanted(void) {
   static pid_t known; static int known_asked;
   struct passwd *pw = user == (uid_t)-1 ? NULL : getpwuid(user);
   if (!pw) return 0;
-  char list[1024], log[1024];
-  snprintf(list, sizeof list, "%s/Library/Application Support/MacGameFix/fans.list", pw->pw_dir);
+  char log[1024];
   snprintf(log, sizeof log, "%s/Library/Application Support/notproton/notproton.log", pw->pw_dir);
-  int have_list = stat(list, &st) == 0 && st.st_size > 1;
   int n = proc_listallpids(pids, sizeof pids), found = 0;
   for (int i = 0; i < n; i++) {
     struct proc_bsdshortinfo info;
     if (proc_pidinfo(pids[i], PROC_PIDT_SHORTBSDINFO, 0, &info, sizeof info) != sizeof info) continue;
     if (info.pbsi_uid != user) continue;
-    int shell = !strcmp(info.pbsi_comm, "sh") || !strcmp(info.pbsi_comm, "bash");
-    if (have_list) {
-      char path[PROC_PIDPATHINFO_MAXSIZE], first[2048];
-      if (proc_pidpath(pids[i], path, sizeof path) > 0 && listed(list, path)) return 1;
-      // A Wine process: its argv[0] is the Windows path of the exe it runs.
-      if (!shell && strstr(info.pbsi_comm, ".ex") && !argv0(pids[i], first, sizeof first, buf, sizeof buf, NULL, NULL, NULL)
-          && listed(list, first)) return 1;
-    }
-    if (!shell) continue;
+    if (strcmp(info.pbsi_comm, "sh") && strcmp(info.pbsi_comm, "bash")) continue;
     int argc; char *p, *end;
     if (argv0(pids[i], NULL, 0, buf, sizeof buf, &argc, &p, &end)) continue;
     const char *exe = NULL; int tool = 0, run = 0;
@@ -296,7 +254,6 @@ static int install(const char *self, int remove_it) {
 int main(int argc, char **argv) {
   const char *mode = argc > 1 ? argv[1] : "";
   if (!strcmp(mode, "--asked") && argc == 4) { puts(asked_in_log(argv[2], argv[3]) ? "yes" : "no"); return 0; }
-  if (!strcmp(mode, "--listed") && argc == 4) { puts(listed(argv[2], argv[3]) ? "yes" : "no"); return 0; }
   if (!strcmp(mode, "--install") || !strcmp(mode, "--remove")) {
     if (geteuid() && !getenv("MGF_FANS_PREFIX")) { fprintf(stderr, "this needs root\n"); return 1; }
     char self[PROC_PIDPATHINFO_MAXSIZE];
