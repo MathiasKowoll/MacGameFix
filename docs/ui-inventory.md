@@ -272,7 +272,7 @@ Below the rows:
 - Header: fan symbol, "Fans", "macOS raises the fans about a minute late; by then it has cut the processor to less than half its speed. With the fans already turning, it does not.", and "On" or "Off".
 - Toggle **"Run the fans at full speed for the games that ask"** (default off). On installs the helper and off removes it; either way macOS shows its own password prompt, and cancelling it changes nothing. Disabled while the app is busy.
   - Tooltip: "Installs a small helper that turns both fans to their maximum when a game that asks for it starts, and hands them back to macOS when it closes. A game asks with MGF_FANS=max in its Steam launch options. macOS asks for your password, because only an administrator can set the fans. It can only raise them."
-- **"This MacGameFix carries a newer helper"** with **"Update…"**, in orange, when the installed helper is not the one in the app.
+- **"This MacGameFix carries a newer helper"** with **"Update…"**, in orange, when the installed helper's version is older than the one in the app (the helper answers `--version`; another build of the same version is left alone).
 - With the helper in place: **"Fans at full speed, for a game"** with `MGF_FANS=max` in a monospaced, selectable font. Tooltip: "Add it to the game's launch options in Steam, before %command%."
 - Always: **"8 processors, for a game"** with `NOTPROTON_ENV_WINENCPU=8`, the same way. Tooltip: "The game sees 8 processors instead of all of them, so its engine starts fewer worker threads and the Mac runs cooler. Add it to the game's launch options in Steam, before %command%. It needs no helper."
 - With the helper in place, its last log line when there is one.

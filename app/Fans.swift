@@ -33,13 +33,22 @@ enum Fans {
 
     enum State: String { case absent, outdated, installed }
 
-    /// Whether the helper is in place, and whether it is the one this app carries.
+    /// Whether the helper is in place, and whether the app carries a newer one. The helper says
+    /// its version itself: every build is signed anew, so two builds of one source are different
+    /// files, and comparing them would ask for the password after every update of the app.
     static func state() -> State {
         let fm = FileManager.default
         guard fm.fileExists(atPath: installed.path), fm.fileExists(atPath: daemonPlist.path) else { return .absent }
-        guard let bundled, let ours = try? Data(contentsOf: bundled), let theirs = try? Data(contentsOf: installed)
-        else { return .installed }
-        return ours == theirs ? .installed : .outdated
+        guard let bundled, let ours = version(of: bundled) else { return .installed }
+        // A helper from before it had a version answers nothing: older than any.
+        return (version(of: installed) ?? 0) < ours ? .outdated : .installed
+    }
+
+    /// What a helper answers to --version, or nil when it does not say.
+    static func version(of helper: URL) -> Int? {
+        guard FileManager.default.isExecutableFile(atPath: helper.path) else { return nil }
+        let (status, output) = run(helper.path, ["--version"], environment: [:])
+        return status == 0 ? Int(output) : nil
     }
 
     /// Installs or updates the helper, or removes it, as root: macOS asks for the password.
