@@ -1,17 +1,18 @@
 # Screenshots
 
-MacGameFix 1.5.5 (Wine modules catalog 1792547610), dark mode, at 2x. Each file name is the tab, then the
-state or sheet; pages link to them by name, so a name stays when its image is retaken.
+MacGameFix 1.6.3 (the build of 2026-11-14 at f74d86c, catalogs 1794704089), dark mode, at 2x. Each file name
+is the tab, then the state or sheet; pages link to them by name, so a name stays when its image is retaken.
 
 | File | What it shows |
 |---|---|
 | `games-all.png` | Games, the All filter: each supported game, what its fix requires, its state, Keep, and where it goes |
 | `games-all-fixes.png` | Games, All fixes: adds the catalog's games that are not on this Mac |
-| `games-not-fixed.png` | Games, Not fixed |
 | `games-selected.png` | Games with a row selected: Install Selected and Remove Selected |
-| `wine-modules.png` | Wine Modules: a switch per CrossOver app and NotProton runner, and the modules' updates |
-| `wine-modules-all-alert.png` | The question All asks before installing into every CrossOver |
-| `wine-modules-crossover-alert.png` | "Change CrossOver itself?", asked before the modules go into a CrossOver app |
+| `games-instructions.png` | A game's special instructions (Forza Horizon 6): the line to play with, its Copy, and what each variable does |
+| `games-instructions-heat.png` | The same sheet, scrolled: Frame rate, Heat, and the optional variables |
+| `improvements.png` | Improvements: DualSense controllers and Copy protection under Rosetta, a switch per CrossOver app and NotProton runner |
+| `improvements-rosetta.png` | The same tab, scrolled: Copy protection under Rosetta with its All and None, and Game Mode |
+| `improvements-fans.png` | The same tab, scrolled to the end: Game Mode, Fans with the two variables to copy, and the modules' updates |
 | `game-feel.png` | Game Feel: every game's options, and each game's own |
 | `game-feel-every-game.png` | Every Game's Settings: the options and the haptics' strength |
 | `game-feel-every-game-triggers.png` | The same sheet, scrolled: the tries and the trigger effects |
@@ -22,6 +23,13 @@ state or sheet; pages link to them by name, so a name stays when its image is re
 | `report-sheet.png` | A game's report sheet: what MacGameFix found in the game's folder |
 | `report-sheet-steps.png` | The same sheet, scrolled: the steps before a report, and Save the Report and Open an Issue |
 | `settings.png` | Settings, as on a first launch: the agent is off until it is turned on |
+
+The two of a game's instructions were taken later the same day, from the app as published at c3f1df6 (catalog
+1794705165), after #77 put the whole line first.
+
+Not pictured: the Not fixed filter, and the two questions asked before an improvement goes into every CrossOver
+or into a CrossOver app. In `improvements-fans.png` the helper reads as older than the app's, which is how that
+build told every new build apart; since #78 it compares versions, and that line shows only for a real update.
 
 ## How they are taken
 
