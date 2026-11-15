@@ -36,6 +36,12 @@ In the game's video settings, turn the upscaler (DLSS) on in a performance mode 
 
 Measured on a MacBook Pro M4 Max, one run each, standing still: with all of it the performance cores stayed at 4.5 GHz instead of 1.8-2.3, and a frame took over 60 ms in 0-1 seconds of a minute instead of 27-59.
 
+# Online
+
+On the 41303 runner the improvement's `ntdll` keeps the game's network socket open. Before, macOS refused two options the game sets on it, the game closed it, and no online session was ever joined. It comes with the Wine modules of 2026-11-15: once MacGameFix has taken them, install the improvement again.
+
+If the open world still shows no other players, turn cross-play on in the game's settings. Played on 2026-11-15, Steam edition: with cross-play off the game held its session with Forza's server and showed nobody; with it on, it connected.
+
 # Optional
 
 Add these yourself if you want them; none is needed to play.
@@ -44,6 +50,7 @@ Add these yourself if you want them; none is needed to play.
 |---|---|
 | `NOTPROTON_RAW_CONTROLLERS=0` | Keeps NotProton's usual controller handling instead of forcing direct access. Not an FPS improvement. |
 | `NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_STATS=0` | Turns the exception counters off. They are on by default, so `=1` changes nothing. Whether turning them off helps the stutter is not measured. |
+| `NOTPROTON_ENV_WINE_DUALSTACK_IPV4_OPTIONS=0` | Turns the socket handling in Online off, as it was before. Only to compare, or if the game does worse with it. |
 | `MTL_HUD_ENABLED=1` | Shows the Metal HUD. |
 | `MTL_HUD_LOG_ENABLED=1` | Asks for the HUD's text log. That log can be missing; `metalperftrace` is used beside it for now. |
 
