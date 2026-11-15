@@ -4,7 +4,7 @@
 | --- | --- |
 | Symptom | White specks all over the characters, Kratos first, in dim light |
 | Cause | The G-buffer pass tests depth with EQUAL against a depth prepass, and the translated shaders do not reproduce the prepass depth to the last bit |
-| Fix | That depth test is created as GREATER_EQUAL |
+| Fix | That depth test becomes GREATER_EQUAL for the draws with stencil reference 0x01 or 0x03 (characters and small objects), not for the grass and leaves |
 | Backend | **DXMT**, D3D11 |
 | CrossOver | Preview 27, through NotProton, under Rosetta and under FEX |
 
@@ -65,7 +65,38 @@ it would now draw through. It was seen on 2026-10-22: alpha-tested grass and
 branches near the camera drawn as solid shapes (see above).
 
 `gow-depth-fix.ini` beside the game sets what an EQUAL test becomes:
-`greater_equal` (the default), `less_equal` or `off`.
+`greater_equal` (the default), `less_equal` or `off`, and for which stencil
+references (`stencil_refs`, see below).
+
+## Only for the characters (2026-11-16)
+
+The G-buffer pass writes a stencil reference per kind of object (write mask
+0x07, REPLACE), so the same EQUAL state is bound with different references. The
+fix now keeps every EQUAL state and makes a twin with the replacement test;
+`OMSetDepthStencilState` is hooked on the immediate and deferred contexts, and the
+twin is bound only for the references in `stencil_refs`.
+
+Measured with DXMT and `d3d11.defuseFma` on CrossOver Preview 27, the Epic
+edition through Heroic, in a dim spot with grass and Kratos in view. Three
+references are used with the EQUAL state:
+
+| Reference | Share of the binds | Replaced alone |
+| --- | --- | --- |
+| 0x05 | about half | not kept |
+| 0x03 | about 40 % | the specks on the characters go; grass and leaves drawn right |
+| 0x01 | about 5 % | with 0x03: the flicker left on the axe on Kratos' back goes too; grass and leaves still right |
+
+The default is `stencil_refs = 0x01, 0x03`, used too when the ini has no such
+line. `all` is the earlier behaviour, `none` leaves every test EQUAL.
+
+To find the references again, `probe_keys = on` in the ini makes F9 step live
+through none, each reference (most used first) and all, and F10 go back to the
+ini's choice; the log records every step and, on exit, how often each reference
+was bound.
+
+On the Game Porting Toolkit 1.1 (Wine 7.7) through Heroic the import is redirected
+but the game never creates its device through it (`0 EQUAL depth states seen`), so
+the fix does nothing there. Not looked into further.
 
 ## Where it hooks
 

@@ -5,7 +5,7 @@
   "executable": "GoW.exe",
   "carrierDirectory": null,
   "alsoRuns": [],
-  "summary": "White specks on characters in dim light: an EQUAL depth test after a prepass, which the translated shaders do not match bit for bit. The fix removes them but draws nearby grass and branches as solid shapes in some scenes; DXMT's d3d11.defuseFma with no fix draws nothing wrong but leaves the specks (2026-10-26).",
+  "summary": "White specks on characters in dim light: an EQUAL depth test after a prepass, which the translated shaders do not match bit for bit. The fix loosens that test only for the stencil references of characters and small objects (0x01, 0x03), so grass and leaves stay right (2026-11-16).",
   "page": "legacy/wiki/God-of-War.md",
   "installs": [
     "libSceJobManager-gow.dll",
@@ -26,7 +26,12 @@
     {
       "file": "gow-depth-fix.c",
       "symbol": "hk_CreateDepthStencilState",
-      "note": "Every depth state that tests EQUAL is created with the replacement test read from gow-depth-fix.ini, which removes the white specks."
+      "note": "Every depth state that tests EQUAL is kept, and a twin with the replacement test read from gow-depth-fix.ini is made beside it."
+    },
+    {
+      "file": "gow-depth-fix.c",
+      "symbol": "hk_OMSetDepthStencilState",
+      "note": "The twin is bound only when the stencil reference is one of stencil_refs: characters and small objects, not grass and leaves."
     }
   ]
 }
