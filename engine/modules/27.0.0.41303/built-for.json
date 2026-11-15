@@ -4,7 +4,7 @@
   "wine": "Wine version 11.21",
   "patches": "wine-11.21",
   "files": {
-    "aarch64-unix/ntdll.so": "6649a9b7ecab08e4f20e7eface56ced1302d16b720c7837ed52fed174d72dafb",
+    "aarch64-unix/ntdll.so": "8c6ca2520339822c785999206939b1a9ba0cc393bc77cca5787067b2b0ac50b4",
     "aarch64-unix/winebus.so": "e7c8696c06a683d5ccb4d169afca7e5754805e1f69aff74870246a2b7cab11be",
     "aarch64-unix/winecoreaudio.so": "bf7070c65539a72383d0179a419a0416cbce53da37b3ed0590f89703f0946203",
     "aarch64-windows/hidclass.sys": "e13a40fe9cfedd61a95dcbafdd1be1b6942bb85adb6f5213ceec15922bfc1abc",
@@ -18,7 +18,7 @@
     "aarch64-windows/xinput1_4.dll": "6cbaca09baf3d817840c50aaad3b9940fe4f23dd4f920e27b9dda12c0a809690",
     "aarch64-windows/xinput9_1_0.dll": "c746a8b9e01d1eebec3ce0b723b471058f6ca48a7f412dc245257e3bb84b91e0",
     "aarch64-windows/xinputuap.dll": "b95de7d50d59bead7215b9f56742d85c091a0ef219aa45de9df118148eceb352",
-    "x86_64-unix/ntdll.so": "7931d42a4889ac3725ae03101bbf82ba06e7c7841997f81b5da7f683c17049a9",
+    "x86_64-unix/ntdll.so": "a81d1625bf678a7d67d0877779d8956f6d278e6ed83dd44901ee9e0575768e62",
     "x86_64-unix/winebus.so": "c5ee882cf9dbf7c9e3b2fb604c4e36435d66b64e3ca03a2fa60e7aa984c54b49",
     "x86_64-unix/winecoreaudio.so": "a70ae015fd2aec5e184db98684f5f29bc7eb52420c7ce67be7397ab6614614b5",
     "x86_64-windows/hidclass.sys": "ec78e018225b15263b5afb31fb40615945e8a1072be7206fae46571fa9942a2f",

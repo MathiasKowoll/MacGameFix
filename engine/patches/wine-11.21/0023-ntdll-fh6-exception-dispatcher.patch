@@ -1535,21 +1535,25 @@
 +}
 --- a/dlls/ntdll/unix/server.c
 +++ b/dlls/ntdll/unix/server.c
-@@ -851,6 +851,7 @@
+@@ -851,6 +851,9 @@
      NTSTATUS status;
      BOOL alertable;
  
++#ifdef __x86_64__  /* FH6's marks read x86-64 registers; the FEX side compiles this file too */
 +    fh6_native_mark(4,GetCurrentThreadId(),context->Rip,context->Rsp,0);
++#endif
      if ((UINT_PTR)args > 0xff)
          alertable = args->ContinueFlags & KCONTINUE_FLAG_TEST_ALERT;
      else
-@@ -861,7 +862,9 @@
+@@ -861,7 +864,11 @@
          status = server_select( NULL, 0, SELECT_INTERRUPTIBLE | SELECT_ALERTABLE, 0, NULL, &apc );
          if (status == STATUS_USER_APC) return invoke_user_apc( context, &apc, status );
      }
 -    return signal_set_full_context( context );
 +    status = signal_set_full_context( context );
++#ifdef __x86_64__
 +    fh6_native_mark(5,GetCurrentThreadId(),context->Rip,context->Rsp,status);
++#endif
 +    return status;
  }
  

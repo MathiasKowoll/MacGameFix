@@ -532,8 +532,8 @@
           "modules": [
             "ntdll"
           ],
-          "commit": "243116fc8a500e072876f46168c88e877f12c3bf",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/243116fc8a500e072876f46168c88e877f12c3bf/engine/patches/wine-11.21/0023-ntdll-fh6-exception-dispatcher.patch"
+          "commit": "45958e9f6c8ea019979491d07429249808a274e4",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/45958e9f6c8ea019979491d07429249808a274e4/engine/patches/wine-11.21/0023-ntdll-fh6-exception-dispatcher.patch"
         },
         {
           "name": "0024-ntdll-fh6-bridge-lea-inc-mul.patch",
@@ -564,6 +564,16 @@
           ],
           "commit": "e4d2a2c67288b796922061ad5c2530b7fd59d1d2",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/e4d2a2c67288b796922061ad5c2530b7fd59d1d2/engine/patches/wine-11.21/0026-ntdll-dualstack-ipv4-options.patch"
+        },
+        {
+          "name": "0027-ntdll-dualstack-ipv4-options-switch.patch",
+          "file": "engine/patches/wine-11.21/0027-ntdll-dualstack-ipv4-options-switch.patch",
+          "subject": "WINE_DUALSTACK_IPV4_OPTIONS=0 turns 0026 off for a program, which then sees macOS's refusal as before; on by default; both sides, ntdll.so",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "ebcdf7ae76a2074d9df2165f799041831a84b852",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/ebcdf7ae76a2074d9df2165f799041831a84b852/engine/patches/wine-11.21/0027-ntdll-dualstack-ipv4-options-switch.patch"
         }
       ]
     }
