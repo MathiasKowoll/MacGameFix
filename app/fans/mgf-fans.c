@@ -7,6 +7,7 @@
 //   mgf-fans              the daemon (root): every 2 s, looks for a game of the console user
 //                         that asked. While one runs both fans are forced to their maximum;
 //                         when none is left they go back to automatic.
+//   mgf-fans --version    the helper's version, a number that goes up when its code changes
 //   mgf-fans --status     read only: fan mode, target, speed, and whether a game asks (no root)
 //   mgf-fans --test       root: full speed for 20 s, then automatic again, printing the speeds
 //   mgf-fans --auto       root: back to automatic now
@@ -198,6 +199,10 @@ static int wanted(void) {
 
 static void stop(int sig) { (void)sig; quit = 1; }
 
+// What the app compares to tell an installed helper from the one it carries. Two builds of the
+// same source are signed at different times and differ byte for byte, so the bytes cannot say;
+// raise this when the helper's code changes.
+#define VERSION 1
 #define LABEL "io.github.macgamefix.fans"
 static const char *PLIST =
   "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
@@ -253,6 +258,7 @@ static int install(const char *self, int remove_it) {
 
 int main(int argc, char **argv) {
   const char *mode = argc > 1 ? argv[1] : "";
+  if (!strcmp(mode, "--version")) { printf("%d\n", VERSION); return 0; }
   if (!strcmp(mode, "--asked") && argc == 4) { puts(asked_in_log(argv[2], argv[3]) ? "yes" : "no"); return 0; }
   if (!strcmp(mode, "--install") || !strcmp(mode, "--remove")) {
     if (geteuid() && !getenv("MGF_FANS_PREFIX")) { fprintf(stderr, "this needs root\n"); return 1; }

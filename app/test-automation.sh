@@ -846,8 +846,12 @@ check '[ -x "$FH" ] && [ "$("$BIN" --fans-state)" = absent ]' "the app carries t
 "$BIN" --fans-install >/dev/null 2>&1
 check 'cmp -s "$FR/Library/PrivilegedHelperTools/io.github.macgamefix.fans" "$FH" && plutil -lint "$FR/Library/LaunchDaemons/io.github.macgamefix.fans.plist" >/dev/null && [ "$("$BIN" --fans-state)" = installed ]' "installing puts the helper and its LaunchDaemon in place"
 check 'has "$(cat "$SUPPORT/notproton/plugins/mgf-fans.conf")" "[MGF_FANS]" && has "$(cat "$SUPPORT/notproton/plugins/mgf-fans.conf")" "on = max"' "and the row for NotProton's panel"
-printf 'older helper' > "$FR/Library/PrivilegedHelperTools/io.github.macgamefix.fans"
-check '[ "$("$BIN" --fans-state)" = outdated ]' "a helper that is not this app's reads as outdated"
+printf '#!/bin/sh\necho 0\n' > "$FR/Library/PrivilegedHelperTools/io.github.macgamefix.fans"
+check '[ "$("$BIN" --fans-state)" = outdated ]' "a helper of an older version reads as outdated"
+printf '#!/bin/sh\necho this needs root >&2; exit 1\n' > "$FR/Library/PrivilegedHelperTools/io.github.macgamefix.fans"
+check '[ "$("$BIN" --fans-state)" = outdated ]' "and so does one from before it said its version"
+printf '#!/bin/sh\n# another build of the same helper\n"%s" "$@"\n' "$FH" > "$FR/Library/PrivilegedHelperTools/io.github.macgamefix.fans"
+check '[ "$("$BIN" --fans-state)" = installed ] && ! cmp -s "$FR/Library/PrivilegedHelperTools/io.github.macgamefix.fans" "$FH"' "another build of the same version is not asked to be replaced"
 "$BIN" --fans-install >/dev/null 2>&1
 FG="$T/Fans Library/steamapps/common/FanGame"
 NL="$T/np.log"
