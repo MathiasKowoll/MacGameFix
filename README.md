@@ -240,14 +240,19 @@ installs or removes it. It can only raise the fans, and puts them back to
 automatic when no such game is running, when it is stopped, and when it is
 removed. Apple silicon only.
 
-A game asks for the fans in NotProton's panel in Steam, **Fans at full speed**,
-which writes `MGF_FANS=max` into its launch options; MacGameFix puts that row
-there with the helper. The fans start within a few seconds of the game's launch.
+A game asks for the fans with `MGF_FANS=max` in its launch options in Steam,
+before `%command%`; this is for the games NotProton runs. The fans start within
+a few seconds of the game's launch. MacGameFix also puts a row, **Fans at full
+speed**, into NotProton's plugins folder; it shows only in a NotProton whose
+panel lists such rows, and the variable works without it.
 
 The fans raise what the Mac can shed; they do not lower what a game draws. A
 game that drew about 96 W uncapped was cut all the same after 2 min 40 s. With
-it, cap the frame rate, turn the game's upscaler to a performance mode, and show
-the game 8 processors (`NOTPROTON_ENV_WINENCPU=8`).
+it, cap the frame rate (`D3DM_MAX_FPS=60`), turn the game's upscaler to a
+performance mode, and show the game 8 processors (`NOTPROTON_ENV_WINENCPU=8`,
+which needs no helper). In one line:
+`MGF_FANS=max NOTPROTON_ENV_WINENCPU=8 D3DM_MAX_FPS=60 %command%`.
+**Improvements › Fans** shows the two variables to copy.
 
 ## Game Mode for CrossOver's games
 

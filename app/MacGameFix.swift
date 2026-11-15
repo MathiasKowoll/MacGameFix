@@ -1281,15 +1281,27 @@ struct EngineView: View {
                     get: { model.fansState != .absent }, set: { model.setFans($0) }))
                     .disabled(model.busy)
                     .help("Installs a small helper that turns both fans to their maximum when a game that asks for it "
-                          + "starts, and hands them back to macOS when it closes. A game asks in NotProton's panel in "
-                          + "Steam. macOS asks for your password, because only an administrator can set the fans. "
-                          + "It can only raise them.")
+                          + "starts, and hands them back to macOS when it closes. A game asks with MGF_FANS=max in its "
+                          + "Steam launch options. macOS asks for your password, because only an administrator can set "
+                          + "the fans. It can only raise them.")
                 if model.fansState == .outdated {
                     LabeledContent("This MacGameFix carries a newer helper") {
                         Button("Update…") { model.setFans(true) }.disabled(model.busy)
                     }
                     .foregroundStyle(.orange)
                 }
+                if model.fansState != .absent {
+                    LabeledContent("Fans at full speed, for a game") {
+                        Text(verbatim: "MGF_FANS=max").font(.system(.body, design: .monospaced)).textSelection(.enabled)
+                    }
+                    .help("Add it to the game's launch options in Steam, before %command%.")
+                }
+                LabeledContent("8 processors, for a game") {
+                    Text(verbatim: "NOTPROTON_ENV_WINENCPU=8").font(.system(.body, design: .monospaced)).textSelection(.enabled)
+                }
+                .help("The game sees 8 processors instead of all of them, so its engine starts fewer worker threads "
+                      + "and the Mac runs cooler. Add it to the game's launch options in Steam, before %command%. "
+                      + "It needs no helper.")
                 if model.fansState != .absent && !model.fansLine.isEmpty {
                     Text(model.fansLine).font(.caption).foregroundStyle(.secondary)
                 }
@@ -1301,7 +1313,7 @@ struct EngineView: View {
                                   summary: "macOS raises the fans about a minute late; by then it has cut the processor to less than half its speed. With the fans already turning, it does not.",
                                   count: model.fansState == .absent ? "Off" : "On")
             } footer: {
-                Text("Choose the games in NotProton's panel in Steam: Fans at full speed, or MGF_FANS=max in a game's launch options. Apple silicon only.")
+                Text("Write them in a game's launch options in Steam, before %command%, for example MGF_FANS=max NOTPROTON_ENV_WINENCPU=8 %command%. For the games NotProton runs. Apple silicon only.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
