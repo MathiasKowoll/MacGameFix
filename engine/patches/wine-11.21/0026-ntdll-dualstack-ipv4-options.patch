@@ -1,6 +1,16 @@
 --- a/dlls/ntdll/unix/socket.c
 +++ b/dlls/ntdll/unix/socket.c
-@@ -1602,6 +1602,111 @@
+@@ -30,6 +30,9 @@
+ #include <sys/socket.h>
+ #include <sys/ioctl.h>
+ #include <unistd.h>
++#ifdef HAVE_SYS_SYSCTL_H
++# include <sys/sysctl.h>
++#endif
+ #ifdef HAVE_IFADDRS_H
+ # include <ifaddrs.h>
+ #endif
+@@ -1602,6 +1605,129 @@
  }
  
  
@@ -66,6 +76,22 @@
 +    return STATUS_SUCCESS;
 +}
 +
++/* The hop limits read -1 until they are set, meaning the system default. The IPv4 options report the value in use,
++ * as Windows does: the default TTL (net.inet.ip.ttl, which IPv4-mapped traffic carries) and a multicast TTL of 1. */
++static int ipv4_option_default( int option6 )
++{
++    int ttl = 64;
++
++    if (option6 == IPV6_MULTICAST_HOPS) return 1;
++#ifdef __APPLE__
++    {
++        size_t size = sizeof(ttl);
++        if (sysctlbyname( "net.inet.ip.ttl", &ttl, &size, NULL, 0 )) ttl = 64;
++    }
++#endif
++    return ttl;
++}
++
 +static NTSTATUS do_get_ipv4_option( HANDLE handle, IO_STATUS_BLOCK *io, int option,
 +                                    void *out_buffer, ULONG out_size )
 +{
@@ -86,6 +112,8 @@
 +        else
 +        {
 +            err = 0;
++            if (value < 0 && (option6 == IPV6_UNICAST_HOPS || option6 == IPV6_MULTICAST_HOPS))
++                value = ipv4_option_default( option6 );
 +            if (out_size >= sizeof(value))
 +            {
 +                memcpy( out_buffer, &value, sizeof(value) );
@@ -112,7 +140,7 @@
  static int get_sock_type( HANDLE handle )
  {
      int sock_type;
-@@ -2140,6 +2245,9 @@
+@@ -2140,6 +2266,9 @@
  #endif
  
          case IOCTL_AFD_WINE_GET_IP_DONTFRAGMENT:
@@ -122,7 +150,7 @@
          {
              socklen_t len = out_size;
              int ret;
-@@ -2147,9 +2255,7 @@
+@@ -2147,9 +2276,7 @@
              if ((status = server_get_unix_fd( handle, 0, &fd, &needs_close, NULL, NULL )))
                  return status;
  
@@ -133,7 +161,7 @@
              {
                  int value;
  
-@@ -2177,10 +2283,11 @@
+@@ -2177,10 +2304,11 @@
              }
              break;
          }
@@ -146,7 +174,7 @@
  #elif defined(IP_MTU_DISCOVER) && defined(IP_PMTUDISC_DO) && defined(IP_PMTUDISC_DONT)
          {
              int value = *(DWORD *)in_buffer ? IP_PMTUDISC_DO : IP_PMTUDISC_DONT;
-@@ -2234,28 +2341,28 @@
+@@ -2234,28 +2362,28 @@
          {
              int sock_type = get_sock_type( handle );
              if (sock_type != SOCK_DGRAM && sock_type != SOCK_RAW) return STATUS_INVALID_PARAMETER;
@@ -179,7 +207,7 @@
          }
  
          case IOCTL_AFD_WINE_GET_IP_OPTIONS:
-@@ -2333,10 +2440,10 @@
+@@ -2333,10 +2461,10 @@
              return do_setsockopt( handle, io, IPPROTO_IP, IP_TOS, in_buffer, in_size );
  
          case IOCTL_AFD_WINE_GET_IP_TTL:

@@ -418,7 +418,7 @@ socket stays open, and the online session search fails with or without a VPN
 
 | Patch | Module | Change |
 |---|---|---|
-| `0026-ntdll-dualstack-ipv4-options.patch` | `ntdll.so` (both sides) | When the host refuses `IP_DONTFRAGMENT`, `IP_TTL`, `IP_MULTICAST_TTL` or `IP_MULTICAST_LOOP` on an `AF_INET6` socket with `EINVAL`, the option is set, or read, as its IPv6 counterpart (`IPV6_DONTFRAG`, `IPV6_UNICAST_HOPS`, `IPV6_MULTICAST_HOPS`, `IPV6_MULTICAST_LOOP`). A host that accepts the IPv4 option never takes this path. `IP_TOS` is left as it was: no game here needs it, and Windows ignores it by default. |
+| `0026-ntdll-dualstack-ipv4-options.patch` | `ntdll.so` (both sides) | When the host refuses `IP_DONTFRAGMENT`, `IP_TTL`, `IP_MULTICAST_TTL` or `IP_MULTICAST_LOOP` on an `AF_INET6` socket with `EINVAL`, the option is set, or read, as its IPv6 counterpart (`IPV6_DONTFRAG`, `IPV6_UNICAST_HOPS`, `IPV6_MULTICAST_HOPS`, `IPV6_MULTICAST_LOOP`). Read before anything set them, the hop limits answer -1 ("the system default"); `IP_TTL` then reports the TTL in use (`net.inet.ip.ttl`, 64) and `IP_MULTICAST_TTL` 1, as Windows reports its own defaults. A host that accepts the IPv4 option never takes this path. `IP_TOS` is left as it was: no game here needs it, and Windows ignores it by default. |
 
 The counterpart is not a stand-in: on macOS it reaches IPv4-mapped traffic. A
 native probe (macOS 27.3 beta, arm64 and x86_64 under Rosetta) sent a datagram to
@@ -432,11 +432,13 @@ Wine meet the same kernel, so `NTDLL_ARM64` names it too.
 for arm64 and x86_64 and checks the kernel's side above (26 checks). Given a runner's
 `CrossOver` folder and a side, it builds `udpopts.c` with llvm-mingw and runs it under
 that side's Wine in a throwaway prefix: a Windows program that opens the socket as FH6
-does, sets and reads back each of the four options, sends to `::ffff:127.0.0.1`, and
-checks that an `AF_INET` socket's own options still work (23 checks). In copies of the
-41303 NotProton runner on 2026-11-13, the runner's own `ntdll.so` failed the four
-options, set and read, with 10022 (8 checks) on both sides; with `0026`, none failed on
-either side. The `AF_INET` socket's checks passed every time.
+does, reads three of the options before anything sets them, sets and reads back all four,
+sends to `::ffff:127.0.0.1`, and checks that an `AF_INET` socket's own options still work
+(26 checks). In copies of the 41303 NotProton runner on 2026-11-14, the runner's own
+`ntdll.so` failed 11 on both sides: the defaults read and the four options set and read,
+all with 10022. With `0026`, none failed on either side, and `IP_TTL` read 64 before it
+was set. The `AF_INET` socket's checks passed every time. (An earlier `0026` answered that
+first read with the hop limit's -1, 4294967295 to the program; FH6 never reads it.)
 
 The FEX side's `ntdll.so` was built from `NTDLL_ARM64`'s tree with `build.sh`'s
 configure line, on its own: `build.sh 27.0.0.41303 … arm64` stops before that step, in

@@ -1,6 +1,7 @@
 /* Wine probe for patch 0026: a Windows program that opens a UDP socket as Forza Horizon 6 does
  * before matchmaking (AF_INET6, IPV6_V6ONLY 0, bound to [::], SIO_UDP_CONNRESET and
- * SIO_UDP_NETRESET), then sets and reads back the IPv4 options 0026 handles, sends to an IPv4
+ * SIO_UDP_NETRESET), reads three of the IPv4 options 0026 handles before anything sets them
+ * (Windows reports its defaults), then sets and reads back all four, sends to an IPv4
  * socket through ::ffff:127.0.0.1, and checks that an AF_INET socket's own IPv4 options still
  * work. Every check should pass, as on Windows (not run on Windows here). Under Wine on macOS
  * without 0026 the IPv4 options on the dual-stack socket fail with 10022 (WSAEINVAL).
@@ -38,6 +39,17 @@ static void check_option(SOCKET s, int option, DWORD value, const char *what)
     check(!getsockopt(s, IPPROTO_IP, option, (char *)&got, &length) && got == value, what);
 }
 
+/* An IPPROTO_IP option read before anything set it: a value from low to high, as Windows reports its defaults
+ * (macOS's IPv6 counterparts read -1 until set, which a program would see as 4294967295). */
+static void check_default(SOCKET s, int option, DWORD low, DWORD high, const char *what)
+{
+    DWORD got = 0xdeadbeef;
+    int length = sizeof(got);
+
+    check(!getsockopt(s, IPPROTO_IP, option, (char *)&got, &length) && got >= low && got <= high, what);
+    printf("%s: %lu\n", what, (unsigned long)got);
+}
+
 int main(void)
 {
     struct sockaddr_in6 any6, mapped;
@@ -60,6 +72,9 @@ int main(void)
     check(!WSAIoctl(dual, SIO_UDP_CONNRESET, &off, sizeof(off), NULL, 0, &returned, NULL, NULL), "SIO_UDP_CONNRESET");
     check(!WSAIoctl(dual, SIO_UDP_NETRESET, &off, sizeof(off), NULL, 0, &returned, NULL, NULL), "SIO_UDP_NETRESET");
 
+    check_default(dual, IP_TTL, 1, 255, "IP_TTL default on the dual-stack socket");
+    check_default(dual, IP_MULTICAST_TTL, 1, 1, "IP_MULTICAST_TTL default on the dual-stack socket");
+    check_default(dual, IP_DONTFRAGMENT, 0, 0, "IP_DONTFRAGMENT default on the dual-stack socket");
     check_option(dual, IP_DONTFRAGMENT, 1, "IP_DONTFRAGMENT on the dual-stack socket");
     check_option(dual, IP_TTL, 255, "IP_TTL on the dual-stack socket");
     check_option(dual, IP_MULTICAST_TTL, 4, "IP_MULTICAST_TTL on the dual-stack socket");
