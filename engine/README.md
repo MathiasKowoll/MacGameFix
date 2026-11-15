@@ -440,10 +440,18 @@ all with 10022. With `0026`, none failed on either side, and `IP_TTL` read 64 be
 was set. The `AF_INET` socket's checks passed every time. (An earlier `0026` answered that
 first read with the hop limit's -1, 4294967295 to the program; FH6 never reads it.)
 
-The FEX side's `ntdll.so` was built from `NTDLL_ARM64`'s tree with `build.sh`'s
-configure line, on its own: `build.sh 27.0.0.41303 … arm64` stops before that step, in
-`0023`'s `context->Rip` in `dlls/ntdll/unix/server.c`, which the main arm64 tree
-compiles and `0023` writes for x86_64 only.
+For those runs the FEX side's `ntdll.so` was built from `NTDLL_ARM64`'s tree with
+`build.sh`'s configure line, on its own: `build.sh 27.0.0.41303 … arm64` stopped before
+that step, in `0023`'s `context->Rip` in `dlls/ntdll/unix/server.c`, which the main arm64
+tree compiles and `0023` wrote for x86_64 only. `0023` now keeps those two lines to
+x86_64, and `build.sh` builds both sides again.
+
+The modules in `modules/27.0.0.41303` carry `0026` since 2026-11-15: `x86_64-unix/ntdll.so`
+and `aarch64-unix/ntdll.so`, built by `build.sh` from the series as above. The rest of
+that folder is as it was, `ntdll.dll` included: `0026` changes `socket.c` only, which is
+in the unix half, and a rebuilt PE file differs from the last in its bytes without
+differing in its code. With these two files in a copy of the 41303 NotProton runner,
+`run.sh` failed none of the 26 checks on either side (11 before, on both).
 
 Played the same day: Forza Horizon 6, Steam edition, build 483970, with this pair in
 the runner (`+winsock` on). Both UDP sockets took the counterparts
