@@ -838,6 +838,28 @@ printf '{"kept":[],"updates":false,"modulesUpdates":false}' > "$SUPPORT/MacGameF
 modagent >/dev/null
 check '! ours "$R1"' "with the Wine modules off, nothing is done"
 
+echo "== Fans at full speed for the games that ask"
+FH="$HERE/MacGameFix.app/Contents/Resources/fans/io.github.macgamefix.fans"
+FR="$T/fansroot"; mkdir -p "$FR/Library/PrivilegedHelperTools" "$FR/Library/LaunchDaemons" "$SUPPORT/notproton/plugins"
+export MACGAMEFIX_FANS_PREFIX="$FR"
+check '[ -x "$FH" ] && [ "$("$BIN" --fans-state)" = absent ]' "the app carries the helper, and nothing is installed before"
+"$BIN" --fans-install >/dev/null 2>&1
+check 'cmp -s "$FR/Library/PrivilegedHelperTools/io.github.macgamefix.fans" "$FH" && plutil -lint "$FR/Library/LaunchDaemons/io.github.macgamefix.fans.plist" >/dev/null && [ "$("$BIN" --fans-state)" = installed ]' "installing puts the helper and its LaunchDaemon in place"
+check 'has "$(cat "$SUPPORT/notproton/plugins/mgf-fans.conf")" "[MGF_FANS]" && has "$(cat "$SUPPORT/notproton/plugins/mgf-fans.conf")" "on = max"' "and the row for NotProton's panel"
+printf 'older helper' > "$FR/Library/PrivilegedHelperTools/io.github.macgamefix.fans"
+check '[ "$("$BIN" --fans-state)" = outdated ]' "a helper that is not this app's reads as outdated"
+"$BIN" --fans-install >/dev/null 2>&1
+FG="$T/Fans Library/steamapps/common/FanGame"
+NL="$T/np.log"
+printf '2026-11-14 10:00:00 [notproton] info [launch] handed to /bin/sh -c: MGF_FANS=max D3DM_MAX_FPS=60 %s/run waitforexitandrun %s\n' "'/tool'" "'$FG/a.exe'" > "$NL"
+printf '2026-11-14 10:05:00 [notproton] info [launch] handed to /bin/sh -c: XMGF_FANS=max MGF_FANS=maximum %s/run waitforexitandrun %s\n' "'/tool'" "'$FG/b.exe'" >> "$NL"
+check '[ "$("$FH" --asked "$NL" "$FG/a.exe")" = yes ] && [ "$("$FH" --asked "$NL" "$FG/b.exe")" = no ] && [ "$("$FH" --asked "$NL" "$FG/c.exe")" = no ]' "a NotProton game asks with MGF_FANS=max in its launch options, as a word of its own"
+printf '2026-11-14 10:09:00 [notproton] info [launch] handed to /bin/sh -c: D3DM_MAX_FPS=60 %s/run waitforexitandrun %s\n' "'/tool'" "'$FG/a.exe'" >> "$NL"
+check '[ "$("$FH" --asked "$NL" "$FG/a.exe")" = no ]' "its last launch decides"
+"$BIN" --fans-remove >/dev/null 2>&1
+check '[ ! -e "$FR/Library/PrivilegedHelperTools/io.github.macgamefix.fans" ] && [ ! -e "$FR/Library/LaunchDaemons/io.github.macgamefix.fans.plist" ] && [ ! -e "$SUPPORT/notproton/plugins/mgf-fans.conf" ] && [ "$("$BIN" --fans-state)" = absent ]' "removing takes the helper, its LaunchDaemon and the row away"
+unset MACGAMEFIX_FANS_PREFIX
+
 echo "== Game Mode for CrossOver's games"
 GM="$MACGAMEFIX_HOME/Applications/CrossOver GM.app"
 GW="$GM/Contents/SharedSupport/CrossOver/lib/wine"

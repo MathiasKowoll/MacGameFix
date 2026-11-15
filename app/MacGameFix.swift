@@ -43,6 +43,11 @@ final class Model: ObservableObject {
     @Published var settings = AutoSettings.load()
     /// Which CrossOvers Game Mode covers, or why none (GameMode.swift).
     @Published var gameModeLine = ""
+    /// The fan helper (Fans.swift): whether it is in place, what it last said, and what went
+    /// wrong the last time it was installed or removed.
+    @Published var fansState = Fans.state()
+    @Published var fansLine = Fans.lastLine()
+    @Published var fansError = ""
     @Published var agentOn = LaunchAgent.enabled
     @Published var events: [AgentEvent] = []
     @Published var updateLine = ""
@@ -198,6 +203,22 @@ final class Model: ObservableObject {
             }.value
             gameModeLine = line
         }
+    }
+
+    /// The fan helper, installed (or brought up to date) or removed: macOS asks for the password.
+    func setFans(_ on: Bool) {
+        busy = true
+        Task {
+            let error = await Task.detached { Fans.change(install: on) }.value
+            fansError = error == "Cancelled." ? "" : (error ?? "")
+            refreshFans()
+            busy = false
+        }
+    }
+
+    func refreshFans() {
+        fansState = Fans.state()
+        fansLine = Fans.lastLine()
     }
 
     /// Games lists the fixes still being tested too, or stops listing them.
@@ -1256,6 +1277,35 @@ struct EngineView: View {
             }
 
             Section {
+                Toggle("Run the fans at full speed for the games that ask", isOn: Binding(
+                    get: { model.fansState != .absent }, set: { model.setFans($0) }))
+                    .disabled(model.busy)
+                    .help("Installs a small helper that turns both fans to their maximum when a game that asks for it "
+                          + "starts, and hands them back to macOS when it closes. A game asks in NotProton's panel in "
+                          + "Steam. macOS asks for your password, because only an administrator can set the fans. "
+                          + "It can only raise them.")
+                if model.fansState == .outdated {
+                    LabeledContent("This MacGameFix carries a newer helper") {
+                        Button("Update…") { model.setFans(true) }.disabled(model.busy)
+                    }
+                    .foregroundStyle(.orange)
+                }
+                if model.fansState != .absent && !model.fansLine.isEmpty {
+                    Text(model.fansLine).font(.caption).foregroundStyle(.secondary)
+                }
+                if !model.fansError.isEmpty {
+                    Text(model.fansError).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                }
+            } header: {
+                ImprovementHeader(symbol: "fan", title: "Fans",
+                                  summary: "macOS raises the fans about a minute late; by then it has cut the processor to less than half its speed. With the fans already turning, it does not.",
+                                  count: model.fansState == .absent ? "Off" : "On")
+            } footer: {
+                Text("Choose the games in NotProton's panel in Steam: Fans at full speed, or MGF_FANS=max in a game's launch options. Apple silicon only.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
                 Picker("New modules", selection: Binding(get: { model.modulesMode }, set: { model.setModulesMode($0) })) {
                     ForEach(Model.UpdateMode.allCases) { Text($0.label).tag($0) }
                 }
@@ -1295,7 +1345,10 @@ struct EngineView: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear { if model.engineRows.isEmpty { model.scanEngine() } }
+        .onAppear {
+            if model.engineRows.isEmpty { model.scanEngine() }
+            model.refreshFans()
+        }
     }
 }
 
@@ -2522,6 +2575,14 @@ enum Entry {
                 }
                 print(parts.joined(separator: " | "))
             }
+            exit(0)
+        }
+        if let i = args.firstIndex(where: { $0.hasPrefix("--fans-") }) {
+            // The fan helper (Fans.swift), for the tests: installed, removed, its state.
+            if args[i] == "--fans-install" || args[i] == "--fans-remove" {
+                if let error = Fans.change(install: args[i] == "--fans-install") { print(error); exit(1) }
+            }
+            print(Fans.state().rawValue)
             exit(0)
         }
         if args.contains("--game-mode-keep") || args.contains("--game-mode-remove") || args.contains("--game-mode-report") {

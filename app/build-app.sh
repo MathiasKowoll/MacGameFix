@@ -200,12 +200,23 @@ rm -rf "$APP"
 mkdir -p "$MACOS" "$RES" "$CACHE"
 
 echo "==> compiling"
-swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Probe.swift" "$HERE/Automation.swift" "$HERE/MenuBar.swift" "$HERE/Instructions.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
+swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/Fans.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Probe.swift" "$HERE/Automation.swift" "$HERE/MenuBar.swift" "$HERE/Instructions.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
   -o "$MACOS/MacGameFix" \
   -framework SwiftUI -framework AppKit -framework IOKit -framework UserNotifications -framework GameController \
   -framework AVFoundation -framework CoreAudio -framework AudioToolbox \
   -target arm64-apple-macos14.0 \
   -module-cache-path "$CACHE"
+
+# The fan helper (Fans.swift, fans/mgf-fans.c): Apple silicon's SMC keys, so arm64 only. It is
+# signed here, before the app, like every Mach-O the app carries.
+echo "==> fan helper"
+mkdir -p "$RES/fans"
+clang -O2 -Wall -Wextra -arch arm64 -mmacosx-version-min=14.0 -o "$RES/fans/io.github.macgamefix.fans" \
+  "$HERE/fans/mgf-fans.c" -framework IOKit
+if [ "$SIGN_ID" != - ]; then
+  codesign --force --options runtime --timestamp --identifier io.github.macgamefix.fans \
+    --sign "$SIGN_ID" "$RES/fans/io.github.macgamefix.fans"
+fi
 
 echo "==> Info.plist"
 cat > "$APP/Contents/Info.plist" <<PLIST
