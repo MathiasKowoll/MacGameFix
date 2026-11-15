@@ -9,7 +9,8 @@
 # With the CrossOver folder of a NotProton runner (the one holding bin/ and lib/wine):
 # udpopts.c, built with llvm-mingw (LLVM_MINGW, as build.sh), runs under that Wine's Intel
 # side (x86_64, the default) or its FEX side (arm64), in a throwaway prefix. Without 0026 in
-# that side's ntdll.so it fails 11 checks; with it, none.
+# that side's ntdll.so it fails 11 checks; with it, none. WINE_DUALSTACK_IPV4_OPTIONS=0 in
+# the environment turns 0026 off (0027): the 11 fail again.
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 work="$(mktemp -d)"

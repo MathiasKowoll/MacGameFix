@@ -419,6 +419,7 @@ socket stays open, and the online session search fails with or without a VPN
 | Patch | Module | Change |
 |---|---|---|
 | `0026-ntdll-dualstack-ipv4-options.patch` | `ntdll.so` (both sides) | When the host refuses `IP_DONTFRAGMENT`, `IP_TTL`, `IP_MULTICAST_TTL` or `IP_MULTICAST_LOOP` on an `AF_INET6` socket with `EINVAL`, the option is set, or read, as its IPv6 counterpart (`IPV6_DONTFRAG`, `IPV6_UNICAST_HOPS`, `IPV6_MULTICAST_HOPS`, `IPV6_MULTICAST_LOOP`). Read before anything set them, the hop limits answer -1 ("the system default"); `IP_TTL` then reports the TTL in use (`net.inet.ip.ttl`, 64) and `IP_MULTICAST_TTL` 1, as Windows reports its own defaults. A host that accepts the IPv4 option never takes this path. `IP_TOS` is left as it was: no game here needs it, and Windows ignores it by default. |
+| `0027-ntdll-dualstack-ipv4-options-switch.patch` | `ntdll.so` (both sides) | `WINE_DUALSTACK_IPV4_OPTIONS=0` turns `0026` off for a program: it sees macOS's refusal as before. On by default. Through NotProton it is `NOTPROTON_ENV_WINE_DUALSTACK_IPV4_OPTIONS=0` in the game's launch options |
 
 The counterpart is not a stand-in: on macOS it reaches IPv4-mapped traffic. A
 native probe (macOS 27.3 beta, arm64 and x86_64 under Rosetta) sent a datagram to
@@ -446,12 +447,17 @@ that step, in `0023`'s `context->Rip` in `dlls/ntdll/unix/server.c`, which the m
 tree compiles and `0023` wrote for x86_64 only. `0023` now keeps those two lines to
 x86_64, and `build.sh` builds both sides again.
 
-The modules in `modules/27.0.0.41303` carry `0026` since 2026-11-15: `x86_64-unix/ntdll.so`
+The modules in `modules/27.0.0.41303` carry `0026` and `0027` since 2026-11-15: `x86_64-unix/ntdll.so`
 and `aarch64-unix/ntdll.so`, built by `build.sh` from the series as above. The rest of
 that folder is as it was, `ntdll.dll` included: `0026` changes `socket.c` only, which is
 in the unix half, and a rebuilt PE file differs from the last in its bytes without
 differing in its code. With these two files in a copy of the 41303 NotProton runner,
-`run.sh` failed none of the 26 checks on either side (11 before, on both).
+`run.sh` failed none of the 26 checks on either side (11 before, on both), and with
+`WINE_DUALSTACK_IPV4_OPTIONS=0` in its environment it failed the same 11 again, on both.
+
+`0026` is on for every program because it only acts where the program was about to get
+`WSAEINVAL`. The switch is for a program that does worse with the counterpart than with
+the refusal; none is known.
 
 Played the same day: Forza Horizon 6, Steam edition, build 483970, with this pair in
 the runner (`+winsock` on). Both UDP sockets took the counterparts
