@@ -562,8 +562,8 @@
           "modules": [
             "ntdll"
           ],
-          "commit": "0f28a0ecad6208d4624bddbf4421f2fcc33fefd3",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/0f28a0ecad6208d4624bddbf4421f2fcc33fefd3/engine/patches/wine-11.21/0026-ntdll-dualstack-ipv4-options.patch"
+          "commit": "e4d2a2c67288b796922061ad5c2530b7fd59d1d2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/e4d2a2c67288b796922061ad5c2530b7fd59d1d2/engine/patches/wine-11.21/0026-ntdll-dualstack-ipv4-options.patch"
         }
       ]
     }
