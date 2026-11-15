@@ -570,10 +570,21 @@ extension Model {
     /// own notification, so nothing more is asked here: a CrossOver app it refused
     /// is kept in appManagementBlocked, for the Improvements tab's notice.
     func allowedToChange(_ rows: [EngineRow]) -> [EngineRow] {
-        let blocked = rows.filter { !Model.mayChange($0.target) }
-        let checked = Set(rows.map(\.target.name))
-        appManagementBlocked = appManagementBlocked.filter { !checked.contains($0) } + blocked.map(\.target.name)
+        // A CrossOver has a row for each improvement: it is asked once, and named once.
+        var may: [String: Bool] = [:]
+        for row in rows where may[row.target.root.path] == nil { may[row.target.root.path] = Model.mayChange(row.target) }
+        let blocked = rows.filter { may[$0.target.root.path] == false }
+        appManagementBlocked = Model.blockedNames(before: appManagementBlocked, checked: rows.map(\.target.name),
+                                                  refused: blocked.map(\.target.name))
         return rows.filter { row in !blocked.contains { $0.id == row.id } }
+    }
+
+    /// The notice's CrossOvers after a check: those refused before and not looked at now, then
+    /// those refused now, each once and in that order.
+    nonisolated static func blockedNames(before: [String], checked: [String], refused: [String]) -> [String] {
+        var names: [String] = []
+        for name in before.filter({ !checked.contains($0) }) + refused where !names.contains(name) { names.append(name) }
+        return names
     }
 
     /// Check Again: each CrossOver app an improvement is kept in, or that was refused.
@@ -2587,6 +2598,13 @@ enum Entry {
                 }
                 print(parts.joined(separator: " | "))
             }
+            exit(0)
+        }
+        if let i = args.firstIndex(of: "--blocked-names"), i + 3 < args.count {
+            // The App Management notice's names (Model.blockedNames), for the tests: lists joined by ";".
+            func list(_ s: String) -> [String] { s.split(separator: ";").map(String.init) }
+            print(Model.blockedNames(before: list(args[i + 1]), checked: list(args[i + 2]), refused: list(args[i + 3]))
+                .joined(separator: ";"))
             exit(0)
         }
         if let i = args.firstIndex(where: { $0.hasPrefix("--fans-") }) {
