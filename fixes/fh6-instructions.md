@@ -19,6 +19,26 @@ The steadiest play so far: set the frame rate to unlimited in the game's own vid
 
 Short stutters remain even so: with the car nearly still, about eight a minute, the longest under 0.1 s. They are not shader compilation, and their cause is still under investigation.
 
+# Heat
+
+Entering the world heats the Mac faster than macOS raises its fans. Near 75 °C macOS cuts the processor to less than half its speed for minutes, and the game stutters. These keep FH6 under that; write them before `%command%` with the rest:
+
+| Variable and value | What it does |
+|---|---|
+| `MGF_FANS=max` | Runs both fans at full speed while the game runs. Turn **Improvements › Fans** on in MacGameFix first: it installs the helper that does it. |
+| `NOTPROTON_ENV_WINENCPU=8` | Shows the game 8 processors, so its engine starts fewer worker threads. |
+| `D3DM_MAX_FPS=60` | Caps the frame rate (see Frame rate). |
+
+All of it in one line:
+
+```
+MGF_FANS=max NOTPROTON_ENV_WINENCPU=8 D3DM_MAX_FPS=60 NOTPROTON_ROSETTA_TRAP_BOOST=1 %command%
+```
+
+In the game's video settings, turn the upscaler (DLSS) on in a performance mode as well. It takes load off the graphics, and under macOS's limit that goes to the processor.
+
+Measured on a MacBook Pro M4 Max, one run each, standing still: with all of it the performance cores stayed at 4.5 GHz instead of 1.8-2.3, and a frame took over 60 ms in 0-1 seconds of a minute instead of 27-59.
+
 # Optional
 
 Add these yourself if you want them; none is needed to play.
