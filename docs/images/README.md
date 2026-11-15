@@ -8,6 +8,8 @@ is the tab, then the state or sheet; pages link to them by name, so a name stays
 | `games-all.png` | Games, the All filter: each supported game, what its fix requires, its state, Keep, and where it goes |
 | `games-all-fixes.png` | Games, All fixes: adds the catalog's games that are not on this Mac |
 | `games-selected.png` | Games with a row selected: Install Selected and Remove Selected |
+| `games-instructions.png` | A game's special instructions (Forza Horizon 6): the line to play with, its Copy, and what each variable does |
+| `games-instructions-heat.png` | The same sheet, scrolled: Frame rate, Heat, and the optional variables |
 | `improvements.png` | Improvements: DualSense controllers and Copy protection under Rosetta, a switch per CrossOver app and NotProton runner |
 | `improvements-rosetta.png` | The same tab, scrolled: Copy protection under Rosetta with its All and None, and Game Mode |
 | `improvements-fans.png` | The same tab, scrolled to the end: Game Mode, Fans with the two variables to copy, and the modules' updates |
@@ -22,10 +24,12 @@ is the tab, then the state or sheet; pages link to them by name, so a name stays
 | `report-sheet-steps.png` | The same sheet, scrolled: the steps before a report, and Save the Report and Open an Issue |
 | `settings.png` | Settings, as on a first launch: the agent is off until it is turned on |
 
-Not pictured: a game's special instructions (Forza Horizon 6's were reordered after this set was taken, in #77),
-the Not fixed filter, and the two questions asked before an improvement goes into every CrossOver or into a
-CrossOver app. In `improvements-fans.png` the helper reads as older than the app's, which is how this build
-told every new build apart; since #78 it compares versions, and that line shows only for a real update.
+The two of a game's instructions were taken later the same day, from the app as published at c3f1df6 (catalog
+1794705165), after #77 put the whole line first.
+
+Not pictured: the Not fixed filter, and the two questions asked before an improvement goes into every CrossOver
+or into a CrossOver app. In `improvements-fans.png` the helper reads as older than the app's, which is how that
+build told every new build apart; since #78 it compares versions, and that line shows only for a real update.
 
 ## How they are taken
 
