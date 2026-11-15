@@ -1,16 +1,25 @@
 # Launch options
 
-FH6's improvement needs one variable in the game's Steam launch options, `NOTPROTON_ROSETTA_TRAP_BOOST=1`. It turns on the priority plugin, which cuts scheduling waits while exceptions are handled under Rosetta. MacGameFix writes it itself when you install the improvement, and keeps the options you already had. Quit Steam first, or it cannot save them, and do not remove it afterwards.
+The line to play with, in the game's launch options in Steam:
 
 ```
-NOTPROTON_ROSETTA_TRAP_BOOST=1 %command%
+MGF_FANS=max NOTPROTON_ENV_WINENCPU=8 D3DM_MAX_FPS=60 NOTPROTON_ROSETTA_TRAP_BOOST=1 %command%
 ```
+
+| Variable and value | What it does |
+|---|---|
+| `NOTPROTON_ROSETTA_TRAP_BOOST=1` | Needed. Turns on the priority plugin, which cuts scheduling waits while exceptions are handled under Rosetta. MacGameFix writes it itself when you install the improvement, and keeps the options you already had. Quit Steam first, or it cannot save them, and do not remove it afterwards. |
+| `MGF_FANS=max` | Runs both fans at full speed while the game runs, so macOS does not cut the processor's speed (see Heat). Turn **Improvements › Fans** on in MacGameFix first: it installs the helper that does it. |
+| `NOTPROTON_ENV_WINENCPU=8` | Shows the game 8 processors, so its engine starts fewer worker threads and the Mac runs cooler. |
+| `D3DM_MAX_FPS=60` | Caps the frame rate (see Frame rate). |
+
+Write the last three yourself, before `%command%`: MacGameFix only writes the first.
 
 On NotProton's runner for CrossOver Preview 41303, FH6's exception handling is now built into the improvement's `ntdll`, so it needs no variables of its own. Installing the improvement again takes out what earlier versions wrote for it (`NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_CHAIN=1`, `NOTPROTON_ENV_WINE_SOFTWARE_ALU_BRIDGE=1`, `NOTPROTON_ENV_WINE_SOFTWARE_BRIDGE_RESUME=0` and `NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_STATS=0`), each only while it still has the value MacGameFix gave it. On the 41073 runner the first three are still needed, and MacGameFix keeps writing them there.
 
 # Frame rate
 
-The steadiest play so far: set the frame rate to unlimited in the game's own video settings, and cap it with D3DMetal 4 instead, by adding one of these before `%command%` in the same launch options, for example `D3DM_MAX_FPS=48 NOTPROTON_ROSETTA_TRAP_BOOST=1 %command%`:
+The steadiest play so far: set the frame rate to unlimited in the game's own video settings, and cap it with D3DMetal 4 instead, with one of these before `%command%` in the same launch options:
 
 | Variable and value | What it does |
 |---|---|
@@ -21,19 +30,7 @@ Short stutters remain even so: with the car nearly still, about eight a minute, 
 
 # Heat
 
-Entering the world heats the Mac faster than macOS raises its fans. Near 75 °C macOS cuts the processor to less than half its speed for minutes, and the game stutters. These keep FH6 under that; write them before `%command%` with the rest:
-
-| Variable and value | What it does |
-|---|---|
-| `MGF_FANS=max` | Runs both fans at full speed while the game runs. Turn **Improvements › Fans** on in MacGameFix first: it installs the helper that does it. |
-| `NOTPROTON_ENV_WINENCPU=8` | Shows the game 8 processors, so its engine starts fewer worker threads. |
-| `D3DM_MAX_FPS=60` | Caps the frame rate (see Frame rate). |
-
-All of it in one line:
-
-```
-MGF_FANS=max NOTPROTON_ENV_WINENCPU=8 D3DM_MAX_FPS=60 NOTPROTON_ROSETTA_TRAP_BOOST=1 %command%
-```
+Entering the world heats the Mac faster than macOS raises its fans. Near 75 °C macOS cuts the processor to less than half its speed for minutes, and the game stutters. `MGF_FANS=max`, `NOTPROTON_ENV_WINENCPU=8` and the frame-rate cap, all in the line above, keep FH6 under that.
 
 In the game's video settings, turn the upscaler (DLSS) on in a performance mode as well. It takes load off the graphics, and under macOS's limit that goes to the processor.
 
