@@ -838,6 +838,10 @@ printf '{"kept":[],"updates":false,"modulesUpdates":false}' > "$SUPPORT/MacGameF
 modagent >/dev/null
 check '! ours "$R1"' "with the Wine modules off, nothing is done"
 
+echo "== The App Management notice"
+check '[ "$("$BIN" --blocked-names "" "CrossOver A;CrossOver A;CrossOver B;CrossOver B" "CrossOver A;CrossOver A;CrossOver B;CrossOver B")" = "CrossOver A;CrossOver B" ]' "a CrossOver refused for two improvements is named once"
+check '[ "$("$BIN" --blocked-names "CrossOver A;CrossOver C" "CrossOver A;CrossOver B" "CrossOver B")" = "CrossOver C;CrossOver B" ]' "one allowed now leaves the notice, one not looked at stays"
+
 echo "== Fans at full speed for the games that ask"
 FH="$HERE/MacGameFix.app/Contents/Resources/fans/io.github.macgamefix.fans"
 FR="$T/fansroot"; mkdir -p "$FR/Library/PrivilegedHelperTools" "$FR/Library/LaunchDaemons" "$SUPPORT/notproton/plugins"

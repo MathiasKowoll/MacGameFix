@@ -174,6 +174,7 @@ Wherever a quoted string is built from a value, `<…>` stands for that value.
 
 **1. App Management notice.** This section only appears while macOS has refused a write to a CrossOver app (1144-1161).
 - A lock-shield label: "macOS does not let MacGameFix change <app names>."
+  - Each CrossOver is named once, however many improvements it was refused for, and macOS is asked once per CrossOver.
 - Caption: "Turn MacGameFix on in System Settings › Privacy & Security › App Management, then check again. Releases signed with MacGameFix's Developer ID are expected to keep this permission across updates; the first update from a release made before the Developer ID, or a build not signed with it, may need it turned on again." Expected, not measured: macOS keeps the permission for the app's designated requirement, which with the Developer ID is the bundle identifier and the team, the same in every release; signed ad hoc, it is the build's own hash, so the first update from an ad hoc release to a Developer ID one changes it.
 - **"Check Again"**: tries the write again on each CrossOver app that is on or was refused (526-530).
 - **"Open App Management…"** (Return): opens `x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles` (532-536).
