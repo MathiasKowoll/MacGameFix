@@ -91,7 +91,7 @@
     },
     "GoW.exe": {
       "title": "God of War",
-      "backend": "dxmt",
+      "backend": "",
       "codec": "",
       "gptk": "",
       "env": {},

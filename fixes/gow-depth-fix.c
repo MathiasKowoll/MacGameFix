@@ -32,6 +32,9 @@
  *   ref 0x01  fewest draws: adding it stopped the flicker left on the axe on
  *             Kratos' back, still with grass and leaves drawn right
  *
+ * D3DMetal under Rosetta (CrossOver Preview 41303, 2026-11-15) binds the same
+ * three references; with the default no specks, grass and leaves drawn right.
+ *
  * The default, used when the ini has no `stencil_refs`, is 0x01 and 0x03.
  * `stencil_refs = all` is the earlier behaviour.
  *
