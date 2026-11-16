@@ -27,8 +27,8 @@
           "language": "c",
           "startLine": 456,
           "endLine": 491,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/ue5-media-fix.c#L456-L491",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/ue5-media-fix.c#L456-L491",
           "code": "static HRESULT WINAPI my_GetOutputAvailableType(void *self, DWORD stream,\n                                                DWORD index, void **type)\n{\n    HRESULT hr = real_GetOutputAvailableType(self, stream, index, type);\n    if (SUCCEEDED(hr) && type && *type)\n    {\n        GUID sub;\n        if (type_subtype(*type, &sub))\n        {\n            char label[32];\n            snprintf(label, sizeof(label), \"offers type %lu\", index);\n            describe_subtype(label, &sub);\n\n            if (restore_nv12 && !IsEqualGUID(&sub, &guid_MFVideoFormat_NV12))\n            {\n                static LONG said;\n                if (type_set_subtype(*type, &guid_MFVideoFormat_NV12))\n                {\n                    if (InterlockedIncrement(&said) == 1)\n                        logf_(\"  -> relabelled as NV12, which is what Electra \"\n                              \"requires and what winegstreamer censored\");\n                }\n                else if (InterlockedIncrement(&said) == 1)\n                    logf_(\"  -> could NOT relabel to NV12\");\n            }\n        }\n        else\n            logf_(\"  offers type %lu (subtype unreadable)\", index);\n    }\n    else if (hr == 0xC00D36B9L)   /* MF_E_NO_MORE_TYPES */\n        logf_(\"  ...that is all it offers (%lu total). The game picks from \"\n              \"this list, and stops here if none will do.\", index);\n    else\n        logf_(\"GetOutputAvailableType(%lu) -> 0x%08lx\", index, hr);\n    return hr;\n}"
         },
         {
@@ -38,8 +38,8 @@
           "language": "c",
           "startLine": 1284,
           "endLine": 1376,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/ue5-media-fix.c#L1284-L1376",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/ue5-media-fix.c#L1284-L1376",
           "code": "static void force_electra_software(void)\n{\n    BYTE *base = (BYTE *)GetModuleHandleA(NULL);\n    int done = 0;\n    if (electra_sw_forced || !base) return;\n    electra_sw_forced = TRUE;\n\n    read_switches();\n    logf_(\"putting Electra on its old output path\");\n\n    /* The two IsSoftware call sites used to be patched here, by address.\n     *\n     * They are gone, and nothing is read off a disassembly any more. The\n     * software path comes from the engine instead: winegstreamer patch 0006,\n     * carried from winevideo, stops advertising MF_SA_D3D_AWARE on macOS, so\n     * Electra never builds a D3D11 device and answers its own IsSoftware()\n     * honestly. That is in the engine this project ships and it does not move\n     * when the game does.\n     *\n     * Those addresses broke three times in sixteen days -- 2026-08-24,\n     * 08-31 and 09-08 -- and each time they took the console variable down\n     * with them, because the check refused before reaching it. The variable is\n     * found by name and never needed the addresses at all; that coupling was\n     * the actual defect, and this is where it ends.\n     *\n     * Measured 2026-09-09 on UE5-CL-408709: with the variable set and no byte\n     * patched anywhere, the video plays. Without the variable the title\n     * crashes in the D3D path, EXCEPTION_ACCESS_VIOLATION reading 0x0 -- so\n     * patch 0006 alone is not enough and the variable below is load-bearing. */\n\n    /* The console variable is a pointer read from a fixed address and written\n     * through -- a wild write on any build but the one it was read from, and\n     * that build is gone. Left alone until it is found the same way the calls\n     * were. */\n    /* The values live at object + 0x50, and that was read off the vtable\n     * rather than guessed.\n     *\n     * What the fixed address holds in this build is an IConsoleVariable, not\n     * the two plain ints the old code wrote -- its first qword is a pointer\n     * into .rdata, so writing 1 at offset zero would destroy the vtable and\n     * produce exactly the null dereference this afternoon was spent chasing.\n     *\n     * Its vtable says where the data is. Slot 12 is `lea rax,[rcx+0x50] ; ret`\n     * -- AsVariableInt returning the embedded TConsoleVariableData<int32> --\n     * and slot 8 is `mov al,1 ; ret`, which is the \"this is an int variable\"\n     * answer. So the two int32s the old build had at offset zero are at 0x50\n     * here, and the old write is right about what to set and wrong only about\n     * where.\n     *\n     * Read before writing anyway: the default is 0, so anything else means\n     * this is not what it is thought to be, and then nothing is touched. */\n    {\n        void **slot = find_cvar_slot(base);\n        void *obj;\n        if (!slot)\n        {\n            /* There is no falling back to a remembered address any more. What\n             * made that safe was the call-site check proving this was the build\n             * the address came from, and that check is gone. A remembered\n             * address on a build it was not read from is a wild write. */\n            logf_(\"  the console variable was not found by name -- doing nothing\");\n            return;\n        }\n        obj = *slot;\n        if (!obj)\n        {\n            logf_(\"  console variable not registered yet\");\n        }\n        else\n        {\n            int *values = (int *)((BYTE *)obj + CVAR_VALUES_OFFSET);\n            logf_(\"  console variable at %p, values at +0x%X currently [%d, %d]\",\n                  obj, (unsigned)CVAR_VALUES_OFFSET, values[0], values[1]);\n            if (!opt_cvar)\n                logf_(\"    left at [%d, %d], by switch -- Electra keeps whichever \"\n                      \"output path it chooses for itself\", values[0], values[1]);\n            else if (values[0] == 0 && values[1] == 0)\n            {\n                values[0] = 1;\n                values[1] = 1;\n                cvar_ready = TRUE;\n                logf_(\"    set to 1 -- Electra takes the old CPU buffer path, \"\n                      \"which stores the sample instead of querying for a D3D \"\n                      \"resource that is not there\");\n            }\n            else\n                logf_(\"    left alone: the default for this variable is 0, so \"\n                      \"this is not the field it is thought to be\");\n        }\n    }\n\n    if (!done) logf_(\"nothing was patched\");\n}"
         }
       ],
@@ -79,8 +79,8 @@
           "language": "c",
           "startLine": 138,
           "endLine": 154,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/ctl-window-fix.c#L138-L154",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/ctl-window-fix.c#L138-L154",
           "code": "static HRESULT WINAPI my_gfx(void *dev, const void *desc, REFIID iid, void **out)\n{\n    unsigned long long h;\n    if (desc && is_hidden(*(void *const *)((const char *)desc + 24), *(const SIZE_T *)((const char *)desc + 32), &h))\n    {\n        /* sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC) on x64: no more is read. */\n        char copy[656];\n        HRESULT hr;\n        memcpy(copy, desc, sizeof(copy));\n        mute(copy + 120);\n        hr = real_gfx(dev, copy, iid, out);\n        InterlockedIncrement(&muted);\n        logline(\"interiorPS %016llx hidden (graphics) -> %08lx\", h, (unsigned long)hr);\n        return hr;\n    }\n    return real_gfx(dev, desc, iid, out);\n}"
         },
         {
@@ -90,8 +90,8 @@
           "language": "c",
           "startLine": 102,
           "endLine": 106,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/ctl-window-fix.c#L102-L106",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/ctl-window-fix.c#L102-L106",
           "code": "static void mute(char *blend)\n{\n    int i;\n    for (i = 0; i < 8; i++) ((unsigned char *)blend)[8 + i * 40 + 36] = 0;\n}"
         }
       ],
@@ -136,8 +136,8 @@
           "language": "text",
           "startLine": 19,
           "endLine": 20,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/cp2077-denoiser.recipes#L19-L20",
+          "commit": "0a0322b02b63c8b5b17916d8e661db9ad24fe2e8",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/0a0322b02b63c8b5b17916d8e661db9ad24fe2e8/fixes/cp2077-denoiser.recipes#L19-L20",
           "code": "# 2.5.0, Steam build 26133166; made and checked on 2026-10-22.\n5814786 1d3c32db2fa9150b9c164eaea1fe678b99d244e705de737999a932487a63bcee 0x1494640 00008052 20008052 c9a89e134ec00af6890609f50fe5b66d86d8ee68c1a3918085a00f8a942d3fd0"
         }
       ],
@@ -184,8 +184,8 @@
           "language": "c",
           "startLine": 109,
           "endLine": 125,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/mf-reader-fallback.c#L109-L125",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/mf-reader-fallback.c#L109-L125",
           "code": "static HRESULT WINAPI my_create(void *stream, void *attrs, void **reader)\n{\n    static LONG calls, ours;\n    HRESULT hr = real_create(stream, attrs, reader);\n    LONG n = InterlockedIncrement(&calls);\n    if (n == 1) logf_(\"MFCreateSourceReaderFromByteStream -> 0x%08lx (first call)\", hr);\n    if (FAILED(hr) && stream && reader && load_asf_reader_())\n    {\n        HRESULT mine = asf_reader_create(stream, attrs, reader);\n        LONG k = InterlockedIncrement(&ours);\n        if (k <= 5 || FAILED(mine))\n            logf_(\"Media Foundation refused a stream (0x%08lx); our ASF reader -> 0x%08lx (%ld so far)\",\n                  hr, mine, k);\n        if (SUCCEEDED(mine)) hr = mine;\n    }\n    return hr;\n}"
         }
       ],
@@ -225,8 +225,8 @@
           "language": "c",
           "startLine": 2163,
           "endLine": 2215,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/dwo-video-bridge.c#L2163-L2215",
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L2163-L2215",
           "code": "static HRESULT WINAPI d3d12_open_shared_handle(void *self, HANDLE handle,\n                                               REFIID iid, void **out)\n{\n    {\n        static LONG told;\n        if (InterlockedIncrement(&told) <= 12)\n            logf_(\"D3D12 OpenSharedHandle %p %s%s\", handle, guid_text_(iid),\n                  handle == BRIDGE_HANDLE ? \"   << ours\" : \"\");\n    }\n    if (handle == BRIDGE_HANDLE)\n    {\n        HRESULT hr;\n        if (!out) return E_INVALIDARG;\n        *out = NULL;\n        if (!IsEqualGUID(iid, &IID_ID3D12Resource)) return E_NOINTERFACE;\n\n        EnterCriticalSection(&frame_lock);\n        /* A new clip of another size: the game has made a new texture and is\n         * opening it now, so this is the one moment the bridge can change size.\n         * Handing back the old one leaves the game drawing from a texture no\n         * frame of this clip can be written into. */\n        if (bridge_texture && frame_width && frame_height &&\n            (texture_width != frame_width || texture_height != frame_height))\n        {\n            logf_(\"bridge: the game opens a %ux%u clip on a %ux%u bridge; rebuilding\",\n                  frame_width, frame_height, texture_width, texture_height);\n            bridge_destroy();\n        }\n        if (!bridge_texture && frame_width && frame_height)\n        {\n            /*\n             * The size the game asked to share, when it said one.\n             *\n             * The handle it passes belongs to a texture it created itself, and\n             * what comes back has to describe that texture -- not the clip.\n             * Kingdom Hearts shares a 2048x1080 surface to carry a 1920x1080\n             * frame, so a texture built to the clip's size is the wrong\n             * resource under the same handle, and what the game copies out of\n             * it is not a picture.\n             */\n            bridge_create((ID3D12Device *)self, frame_width, frame_height);\n        }\n        hr = bridge_texture ? S_OK : E_FAIL;\n        if (bridge_texture)\n        {\n            ID3D12Resource_AddRef(bridge_texture);\n            *out = bridge_texture;\n        }\n        LeaveCriticalSection(&frame_lock);\n        return hr;\n    }\n    return real_open_shared_handle(self, handle, iid, out);\n}"
         },
         {
@@ -236,8 +236,8 @@
           "language": "c",
           "startLine": 1863,
           "endLine": 1884,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/dwo-video-bridge.c#L1863-L1884",
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L1863-L1884",
           "code": "static HRESULT WINAPI res_get_shared_handle(void *self, HANDLE *handle)\n{\n    HRESULT hr = real_res_get_shared_handle(self, handle);\n    {\n        static LONG told;\n        if (InterlockedIncrement(&told) <= 12)\n            logf_(\"GetSharedHandle -> 0x%08lx%s\", (unsigned long)hr,\n                  (FAILED(hr) && d3d12_bridge_armed) ? \"   (answering BRIDGE_HANDLE)\" : \"\");\n    }\n    /*\n     * Only invent a handle if the side that can recognise it is armed.\n     *\n     * BRIDGE_HANDLE is meaningful to d3d12_open_shared_handle and to nothing\n     * else. Handing it out while that hook is missing turns a clean failure --\n     * the game learns it cannot share, and says so -- into a real D3D12 device\n     * dereferencing 0xD3D12B21D. Nioh 3 crashed exactly that way, because its\n     * D3D12 arrives through Streamline and the hook had not been placed there\n     * yet. Reporting the original failure is the safe answer.\n     */\n    if (FAILED(hr) && handle && d3d12_bridge_armed) { *handle = BRIDGE_HANDLE; return S_OK; }\n    return hr;\n}"
         }
       ],
@@ -314,8 +314,8 @@
           "language": "c",
           "startLine": 201,
           "endLine": 209,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/fh5-d3d12/stride.h#L201-L209",
+          "commit": "2d9211e2cea05174afb1f61998776834a6ce8589",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2d9211e2cea05174afb1f61998776834a6ce8589/fixes/fh5-d3d12/stride.h#L201-L209",
           "code": "static UINT STDMETHODCALLTYPE st_GDHIS(void *d, D3D12_DESCRIPTOR_HEAP_TYPE t)\n{\n    ENT(d, S_GDHIS); UINT r;\n    if (!e) return 0;\n    r = ((UINT (STDMETHODCALLTYPE *)(void *, D3D12_DESCRIPTOR_HEAP_TYPE))e->orig[S_GDHIS])(d, t);\n    ST_CNT(M_GDHIS, calls);\n    if (t == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV && st_active) { ST_CNT(M_GDHIS, hits); return ST_FAKE_INC; }\n    return r;\n}"
         },
         {
@@ -325,8 +325,8 @@
           "language": "c",
           "startLine": 185,
           "endLine": 191,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/fh5-d3d12/stride.h#L185-L191",
+          "commit": "2d9211e2cea05174afb1f61998776834a6ce8589",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2d9211e2cea05174afb1f61998776834a6ce8589/fixes/fh5-d3d12/stride.h#L185-L191",
           "code": "static D3D12_CPU_DESCRIPTOR_HANDLE st_tc(D3D12_CPU_DESCRIPTOR_HANDLE h, int m)\n{\n    int s; D3D12_CPU_DESCRIPTOR_HANDLE r;\n    r.ptr = (SIZE_T)sm_xlat(st_heaps, st_nheap, 0, (uint64_t)h.ptr, ST_FAKE_INC, (uint32_t)st_real_inc, &s);\n    if (s) { ST_CNT(m, hits); if (s > SM_OK) st_anomaly(s, m, 0, (uint64_t)h.ptr); }\n    return r;\n}"
         },
         {
@@ -336,8 +336,8 @@
           "language": "c",
           "startLine": 256,
           "endLine": 293,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/fh5-netfix.c#L256-L293",
+          "commit": "2d9211e2cea05174afb1f61998776834a6ce8589",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2d9211e2cea05174afb1f61998776834a6ce8589/fixes/fh5-netfix.c#L256-L293",
           "code": "int WSAAPI wrap_setsockopt(SOCKET socket, int level, int option, const char *value, int length)\n{\n    ORIGINAL(function, \"setsockopt\");\n    int result = ((int (WSAAPI *)(SOCKET,int,int,const char*,int))function_proc)(socket, level, option, value, length);\n    int original_result = result, alternate = -2;\n    if (result != 0 && level == IPPROTO_IP && enabled())\n    {\n        DWORD original_error = GetLastError();\n        if (original_error == WSAEINVAL || original_error == WSAENOPROTOOPT)\n        {\n            int ipv6_option = option == IP_TTL ? IPV6_UNICAST_HOPS :\n                              option == IP_MULTICAST_TTL ? IPV6_MULTICAST_HOPS :\n                              option == IP_MULTICAST_LOOP ? IPV6_MULTICAST_LOOP :\n                              option == IP_TOS ? IPV6_TCLASS : -1;\n            if (ipv6_option >= 0)\n                alternate = ((int (WSAAPI *)(SOCKET,int,int,const char*,int))function_proc)\n                    (socket, IPPROTO_IPV6, ipv6_option, value, length);\n            result = 0; SetLastError(0);\n        }\n        else SetLastError(original_error);\n    }\n    if (enabled() && known_socket(socket))\n    {\n        DWORD error = GetLastError();\n        LOG_BUFFER(buffer);\n        begin_line(&buffer, CALLER); put_string(&buffer, \"setsockopt h=\"); put_unsigned(&buffer, socket);\n        put_string(&buffer, \" level=\"); put_integer(&buffer, level);\n        put_string(&buffer, \" option=\"); put_integer(&buffer, option);\n        if (original_result != result)\n        {\n            put_string(&buffer, \" original=\"); put_integer(&buffer, original_result);\n            put_string(&buffer, \" ipv6-alternate=\"); put_integer(&buffer, alternate);\n            put_string(&buffer, \" forced-success\");\n        }\n        log_result(&buffer, result, error); emit(&buffer); SetLastError(error);\n    }\n    return result;\n}"
         }
       ],
@@ -377,8 +377,8 @@
           "language": "c",
           "startLine": 293,
           "endLine": 350,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/gowr-triggers.c#L293-L350",
+          "commit": "6cfa209082f8c2db2c2357b67e3aff53f4ac70e6",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/6cfa209082f8c2db2c2357b67e3aff53f4ac70e6/fixes/gowr-triggers.c#L293-L350",
           "code": "static uint8_t *find_wrapper(char *why, size_t cap)\n{\n    static const char name[] = \"scePadSetTriggerEffect\";\n    IMAGE_NT_HEADERS64 *nt = (IMAGE_NT_HEADERS64 *)(g_exe + ((IMAGE_DOS_HEADER *)g_exe)->e_lfanew);\n    IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);\n    IMAGE_DATA_DIRECTORY *exc = &nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION];\n    const IMAGE_RUNTIME_FUNCTION_ENTRY *fn = (const IMAGE_RUNTIME_FUNCTION_ENTRY *)(g_exe + exc->VirtualAddress);\n    size_t nfn = exc->Size / sizeof(*fn), lo, hi;\n    uint8_t *text = NULL, *found = NULL, *s;\n    uint32_t text_size = 0, str_rva = 0, i, k;\n    int strings = 0, hits = 0;\n\n    for (k = 0; k < nt->FileHeader.NumberOfSections; k++)\n    {\n        uint8_t *b = g_exe + sec[k].VirtualAddress;\n        uint32_t n = sec[k].Misc.VirtualSize;\n        if (!memcmp(sec[k].Name, \".text\", 6)) { text = b; text_size = n; continue; }\n        if (sec[k].Characteristics & IMAGE_SCN_MEM_EXECUTE || !(sec[k].Characteristics & IMAGE_SCN_MEM_READ)) continue;\n        for (s = b + 1; s + sizeof(name) <= b + n; s++)\n            if (*s == name[0] && !s[-1] && !memcmp(s, name, sizeof(name)))\n            {\n                strings++;\n                str_rva = (uint32_t)(s - g_exe);\n            }\n    }\n    if (strings != 1 || !text || !nfn)\n    {\n        snprintf(why, cap, \"%d copies of the name, %s, %u functions\", strings, text ? \".text\" : \"no .text\", (unsigned)nfn);\n        return NULL;\n    }\n    for (i = 0; i + 7 <= text_size; i++)\n    {\n        uint8_t *at = text + i, *start;\n        uint32_t rva;\n        int32_t disp;\n        if ((at[0] != 0x48 && at[0] != 0x4c) || at[1] != 0x8d || (at[2] & 0xc7) != 0x05) continue;\n        memcpy(&disp, at + 3, 4);\n        rva = (uint32_t)(at + 7 - g_exe) + (uint32_t)disp;\n        if (rva != str_rva) continue;\n        rva = (uint32_t)(at - g_exe);\n        for (lo = 0, hi = nfn; lo < hi; )\n        {\n            size_t mid = (lo + hi) / 2;\n            if (fn[mid].BeginAddress <= rva) lo = mid + 1; else hi = mid;\n        }\n        if (!lo || rva >= fn[lo - 1].EndAddress) continue;\n        start = g_exe + fn[lo - 1].BeginAddress;\n        if (memcmp(start, wrapper_start, sizeof(wrapper_start))) continue;\n        hits++;\n        found = start;\n    }\n    if (hits != 1)\n    {\n        snprintf(why, cap, \"%d functions name it and start as the wrapper does\", hits);\n        return NULL;\n    }\n    return found;\n}"
         },
         {
@@ -388,8 +388,8 @@
           "language": "c",
           "startLine": 114,
           "endLine": 152,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/gowr-triggers.c#L114-L152",
+          "commit": "6cfa209082f8c2db2c2357b67e3aff53f4ac70e6",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/6cfa209082f8c2db2c2357b67e3aff53f4ac70e6/fixes/gowr-triggers.c#L114-L152",
           "code": "static void convert(uint32_t mode, const uint8_t *p, uint8_t out[11])\n{\n    uint8_t s[10] = {0};\n    int i;\n    switch (mode)\n    {\n    case MODE_FEEDBACK:      /* position 0-9, strength 1-8 */\n        for (i = p[0]; i < 10; i++) s[i] = p[1];\n        zones(s, 0x21, 0, out);\n        return;\n    case MODE_WEAPON:        /* start 2-7, end start+1-8, strength 1-8 */\n        memset(out, 0, 11);\n        if (p[0] > 9 || p[1] > 9 || p[1] <= p[0] || !p[2] || p[2] > 8) { out[0] = 0x05; return; }\n        out[0] = 0x25;\n        out[1] = ((1u << p[0]) | (1u << p[1])) & 0xff;\n        out[2] = ((1u << p[0]) | (1u << p[1])) >> 8;\n        out[3] = p[2] - 1;\n        return;\n    case MODE_VIBRATION:     /* position 0-9, amplitude 1-8, frequency in Hz */\n        for (i = p[0]; i < 10; i++) s[i] = p[1];\n        zones(s, 0x26, p[2], out);\n        return;\n    case MODE_MULTI_FEEDBACK:  /* strength[10] */\n        zones(p, 0x21, 0, out);\n        return;\n    case MODE_SLOPE:         /* start, end, start strength, end strength */\n        if (p[1] > p[0] && p[1] <= 9)\n            for (i = p[0]; i < 10; i++)\n                s[i] = i >= p[1] ? p[3] : (uint8_t)(p[2] + (int)(p[3] - p[2]) * (i - p[0]) / (p[1] - p[0]));\n        zones(s, 0x21, 0, out);\n        return;\n    case MODE_MULTI_VIBRATION: /* frequency, amplitude[10] */\n        zones(p + 1, 0x26, p[0], out);\n        return;\n    default:\n        memset(out, 0, 11);\n        out[0] = 0x05;\n    }\n}"
         },
         {
@@ -399,8 +399,8 @@
           "language": "c",
           "startLine": 256,
           "endLine": 290,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/gowr-triggers.c#L256-L290",
+          "commit": "6cfa209082f8c2db2c2357b67e3aff53f4ac70e6",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/6cfa209082f8c2db2c2357b67e3aff53f4ac70e6/fixes/gowr-triggers.c#L256-L290",
           "code": "__attribute__((noinline)) int32_t triggers_SetTriggerEffect(int32_t handle, const uint8_t *param)\n{\n    uint8_t want[2][11];\n    int sides = 0, i;\n    (void)handle;\n\n    if (!param) return (int32_t)RETURN_NOT_LOADED;\n    InterlockedIncrement(&g_effects);\n    EnterCriticalSection(&g_lock);\n    if (!g_pad_looked) find_pad();\n    if (g_pad != INVALID_HANDLE_VALUE)\n    {\n        /* Sony's command[0] is L2 and command[1] R2; the DualSense's report has R2 first. */\n        for (i = 0; i < 2; i++)\n        {\n            int ds = i ? 0 : 1;\n            const uint8_t *cmd = param + CMD_FIRST + CMD_SIZE * i;\n            if (!(param[0] & (1 << i))) continue;\n            convert(*(const uint32_t *)cmd, cmd + CMD_PARAM, want[ds]);\n            if (memcmp(want[ds], g_last[ds], 11) || !g_set[ds])\n            {\n                if (!g_set[ds] || want[ds][0] != g_last[ds][0])\n                    logline(\"%s: mode %u -> DualSense %02x %02x%02x %02x%02x%02x%02x .. %02x\", ds ? \"L2\" : \"R2\",\n                            *(const uint32_t *)cmd, want[ds][0], want[ds][1], want[ds][2], want[ds][3], want[ds][4],\n                            want[ds][5], want[ds][6], want[ds][9]);\n                memcpy(g_last[ds], want[ds], 11);\n                g_set[ds] = 1;\n                sides |= 1 << ds;\n            }\n        }\n        if (sides) write_sides(want, sides);\n    }\n    LeaveCriticalSection(&g_lock);\n    return (int32_t)RETURN_NOT_LOADED;   /* what the original answers: the game behaves as before */\n}"
         }
       ],
@@ -436,6 +436,11 @@
           "name": "The author of \"God Of War 2018 White Dot Fix (through Crossover)\" on r/macgaming",
           "url": null,
           "note": "Found the depth test behind the white specks."
+        },
+        {
+          "name": "tombirdQAQ",
+          "url": "https://github.com/tombirdQAQ",
+          "note": "Found that the pass writes a stencil reference per kind of object, and made the fix loosen the test only for the characters' and small objects' (#82)."
         }
       ],
       "excerpts": [
@@ -444,10 +449,10 @@
           "symbol": "hk_CreateDepthStencilState",
           "note": "Every depth state that tests EQUAL is kept, and a twin with the replacement test read from gow-depth-fix.ini is made beside it.",
           "language": "c",
-          "startLine": 289,
-          "endLine": 315,
-          "commit": "e4e5a97d8aae2b5d6b699473cedc909d377b6a6c",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/e4e5a97d8aae2b5d6b699473cedc909d377b6a6c/fixes/gow-depth-fix.c#L289-L315",
+          "startLine": 292,
+          "endLine": 318,
+          "commit": "34d2e07cd16e6a44e74531b206c39d82d6ee3a49",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/34d2e07cd16e6a44e74531b206c39d82d6ee3a49/fixes/gow-depth-fix.c#L292-L318",
           "code": "static HRESULT STDMETHODCALLTYPE hk_CreateDepthStencilState(ID3D11Device *device,\n        const D3D11_DEPTH_STENCIL_DESC *desc, ID3D11DepthStencilState **state)\n{\n    HRESULT (STDMETHODCALLTYPE *orig)(ID3D11Device *, const D3D11_DEPTH_STENCIL_DESC *, ID3D11DepthStencilState **)\n            = orig_fn(device, DEV_IDX(CreateDepthStencilState));\n    D3D11_DEPTH_STENCIL_DESC changed;\n    ID3D11DepthStencilState *repl = NULL;\n    HRESULT hr;\n\n    hr = orig(device, desc, state);\n    if (FAILED(hr) || !state || !*state || !desc || !desc->DepthEnable\n            || desc->DepthFunc != D3D11_COMPARISON_EQUAL || !g_equal_to)\n        return hr;\n    if (InterlockedIncrement(&g_equal_seen) <= 24)\n        log_msg(\"EQUAL state %p: depth writes %s, stencil %s read %02x write %02x, \"\n                \"front %s pass %s fail %s zfail %s, back %s pass %s\",\n                (void *)*state, desc->DepthWriteMask == D3D11_DEPTH_WRITE_MASK_ALL ? \"on\" : \"off\",\n                desc->StencilEnable ? \"on\" : \"off\", desc->StencilReadMask, desc->StencilWriteMask,\n                func_name(desc->FrontFace.StencilFunc), op_name(desc->FrontFace.StencilPassOp),\n                op_name(desc->FrontFace.StencilFailOp), op_name(desc->FrontFace.StencilDepthFailOp),\n                func_name(desc->BackFace.StencilFunc), op_name(desc->BackFace.StencilPassOp));\n    changed = *desc;\n    changed.DepthFunc = g_equal_to;\n    if (SUCCEEDED(orig(device, &changed, &repl)) && repl)\n        remember_state(*state, repl);\n    return hr;\n}"
         },
         {
@@ -455,20 +460,20 @@
           "symbol": "hk_OMSetDepthStencilState",
           "note": "The twin is bound only when the stencil reference is one of stencil_refs: characters and small objects, not grass and leaves.",
           "language": "c",
-          "startLine": 398,
-          "endLine": 413,
-          "commit": "e4e5a97d8aae2b5d6b699473cedc909d377b6a6c",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/e4e5a97d8aae2b5d6b699473cedc909d377b6a6c/fixes/gow-depth-fix.c#L398-L413",
+          "startLine": 401,
+          "endLine": 416,
+          "commit": "34d2e07cd16e6a44e74531b206c39d82d6ee3a49",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/34d2e07cd16e6a44e74531b206c39d82d6ee3a49/fixes/gow-depth-fix.c#L401-L416",
           "code": "static void STDMETHODCALLTYPE hk_OMSetDepthStencilState(ID3D11DeviceContext *ctx,\n        ID3D11DepthStencilState *state, UINT ref)\n{\n    void (STDMETHODCALLTYPE *orig)(ID3D11DeviceContext *, ID3D11DepthStencilState *, UINT)\n            = orig_fn(ctx, CTX_IDX(OMSetDepthStencilState));\n    ID3D11DepthStencilState *repl;\n\n    poll_keys();\n    if ((repl = twin_of(state)))\n    {\n        InterlockedIncrement(&g_ref_count[ref & 0xff]);\n        if (wants_replacement(ref))\n            state = repl;\n    }\n    orig(ctx, state, ref);\n}"
         }
       ],
       "symptom": "White specks all over the characters, Kratos first, in dim light",
       "cause": "The G-buffer pass tests depth with EQUAL against a depth prepass, and the translated shaders do not reproduce the prepass depth to the last bit",
       "fix": "That depth test becomes GREATER_EQUAL for the draws with stencil reference 0x01 or 0x03 (characters and small objects), not for the grass and leaves",
-      "backend": "**DXMT**, D3D11",
-      "crossover": "Preview 27, through NotProton, under Rosetta and under FEX",
+      "backend": "D3DMetal or DXMT, D3D11",
+      "crossover": "Preview 27, through NotProton: DXMT under Rosetta and under FEX, D3DMetal under Rosetta",
       "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/God-of-War.md",
-      "graphicsBackend": "dxmt",
+      "graphicsBackend": null,
       "gptk": null,
       "notNeededFromGptk": null
     },
@@ -499,8 +504,8 @@
           "language": "c",
           "startLine": 1508,
           "endLine": 1524,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/dwo-video-bridge.c#L1508-L1524",
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L1508-L1524",
           "code": "static IMFAttributes *strip_d3d_attributes(IMFAttributes *attrs)\n{\n    IMFAttributes *plain = NULL;\n    UINT32 count = 0;\n\n    if (!attrs || !real_MFCreateAttributes) return NULL;\n    IMFAttributes_GetCount(attrs, &count);\n    if (SUCCEEDED(real_MFCreateAttributes(&plain, count + 2)) && plain\n        && SUCCEEDED(IMFAttributes_CopyAllItems(attrs, plain)))\n    {\n        IMFAttributes_DeleteItem(plain, &MF_SOURCE_READER_D3D_MANAGER);\n        IMFAttributes_DeleteItem(plain, &MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS);\n        return plain;\n    }\n    if (plain) IMFAttributes_Release(plain);\n    return NULL;\n}"
         },
         {
@@ -510,8 +515,8 @@
           "language": "c",
           "startLine": 2112,
           "endLine": 2161,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/dwo-video-bridge.c#L2112-L2161",
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L2112-L2161",
           "code": "static void plane_write(const BYTE *nv12, UINT stride, UINT width, UINT height)\n{\n    D3D12_TEXTURE_COPY_LOCATION dst = { 0 }, src = { 0 };\n    const BYTE *uv = nv12 + (size_t)stride * height;\n    BYTE *mapped = NULL;\n    UINT y;\n\n    if (!plane_ready || !bridge_list || !bridge_queue) return;\n    /*\n     * Copy the planes' geometry, not the frame's.\n     *\n     * The footprints were computed from the descriptors captured when the pair\n     * was created. If a later clip is larger and the game has not yet made a\n     * new pair, writing the frame's rows into those footprints runs off the end\n     * of the upload buffer. Refusing is the right answer: the next pair the\n     * game creates re-arms this.\n     */\n    if (width != plane_y_desc.Width || height != plane_y_desc.Height) return;\n    if (FAILED(ID3D12Resource_Map(plane_upload, 0, NULL, (void **)&mapped)) || !mapped)\n        return;\n    for (y = 0; y < height; ++y)\n        memcpy(mapped + plane_y_fp.Offset + (size_t)y * plane_y_fp.Footprint.RowPitch,\n               nv12 + (size_t)y * stride, width);\n    for (y = 0; y < height / 2; ++y)\n        memcpy(mapped + plane_uv_fp.Offset + (size_t)y * plane_uv_fp.Footprint.RowPitch,\n               uv + (size_t)y * stride, width);\n    ID3D12Resource_Unmap(plane_upload, 0, NULL);\n\n    ID3D12CommandAllocator_Reset(bridge_alloc);\n    ID3D12GraphicsCommandList_Reset(bridge_list, bridge_alloc, NULL);\n    src.pResource = plane_upload;\n    src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;\n    dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;\n    dst.pResource = plane_y;  src.PlacedFootprint = plane_y_fp;\n    ID3D12GraphicsCommandList_CopyTextureRegion(bridge_list, &dst, 0, 0, 0, &src, NULL);\n    dst.pResource = plane_uv; src.PlacedFootprint = plane_uv_fp;\n    ID3D12GraphicsCommandList_CopyTextureRegion(bridge_list, &dst, 0, 0, 0, &src, NULL);\n    ID3D12GraphicsCommandList_Close(bridge_list);\n    ID3D12CommandQueue_ExecuteCommandLists(bridge_queue, 1,\n            (ID3D12CommandList *const *)&bridge_list);\n\n    ++bridge_fence_value;\n    if (SUCCEEDED(ID3D12CommandQueue_Signal(bridge_queue, bridge_fence, bridge_fence_value))\n        && ID3D12Fence_GetCompletedValue(bridge_fence) < bridge_fence_value\n        && bridge_event)\n    {\n        ID3D12Fence_SetEventOnCompletion(bridge_fence, bridge_fence_value, bridge_event);\n        WaitForSingleObject(bridge_event, 1000);\n    }\n}"
         }
       ],
@@ -552,8 +557,8 @@
           "language": "c",
           "startLine": 1508,
           "endLine": 1524,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/dwo-video-bridge.c#L1508-L1524",
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L1508-L1524",
           "code": "static IMFAttributes *strip_d3d_attributes(IMFAttributes *attrs)\n{\n    IMFAttributes *plain = NULL;\n    UINT32 count = 0;\n\n    if (!attrs || !real_MFCreateAttributes) return NULL;\n    IMFAttributes_GetCount(attrs, &count);\n    if (SUCCEEDED(real_MFCreateAttributes(&plain, count + 2)) && plain\n        && SUCCEEDED(IMFAttributes_CopyAllItems(attrs, plain)))\n    {\n        IMFAttributes_DeleteItem(plain, &MF_SOURCE_READER_D3D_MANAGER);\n        IMFAttributes_DeleteItem(plain, &MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS);\n        return plain;\n    }\n    if (plain) IMFAttributes_Release(plain);\n    return NULL;\n}"
         },
         {
@@ -563,8 +568,8 @@
           "language": "c",
           "startLine": 2112,
           "endLine": 2161,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/dwo-video-bridge.c#L2112-L2161",
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L2112-L2161",
           "code": "static void plane_write(const BYTE *nv12, UINT stride, UINT width, UINT height)\n{\n    D3D12_TEXTURE_COPY_LOCATION dst = { 0 }, src = { 0 };\n    const BYTE *uv = nv12 + (size_t)stride * height;\n    BYTE *mapped = NULL;\n    UINT y;\n\n    if (!plane_ready || !bridge_list || !bridge_queue) return;\n    /*\n     * Copy the planes' geometry, not the frame's.\n     *\n     * The footprints were computed from the descriptors captured when the pair\n     * was created. If a later clip is larger and the game has not yet made a\n     * new pair, writing the frame's rows into those footprints runs off the end\n     * of the upload buffer. Refusing is the right answer: the next pair the\n     * game creates re-arms this.\n     */\n    if (width != plane_y_desc.Width || height != plane_y_desc.Height) return;\n    if (FAILED(ID3D12Resource_Map(plane_upload, 0, NULL, (void **)&mapped)) || !mapped)\n        return;\n    for (y = 0; y < height; ++y)\n        memcpy(mapped + plane_y_fp.Offset + (size_t)y * plane_y_fp.Footprint.RowPitch,\n               nv12 + (size_t)y * stride, width);\n    for (y = 0; y < height / 2; ++y)\n        memcpy(mapped + plane_uv_fp.Offset + (size_t)y * plane_uv_fp.Footprint.RowPitch,\n               uv + (size_t)y * stride, width);\n    ID3D12Resource_Unmap(plane_upload, 0, NULL);\n\n    ID3D12CommandAllocator_Reset(bridge_alloc);\n    ID3D12GraphicsCommandList_Reset(bridge_list, bridge_alloc, NULL);\n    src.pResource = plane_upload;\n    src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;\n    dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;\n    dst.pResource = plane_y;  src.PlacedFootprint = plane_y_fp;\n    ID3D12GraphicsCommandList_CopyTextureRegion(bridge_list, &dst, 0, 0, 0, &src, NULL);\n    dst.pResource = plane_uv; src.PlacedFootprint = plane_uv_fp;\n    ID3D12GraphicsCommandList_CopyTextureRegion(bridge_list, &dst, 0, 0, 0, &src, NULL);\n    ID3D12GraphicsCommandList_Close(bridge_list);\n    ID3D12CommandQueue_ExecuteCommandLists(bridge_queue, 1,\n            (ID3D12CommandList *const *)&bridge_list);\n\n    ++bridge_fence_value;\n    if (SUCCEEDED(ID3D12CommandQueue_Signal(bridge_queue, bridge_fence, bridge_fence_value))\n        && ID3D12Fence_GetCompletedValue(bridge_fence) < bridge_fence_value\n        && bridge_event)\n    {\n        ID3D12Fence_SetEventOnCompletion(bridge_fence, bridge_fence_value, bridge_event);\n        WaitForSingleObject(bridge_event, 1000);\n    }\n}"
         }
       ],
@@ -604,8 +609,8 @@
           "language": "c",
           "startLine": 2297,
           "endLine": 2315,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/ue5-media-fix.c#L2297-L2315",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/ue5-media-fix.c#L2297-L2315",
           "code": "static HRESULT WINAPI guarded_query_vram(void *self, UINT node,\n                                         DXGI_MEMORY_SEGMENT_GROUP group,\n                                         DXGI_QUERY_VIDEO_MEMORY_INFO *info)\n{\n    /* One GPU means one node, so zero is the only valid index, and\n     * DXGI_ERROR_INVALID_CALL is what Windows returns past the end. */\n    {\n        static LONG asked;\n        if (InterlockedIncrement(&asked) == 1)\n            logf_(\"node guard: the adapter was asked for video memory (node %u) -- the walk reached us\", node);\n    }\n    if (node != 0)\n    {\n        if (InterlockedIncrement(&refusals) == 1)\n            logf_(\"node %u does not exist -- refused, which ends the caller's walk\", node);\n        return DXGI_ERROR_INVALID_CALL;\n    }\n    return real_query_vram(self, node, group, info);\n}"
         }
       ],
@@ -645,8 +650,8 @@
           "language": "c",
           "startLine": 2297,
           "endLine": 2315,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/ue5-media-fix.c#L2297-L2315",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/ue5-media-fix.c#L2297-L2315",
           "code": "static HRESULT WINAPI guarded_query_vram(void *self, UINT node,\n                                         DXGI_MEMORY_SEGMENT_GROUP group,\n                                         DXGI_QUERY_VIDEO_MEMORY_INFO *info)\n{\n    /* One GPU means one node, so zero is the only valid index, and\n     * DXGI_ERROR_INVALID_CALL is what Windows returns past the end. */\n    {\n        static LONG asked;\n        if (InterlockedIncrement(&asked) == 1)\n            logf_(\"node guard: the adapter was asked for video memory (node %u) -- the walk reached us\", node);\n    }\n    if (node != 0)\n    {\n        if (InterlockedIncrement(&refusals) == 1)\n            logf_(\"node %u does not exist -- refused, which ends the caller's walk\", node);\n        return DXGI_ERROR_INVALID_CALL;\n    }\n    return real_query_vram(self, node, group, info);\n}"
         }
       ],
@@ -696,8 +701,8 @@
           "language": "c",
           "startLine": 565,
           "endLine": 587,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/sm2-tpose-fix.c#L565-L587",
+          "commit": "fabb97bc1bd6acc3c69d52f28c4f3f2da7fcfef0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fabb97bc1bd6acc3c69d52f28c4f3f2da7fcfef0/fixes/sm2-tpose-fix.c#L565-L587",
           "code": "static void STDMETHODCALLTYPE hk_CreateShaderResourceView(ID3D12Device *device, ID3D12Resource *resource,\n        const D3D12_SHADER_RESOURCE_VIEW_DESC *desc, D3D12_CPU_DESCRIPTOR_HANDLE handle)\n{\n    void (STDMETHODCALLTYPE *orig)(ID3D12Device *, ID3D12Resource *, const D3D12_SHADER_RESOURCE_VIEW_DESC *,\n            D3D12_CPU_DESCRIPTOR_HANDLE) = orig_fn(device, DEV_IDX(CreateShaderResourceView));\n\n    if (desc && desc->ViewDimension == D3D12_SRV_DIMENSION_BUFFER && desc->Buffer.NumElements > WIDE_VIEW\n            && !(desc->Buffer.Flags & D3D12_BUFFER_SRV_FLAG_RAW)\n            && (desc->Format == DXGI_FORMAT_R32_UINT || desc->Format == DXGI_FORMAT_R32_SINT\n                || desc->Format == DXGI_FORMAT_R32_FLOAT))\n    {\n        D3D12_SHADER_RESOURCE_VIEW_DESC raw = *desc;\n\n        raw.Format = DXGI_FORMAT_R32_TYPELESS;\n        raw.Buffer.Flags |= D3D12_BUFFER_SRV_FLAG_RAW;\n        raw.Buffer.StructureByteStride = 0;\n        if (InterlockedIncrement(&g_views) <= 4)\n            log_msg(\"Wide typed view (%u elements) created as a raw view\", desc->Buffer.NumElements);\n        orig(device, resource, &raw, handle);\n        return;\n    }\n    orig(device, resource, desc, handle);\n}"
         },
         {
@@ -707,8 +712,8 @@
           "language": "c",
           "startLine": 411,
           "endLine": 426,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/sm2-tpose-fix.c#L411-L426",
+          "commit": "fabb97bc1bd6acc3c69d52f28c4f3f2da7fcfef0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fabb97bc1bd6acc3c69d52f28c4f3f2da7fcfef0/fixes/sm2-tpose-fix.c#L411-L426",
           "code": "static void STDMETHODCALLTYPE hk_Dispatch(ID3D12GraphicsCommandList *list, UINT x, UINT y, UINT z)\n{\n    void (STDMETHODCALLTYPE *orig)(ID3D12GraphicsCommandList *, UINT, UINT, UINT) = orig_fn(list, LIST_IDX(Dispatch));\n\n    orig(list, x, y, z);\n    if (t_bound.list == list && t_bound.fog)\n    {\n        D3D12_RESOURCE_BARRIER barrier;\n\n        memset(&barrier, 0, sizeof(barrier));\n        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;\n        barrier.UAV.pResource = NULL;   /* every UAV access before, against every one after */\n        list->lpVtbl->ResourceBarrier(list, 1, &barrier);\n        InterlockedIncrement(&g_fog_barriers);\n    }\n}"
         }
       ],
@@ -759,8 +764,8 @@
           "language": "c",
           "startLine": 155,
           "endLine": 172,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/mk11-face-fix.c#L155-L172",
+          "commit": "f5d5640fdb90bfa4714baaab10c63c2d38d9353a",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f5d5640fdb90bfa4714baaab10c63c2d38d9353a/fixes/mk11-face-fix.c#L155-L172",
           "code": "static void STDMETHODCALLTYPE hk_CreateShaderResourceView(ID3D12Device *dev, ID3D12Resource *res,\n        const D3D12_SHADER_RESOURCE_VIEW_DESC *desc, D3D12_CPU_DESCRIPTOR_HANDLE h)\n{\n    void (STDMETHODCALLTYPE *orig)(ID3D12Device *, ID3D12Resource *, const D3D12_SHADER_RESOURCE_VIEW_DESC *,\n            D3D12_CPU_DESCRIPTOR_HANDLE) = orig_fn(dev, DEV_IDX(CreateShaderResourceView));\n    if (desc && desc->ViewDimension == D3D12_SRV_DIMENSION_BUFFER && desc->Format == DXGI_FORMAT_R32G32B32_FLOAT\n            && !(desc->Buffer.Flags & D3D12_BUFFER_SRV_FLAG_RAW))\n    {\n        D3D12_SHADER_RESOURCE_VIEW_DESC one = *desc;\n        one.Format = DXGI_FORMAT_R32_FLOAT;\n        one.Buffer.FirstElement = desc->Buffer.FirstElement * 3;\n        one.Buffer.NumElements = desc->Buffer.NumElements * 3;\n        InterlockedIncrement(&views_made);\n        orig(dev, res, &one, h);\n        return;\n    }\n    orig(dev, res, desc, h);\n}"
         },
         {
@@ -770,8 +775,8 @@
           "language": "c",
           "startLine": 324,
           "endLine": 345,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/mk11-movie.c#L324-L345",
+          "commit": "f5d5640fdb90bfa4714baaab10c63c2d38d9353a",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f5d5640fdb90bfa4714baaab10c63c2d38d9353a/fixes/mk11-movie.c#L324-L345",
           "code": "static HRESULT STDMETHODCALLTYPE movie_GetOutputAvailableType(IMFTransform *t, DWORD stream, DWORD index,\n        IMFMediaType **type)\n{\n    HRESULT (STDMETHODCALLTYPE *real)(IMFTransform *, DWORD, DWORD, IMFMediaType **)\n            = orig_fn(t, MFT_IDX(GetOutputAvailableType));\n    IMFMediaType *first = NULL, *nv12 = NULL;\n    GUID sub = { 0 };\n    if (!type || FAILED(real(t, stream, 0, &first)) || !first) return real(t, stream, index, type);\n    if (SUCCEEDED(IMFMediaType_GetGUID(first, &movie_subtype, &sub)) && IsEqualGUID(&sub, &movie_nv12))\n    {\n        IMFMediaType_Release(first);\n        return real(t, stream, index, type);\n    }\n    if (index) { IMFMediaType_Release(first); return real(t, stream, index - 1, type); }\n    if (FAILED(create_media_type(&nv12)) || !nv12) { *type = first; return S_OK; }\n    IMFMediaType_CopyAllItems(first, (IMFAttributes *)nv12);\n    IMFMediaType_SetGUID(nv12, &movie_subtype, &movie_nv12);\n    IMFMediaType_Release(first);\n    if (!InterlockedExchange(&nv12_offered, 1)) log_msg(\"movie: the H.264 decoder offers no NV12; it is offered first\");\n    *type = nv12;\n    return S_OK;\n}"
         },
         {
@@ -781,8 +786,8 @@
           "language": "c",
           "startLine": 304,
           "endLine": 321,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/mk11-movie.c#L304-L321",
+          "commit": "f5d5640fdb90bfa4714baaab10c63c2d38d9353a",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f5d5640fdb90bfa4714baaab10c63c2d38d9353a/fixes/mk11-movie.c#L304-L321",
           "code": "static HRESULT hand_out(movie_decoder *d, MFT_OUTPUT_DATA_BUFFER *out, DWORD *status)\n{\n    int i, best = 0;\n    BOOL ok;\n    BYTE *data;\n    DWORD cap;\n    for (i = 1; i < d->nheld; i++) if (d->held[i].key < d->held[best].key) best = i;\n    ok = move_frame(out->pSample, &d->held[best].data, &d->held[best].len, &d->held[best].cap, TRUE);\n    if (best) d->moved++;\n    /* The rest stay oldest first; the emptied buffer goes to the end for reuse. */\n    data = d->held[best].data; cap = d->held[best].cap;\n    memmove(&d->held[best], &d->held[best + 1], (size_t)(d->nheld - best - 1) * sizeof(d->held[0]));\n    d->nheld--;\n    d->held[d->nheld].data = data; d->held[d->nheld].cap = cap; d->held[d->nheld].len = 0;\n    out->dwStatus = 0;\n    if (status) *status = 0;\n    return ok ? S_OK : E_FAIL;\n}"
         }
       ],
@@ -822,8 +827,8 @@
           "language": "c",
           "startLine": 1284,
           "endLine": 1376,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/ue5-media-fix.c#L1284-L1376",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/ue5-media-fix.c#L1284-L1376",
           "code": "static void force_electra_software(void)\n{\n    BYTE *base = (BYTE *)GetModuleHandleA(NULL);\n    int done = 0;\n    if (electra_sw_forced || !base) return;\n    electra_sw_forced = TRUE;\n\n    read_switches();\n    logf_(\"putting Electra on its old output path\");\n\n    /* The two IsSoftware call sites used to be patched here, by address.\n     *\n     * They are gone, and nothing is read off a disassembly any more. The\n     * software path comes from the engine instead: winegstreamer patch 0006,\n     * carried from winevideo, stops advertising MF_SA_D3D_AWARE on macOS, so\n     * Electra never builds a D3D11 device and answers its own IsSoftware()\n     * honestly. That is in the engine this project ships and it does not move\n     * when the game does.\n     *\n     * Those addresses broke three times in sixteen days -- 2026-08-24,\n     * 08-31 and 09-08 -- and each time they took the console variable down\n     * with them, because the check refused before reaching it. The variable is\n     * found by name and never needed the addresses at all; that coupling was\n     * the actual defect, and this is where it ends.\n     *\n     * Measured 2026-09-09 on UE5-CL-408709: with the variable set and no byte\n     * patched anywhere, the video plays. Without the variable the title\n     * crashes in the D3D path, EXCEPTION_ACCESS_VIOLATION reading 0x0 -- so\n     * patch 0006 alone is not enough and the variable below is load-bearing. */\n\n    /* The console variable is a pointer read from a fixed address and written\n     * through -- a wild write on any build but the one it was read from, and\n     * that build is gone. Left alone until it is found the same way the calls\n     * were. */\n    /* The values live at object + 0x50, and that was read off the vtable\n     * rather than guessed.\n     *\n     * What the fixed address holds in this build is an IConsoleVariable, not\n     * the two plain ints the old code wrote -- its first qword is a pointer\n     * into .rdata, so writing 1 at offset zero would destroy the vtable and\n     * produce exactly the null dereference this afternoon was spent chasing.\n     *\n     * Its vtable says where the data is. Slot 12 is `lea rax,[rcx+0x50] ; ret`\n     * -- AsVariableInt returning the embedded TConsoleVariableData<int32> --\n     * and slot 8 is `mov al,1 ; ret`, which is the \"this is an int variable\"\n     * answer. So the two int32s the old build had at offset zero are at 0x50\n     * here, and the old write is right about what to set and wrong only about\n     * where.\n     *\n     * Read before writing anyway: the default is 0, so anything else means\n     * this is not what it is thought to be, and then nothing is touched. */\n    {\n        void **slot = find_cvar_slot(base);\n        void *obj;\n        if (!slot)\n        {\n            /* There is no falling back to a remembered address any more. What\n             * made that safe was the call-site check proving this was the build\n             * the address came from, and that check is gone. A remembered\n             * address on a build it was not read from is a wild write. */\n            logf_(\"  the console variable was not found by name -- doing nothing\");\n            return;\n        }\n        obj = *slot;\n        if (!obj)\n        {\n            logf_(\"  console variable not registered yet\");\n        }\n        else\n        {\n            int *values = (int *)((BYTE *)obj + CVAR_VALUES_OFFSET);\n            logf_(\"  console variable at %p, values at +0x%X currently [%d, %d]\",\n                  obj, (unsigned)CVAR_VALUES_OFFSET, values[0], values[1]);\n            if (!opt_cvar)\n                logf_(\"    left at [%d, %d], by switch -- Electra keeps whichever \"\n                      \"output path it chooses for itself\", values[0], values[1]);\n            else if (values[0] == 0 && values[1] == 0)\n            {\n                values[0] = 1;\n                values[1] = 1;\n                cvar_ready = TRUE;\n                logf_(\"    set to 1 -- Electra takes the old CPU buffer path, \"\n                      \"which stores the sample instead of querying for a D3D \"\n                      \"resource that is not there\");\n            }\n            else\n                logf_(\"    left alone: the default for this variable is 0, so \"\n                      \"this is not the field it is thought to be\");\n        }\n    }\n\n    if (!done) logf_(\"nothing was patched\");\n}"
         }
       ],
@@ -877,8 +882,8 @@
           "language": "text",
           "startLine": 17,
           "endLine": 28,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/nfsu-prebuild.recipes#L17-L28",
+          "commit": "b458bebadd253fa35587f9ed455a8618aaaa093d",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/b458bebadd253fa35587f9ed455a8618aaaa093d/fixes/nfsu-prebuild.recipes#L17-L28",
           "code": "result ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 496deaa8f65df105528cfd85e68b3521b11809d208da1724d07fd46494ef4b1f\n# The code section's size in the header, so the two checks below are code.\nedit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x258 8efd2000 00fe2000\n# Graphics pre-build: call the check for a root signature that could not be created.\nedit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x433f4 e8f79a1800 e897cd1c00\n# Compute pre-build: the same check.\nedit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x437d9 4d85ff7428 e9d2c91c00\n# Pre-build cleanup: skip an empty root-signature entry instead of calling through it.\nedit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x43ae0 488b4f08488b01ff5010488b4710488bf84885c0751766660f1f840000000000 488b4f08e306488b01ff5010488b7f104885ff75189090909090909090909090\n# The two checks, in unused space at the end of the code section.\nedit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x210190 000000000000000000000000000000000000 4883bd0004000000750331c0c3e94ecdfbff\nedit ee3a654be58be406eda32aeadad99ad60894403e374a2d3b847a20008cd30c62 0x2101b0 00000000000000000000000000000000000000000000000000000000 4883bd68010000000f843d37e3ff4d85ff0f843f36e3ffe91236e3ff"
         },
         {
@@ -888,8 +893,8 @@
           "language": "bash",
           "startLine": 93,
           "endLine": 106,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/install-nfsu-fix.sh#L93-L106",
+          "commit": "b458bebadd253fa35587f9ed455a8618aaaa093d",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/b458bebadd253fa35587f9ed455a8618aaaa093d/fixes/install-nfsu-fix.sh#L93-L106",
           "code": "patch() { # <in> <out> <rows> <from field> <to field> <offset field>\n  /usr/bin/perl -e '\n    my ($in, $out, $rows, $fi, $ti, $oi) = @ARGV;\n    open(my $f, \"<:raw\", $in) or die \"cannot read $in\\n\"; local $/; my $d = <$f>; close $f;\n    for my $r (split /\\n/, $rows) {\n      my @x = split \" \", $r; my $o = hex $x[$oi];\n      my ($from, $to) = (pack(\"H*\", $x[$fi]), pack(\"H*\", $x[$ti]));\n      length($from) == length($to) or die \"row at $x[$oi]: the two byte strings differ in length\\n\";\n      substr($d, $o, length $from) eq $from or die \"the bytes at $x[$oi] are not the expected ones\\n\";\n      substr($d, $o, length $to) = $to;\n    }\n    open(my $g, \">:raw\", $out) or die \"cannot write $out\\n\"; print $g $d; close $g or die \"cannot write $out\\n\";\n  ' \"$1\" \"$2\" \"$3\" \"$4\" \"$5\" \"$6\"\n}"
         }
       ],
@@ -936,8 +941,8 @@
           "language": "c",
           "startLine": 1508,
           "endLine": 1524,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/dwo-video-bridge.c#L1508-L1524",
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L1508-L1524",
           "code": "static IMFAttributes *strip_d3d_attributes(IMFAttributes *attrs)\n{\n    IMFAttributes *plain = NULL;\n    UINT32 count = 0;\n\n    if (!attrs || !real_MFCreateAttributes) return NULL;\n    IMFAttributes_GetCount(attrs, &count);\n    if (SUCCEEDED(real_MFCreateAttributes(&plain, count + 2)) && plain\n        && SUCCEEDED(IMFAttributes_CopyAllItems(attrs, plain)))\n    {\n        IMFAttributes_DeleteItem(plain, &MF_SOURCE_READER_D3D_MANAGER);\n        IMFAttributes_DeleteItem(plain, &MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS);\n        return plain;\n    }\n    if (plain) IMFAttributes_Release(plain);\n    return NULL;\n}"
         }
       ],
@@ -990,8 +995,8 @@
           "language": "bash",
           "startLine": 483,
           "endLine": 503,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/install-ng3-fix.sh#L483-L503",
+          "commit": "e16e2e8539fec54d65e64f2078a8f93a72647ca5",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/e16e2e8539fec54d65e64f2078a8f93a72647ca5/fixes/install-ng3-fix.sh#L483-L503",
           "code": "for d in $DLLS; do\n  s=\"$(src_for \"$d\")\" || { echo \"error: $d is not beside this script\" >&2; exit 1; }\n  # Only the prefix's own file is kept aside: ours, from an earlier install,\n  # is not an original to put back.\n  if [ -f \"$SYS/$d\" ] && [ ! -f \"$SYS/$d.mgvf-stock\" ] && ! cmp -s \"$SYS/$d\" \"$s\"; then\n    mv \"$SYS/$d\" \"$SYS/$d.mgvf-stock\"\n  fi\n  cp \"$s\" \"$SYS/$d\"\n  echo \"  $d  <- ${s#$HOME/}\"\ndone\n\nif [ -n \"$PFX\" ]; then\n  for n in d3d9 qasf quartz winegstreamer; do\n    # Written and then read back, as below for a bottle.\n    if ! user_reg_edit \"$PFX\" set \"$REG_KEY\" \"*$n\" \"native,builtin\" \\\n       || ! user_reg_has_value \"$PFX\" \"$REG_KEY\" \"*$n\"; then\n      echo \"error: could not write the override for $n into $PFX/user.reg\" >&2\n      exit 1\n    fi\n  done\n  echo \"  overrides written for this executable only, into the prefix's user.reg\""
         }
       ],
@@ -1030,8 +1035,8 @@
           "language": "c",
           "startLine": 1195,
           "endLine": 1291,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/tools/ng4-observe.c#L1195-L1291",
+          "commit": "ff8741000f7884aea39d9b098a17a520db4d5df9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/ff8741000f7884aea39d9b098a17a520db4d5df9/tools/ng4-observe.c#L1195-L1291",
           "code": "static HRESULT WINAPI my_MFTEnumEx(GUID category, UINT32 flags,\n                                   const REG_TYPE_INFO *in,\n                                   const REG_TYPE_INFO *out,\n                                   void ***mfts, UINT32 *count)\n{\n    HRESULT hr = real_MFTEnumEx(category, flags, in, out, mfts, count);\n\n    /* The engine's own answer, captured before the substitution below can\n     * overwrite it. */\n    BOOL engine_answered_vp9 = SUCCEEDED(hr) && in && count && *count > 0\n                               && IsEqualGUID(&in->guidSubtype, &guid_VP90);\n\n    if (answer_mft_gate && in && count && *count == 0\n        && IsEqualGUID(&in->guidSubtype, &guid_VP90))\n    {\n        REG_TYPE_INFO substitute = *in;\n        static LONG said;\n        const char *how = \"H264\";\n\n        substitute.guidSubtype = guid_H264;\n        hr = real_MFTEnumEx(category, flags, &substitute, out, mfts, count);\n\n        /* H.264 is the first choice and not the only one.\n         *\n         * Borrowing one named format's list assumed that format is registered,\n         * and on a CrossOver that offers no H.264 decoder at all the fallback\n         * had nothing to hand back: the gate still saw zero and the game still\n         * quit, on an engine where everything else about the fix was working.\n         * Measured on a patched Preview 27, where MFTEnumEx offers zero H.264\n         * MFTs while 26.3 offers some -- so the answer was engine-dependent\n         * through no property of this title.\n         *\n         * Asking with no input type at all means \"every video decoder you\n         * have\", whatever this engine happens to register. It keeps the reason\n         * the substitution is done this way -- these are real MFTs with real\n         * lifetimes, not an array we fabricated for the game to free -- while\n         * depending on nothing being present by name. */\n        if (SUCCEEDED(hr) && *count == 0)\n        {\n            hr = real_MFTEnumEx(category, flags, NULL, out, mfts, count);\n            how = \"any video decoder\";\n        }\n        if (InterlockedIncrement(&said) == 1)\n            logf_(\"VP90 had no decoder; asked again for %s and got %u. On 26.3 \"\n                  \"the game only counts these and never activates them -- if \"\n                  \"an IMFActivate::ActivateObject line follows on this engine, \"\n                  \"that assumption does not hold here and this answer is \"\n                  \"hiding a legible error behind a later one\",\n                  how, count ? *count : 0);\n        if (count && *count == 0)\n            logf_(\"  and this engine registers NO video decoder of any kind, so \"\n                  \"the gate cannot be answered from what is here\");\n    }\n    logf_(\"MFTEnumEx flags=0x%lx -> 0x%08lx, %u decoder(s) offered\",\n          flags, hr, count ? *count : 0);\n    /* Whether this engine registers a VP9 decoder -- measured, not obeyed.\n     *\n     * This fix pushes decoding to software by refusing the game a D3D device\n     * manager. 5f781eb stood that down when the engine offers a decoder of its\n     * own, reasoning that an engine which can decode VP9 needs no push. Both\n     * halves of that were wrong, and each was wrong in its own way:\n     *\n     *   - It read *count after the substitution block below had run. That\n     *     block is the workaround -- when the VP9 ask comes back empty we hand\n     *     the game an H264 list so its gate passes -- so the count was ours.\n     *     Fixed by capturing the game's typed ask first.\n     *   - The idea itself does not hold. Measured 27 Aug on an engine that\n     *     does register VP9 (winevideo's vpx plugin under our winegstreamer):\n     *     the enumeration answers 1 on the first ask, the stand-down fires\n     *     exactly as designed, and the title dies on its first video anyway --\n     *     six access violations, the same ones it dies with everywhere else.\n     *     On stock 26.3, where the ask returns 0 and the refusal stands, the\n     *     videos play through to the menu.\n     *\n     * So a decoder existing does not make the hardware path work here. What\n     * the title needs is the software path, on every engine, which is what\n     * shipped on 25 Aug. The flag stays because the log is more legible for\n     * having it -- it says which kind of engine this is -- and nothing reads\n     * it.\n     */\n    if (engine_answered_vp9)\n        engine_offers_decoder = TRUE;\n    (void)engine_offers_decoder;\n    if (in)  describe_subtype(\"wants to decode\", &in->guidSubtype);\n    /* Watch the promised decoder actually be created. */\n    if (SUCCEEDED(hr) && mfts && *mfts && count && *count > 0)\n    {\n        static void *ao;\n        if (patch_slot(\"ActivateObject\", (*mfts)[0], SLOT_ACTIVATE_OBJECT, (void *)my_ActivateObject, &ao))\n            real_ActivateObject = (HRESULT (WINAPI *)(void *, REFIID, void **))ao;\n    }\n    if (out) describe_subtype(\"wants out as  \", &out->guidSubtype);\n    if (count && *count == 0)\n        logf_(\"  NOTHING can decode that here -- this is the failure, if the \"\n              \"picture is missing and the sound is not\");\n    return hr;\n}"
         },
         {
@@ -1041,8 +1046,8 @@
           "language": "c",
           "startLine": 4053,
           "endLine": 4087,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/tools/ng4-observe.c#L4053-L4087",
+          "commit": "ff8741000f7884aea39d9b098a17a520db4d5df9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/ff8741000f7884aea39d9b098a17a520db4d5df9/tools/ng4-observe.c#L4053-L4087",
           "code": "static HRESULT WINAPI my_QWaitF(void *q, void *f, UINT64 v)\n{\n    int i, j;\n    HRESULT hr;\n    UINT64 done = real_FGetCompletedF ? real_FGetCompletedF(f) : 0, a = v;\n    LONG k = InterlockedIncrement(&fence_ops);\n    AcquireSRWLockExclusive(&fence_lock);\n    i = q_index(q); j = f_index(f, FALSE);\n    if (i >= 0) { fq[i].wf = f; fq[i].wv = v; fq[i].wt = GetTickCount(); }\n    if (j >= 0) ff[j].waits++;\n    if (mono_fences && j >= 0 && ff[j].nbase) { a = mono_wait_(j, v); done = mono_back_(j, done); }\n    if (i >= 0) fq[i].wv = a;\n    {\n        /* Early: no signal of at least this value issued yet, by anyone. */\n        BOOL early = bridge_waits && mono_fences && i >= 0 && j >= 0 && ff[j].nbase && a > ff[j].top;\n        ReleaseSRWLockExclusive(&fence_lock);\n        if (!early && bridge_all && mono_fences && i >= 0 && j >= 0 && real_FGetCompletedF(f) < a)\n            early = TRUE;\n        if (early && bridge_wait_(i, q, f, a, &hr))\n        {\n            if (k <= 200000) flog_(\"Q%d(%s) Wait F%d >= %llu [actual %llu] BRIDGED -> 0x%08lx\", i,\n                                   qtype(fq[i].type), j, (unsigned long long)v, (unsigned long long)a, hr);\n            return hr;\n        }\n    }\n    hr = real_QWaitF(q, f, a);\n    if (k <= 200000 || done < v)\n        flog_(\"Q%d(%s) Wait F%d >= %llu [actual %llu] (completed %llu, asked %llu by %s%d)%s -> 0x%08lx\",\n              i, i >= 0 ? qtype(fq[i].type) : \"?\", j, (unsigned long long)v, (unsigned long long)a,\n              (unsigned long long)done,\n              j >= 0 ? (unsigned long long)ff[j].asked : 0ULL,\n              j >= 0 && ff[j].who == -1 ? \"CPU\" : \"Q\", j >= 0 ? ff[j].who : -9,\n              done < v ? \" NOT YET MET\" : \"\", hr);\n    return hr;\n}"
         }
       ],
@@ -1094,8 +1099,8 @@
           "language": "c",
           "startLine": 1437,
           "endLine": 1466,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/p5s-video-bridge.c#L1437-L1466",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/p5s-video-bridge.c#L1437-L1466",
           "code": "static HRESULT WINAPI my_CreateRenderTarget(void *self, UINT w, UINT h, DWORD fmt,\n                                            DWORD ms, DWORD msq, BOOL lockable,\n                                            void **surface, HANDLE *shared)\n{\n    HRESULT hr = real_CreateRenderTarget(self, w, h, fmt, ms, msq, lockable, surface, shared);\n    note_shared(\"CreateRenderTarget\", w, h, fmt, hr, shared);\n    /* Only where Wine left a hole: it succeeded and shared nothing. */\n    if (SUCCEEDED(hr) && shared && !*shared && make_sidecar(w, h))\n    {\n        static LONG said;\n        *shared = sidecar_handle;\n        sidecar_w = w; sidecar_h = h;\n        if (surface && *surface)\n        {\n            static void *su;\n            void **vt;\n            shared_surface = *surface;\n            vt = *(void ***)shared_surface;\n            real_SurfUnlock = (HRESULT (WINAPI *)(void *))vt[SLOT_SURF_UNLOCKRECT];\n            if (!watch_write_path || !patch_slot(\"surface UnlockRect\", shared_surface,\n                    SLOT_SURF_UNLOCKRECT, (void *)my_SurfUnlock, &su))\n                real_SurfUnlock = NULL;\n        }\n        if (InterlockedIncrement(&said) == 1)\n            logf_(\"  handed the game a real shared handle %p instead of null -- \"\n                  \"nothing copies into it yet; this only asks whether the game \"\n                  \"then carries on\", sidecar_handle);\n    }\n    return hr;\n}"
         }
       ],
@@ -1141,8 +1146,8 @@
           "language": "c",
           "startLine": 2163,
           "endLine": 2215,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/dwo-video-bridge.c#L2163-L2215",
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L2163-L2215",
           "code": "static HRESULT WINAPI d3d12_open_shared_handle(void *self, HANDLE handle,\n                                               REFIID iid, void **out)\n{\n    {\n        static LONG told;\n        if (InterlockedIncrement(&told) <= 12)\n            logf_(\"D3D12 OpenSharedHandle %p %s%s\", handle, guid_text_(iid),\n                  handle == BRIDGE_HANDLE ? \"   << ours\" : \"\");\n    }\n    if (handle == BRIDGE_HANDLE)\n    {\n        HRESULT hr;\n        if (!out) return E_INVALIDARG;\n        *out = NULL;\n        if (!IsEqualGUID(iid, &IID_ID3D12Resource)) return E_NOINTERFACE;\n\n        EnterCriticalSection(&frame_lock);\n        /* A new clip of another size: the game has made a new texture and is\n         * opening it now, so this is the one moment the bridge can change size.\n         * Handing back the old one leaves the game drawing from a texture no\n         * frame of this clip can be written into. */\n        if (bridge_texture && frame_width && frame_height &&\n            (texture_width != frame_width || texture_height != frame_height))\n        {\n            logf_(\"bridge: the game opens a %ux%u clip on a %ux%u bridge; rebuilding\",\n                  frame_width, frame_height, texture_width, texture_height);\n            bridge_destroy();\n        }\n        if (!bridge_texture && frame_width && frame_height)\n        {\n            /*\n             * The size the game asked to share, when it said one.\n             *\n             * The handle it passes belongs to a texture it created itself, and\n             * what comes back has to describe that texture -- not the clip.\n             * Kingdom Hearts shares a 2048x1080 surface to carry a 1920x1080\n             * frame, so a texture built to the clip's size is the wrong\n             * resource under the same handle, and what the game copies out of\n             * it is not a picture.\n             */\n            bridge_create((ID3D12Device *)self, frame_width, frame_height);\n        }\n        hr = bridge_texture ? S_OK : E_FAIL;\n        if (bridge_texture)\n        {\n            ID3D12Resource_AddRef(bridge_texture);\n            *out = bridge_texture;\n        }\n        LeaveCriticalSection(&frame_lock);\n        return hr;\n    }\n    return real_open_shared_handle(self, handle, iid, out);\n}"
         },
         {
@@ -1152,8 +1157,8 @@
           "language": "c",
           "startLine": 1863,
           "endLine": 1884,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/dwo-video-bridge.c#L1863-L1884",
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L1863-L1884",
           "code": "static HRESULT WINAPI res_get_shared_handle(void *self, HANDLE *handle)\n{\n    HRESULT hr = real_res_get_shared_handle(self, handle);\n    {\n        static LONG told;\n        if (InterlockedIncrement(&told) <= 12)\n            logf_(\"GetSharedHandle -> 0x%08lx%s\", (unsigned long)hr,\n                  (FAILED(hr) && d3d12_bridge_armed) ? \"   (answering BRIDGE_HANDLE)\" : \"\");\n    }\n    /*\n     * Only invent a handle if the side that can recognise it is armed.\n     *\n     * BRIDGE_HANDLE is meaningful to d3d12_open_shared_handle and to nothing\n     * else. Handing it out while that hook is missing turns a clean failure --\n     * the game learns it cannot share, and says so -- into a real D3D12 device\n     * dereferencing 0xD3D12B21D. Nioh 3 crashed exactly that way, because its\n     * D3D12 arrives through Streamline and the hook had not been placed there\n     * yet. Reporting the original failure is the safe answer.\n     */\n    if (FAILED(hr) && handle && d3d12_bridge_armed) { *handle = BRIDGE_HANDLE; return S_OK; }\n    return hr;\n}"
         }
       ],
@@ -1205,8 +1210,8 @@
           "language": "c",
           "startLine": 1437,
           "endLine": 1466,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/p5s-video-bridge.c#L1437-L1466",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/p5s-video-bridge.c#L1437-L1466",
           "code": "static HRESULT WINAPI my_CreateRenderTarget(void *self, UINT w, UINT h, DWORD fmt,\n                                            DWORD ms, DWORD msq, BOOL lockable,\n                                            void **surface, HANDLE *shared)\n{\n    HRESULT hr = real_CreateRenderTarget(self, w, h, fmt, ms, msq, lockable, surface, shared);\n    note_shared(\"CreateRenderTarget\", w, h, fmt, hr, shared);\n    /* Only where Wine left a hole: it succeeded and shared nothing. */\n    if (SUCCEEDED(hr) && shared && !*shared && make_sidecar(w, h))\n    {\n        static LONG said;\n        *shared = sidecar_handle;\n        sidecar_w = w; sidecar_h = h;\n        if (surface && *surface)\n        {\n            static void *su;\n            void **vt;\n            shared_surface = *surface;\n            vt = *(void ***)shared_surface;\n            real_SurfUnlock = (HRESULT (WINAPI *)(void *))vt[SLOT_SURF_UNLOCKRECT];\n            if (!watch_write_path || !patch_slot(\"surface UnlockRect\", shared_surface,\n                    SLOT_SURF_UNLOCKRECT, (void *)my_SurfUnlock, &su))\n                real_SurfUnlock = NULL;\n        }\n        if (InterlockedIncrement(&said) == 1)\n            logf_(\"  handed the game a real shared handle %p instead of null -- \"\n                  \"nothing copies into it yet; this only asks whether the game \"\n                  \"then carries on\", sidecar_handle);\n    }\n    return hr;\n}"
         }
       ],
@@ -1258,8 +1263,8 @@
           "language": "c",
           "startLine": 1437,
           "endLine": 1466,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/p5s-video-bridge.c#L1437-L1466",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/p5s-video-bridge.c#L1437-L1466",
           "code": "static HRESULT WINAPI my_CreateRenderTarget(void *self, UINT w, UINT h, DWORD fmt,\n                                            DWORD ms, DWORD msq, BOOL lockable,\n                                            void **surface, HANDLE *shared)\n{\n    HRESULT hr = real_CreateRenderTarget(self, w, h, fmt, ms, msq, lockable, surface, shared);\n    note_shared(\"CreateRenderTarget\", w, h, fmt, hr, shared);\n    /* Only where Wine left a hole: it succeeded and shared nothing. */\n    if (SUCCEEDED(hr) && shared && !*shared && make_sidecar(w, h))\n    {\n        static LONG said;\n        *shared = sidecar_handle;\n        sidecar_w = w; sidecar_h = h;\n        if (surface && *surface)\n        {\n            static void *su;\n            void **vt;\n            shared_surface = *surface;\n            vt = *(void ***)shared_surface;\n            real_SurfUnlock = (HRESULT (WINAPI *)(void *))vt[SLOT_SURF_UNLOCKRECT];\n            if (!watch_write_path || !patch_slot(\"surface UnlockRect\", shared_surface,\n                    SLOT_SURF_UNLOCKRECT, (void *)my_SurfUnlock, &su))\n                real_SurfUnlock = NULL;\n        }\n        if (InterlockedIncrement(&said) == 1)\n            logf_(\"  handed the game a real shared handle %p instead of null -- \"\n                  \"nothing copies into it yet; this only asks whether the game \"\n                  \"then carries on\", sidecar_handle);\n    }\n    return hr;\n}"
         }
       ],
@@ -1310,8 +1315,8 @@
           "language": "bash",
           "startLine": 171,
           "endLine": 177,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/install-pbz-fix.sh#L171-L177",
+          "commit": "e9a36f5924d22e07200569506deb7de381aa9d47",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/e9a36f5924d22e07200569506deb7de381aa9d47/fixes/install-pbz-fix.sh#L171-L177",
           "code": "values() {\n  printf '%s|%s|%s\\n' \"$ENV_KEY\" \"$CPUID_NAME\" \"$CPUID_DATA\"\n  local d\n  for d in $DLLS; do printf '%s|*%s|native,builtin\\n' \"$DLL_KEY\" \"$d\"; done\n  # native,builtin: should the prefix lose our file, CrossOver's decoder loads.\n  printf '%s|*msmpeg2vdec|native,builtin\\n' \"$DLL_KEY\"\n}"
         },
         {
@@ -1321,8 +1326,8 @@
           "language": "c",
           "startLine": 214,
           "endLine": 243,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/h264-software-decoder.c#L214-L243",
+          "commit": "e9a36f5924d22e07200569506deb7de381aa9d47",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/e9a36f5924d22e07200569506deb7de381aa9d47/fixes/h264-software-decoder.c#L214-L243",
           "code": "static HRESULT WINAPI decoder_GetOutputAvailableType(IMFTransform *iface, DWORD id, DWORD index, IMFMediaType **type)\n{\n    struct decoder *decoder = impl(iface);\n    IMFMediaType *first, *nv12 = NULL;\n    HRESULT hr;\n\n    if (index)\n        return IMFTransform_GetOutputAvailableType(decoder->inner, id, index, type);\n\n    if (FAILED(hr = IMFTransform_GetOutputAvailableType(decoder->inner, id, 0, &first)))\n        return hr;\n    if (is_subtype(first, &MFVideoFormat_NV12) || !is_subtype(first, &MFVideoFormat_YV12))\n    {\n        *type = first;  /* NV12 already offered, or a list this was not written for */\n        return S_OK;\n    }\n\n    if (SUCCEEDED(hr = MFCreateMediaType(&nv12))\n            && SUCCEEDED(hr = IMFMediaType_CopyAllItems(first, (IMFAttributes *)nv12))\n            && SUCCEEDED(hr = IMFMediaType_SetGUID(nv12, &MF_MT_SUBTYPE, &MFVideoFormat_NV12)))\n    {\n        *type = nv12;\n        if (!InterlockedExchange(&decoder->offered_nv12, 1))\n            say(\"decoder %p: offering NV12 first\", decoder);\n    }\n    else if (nv12)\n        IMFMediaType_Release(nv12);\n    IMFMediaType_Release(first);\n    return hr;\n}"
         },
         {
@@ -1332,8 +1337,8 @@
           "language": "c",
           "startLine": 291,
           "endLine": 301,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/h264-software-decoder.c#L291-L301",
+          "commit": "e9a36f5924d22e07200569506deb7de381aa9d47",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/e9a36f5924d22e07200569506deb7de381aa9d47/fixes/h264-software-decoder.c#L291-L301",
           "code": "static HRESULT WINAPI decoder_ProcessMessage(IMFTransform *iface, MFT_MESSAGE_TYPE message, ULONG_PTR param)\n{\n    struct decoder *decoder = impl(iface);\n\n    if (message == MFT_MESSAGE_SET_D3D_MANAGER && param)\n    {\n        say(\"decoder %p: refused a D3D manager\", decoder);\n        return E_NOTIMPL;\n    }\n    return IMFTransform_ProcessMessage(decoder->inner, message, param);\n}"
         }
       ],
@@ -1380,8 +1385,8 @@
           "language": "c",
           "startLine": 109,
           "endLine": 125,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/mf-reader-fallback.c#L109-L125",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/mf-reader-fallback.c#L109-L125",
           "code": "static HRESULT WINAPI my_create(void *stream, void *attrs, void **reader)\n{\n    static LONG calls, ours;\n    HRESULT hr = real_create(stream, attrs, reader);\n    LONG n = InterlockedIncrement(&calls);\n    if (n == 1) logf_(\"MFCreateSourceReaderFromByteStream -> 0x%08lx (first call)\", hr);\n    if (FAILED(hr) && stream && reader && load_asf_reader_())\n    {\n        HRESULT mine = asf_reader_create(stream, attrs, reader);\n        LONG k = InterlockedIncrement(&ours);\n        if (k <= 5 || FAILED(mine))\n            logf_(\"Media Foundation refused a stream (0x%08lx); our ASF reader -> 0x%08lx (%ld so far)\",\n                  hr, mine, k);\n        if (SUCCEEDED(mine)) hr = mine;\n    }\n    return hr;\n}"
         }
       ],
@@ -1428,8 +1433,8 @@
           "language": "c",
           "startLine": 109,
           "endLine": 125,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/mf-reader-fallback.c#L109-L125",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/mf-reader-fallback.c#L109-L125",
           "code": "static HRESULT WINAPI my_create(void *stream, void *attrs, void **reader)\n{\n    static LONG calls, ours;\n    HRESULT hr = real_create(stream, attrs, reader);\n    LONG n = InterlockedIncrement(&calls);\n    if (n == 1) logf_(\"MFCreateSourceReaderFromByteStream -> 0x%08lx (first call)\", hr);\n    if (FAILED(hr) && stream && reader && load_asf_reader_())\n    {\n        HRESULT mine = asf_reader_create(stream, attrs, reader);\n        LONG k = InterlockedIncrement(&ours);\n        if (k <= 5 || FAILED(mine))\n            logf_(\"Media Foundation refused a stream (0x%08lx); our ASF reader -> 0x%08lx (%ld so far)\",\n                  hr, mine, k);\n        if (SUCCEEDED(mine)) hr = mine;\n    }\n    return hr;\n}"
         }
       ],
@@ -1468,8 +1473,8 @@
           "language": "c",
           "startLine": 74,
           "endLine": 120,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/shader-floor-fix.c#L74-L120",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/shader-floor-fix.c#L74-L120",
           "code": "static void lower_the_floor(void)\n{\n    HMODULE base = GetModuleHandleA(NULL);\n    IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)base;\n    IMAGE_NT_HEADERS *nt;\n    IMAGE_SECTION_HEADER *sec;\n    BYTE *found = NULL;\n    int hits = 0;\n    unsigned i;\n\n    if (!base || dos->e_magic != IMAGE_DOS_SIGNATURE) return;\n    nt = (IMAGE_NT_HEADERS *)((BYTE *)base + dos->e_lfanew);\n    if (nt->Signature != IMAGE_NT_SIGNATURE) return;\n    sec = IMAGE_FIRST_SECTION(nt);\n\n    for (i = 0; i < nt->FileHeader.NumberOfSections; i++, sec++)\n    {\n        BYTE *p, *end;\n        if (memcmp(sec->Name, \".text\", 5) != 0) continue;\n        p   = (BYTE *)base + sec->VirtualAddress;\n        end = p + sec->Misc.VirtualSize - sizeof(SM_FLOOR);\n        for (; p < end; p++)\n        {\n            if (p[0] != SM_FLOOR[0] || memcmp(p, SM_FLOOR, sizeof(SM_FLOOR)) != 0) continue;\n            if (++hits == 1) found = p;\n        }\n    }\n\n    if (hits != 1)\n    {\n        logf_(\"%d places match the pattern -- leaving all of them alone\", hits);\n        return;\n    }\n    {\n        DWORD old;\n        if (!VirtualProtect(found + 2, 1, PAGE_EXECUTE_READWRITE, &old))\n        {\n            logf_(\"VirtualProtect refused (err %lu)\", GetLastError());\n            return;\n        }\n        found[2] = 0x66;\n        VirtualProtect(found + 2, 1, old, &old);\n        logf_(\"shader model floor 6.7 -> 6.6 at +0x%lX, in memory only%s\",\n              (unsigned long)(found - (BYTE *)base),\n              found[2] == 0x66 ? \"\" : \" -- but the write did not stick\");\n    }\n}"
         }
       ],
@@ -1515,8 +1520,8 @@
           "language": "c",
           "startLine": 101,
           "endLine": 112,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/w3-streamout-fix.c#L101-L112",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/w3-streamout-fix.c#L101-L112",
           "code": "static BOOL refuse(BOOL gs, BOOL ps, UINT so_entries)\n{\n#ifdef W3_RTPROBE\n    if (allow_gs_without_ps && gs && !so_entries && !ps)\n    {\n        logline(\"let through geometry-shader pipeline %ld with no pixel shader and no stream output\",\n                InterlockedIncrement(&let_through));\n        return FALSE;\n    }\n#endif\n    return gs && (so_entries || !ps);\n}"
         },
         {
@@ -1526,8 +1531,8 @@
           "language": "c",
           "startLine": 119,
           "endLine": 139,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/w3-streamout-fix.c#L119-L139",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/w3-streamout-fix.c#L119-L139",
           "code": "static HRESULT WINAPI my_gfx(void *dev, const void *desc, REFIID iid, void **out)\n{\n    const char *d = desc;\n    InterlockedIncrement(&seen_gfx);\n    if (d && refuse(has_shader(d + 72), has_shader(d + 24), *(const UINT *)(d + 96)))\n    {\n        LONG n = InterlockedIncrement(&refused);\n        logline(\"refused stream-output pipeline %ld (graphics desc, %u entries)\", n, *(const UINT *)(d + 96));\n        if (out) *out = NULL;\n        return E_INVALIDARG;\n    }\n#ifdef W3_RTPROBE\n    {\n        HRESULT hr = real_gfx(dev, desc, iid, out);\n        if (FAILED(hr)) logline(\"CreateGraphicsPipelineState failed: %08lx\", (unsigned long)hr);\n        return hr;\n    }\n#else\n    return real_gfx(dev, desc, iid, out);\n#endif\n}"
         }
       ],
@@ -1576,8 +1581,8 @@
           "language": "bash",
           "startLine": 154,
           "endLine": 156,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/install-wolf-fix.sh#L154-L156",
+          "commit": "57495a65ee8f8e2e098a1a37d97aeafbdd76fe0b",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/57495a65ee8f8e2e098a1a37d97aeafbdd76fe0b/fixes/install-wolf-fix.sh#L154-L156",
           "code": "echo \"[2/2] telling Wine to load it, for this game only\"\nuser_reg_edit \"$PLACE\" set \"$KEY\" d3d11 \"native,builtin\" || {\n  echo \"error: could not write the override into $PLACE/user.reg\" >&2; exit 1; }"
         }
       ],
@@ -1617,8 +1622,8 @@
           "language": "c",
           "startLine": 207,
           "endLine": 220,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/d3d12-guards.c#L207-L220",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/d3d12-guards.c#L207-L220",
           "code": "static HRESULT WINAPI my_deserialize(const void *blob, SIZE_T len, REFIID iid, void **out)\n{\n    if (!has_root_signature(blob, len))\n    {\n        if (InterlockedIncrement(&refused) <= 8)\n            logf_(\"no RTS0 in a %llu byte container -- answering E_INVALIDARG \"\n                  \"instead of letting it be dereferenced\",\n                  (unsigned long long)len);\n        if (out) *out = NULL;\n        return E_INVALIDARG;\n    }\n    InterlockedIncrement(&passed);\n    return real_deserialize(blob, len, iid, out);\n}"
         }
       ],
@@ -1658,8 +1663,8 @@
           "language": "c",
           "startLine": 422,
           "endLine": 507,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/d3d12-guards.c#L422-L507",
+          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/d3d12-guards.c#L422-L507",
           "code": "static HRESULT WINAPI my_modelist(void *self, UINT fmt, UINT flags, UINT *count, void *modes)\n{\n    HRESULT hr;\n    UINT w = 0, h = 0, hz = 0, i, have, room, added = 0, big_w = 0, big_h = 0;\n\n    if (!desktop_size(&w, &h, &hz)) return real_modelist(self, fmt, flags, count, modes);\n\n    if (!modes)                                   /* the counting call */\n    {\n        hr = real_modelist(self, fmt, flags, count, NULL);\n        if (SUCCEEDED(hr) && count) *count += ladder_fits(w, h);  /* room for ours */\n        return hr;\n    }\n\n    /* The filling call. Hold back the slots we may need, fill the rest normally. */\n    room = ladder_fits(w, h);\n    have = *count;\n    /* Never write past what the caller allocated. It asked for a count first\n     * and this said \"that many plus room\", but a caller is free to hand back a\n     * smaller buffer than it was told about, and appending into one would be a\n     * far worse bug than the crash being repaired. */\n    if (room > have) room = have;\n    *count = have - room;\n    hr = real_modelist(self, fmt, flags, count, modes);\n    if (FAILED(hr)) { *count = have; return hr; }\n\n    {\n        /* Say what is actually on offer, with the right stride. A mode list\n         * read at the wrong stride reports resolutions nobody offered, and a\n         * conclusion drawn from it is worse than no conclusion. */\n        static LONG told;\n        UINT tallest = 0, widest = 0;\n        for (i = 0; i < *count; ++i)\n        {\n            const unsigned char *m = (const unsigned char *)modes + (size_t)i * MODE_DESC_SIZE;\n            UINT mw = *(const UINT *)(m + 0), mh = *(const UINT *)(m + 4);\n            if (mh > tallest) tallest = mh;\n            if (mw > widest) widest = mw;\n        }\n        if (InterlockedIncrement(&told) <= 4)\n            logf_(\"mode list for format %u: %u modes, largest %ux%u; the screen is %ux%u\",\n                  fmt, *count, widest, tallest, w, h);\n    }\n    for (i = 0; i < *count; ++i)\n    {\n        const unsigned char *m = (const unsigned char *)modes + (size_t)i * MODE_DESC_SIZE;\n        UINT mw = *(const UINT *)(m + 0), mh = *(const UINT *)(m + 4);\n        double aspect;\n        if (!mh) continue;\n        aspect = (double)mw / (double)mh;\n        if (aspect > ASPECT_LOW && aspect < ASPECT_HIGH)\n        {\n            static LONG said;\n            if (InterlockedIncrement(&said) <= 4)\n                logf_(\"        a 16:9 mode is already on offer (%ux%u), adding nothing\",\n                      mw, mh);\n            return hr;\n        }\n    }\n    /* Nothing on offer is 16:9 and this game keeps nothing else, so the array\n     * it is about to build would come out empty. Give it the whole ladder that\n     * fits, not just enough to survive: the player gets a resolution menu, not\n     * a single forced entry. */\n    for (i = 0; i < LADDER_N && added < room; ++i)\n    {\n        unsigned char *m;\n        if ((ladder[i].w > w || ladder[i].h > h) && !(added == 0 && i + 1 == LADDER_N))\n            continue;\n        m = (unsigned char *)modes + (size_t)(*count) * MODE_DESC_SIZE;\n        if (*count) memcpy(m, modes, MODE_DESC_SIZE);  /* inherit format and scaling */\n        else memset(m, 0, MODE_DESC_SIZE);\n        *(UINT *)(m + 0)  = ladder[i].w;\n        *(UINT *)(m + 4)  = ladder[i].h;\n        *(UINT *)(m + 8)  = hz;\n        *(UINT *)(m + 12) = 1;\n        *(UINT *)(m + 16) = fmt;\n        *count += 1;\n        if (!added) { big_w = ladder[i].w; big_h = ladder[i].h; }  /* largest first */\n        ++added;\n    }\n    if (InterlockedIncrement(&modes_added) <= 8)\n        logf_(\"not one of the %u modes on offer is 16:9, and this game keeps \"\n              \"nothing else -- added %u of them, largest %ux%u @ %u Hz\",\n              *count - added, added, big_w, big_h, hz);\n    return hr;\n}"
         }
       ],
@@ -1699,8 +1704,8 @@
           "language": "c",
           "startLine": 2163,
           "endLine": 2215,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/dwo-video-bridge.c#L2163-L2215",
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L2163-L2215",
           "code": "static HRESULT WINAPI d3d12_open_shared_handle(void *self, HANDLE handle,\n                                               REFIID iid, void **out)\n{\n    {\n        static LONG told;\n        if (InterlockedIncrement(&told) <= 12)\n            logf_(\"D3D12 OpenSharedHandle %p %s%s\", handle, guid_text_(iid),\n                  handle == BRIDGE_HANDLE ? \"   << ours\" : \"\");\n    }\n    if (handle == BRIDGE_HANDLE)\n    {\n        HRESULT hr;\n        if (!out) return E_INVALIDARG;\n        *out = NULL;\n        if (!IsEqualGUID(iid, &IID_ID3D12Resource)) return E_NOINTERFACE;\n\n        EnterCriticalSection(&frame_lock);\n        /* A new clip of another size: the game has made a new texture and is\n         * opening it now, so this is the one moment the bridge can change size.\n         * Handing back the old one leaves the game drawing from a texture no\n         * frame of this clip can be written into. */\n        if (bridge_texture && frame_width && frame_height &&\n            (texture_width != frame_width || texture_height != frame_height))\n        {\n            logf_(\"bridge: the game opens a %ux%u clip on a %ux%u bridge; rebuilding\",\n                  frame_width, frame_height, texture_width, texture_height);\n            bridge_destroy();\n        }\n        if (!bridge_texture && frame_width && frame_height)\n        {\n            /*\n             * The size the game asked to share, when it said one.\n             *\n             * The handle it passes belongs to a texture it created itself, and\n             * what comes back has to describe that texture -- not the clip.\n             * Kingdom Hearts shares a 2048x1080 surface to carry a 1920x1080\n             * frame, so a texture built to the clip's size is the wrong\n             * resource under the same handle, and what the game copies out of\n             * it is not a picture.\n             */\n            bridge_create((ID3D12Device *)self, frame_width, frame_height);\n        }\n        hr = bridge_texture ? S_OK : E_FAIL;\n        if (bridge_texture)\n        {\n            ID3D12Resource_AddRef(bridge_texture);\n            *out = bridge_texture;\n        }\n        LeaveCriticalSection(&frame_lock);\n        return hr;\n    }\n    return real_open_shared_handle(self, handle, iid, out);\n}"
         },
         {
@@ -1710,8 +1715,8 @@
           "language": "c",
           "startLine": 1863,
           "endLine": 1884,
-          "commit": "2b7f350f858677c83e18b74f925c53dfaa323434",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/2b7f350f858677c83e18b74f925c53dfaa323434/fixes/dwo-video-bridge.c#L1863-L1884",
+          "commit": "f57c3f6131cd9252c7f6f464078ff11a95c5db94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f57c3f6131cd9252c7f6f464078ff11a95c5db94/fixes/dwo-video-bridge.c#L1863-L1884",
           "code": "static HRESULT WINAPI res_get_shared_handle(void *self, HANDLE *handle)\n{\n    HRESULT hr = real_res_get_shared_handle(self, handle);\n    {\n        static LONG told;\n        if (InterlockedIncrement(&told) <= 12)\n            logf_(\"GetSharedHandle -> 0x%08lx%s\", (unsigned long)hr,\n                  (FAILED(hr) && d3d12_bridge_armed) ? \"   (answering BRIDGE_HANDLE)\" : \"\");\n    }\n    /*\n     * Only invent a handle if the side that can recognise it is armed.\n     *\n     * BRIDGE_HANDLE is meaningful to d3d12_open_shared_handle and to nothing\n     * else. Handing it out while that hook is missing turns a clean failure --\n     * the game learns it cannot share, and says so -- into a real D3D12 device\n     * dereferencing 0xD3D12B21D. Nioh 3 crashed exactly that way, because its\n     * D3D12 arrives through Streamline and the hook had not been placed there\n     * yet. Reporting the original failure is the safe answer.\n     */\n    if (FAILED(hr) && handle && d3d12_bridge_armed) { *handle = BRIDGE_HANDLE; return S_OK; }\n    return hr;\n}"
         }
       ],
