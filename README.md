@@ -1034,6 +1034,10 @@ how, is in the game's page under `legacy/wiki/`.
 - **Hrava** wrote the ntdll patch that makes Rosetta's CPU look like the one
   Phantom Blade Zero's Denuvo checks for (engine patch `0017`), which reached us
   in a package for that game with the D3DMetal fallback (`0018`).
+- **[prsloan](https://github.com/prsloan)** found why Forza Horizon 6 never
+  joined an online session on a Mac (two IPv4 options that macOS refuses on the
+  game's dual-stack UDP socket) and wrote the ntdll patch that answers them
+  (engine patch `0026`, #73), with its probes.
 - **The Cyberpunk 2077 patch** comes from a community script published
   anonymously; its author is not known. MacGameFix writes one of its five
   words.
