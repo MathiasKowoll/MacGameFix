@@ -469,6 +469,67 @@ Eliminator event was played to its end. FH6 also sets `IPPROTO_IP` option 76
 (`IP_USER_MTU`, 1384), which Wine's `ws2_32` does not know (a FIXME); the game carries
 on without it. The FEX side was not played.
 
+## A direct system call while the thread is suspended
+
+Copy protection makes some of its system calls with a `syscall` instruction of its own, in
+memory it allocated, not through ntdll's stubs. Wine on macOS receives each one as
+`SIGSYS` and sends the thread into its system call dispatcher from the handler. Under
+Rosetta 2 that signal does not wait for its turn. When `SIGUSR1` reaches the thread at
+the same instruction (another thread called `SuspendThread` or `GetThreadContext` on it,
+or the server has a system APC for it), `SIGUSR1`'s frame is built first, with the thread
+just after the instruction and the system call not made, and then:
+
+- `SIGSYS` is delivered on top of that frame before `usr1_handler` has run. Its context
+  is the entry of the signal trampoline on the signal stack, and Wine sends that into the
+  dispatcher: the system call runs on the signal stack with whatever the registers hold
+  and returns into the middle of the trampoline. `usr1_handler` never runs, the thread
+  that suspended it waits for ever in `GetThreadContext`, and the thread itself spins in
+  user mode. One run also printed an assertion of Rosetta's own runtime:
+  `assertion failed [guest_ucontext->uc_link == nullptr]: uc_link not null
+  (ThreadContextSignals.cpp:480 sigreturn)`;
+- or `SIGSYS` is not delivered at all, and the program carries on after its instruction
+  with the system call number in `rax` where the status should be.
+
+Blocking `SIGSYS` in the other handlers' masks turns the first into the second: Rosetta
+drops a blocked one.
+
+Found on 2026-11-16 with a diagnostic that suspended Forza Horizon 6's threads to read
+where they were (the game's protection makes direct system calls: a thread in one shows
+its instruction pointer in private executable memory). Two sessions ended that way, one
+with the game exiting with status 1, one with it hung. Whether the game meets the same
+pair without a tool, through the server's own `SIGUSR1`, was not measured.
+
+| Patch | Module | Change |
+|---|---|---|
+| `0028-ntdll-direct-syscall-under-suspend.patch` | `ntdll.so` (Intel side) | `sigsys_handler` only notes a `SIGSYS` whose context is on the signal stack, and `usr1_handler`, when it is done, enters the system call from the context it was given if one was noted. With none noted it enters it only if the two bytes before the thread are `0f 05`, `rax` could be a system call number, the thread has not been through the dispatcher (which leaves the return address in `rcx`, as the instruction does) and `r10` equals `rcx`, as after the `mov r10,rcx` a system call stub starts with: those two bytes can end any instruction, so a program that loads `r10` another way keeps the second outcome. A `SIGSYS` whose thread is not just after a `syscall` instruction, or has been through the dispatcher already, is ignored (never seen). Under Rosetta only. `WINE_DIRECT_SYSCALL_DEFERRAL=0` turns it off; through NotProton that is `NOTPROTON_ENV_WINE_DIRECT_SYSCALL_DEFERRAL=0` in the game's launch options |
+
+`tests/direct-syscall-suspend/run.sh <CrossOver folder>` runs threads that make direct
+system calls and check every result, a pair that waits and wakes through them, four
+pairs that do so through kernel32, and a thread that suspends them all in turn without
+pause. Measured the same day in copies of the 41303 NotProton runner (macOS 27.2, M4
+Max), with msync and without:
+
+| `x86_64-unix/ntdll.so` | Result |
+|---|---|
+| the runner's (`0027`) | fails in 1 to 3 s, every run: a look never returns from `GetThreadContext` |
+| `SIGSYS` blocked in the other handlers (tried, not kept) | no look is lost, and 4 of some 3,000 direct calls made in 9 s return `0x31`, their own number |
+| with `0028` | 30 s each way: 150,511 and 139,843 looks, 164,106 and 160,341 pairs of direct calls, nothing lost, none run twice |
+| with `0028`, `WINE_DIRECT_SYSCALL_DEFERRAL=0` | fails as the runner's does |
+
+In a 30 s run with one thread making direct calls and 419,492 looks at it, an
+instrumented build counted 562 system calls entered because their `SIGSYS` came on top
+of the handler and 7 because it never came; two 40 s runs of the same on the patch as
+it is returned no wrong status. The same test through ntdll's stubs alone
+(nine kinds of wait, 13 million waits, 73,000 looks) loses nothing without the patch:
+the defect needs the direct call.
+
+The modules in `modules/27.0.0.41303` carry `0028` since 2026-11-16:
+`x86_64-unix/ntdll.so`, built by `build.sh` from the series. The rest of that folder is
+as it was. `tests/dualstack-udp/run.sh` still fails none of its 26 checks with it. The
+patch is in `signal_x86_64.c`, which the FEX side's `ntdll.so` does not compile; what
+that side does with a program's `syscall` instruction was not looked at. Forza Horizon 6
+has not been played with it yet.
+
 ## Measured
 
 Measured on 2026-10-18 on CrossOver Preview 27.0.0.41069, in a NotProton runner,
