@@ -17,8 +17,10 @@
 # CrossOver: a DXMT or D3DMetal update needs nothing done here.
 #
 # gow-depth-fix.ini beside the game says what an EQUAL test becomes:
-# greater_equal (the fix, written by default), less_equal, or off. A value
-# someone chose is kept across reinstalls.
+# greater_equal (the fix, written by default), less_equal, or off, and for which
+# stencil references (stencil_refs, default 0x01, 0x03: characters and small
+# objects, not the grass and leaves). A value someone chose is kept across
+# reinstalls; an ini without stencil_refs gets the default.
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
@@ -116,9 +118,9 @@ echo "[2/3] settings"
 if [ -f "$INI" ]; then
   echo "  keeping $(basename "$INI"): $(sed -n 's/^equal_depth[[:space:]]*=[[:space:]]*//p' "$INI" | head -1)"
 else
-  printf '# God of War depth fix (MacGameVideoFix): what an EQUAL depth test becomes.\n# greater_equal (the fix), less_equal, or off.\nequal_depth = greater_equal\n' > "$INI.new"
+  printf '# God of War depth fix (MacGameVideoFix): what an EQUAL depth test becomes.\n# greater_equal (the fix), less_equal, or off.\nequal_depth = greater_equal\n# For which stencil references: 0x01, 0x03 (characters and small objects; the\n# default), all (every draw: grass and leaves turn into solid cards), or none.\nstencil_refs = 0x01, 0x03\n' > "$INI.new"
   mv -f "$INI.new" "$INI"
-  echo "  equal_depth = greater_equal"
+  echo "  equal_depth = greater_equal, stencil_refs = 0x01, 0x03"
 fi
 
 echo "[3/3] installing"
@@ -141,4 +143,4 @@ else
 fi
 echo
 echo "installed"
-echo "  EQUAL depth tests are loosened; the game writes $MARKER beside itself"
+echo "  EQUAL depth tests are loosened for characters; the game writes $MARKER beside itself"

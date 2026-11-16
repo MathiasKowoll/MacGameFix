@@ -564,15 +564,17 @@ So there the fix corrects the T-pose but adds no fog barrier, and the black bloc
 in volumetric fog remain; `sm2-tpose-fix.log` says so. Played on 2026-10-25: four
 minutes, characters right, no crash. With D3DMetal 4 the fix works as before.
 
-### God of War: neither way is complete yet
+### God of War: the specks without the solid grass
 
-God of War's white specks have two partial answers. With DXMT and
-`d3d11.defuseFma` (in NotProton's launch options in Steam:
-`CX_GRAPHICS_BACKEND=dxmt DXMT_CONFIG="d3d11.defuseFma=True" %command%`) and no
-fix installed, nothing else is drawn wrong, but the specks are still seen
-(2026-10-26). The fix in the catalog removes the specks by loosening the depth
-test, and that loosening draws nearby grass and branches as solid shapes in some
-scenes (reported 2026-10-22). See [God of War](legacy/wiki/God-of-War.md).
+God of War's white specks are fixed by loosening one depth test, and loosening it
+for every draw also drew nearby grass and branches as solid shapes (reported
+2026-10-22). The game writes a stencil reference per kind of object in that pass,
+so the fix now loosens it only for references 0x01 and 0x03: characters and small
+objects such as the axe on Kratos' back. Played on 2026-11-16 with DXMT and
+`d3d11.defuseFma` on CrossOver Preview 27 (through Heroic, Epic edition): no
+specks, grass and leaves drawn right, the axe steady. `stencil_refs = all` in
+`gow-depth-fix.ini` brings back the earlier behaviour. See
+[God of War](legacy/wiki/God-of-War.md).
 
 ### God of War Ragnarök sends its trigger effects to the pad
 
