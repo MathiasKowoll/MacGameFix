@@ -1,9 +1,12 @@
-/* suspend.exe [seconds] [calm]: threads that make system calls with a syscall instruction of their own,
- * while another thread suspends them. For patch 0028; run.sh says how to run it.
+/* suspend.exe [seconds] [calm] [step]: threads that make system calls with a syscall instruction of their own, and
+ * threads that raise exceptions on purpose, while another thread suspends them. For patches 0028 and 0029;
+ * run.sh says how to run it.
  *
  * Copy protection does not call ntdll's stubs. It runs the syscall instruction from memory of its own,
- * which Wine on macOS receives as SIGSYS. Here three kinds of thread do the same, through stubs written
- * into a private page with ntdll's own system call numbers:
+ * which Wine on macOS receives as SIGSYS, and it raises exceptions by the thousand (an undefined
+ * instruction, a breakpoint, a bad address, a single step) that a handler of its own steps over. Here
+ * threads do the same. The system calls go through stubs written into a private page with ntdll's own
+ * system call numbers:
  *
  *   - one calls NtQueryPerformanceCounter and NtReleaseSemaphore as fast as it can and checks every
  *     result: the status, a counter that moves, and the semaphore's previous count, which says whether
@@ -11,6 +14,14 @@
  *   - a pair plays ping-pong, one side waiting in a direct NtWaitForSingleObject, the other waking it
  *     with a direct NtSetEvent;
  *   - four more pairs do the same through kernel32, as a control.
+ *
+ * Three threads raise one kind of exception each, in a loop (an undefined instruction, a breakpoint,
+ * a bad address), and a vectored handler steps over the instruction: every call must give exactly one
+ * exception, and a thread that stops making calls was ended by Wine ("nested exception on signal
+ * stack"). "step" adds a fourth that sets the trap flag. It is left out by default because Rosetta's
+ * own runtime can stop the process when a signal reaches that thread at its popfq, whatever Wine does:
+ * "assertion failed: emulated forward to an arm pc that isn't in translated code ...
+ * (ThreadContextRegisterState.cpp:694 move_to_instruction_boundary)", seen once here, with 0029.
  *
  * A last thread does SuspendThread, GetThreadContext, ResumeThread to all of them in turn, without
  * pause ("calm" leaves it out). The main thread watches: a look that takes two seconds never returned,
@@ -73,6 +84,62 @@ static void *make_stub( const char *name )
     memcpy( code + 4, stub + 4, 4 );
     memcpy( code + 8, "\x0f\x05\xc3", 3 );
     return code;
+}
+
+/* ud2; int3; mov eax,[0]; and pushfq, or [rsp],0x100 (the trap flag), popfq, four nops -- each followed by ret */
+enum trap { UNDEFINED, BREAKPOINT, BAD_ADDRESS, SINGLE_STEP, TRAPS };
+static const char *const trap_names[TRAPS] = { "undefined instruction", "breakpoint", "bad address", "single step" };
+static const unsigned char trap_length[TRAPS] = { 2, 1, 7, 0 };
+static unsigned char *trap_code;
+static volatile LONG trap_made[TRAPS], trap_seen[TRAPS], trap_unexpected;
+static int raisers = SINGLE_STEP;  /* TRAPS with "step" */
+
+static LONG CALLBACK step_over( EXCEPTION_POINTERS *info )
+{
+    ULONG_PTR address = (ULONG_PTR)info->ExceptionRecord->ExceptionAddress;
+    int i;
+
+    if (info->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP)
+    {
+        InterlockedIncrement( &trap_seen[SINGLE_STEP] );
+        return EXCEPTION_CONTINUE_EXECUTION;
+    }
+    for (i = 0; i < SINGLE_STEP; i++)
+    {
+        if (address != (ULONG_PTR)trap_code + 16 * i) continue;
+        InterlockedIncrement( &trap_seen[i] );
+        info->ContextRecord->Rip = address + trap_length[i];
+        return EXCEPTION_CONTINUE_EXECUTION;
+    }
+    InterlockedIncrement( &trap_unexpected );
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+static DWORD WINAPI raiser( void *arg )
+{
+    int i = (int)(ULONG_PTR)arg;
+    void (*raise_it)(void) = (void (*)(void))(trap_code + 16 * i);
+
+    while (!stop)
+    {
+        raise_it();
+        InterlockedIncrement( &trap_made[i] );
+    }
+    return 0;
+}
+
+static void start_raisers( void )
+{
+    int i;
+
+    trap_code = VirtualAlloc( NULL, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE );
+    if (!trap_code) ExitProcess( 2 );
+    memcpy( trap_code + 16 * UNDEFINED, "\x0f\x0b\xc3", 3 );
+    memcpy( trap_code + 16 * BREAKPOINT, "\xcc\xc3", 2 );
+    memcpy( trap_code + 16 * BAD_ADDRESS, "\x8b\x04\x25\x00\x00\x00\x00\xc3", 8 );
+    memcpy( trap_code + 16 * SINGLE_STEP, "\x9c\x48\x81\x0c\x24\x00\x01\x00\x00\x9d\x90\x90\x90\x90\xc3", 15 );
+    AddVectoredExceptionHandler( 1, step_over );
+    for (i = 0; i < raisers; i++) CreateThread( NULL, 0, raiser, (void *)(ULONG_PTR)i, 0, NULL );
 }
 
 static void complain( volatile LONG *count, const char *format, unsigned long a, unsigned long b )
@@ -239,17 +306,23 @@ static DWORD WINAPI suspender( void *arg )
 int main( int argc, char **argv )
 {
     static const char *const steps[] = { "between looks", "SuspendThread", "GetThreadContext", "ResumeThread" };
-    int seconds = argc > 1 ? atoi( argv[1] ) : 20, calm = argc > 2 && !strcmp( argv[2], "calm" );
-    int i, second, stuck = 0, bad = 0;
-    LONG last_looks = 0;
+    int seconds = argc > 1 ? atoi( argv[1] ) : 20, calm = 0;
+    int i, second, stuck = 0, bad = 0, suspended_seconds = 0;
+    LONG last_looks = 0, made_before[TRAPS], made_under[TRAPS];
 
     setvbuf( stdout, NULL, _IONBF, 0 );
+    for (i = 2; i < argc; i++)
+    {
+        if (!strcmp( argv[i], "calm" )) calm = 1;
+        if (!strcmp( argv[i], "step" )) raisers = TRAPS;
+    }
     sys_wait = make_stub( "NtWaitForSingleObject" );
     sys_set = make_stub( "NtSetEvent" );
     sys_counter = make_stub( "NtQueryPerformanceCounter" );
     sys_release = make_stub( "NtReleaseSemaphore" );
 
     CreateThread( NULL, 0, caller, NULL, 0, NULL );
+    start_raisers();
     for (i = 0; i < KINDS; i++)
     {
         struct pair *pair = &pairs[i];
@@ -264,6 +337,7 @@ int main( int argc, char **argv )
         CreateThread( NULL, 0, waking_side, pair, 0, NULL );
     }
     Sleep( 300 );
+    for (i = 0; i < raisers; i++) made_before[i] = trap_made[i];
     if (!calm) CreateThread( NULL, 0, suspender, (void *)(ULONG_PTR)GetCurrentThreadId(), 0, NULL );
 
     for (second = 0; second < seconds && stuck < 2; second++)
@@ -271,10 +345,14 @@ int main( int argc, char **argv )
         Sleep( 1000 );
         if (!calm) stuck = looks == last_looks ? stuck + 1 : 0;
         last_looks = looks;
+        /* what each raiser did in the last second: one that Wine ended makes no more calls */
+        if (second == seconds - 2) for (i = 0; i < raisers; i++) made_under[i] = trap_made[i];
     }
+    suspended_seconds = second;
     stop = 1;
+    Sleep( 200 );
 
-    printf( "%ld looks at 11 threads in %d s; %ld pairs of direct system calls\n", looks, second, calls );
+    printf( "%ld looks at %d threads in %d s; %ld pairs of direct system calls\n", looks, 11 + raisers, suspended_seconds, calls );
     if (stuck >= 2)
     {
         printf( "FAIL: a look at thread %lu never returned from %s\n", (unsigned long)look_tid, steps[look_step & 3] );
@@ -293,6 +371,22 @@ int main( int argc, char **argv )
         printf( "%-20s %8ld rounds, never woke %ld, answer never seen %ld, calls failed %ld\n", kind_names[i],
                 pair->rounds, pair->never_woke, pair->never_seen, pair->failed );
         if (pair->never_woke || pair->never_seen || pair->failed || !pair->rounds) bad = 1;
+    }
+    for (i = 0; i < raisers; i++)
+    {
+        LONG made = trap_made[i], seen = trap_seen[i];
+        /* the thread may have been stopped between an exception and the count of its call */
+        int mismatch = seen < made || seen > made + 1;
+        int ended = seconds >= 3 && stuck < 2 && made == made_under[i];
+
+        printf( "%-22s %8ld raised, %8ld seen%s%s\n", trap_names[i], made, seen,
+                mismatch ? ", MISMATCH" : "", ended ? ", THREAD STOPPED" : "" );
+        if (mismatch || ended || made == made_before[i]) bad = 1;
+    }
+    if (trap_unexpected)
+    {
+        printf( "FAIL: %ld exceptions from somewhere else\n", trap_unexpected );
+        bad = 1;
     }
     if (!calls) bad = 1;
     printf( "%s\n", bad ? "FAILED" : "passed" );
