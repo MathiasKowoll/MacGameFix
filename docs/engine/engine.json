@@ -574,6 +574,16 @@
           ],
           "commit": "ebcdf7ae76a2074d9df2165f799041831a84b852",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/ebcdf7ae76a2074d9df2165f799041831a84b852/engine/patches/wine-11.21/0027-ntdll-dualstack-ipv4-options-switch.patch"
+        },
+        {
+          "name": "0028-ntdll-direct-syscall-under-suspend.patch",
+          "file": "engine/patches/wine-11.21/0028-ntdll-direct-syscall-under-suspend.patch",
+          "subject": "Under Rosetta, a thread that makes a system call with a syscall instruction of its own while another thread suspends it is no longer lost and no longer skips the call: a SIGSYS that lands on top of the suspend handler, or never arrives, is entered when that handler is done; WINE_DIRECT_SYSCALL_DEFERRAL=0 turns it off; Intel side, ntdll.so",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "9a372d5302a9757ecfb7ef2da09adf22d67e9132",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/9a372d5302a9757ecfb7ef2da09adf22d67e9132/engine/patches/wine-11.21/0028-ntdll-direct-syscall-under-suspend.patch"
         }
       ]
     }
