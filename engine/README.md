@@ -416,6 +416,8 @@ socket stays open, and the online session search fails with or without a VPN
 (`WINEDEBUG=+winsock`, Steam edition on NotProton's 41303 Rosetta runner,
 2026-11-13).
 
+Found, patched and probed by [prsloan](https://github.com/prsloan) (#73).
+
 | Patch | Module | Change |
 |---|---|---|
 | `0026-ntdll-dualstack-ipv4-options.patch` | `ntdll.so` (both sides) | When the host refuses `IP_DONTFRAGMENT`, `IP_TTL`, `IP_MULTICAST_TTL` or `IP_MULTICAST_LOOP` on an `AF_INET6` socket with `EINVAL`, the option is set, or read, as its IPv6 counterpart (`IPV6_DONTFRAG`, `IPV6_UNICAST_HOPS`, `IPV6_MULTICAST_HOPS`, `IPV6_MULTICAST_LOOP`). Read before anything set them, the hop limits answer -1 ("the system default"); `IP_TTL` then reports the TTL in use (`net.inet.ip.ttl`, 64) and `IP_MULTICAST_TTL` 1, as Windows reports its own defaults. A host that accepts the IPv4 option never takes this path. `IP_TOS` is left as it was: no game here needs it, and Windows ignores it by default. |
