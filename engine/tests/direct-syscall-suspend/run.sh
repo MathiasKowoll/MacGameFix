@@ -1,7 +1,8 @@
 #!/bin/bash
-# Test for patch 0028 (a direct system call while the thread is being suspended).
+# Test for patches 0028 and 0029 (a direct system call, or an exception, while the thread is being
+# suspended).
 #
-#   /bin/bash engine/tests/direct-syscall-suspend/run.sh <CrossOver folder> [seconds]
+#   /bin/bash engine/tests/direct-syscall-suspend/run.sh <CrossOver folder> [seconds] [step]
 #
 # The CrossOver folder is a NotProton runner's (the one holding bin/ and lib/wine). suspend.c,
 # built with llvm-mingw (LLVM_MINGW, as build.sh), runs under that Wine's Intel side, which is
@@ -10,14 +11,15 @@
 #
 # Without 0028 in that side's ntdll.so it fails within a second or two: a look at a thread never
 # returns from GetThreadContext, or direct system calls come back with their own number as the
-# status. With it, it passes. WINE_DIRECT_SYSCALL_DEFERRAL=0 in the environment turns 0028 off:
-# it fails again.
+# status. With 0028 and without 0029 the threads that raise exceptions stop, each ended by Wine
+# with "nested exception on signal stack". With both, it passes. WINE_DIRECT_SYSCALL_DEFERRAL=0
+# in the environment turns both off: it fails again.
 #
-# Intel side only: 0028 is in signal_x86_64.c, which the FEX side's ntdll.so does not compile.
+# Intel side only: both are in signal_x86_64.c, which the FEX side's ntdll.so does not compile.
 set -eu
 [ $# -ge 1 ] || { sed -n '3,5p' "$0"; exit 2; }
 here="$(cd "$(dirname "$0")" && pwd)"
-crossover="$1"; seconds="${2:-20}"
+crossover="$1"; seconds="${2:-20}"; step="${3:-}"
 wine="$crossover/lib/wine/x86_64-unix/wine"; wineserver="$crossover/bin/wineserver-x86"
 [ -x "$wine" ] && [ -x "$wineserver" ] || { echo "no Intel-side Wine in $crossover"; exit 1; }
 LLVM_MINGW="${LLVM_MINGW:-$HOME/.local/cxge/toolchains/llvm-mingw}"
@@ -30,8 +32,8 @@ echo "==> suspend.exe on $(shasum -a 256 "$crossover/lib/wine/x86_64-unix/ntdll.
 status=0
 for msync in 1 0; do
   echo "==> WINEMSYNC=$msync, $seconds s"
-  WINEPREFIX="$work/prefix" WINESERVER="$wineserver" WINEDEBUG=-all WINEDLLOVERRIDES="mscoree,mshtml=" WINEMSYNC=$msync \
-    "$wine" "$work/suspend.exe" "$seconds" &
+  WINEPREFIX="$work/prefix" WINESERVER="$wineserver" WINEDEBUG=fixme-all,err-all,err+virtual WINEDLLOVERRIDES="mscoree,mshtml=" WINEMSYNC=$msync \
+    "$wine" "$work/suspend.exe" "$seconds" $step &
   pid=$!
   # A thread lost to the defect spins for ever, and the process may not end by itself.
   ( sleep $((seconds + 60)); kill -9 $pid ) 2>/dev/null &

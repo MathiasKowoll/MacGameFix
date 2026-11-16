@@ -584,6 +584,16 @@
           ],
           "commit": "9a372d5302a9757ecfb7ef2da09adf22d67e9132",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/9a372d5302a9757ecfb7ef2da09adf22d67e9132/engine/patches/wine-11.21/0028-ntdll-direct-syscall-under-suspend.patch"
+        },
+        {
+          "name": "0029-ntdll-exception-ahead-of-suspend.patch",
+          "file": "engine/patches/wine-11.21/0029-ntdll-exception-ahead-of-suspend.patch",
+          "subject": "Under Rosetta, an exception raised by a thread that another thread is suspending no longer ends it with 'nested exception on signal stack': a fault delivered ahead of the suspend handler is left to happen again, and a breakpoint is replayed; under 0028's switch; Intel side, ntdll.so",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "0037103a8c4e1fdbf8beb9d5b6db28416ba1b07d",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/0037103a8c4e1fdbf8beb9d5b6db28416ba1b07d/engine/patches/wine-11.21/0029-ntdll-exception-ahead-of-suspend.patch"
         }
       ]
     }

@@ -493,21 +493,35 @@ just after the instruction and the system call not made, and then:
 Blocking `SIGSYS` in the other handlers' masks turns the first into the second: Rosetta
 drops a blocked one.
 
+The signal of an exception meets `SIGUSR1` the same way: `SIGILL`, `SIGSEGV`, `SIGBUS`,
+`SIGFPE` or `SIGTRAP` is delivered on top of `SIGUSR1`'s frame, with the trampoline's
+entry as its context. Wine takes that for the place of the exception, finds it on the
+signal stack and ends the thread:
+`err:virtual:virtual_setup_exception nested exception on signal stack addr 0x7ff811803400
+stack 0x10014fff0`. Copy protection raises exceptions on purpose by the thousand (an
+undefined instruction, a breakpoint, a bad address) and steps over them in a handler of
+its own, so a thread of it that is being suspended does not last.
+
 Found on 2026-11-16 with a diagnostic that suspended Forza Horizon 6's threads to read
 where they were (the game's protection makes direct system calls: a thread in one shows
 its instruction pointer in private executable memory). Two sessions ended that way, one
-with the game exiting with status 1, one with it hung. Whether the game meets the same
-pair without a tool, through the server's own `SIGUSR1`, was not measured.
+with the game exiting with status 1, one with it hung, and a third hung the same day
+with `0028` alone in the runner, which is how the exceptions' half was found. Which of
+the two ended each session was not established, and whether the game meets either
+without a tool, through the server's own `SIGUSR1`, was not measured.
 
 | Patch | Module | Change |
 |---|---|---|
 | `0028-ntdll-direct-syscall-under-suspend.patch` | `ntdll.so` (Intel side) | `sigsys_handler` only notes a `SIGSYS` whose context is on the signal stack, and `usr1_handler`, when it is done, enters the system call from the context it was given if one was noted. With none noted it enters it only if the two bytes before the thread are `0f 05`, `rax` could be a system call number, the thread has not been through the dispatcher (which leaves the return address in `rcx`, as the instruction does) and `r10` equals `rcx`, as after the `mov r10,rcx` a system call stub starts with: those two bytes can end any instruction, so a program that loads `r10` another way keeps the second outcome. A `SIGSYS` whose thread is not just after a `syscall` instruction, or has been through the dispatcher already, is ignored (never seen). Under Rosetta only. `WINE_DIRECT_SYSCALL_DEFERRAL=0` turns it off; through NotProton that is `NOTPROTON_ENV_WINE_DIRECT_SYSCALL_DEFERRAL=0` in the game's launch options |
+| `0029-ntdll-exception-ahead-of-suspend.patch` | `ntdll.so` (Intel side) | A signal that finds the thread on the signal stack with nothing on it yet was delivered ahead of another handler. `segv_handler` and `fpe_handler` ignore it there: the instruction has not run and faults again once the other handler returns to it. `trap_handler` notes a breakpoint, whose instruction has run, and `usr1_handler` sends the thread back onto its `int3` when it is done. A single step delivered that way is ignored and not replayed. Under Rosetta only, and under `0028`'s switch |
 
 `tests/direct-syscall-suspend/run.sh <CrossOver folder>` runs threads that make direct
 system calls and check every result, a pair that waits and wakes through them, four
-pairs that do so through kernel32, and a thread that suspends them all in turn without
-pause. Measured the same day in copies of the 41303 NotProton runner (macOS 27.2, M4
-Max), with msync and without:
+pairs that do so through kernel32, three threads that raise an exception in a loop (an
+undefined instruction, a breakpoint, a bad address) and count it in a vectored handler,
+and a thread that suspends them all in turn without pause. Measured the same day in
+copies of the 41303 NotProton runner (macOS 27.2, M4 Max), with msync and without; the
+first four rows are from before the test raised exceptions:
 
 | `x86_64-unix/ntdll.so` | Result |
 |---|---|
@@ -515,6 +529,9 @@ Max), with msync and without:
 | `SIGSYS` blocked in the other handlers (tried, not kept) | no look is lost, and 4 of some 3,000 direct calls made in 9 s return `0x31`, their own number |
 | with `0028` | 30 s each way: 150,511 and 139,843 looks, 164,106 and 160,341 pairs of direct calls, nothing lost, none run twice |
 | with `0028`, `WINE_DIRECT_SYSCALL_DEFERRAL=0` | fails as the runner's does |
+| with `0028`, the test raising exceptions | no look is lost, and all three raising threads are ended by Wine within seconds (`nested exception on signal stack`) |
+| with `0028` and `0029` | 30 s each way: 155,596 and 162,912 looks, 221,003 and 192,106 pairs of direct calls, 1.08 and 1.61 million exceptions, each seen once, nothing lost |
+| with both, `WINE_DIRECT_SYSCALL_DEFERRAL=0` | fails: a raising thread is ended and a look never returns |
 
 In a 30 s run with one thread making direct calls and 419,492 looks at it, an
 instrumented build counted 562 system calls entered because their `SIGSYS` came on top
@@ -523,12 +540,23 @@ it is returned no wrong status. The same test through ntdll's stubs alone
 (nine kinds of wait, 13 million waits, 73,000 looks) loses nothing without the patch:
 the defect needs the direct call.
 
-The modules in `modules/27.0.0.41303` carry `0028` since 2026-11-16:
+A fourth raising thread, which sets the trap flag (`run.sh <folder> <seconds> step`), is
+left out by default: with it Rosetta's own runtime once stopped the process, with `0029`
+in place, `assertion failed: emulated forward to an arm pc that isn't in translated code
+... (ThreadContextRegisterState.cpp:694 move_to_instruction_boundary)`, at that thread's
+`popfq`. Nothing in Wine was found to answer for that, and nothing here addresses it.
+
+The diagnostic itself, run against threads of all these kinds outside the game for 60 s
+with both patches: 9 captures, every look returned, 3.9 million exceptions and 1.2
+million direct calls all accounted for.
+
+The modules in `modules/27.0.0.41303` carry `0028` and `0029` since 2026-11-16:
 `x86_64-unix/ntdll.so`, built by `build.sh` from the series. The rest of that folder is
 as it was. `tests/dualstack-udp/run.sh` still fails none of its 26 checks with it. The
 patch is in `signal_x86_64.c`, which the FEX side's `ntdll.so` does not compile; what
 that side does with a program's `syscall` instruction was not looked at. Forza Horizon 6
-has not been played with it yet.
+was played with `0028` alone (menus, a load and the open world, as before it); it has not
+been played with `0029` yet.
 
 ## Measured
 

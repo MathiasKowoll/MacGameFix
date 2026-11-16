@@ -1,0 +1,120 @@
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -90,6 +90,9 @@
+ /* CW Hack 24256 */
+ #include <sys/sysctl.h>
+ static BOOL is_rosetta2;
++/* WINE_DIRECT_SYSCALL_DEFERRAL=0 turns off what finish_direct_syscall describes, for system calls and
++ * for exceptions alike. Rosetta only. */
++static BOOL direct_syscall_deferral;
+ struct amd64_thread_data;
+ static void sync_sw_breakpoints( struct amd64_thread_data *data, ULONG_PTR resume_rip );  /* HRAVA_HW_EXEC_BREAKPOINT */
+ static unsigned int rosetta_cpuid7_ebx, rosetta_cpuid7_ecx;  /* HRAVA_ROSETTA_CPUID: leaf-7 bits added for this process */
+@@ -2783,6 +2786,25 @@
+         return TRUE;
+     }
+     return FALSE;
++}
++#endif
++
++#ifdef __APPLE__
++/***********************************************************************
++ *           is_ahead_of_handler
++ *
++ * Whether a signal was delivered on top of another handler before that handler ran (see
++ * finish_direct_syscall): the thread is on the signal stack with nothing on it yet. A
++ * fault inside a handler has that handler's frame above it.
++ *
++ * Without this Wine takes the signal trampoline's entry for the place of the exception,
++ * finds it on the signal stack ("nested exception on signal stack") and ends the thread.
++ */
++static inline BOOL is_ahead_of_handler( struct thread_data *data, ucontext_t *sigcontext )
++{
++    char *top = data->signal_stack + signal_stack_size, *sp = (char *)RSP_sig(sigcontext);
++
++    return direct_syscall_deferral && sp < top && sp >= top - 0x80;
+ }
+ #endif
+ 
+@@ -2798,6 +2820,11 @@
+     struct xcontext context;
+     EXCEPTION_RECORD rec = { .ExceptionAddress = (void *)RIP_sig(sigcontext) };
+ 
++#ifdef __APPLE__
++    /* the instruction has not run: it faults again once the other handler returns to it */
++    if (is_ahead_of_handler( data, sigcontext )) return;
++#endif
++
+     fh6_native_mark(1,HandleToULong(data->teb->ClientId.UniqueThread),RIP_sig(sigcontext),RSP_sig(sigcontext),signal);
+     save_context( data, &context, sigcontext );
+ 
+@@ -2929,6 +2956,15 @@
+     struct thread_data *data = init_handler( sigcontext );
+     struct xcontext context;
+     EXCEPTION_RECORD rec = { .ExceptionAddress = (void *)RIP_sig(sigcontext) };
++
++#ifdef __APPLE__
++    if (is_ahead_of_handler( data, sigcontext ))
++    {
++        /* the instruction has run: the other handler sends the thread back to it */
++        if (TRAP_sig(sigcontext) == TRAP_x86_BPTFLT) amd64_thread_data( data )->direct_syscall_pending = 2;
++        return;
++    }
++#endif
+ 
+     if (handle_syscall_trap( data, sigcontext, siginfo )) return;
+ 
+@@ -2984,6 +3020,10 @@
+     struct thread_data *data = init_handler( sigcontext );
+     struct xcontext context;
+     EXCEPTION_RECORD rec = { .ExceptionAddress = (void *)RIP_sig(sigcontext) };
++
++#ifdef __APPLE__
++    if (is_ahead_of_handler( data, sigcontext )) return;  /* as in segv_handler */
++#endif
+ 
+     fh6_native_mark(1,HandleToULong(data->teb->ClientId.UniqueThread),RIP_sig(sigcontext),RSP_sig(sigcontext),signal);
+     save_context( data, &context, sigcontext );
+@@ -3266,9 +3306,6 @@
+ #endif
+ 
+ #ifdef __APPLE__
+-/* WINE_DIRECT_SYSCALL_DEFERRAL=0 turns finish_direct_syscall and what feeds it off. Rosetta only. */
+-static BOOL direct_syscall_deferral;
+-
+ /***********************************************************************
+  *           finish_direct_syscall
+  *
+@@ -3300,16 +3337,31 @@
+  * return address in rcx, as the instruction does) and r10 equals rcx, as it does after
+  * the mov r10,rcx every system call stub starts with. A program that loads r10 some
+  * other way keeps the second outcome.
++ *
++ * The signal of an exception is delivered on top of SIGUSR1's frame in the same way (see
++ * is_ahead_of_handler). A fault needs nothing but to be ignored there: its instruction has
++ * not run and faults again once usr1_handler returns to it. A breakpoint's has run, so
++ * trap_handler notes it and this sends the thread back onto its int3. A single step
++ * delivered that way is ignored and not replayed. (In the test every single step was
++ * still seen once; whether one was ever delivered that way there is not known.)
+  */
+ static void finish_direct_syscall( struct thread_data *data, ucontext_t *sigcontext, ULONG64 rip )
+ {
+     struct amd64_thread_data *amd64_data = amd64_thread_data( data );
+-    BOOL noted;
++    int noted;
+     BYTE insn[2];
+ 
+     if (!direct_syscall_deferral || !amd64_data) return;
+     noted = amd64_data->direct_syscall_pending;
+     amd64_data->direct_syscall_pending = 0;
++
++    if (noted == 2)  /* a breakpoint trap */
++    {
++        if (RIP_sig(sigcontext) == rip && !is_inside_syscall( data, RSP_sig(sigcontext) ) &&
++            virtual_uninterrupted_read_memory( (BYTE *)rip - 1, insn, 1 ) == 1 && insn[0] == 0xcc)
++            RIP_sig(sigcontext) = rip - 1;
++        return;
++    }
+ 
+     if (RIP_sig(sigcontext) == rip &&
+         (noted ? (WORD)RAX_sig(sigcontext) == amd64_data->direct_syscall_id
