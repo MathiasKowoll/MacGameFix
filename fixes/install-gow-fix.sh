@@ -10,7 +10,8 @@
 # with EQUAL against a prepass, and the translated shaders do not reproduce the
 # prepass depth to the last bit. The fix creates that depth test as
 # GREATER_EQUAL; see gow-depth-fix.c. Measured on DXMT under Rosetta and under
-# FEX: specks without it, none with it.
+# FEX: specks without it, none with it. Played on D3DMetal under Rosetta as well:
+# it needs neither backend in particular.
 #
 # It rides on libSceJobManager.dll, which the game imports and no runner ships,
 # so no DLL override is needed under any launcher, and nothing is copied out of
@@ -28,6 +29,8 @@
 # MGVF-GAME: God of War | GoW.exe |
 # MGVF-WHY: White specks on characters in dim light: an EQUAL depth test after a prepass, which the translated shaders do not match bit for bit.
 # MGVF-LOG: gow-depth-fix.log
+# MGVF-CREDIT: The author of "God Of War 2018 White Dot Fix (through Crossover)" on r/macgaming (the depth test behind the specks)
+# MGVF-CREDIT: tombirdQAQ (the stencil references: the fix only for the characters) | https://github.com/tombirdQAQ
 
 set -euo pipefail
 

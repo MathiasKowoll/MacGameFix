@@ -75,7 +75,7 @@ A fix goes into the game's own folder, and the same folder serves every
 place that runs the game: a NotProton runner, a CrossOver bottle, or both.
 Where you run it is yours to check. The app says beside each game what its fix
 requires: the graphics backend it was made for (D3DMetal or DXMT; God of War's
-needs `CX_GRAPHICS_BACKEND=dxmt`), and for some games a CrossOver or D3DMetal
+works on both and names neither), and for some games a CrossOver or D3DMetal
 version.
 
 Some fixes are not needed from a D3DMetal version on (CONTROL Resonant,
@@ -293,7 +293,7 @@ open Steam there (engine/README.md, "The options").
 | DYNASTY WARRIORS: ORIGINS | Cutscenes with sound and no picture | D3DMetal, CrossOver Preview 27 |
 | Forza Horizon 5 | Never leaves the loading screen after Xbox sign-in | D3DMetal 4, a prefix |
 | Forza Horizon 6 — WIP | Sign-in and driving validated; reduced recurring stutter | D3DMetal 4, Preview 41073 Rosetta improvement, a prefix |
-| God of War | White specks on characters in dim light | DXMT |
+| God of War | White specks on characters in dim light | D3DMetal or DXMT |
 | God of War Ragnarök | Adaptive triggers never reach the pad | A DualSense or DualSense Edge, Bluetooth as a cable over Bluetooth |
 | KINGDOM HEARTS Dream Drop Distance | Cutscenes with a solid green picture; a crash dialog on exit | D3DMetal, a prefix |
 | KINGDOM HEARTS HD 1.5+2.5 ReMIX | The same, for the six titles of the package | D3DMetal, a prefix |
@@ -572,9 +572,11 @@ for every draw also drew nearby grass and branches as solid shapes (reported
 so the fix now loosens it only for references 0x01 and 0x03: characters and small
 objects such as the axe on Kratos' back. Played on 2026-11-16 with DXMT and
 `d3d11.defuseFma` on CrossOver Preview 27 (through Heroic, Epic edition): no
-specks, grass and leaves drawn right, the axe steady. `stencil_refs = all` in
-`gow-depth-fix.ini` brings back the earlier behaviour. See
-[God of War](legacy/wiki/God-of-War.md).
+specks, grass and leaves drawn right, the axe steady. Played again on 2026-11-15
+with D3DMetal under Rosetta, on NotProton's runner for CrossOver Preview 41303
+(Steam edition): the same three references, no specks, grass and leaves drawn
+right. `stencil_refs = all` in `gow-depth-fix.ini` brings back the earlier
+behaviour. See [God of War](legacy/wiki/God-of-War.md).
 
 ### God of War Ragnarök sends its trigger effects to the pad
 
@@ -1027,6 +1029,10 @@ how, is in the game's page under `legacy/wiki/`.
 - **The God of War fix** comes from a r/macgaming post, "God Of War 2018 White
   Dot Fix (through Crossover)", whose author found the depth test behind the
   white specks.
+- **[tombirdQAQ](https://github.com/tombirdQAQ)** found that God of War writes
+  a stencil reference per kind of object in that pass, and made the fix loosen
+  the test only for the characters' and small objects', so the grass is no
+  longer drawn as solid shapes (#82).
 - **[winevideo](https://github.com/Jfishin/winevideo)'s author** found why
   NINJA GAIDEN 3's movies never start (Wine's ASF Reader blocks its audio
   behind the video) and built the patched `qasf`, `quartz` and `winegstreamer`

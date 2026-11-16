@@ -20,6 +20,11 @@
       "name": "The author of \"God Of War 2018 White Dot Fix (through Crossover)\" on r/macgaming",
       "url": null,
       "note": "Found the depth test behind the white specks."
+    },
+    {
+      "name": "tombirdQAQ",
+      "url": "https://github.com/tombirdQAQ",
+      "note": "Found that the pass writes a stencil reference per kind of object, and made the fix loosen the test only for the characters' and small objects' (#82)."
     }
   ],
   "excerpts": [

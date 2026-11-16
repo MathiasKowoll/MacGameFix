@@ -5,8 +5,8 @@
 | Symptom | White specks all over the characters, Kratos first, in dim light |
 | Cause | The G-buffer pass tests depth with EQUAL against a depth prepass, and the translated shaders do not reproduce the prepass depth to the last bit |
 | Fix | That depth test becomes GREATER_EQUAL for the draws with stencil reference 0x01 or 0x03 (characters and small objects), not for the grass and leaves |
-| Backend | **DXMT**, D3D11 |
-| CrossOver | Preview 27, through NotProton, under Rosetta and under FEX |
+| Backend | D3DMetal or DXMT, D3D11 |
+| CrossOver | Preview 27, through NotProton: DXMT under Rosetta and under FEX, D3DMetal under Rosetta |
 
 ## DXMT's own setting, partly
 
@@ -58,7 +58,7 @@ instead. Nothing else changes. Measured on DXMT in CrossOver Preview 27:
 
 The game creates the state about forty times, always the same kind (depth writes
 off, stencil on), and the log counts them. D3DMetal is said to show the same
-specks; that has not been measured here.
+specks; without the fix that has not been measured here (with it, see below).
 
 The risk, as the poster says: something drawn after the prepass that was not in
 it would now draw through. It was seen on 2026-10-22: alpha-tested grass and
@@ -88,6 +88,14 @@ references are used with the EQUAL state:
 
 The default is `stencil_refs = 0x01, 0x03`, used too when the ini has no such
 line. `all` is the earlier behaviour, `none` leaves every test EQUAL.
+
+Played again on 2026-11-15 with D3DMetal under Rosetta, on NotProton's runner for
+CrossOver Preview 41303 (Steam edition, no `CX_GRAPHICS_BACKEND`), with the default
+`stencil_refs`: no specks, grass and leaves drawn right. D3DMetal answers the game's
+56 creations of the EQUAL state with one object, so one twin is kept. In about three
+and a half minutes the state was bound 560,474 times with 0x05, 436,046 with 0x03
+and 140,049 with 0x01: the same three references as on DXMT. No deferred context
+was created.
 
 To find the references again, `probe_keys = on` in the ini makes F9 step live
 through none, each reference (most used first) and all, and F10 go back to the
