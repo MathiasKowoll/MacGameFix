@@ -18,7 +18,7 @@
     "aarch64-windows/xinput1_4.dll": "6cbaca09baf3d817840c50aaad3b9940fe4f23dd4f920e27b9dda12c0a809690",
     "aarch64-windows/xinput9_1_0.dll": "c746a8b9e01d1eebec3ce0b723b471058f6ca48a7f412dc245257e3bb84b91e0",
     "aarch64-windows/xinputuap.dll": "b95de7d50d59bead7215b9f56742d85c091a0ef219aa45de9df118148eceb352",
-    "x86_64-unix/ntdll.so": "a81d1625bf678a7d67d0877779d8956f6d278e6ed83dd44901ee9e0575768e62",
+    "x86_64-unix/ntdll.so": "540da93ddca5d2e96578169dab4071fe3051f5ff01788032e298a54888bdea9e",
     "x86_64-unix/winebus.so": "c5ee882cf9dbf7c9e3b2fb604c4e36435d66b64e3ca03a2fa60e7aa984c54b49",
     "x86_64-unix/winecoreaudio.so": "a70ae015fd2aec5e184db98684f5f29bc7eb52420c7ce67be7397ab6614614b5",
     "x86_64-windows/hidclass.sys": "ec78e018225b15263b5afb31fb40615945e8a1072be7206fae46571fa9942a2f",

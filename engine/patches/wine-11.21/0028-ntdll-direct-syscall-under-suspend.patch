@@ -1,0 +1,252 @@
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -485,6 +485,8 @@
+     DWORD                 fs;            /* 0338 WOW TEB selector */
+     DWORD                 mxcsr;         /* 033c Unix-side mxcsr register */
+     char                  syscall_dispatch; /* 0340 */
++    char                  direct_syscall_pending; /* 0341 a SIGSYS was delivered on top of another handler */
++    WORD                  direct_syscall_id;      /* 0342 the system call number it carried */
+ };
+ 
+ C_ASSERT( sizeof(struct amd64_thread_data) <= sizeof(((struct teb_data *)0)->cpu_data) );
+@@ -3100,7 +3102,11 @@
+     if (is_inside_syscall( data, RSP_sig(sigcontext) )) abort_thread( 0 );
+     user_mode_abort_thread( 0, get_syscall_frame( data ));
+ }
++
+ 
++#ifdef __APPLE__
++static void finish_direct_syscall( struct thread_data *data, ucontext_t *sigcontext, ULONG64 rip );
++#endif
+ 
+ /**********************************************************************
+  *		usr1_handler
+@@ -3111,6 +3117,9 @@
+ {
+     ucontext_t *sigcontext = _sigcontext;
+     struct thread_data *data = init_handler( sigcontext );
++#ifdef __APPLE__
++    ULONG64 rip = RIP_sig(sigcontext);
++#endif
+ 
+     if (!data->teb)
+     {
+@@ -3170,6 +3179,9 @@
+         if (is_wow64() && context.c.SegCs == cs64_sel) context.c.ContextFlags |= CONTEXT_EXCEPTION_ACTIVE;
+         wait_suspend( &context.c );
+         restore_context( data, &context, sigcontext );
++#ifdef __APPLE__
++        finish_direct_syscall( data, sigcontext, rip );
++#endif
+     }
+ }
+ 
+@@ -3202,6 +3214,123 @@
+ #endif
+ 
+ #if defined(__APPLE__) || defined(__linux__)
++/***********************************************************************
++ *           enter_direct_syscall
++ *
++ * Send a thread that ran a syscall instruction of its own into the system call dispatcher,
++ * as if it had come through an ntdll stub. sigcontext is the thread just after the
++ * instruction, with the system call number still in rax.
++ */
++static void enter_direct_syscall( struct thread_data *data, ucontext_t *sigcontext )
++{
++    extern const void *__wine_syscall_dispatcher_prolog_end_ptr;
++    struct syscall_frame *frame = get_syscall_frame( data );
++
++    frame->rip = RIP_sig(sigcontext) + 0xb;
++    frame->rcx = RIP_sig(sigcontext);
++    frame->eflags = EFL_sig(sigcontext);
++    frame->restore_flags = 0;
++    if (instrumentation_callback) frame->restore_flags |= RESTORE_FLAGS_INSTRUMENTATION;
++    RCX_sig(sigcontext) = (ULONG_PTR)frame;
++    R11_sig(sigcontext) = frame->eflags;
++    if (EFL_sig(sigcontext) & 0x100)
++    {
++        EFL_sig(sigcontext) &= ~0x100;  /* clear single-step flag */
++        frame->restore_flags |= CONTEXT_CONTROL;
++    }
++    RIP_sig(sigcontext) = (ULONG64)__wine_syscall_dispatcher_prolog_end_ptr;
++
++#ifdef __APPLE__
++    /* CW Hack 24265 */
++    if (is_rosetta2 && FPU_sig(sigcontext))
++    {
++        XMM_SAVE_AREA32 fpu;
++        unsigned int direct_mxcsr;
++        __asm__ volatile( "stmxcsr %0" : "=m" (direct_mxcsr) );
++        memcpy( &fpu, FPU_sig(sigcontext), sizeof(fpu) );
++
++        if (direct_mxcsr != fpu.MxCsr)
++        {
++            fpu.MxCsr = direct_mxcsr;
++            memcpy( FPU_sig(sigcontext), &fpu, sizeof(fpu) );
++
++            /* On the M3, Rosetta will restore mxcsr to the initial, incorrect
++               value from the sigcontext, even if we change it. So we jump to a
++               thunk that restores the value from amd64_thread_data. */
++            amd64_thread_data(data)->mxcsr = direct_mxcsr;
++            RIP_sig(sigcontext) = (ULONG64)__restore_mxcsr_thunk;
++        }
++    }
++#endif
++}
++#endif
++
++#ifdef __APPLE__
++/* WINE_DIRECT_SYSCALL_DEFERRAL=0 turns finish_direct_syscall and what feeds it off. Rosetta only. */
++static BOOL direct_syscall_deferral;
++
++/***********************************************************************
++ *           finish_direct_syscall
++ *
++ * Under Rosetta 2 the SIGSYS of a syscall instruction does not wait for its turn. When
++ * SIGUSR1 reaches the thread at the same instruction (another thread is suspending it, or
++ * the server has a system APC for it), SIGUSR1's frame is built first, with the thread just
++ * after the instruction and the system call not made. Then one of two things happens to
++ * the SIGSYS:
++ *
++ * - it is delivered on top of that frame, before usr1_handler has run: its context is the
++ *   entry of the signal trampoline, on the signal stack. Sent into the dispatcher, that
++ *   context runs the system call on the signal stack with whatever the registers hold and
++ *   returns into the middle of the trampoline. usr1_handler never runs, so the thread that
++ *   called SuspendThread waits for ever in GetThreadContext, and this one is lost;
++ * - or it is not delivered at all, and the program carries on after its instruction with
++ *   the system call number where the result should be.
++ *
++ * Blocking SIGSYS while other handlers run turns the first into the second: Rosetta drops
++ * a blocked one.
++ *
++ * So sigsys_handler only notes a SIGSYS that lands on the signal stack, and usr1_handler
++ * calls this when it is done, with the context it was given: if a SIGSYS was noted, the
++ * system call is entered from here. rip is where the thread was when the handler began:
++ * a context another thread has moved meanwhile is left alone.
++ *
++ * With no SIGSYS there is only the thread's state to go by, and the two bytes before rip
++ * can end any instruction. The system call is entered if they are 0f 05, rax could be a
++ * system call number, the thread has not been through the dispatcher (which leaves the
++ * return address in rcx, as the instruction does) and r10 equals rcx, as it does after
++ * the mov r10,rcx every system call stub starts with. A program that loads r10 some
++ * other way keeps the second outcome.
++ */
++static void finish_direct_syscall( struct thread_data *data, ucontext_t *sigcontext, ULONG64 rip )
++{
++    struct amd64_thread_data *amd64_data = amd64_thread_data( data );
++    BOOL noted;
++    BYTE insn[2];
++
++    if (!direct_syscall_deferral || !amd64_data) return;
++    noted = amd64_data->direct_syscall_pending;
++    amd64_data->direct_syscall_pending = 0;
++
++    if (RIP_sig(sigcontext) == rip &&
++        (noted ? (WORD)RAX_sig(sigcontext) == amd64_data->direct_syscall_id
++               : (RCX_sig(sigcontext) != rip && RCX_sig(sigcontext) == R10_sig(sigcontext) &&
++                  RAX_sig(sigcontext) < 0x3000)) &&
++        !is_inside_syscall( data, RSP_sig(sigcontext) ) &&
++        !is_inside_signal_stack( data, (void *)RSP_sig(sigcontext) ) &&
++        virtual_uninterrupted_read_memory( (BYTE *)rip - 2, insn, 2 ) == 2 &&
++        insn[0] == 0x0f && insn[1] == 0x05)
++    {
++        TRACE_(seh)( "entering system call %#lx made at %p, %s\n", (long)RAX_sig(sigcontext), (void *)rip,
++                     noted ? "its SIGSYS came on top of this handler" : "its SIGSYS never came" );
++        enter_direct_syscall( data, sigcontext );
++    }
++    else if (noted)
++        ERR_(seh)( "system call %#x not made: SIGSYS came on top of a handler at %p, the thread is at %p\n",
++                   amd64_data->direct_syscall_id, (void *)rip, (void *)RIP_sig(sigcontext) );
++}
++#endif
++
++#if defined(__APPLE__) || defined(__linux__)
+ /**********************************************************************
+  *		sigsys_handler
+  *
+@@ -3210,10 +3339,8 @@
+  */
+ static void sigsys_handler( int signal, siginfo_t *siginfo, void *_sigcontext )
+ {
+-    extern const void *__wine_syscall_dispatcher_prolog_end_ptr;
+     ucontext_t *sigcontext = _sigcontext;
+     struct thread_data *data = init_handler( sigcontext );
+-    struct syscall_frame *frame = get_syscall_frame( data );
+ 
+     TRACE_(seh)("SIGSYS, rax %#lx, rip %#lx.\n", (long)RAX_sig(sigcontext), (long)RIP_sig(sigcontext));
+ 
+@@ -3261,42 +3388,32 @@
+     }
+ #endif
+ 
+-    frame->rip = RIP_sig(sigcontext) + 0xb;
+-    frame->rcx = RIP_sig(sigcontext);
+-    frame->eflags = EFL_sig(sigcontext);
+-    frame->restore_flags = 0;
+-    if (instrumentation_callback) frame->restore_flags |= RESTORE_FLAGS_INSTRUMENTATION;
+-    RCX_sig(sigcontext) = (ULONG_PTR)frame;
+-    R11_sig(sigcontext) = frame->eflags;
+-    if (EFL_sig(sigcontext) & 0x100)
++#ifdef __APPLE__
++    if (direct_syscall_deferral)
+     {
+-        EFL_sig(sigcontext) &= ~0x100;  /* clear single-step flag */
+-        frame->restore_flags |= CONTEXT_CONTROL;
+-    }
+-    RIP_sig(sigcontext) = (ULONG64)__wine_syscall_dispatcher_prolog_end_ptr;
++        struct amd64_thread_data *amd64_data = amd64_thread_data( data );
++        BYTE insn[2];
+ 
+-#ifdef __APPLE__
+-    /* CW Hack 24265 */
+-    if (is_rosetta2 && FPU_sig(sigcontext))
+-    {
+-        XMM_SAVE_AREA32 fpu;
+-        unsigned int direct_mxcsr;
+-        __asm__ volatile( "stmxcsr %0" : "=m" (direct_mxcsr) );
+-        memcpy( &fpu, FPU_sig(sigcontext), sizeof(fpu) );
+-
+-        if (direct_mxcsr != fpu.MxCsr)
++        if (is_inside_signal_stack( data, (void *)RSP_sig(sigcontext) ))
+         {
+-            fpu.MxCsr = direct_mxcsr;
+-            memcpy( FPU_sig(sigcontext), &fpu, sizeof(fpu) );
+-
+-            /* On the M3, Rosetta will restore mxcsr to the initial, incorrect
+-               value from the sigcontext, even if we change it. So we jump to a
+-               thunk that restores the value from amd64_thread_data. */
+-            amd64_thread_data(data)->mxcsr = direct_mxcsr;
+-            RIP_sig(sigcontext) = (ULONG64)__restore_mxcsr_thunk;
++            /* delivered on top of another handler: that handler enters the system call */
++            amd64_data->direct_syscall_id = RAX_sig(sigcontext);
++            amd64_data->direct_syscall_pending = 1;
++            return;
++        }
++        if (RCX_sig(sigcontext) == RIP_sig(sigcontext) ||
++            virtual_uninterrupted_read_memory( (BYTE *)RIP_sig(sigcontext) - 2, insn, 2 ) != 2 ||
++            insn[0] != 0x0f || insn[1] != 0x05)
++        {
++            /* Not a thread that has just run a syscall instruction: it is elsewhere, or the
++             * dispatcher has returned it there already. Never seen; it would be a SIGSYS that
++             * came after finish_direct_syscall had taken it for one that never would. */
++            WARN_(seh)( "SIGSYS with nothing to enter, rip %#lx\n", (long)RIP_sig(sigcontext) );
++            return;
+         }
+     }
+ #endif
++    enter_direct_syscall( data, sigcontext );
+ }
+ #endif
+ 
+@@ -3629,6 +3746,10 @@
+             is_rosetta2 = ret;
+     }
+     rosetta_extend_cpuid();  /* HRAVA_ROSETTA_CPUID */
++    {
++        const char *env = getenv( "WINE_DIRECT_SYSCALL_DEFERRAL" );
++        direct_syscall_deferral = is_rosetta2 && !(env && env[0] == '0' && !env[1]);
++    }
+ 
+     /* CW Hack 23427: __builtin_available presumably isn't signal-safe. */
+     if (__builtin_available( macOS 15.0, * ))
