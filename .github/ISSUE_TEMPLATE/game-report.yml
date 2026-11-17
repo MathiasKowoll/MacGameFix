@@ -11,7 +11,7 @@ body:
         names this game alone, writes your home folder as `~` and leaves your Mac's name out.
 
         **If the game runs slowly**, record two minutes of it as well and attach the zip that leaves:
-        [how to record it](https://github.com/MathiasKowoll/MacGameFix/blob/main/docs/performance-capture.md).
+        [how to record it](https://macgamefix.app/docs/reporting#performance-capture).
   - type: input
     id: game
     attributes:
