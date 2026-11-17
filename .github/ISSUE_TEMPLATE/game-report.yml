@@ -9,6 +9,9 @@ body:
         goes wrong and follow the steps it gives, then click **Save the Report and Open an Issue…** and attach
         the file it saves below. MacGameFix reads the game's folder without changing anything in it; the report
         names this game alone, writes your home folder as `~` and leaves your Mac's name out.
+
+        **If the game runs slowly**, record two minutes of it as well and attach the zip that leaves:
+        [how to record it](https://github.com/MathiasKowoll/MacGameFix/blob/main/docs/performance-capture.md).
   - type: input
     id: game
     attributes:
@@ -59,4 +62,4 @@ body:
     id: screenshots
     attributes:
       label: Screenshots or a recording
-      description: Drag them here. With the Metal HUD on if the game runs slowly.
+      description: Drag them here. If the game runs slowly, the zip of its performance capture too.
