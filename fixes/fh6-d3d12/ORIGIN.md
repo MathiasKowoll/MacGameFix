@@ -16,6 +16,11 @@ instead of the reference setup's bare `d3d12_d3dmetal.dll`, it loads
 alias from the selected NotProton/CrossOver runner's own D3DMetal module and
 changes its PE export name. No D3DMetal binary is distributed by MacGameFix.
 
+In this directory MacGameFix also adds `pacer.h`, which is its own and has nothing
+to do with D3D12: a thread, off unless `MGF_FH6_ROSETTA_PACER` asks for it, that
+shortens the stop Rosetta makes when its store of translated code fills. The file's
+header says what was measured.
+
 `build-fh5-d3d12.sh` builds the shipped `d3d12-fh5.dll` from these files.
 `build-fh6-d3d12.sh` builds `d3d12-fh6.dll` from the same audited source with
 `MGF_FH6_PROFILE=1`. That profile does not install FH5's 24-to-32-byte

@@ -26,7 +26,36 @@ The steadiest play so far: set the frame rate to unlimited in the game's own vid
 | `D3DM_MAX_FPS=48` | Caps the frame rate at 48. |
 | `D3DM_MAX_FPS=60` | Caps the frame rate at 60. On a MacBook Pro's ProMotion display it may hold 48 all the same. |
 
-Short stutters remain even so: with the car nearly still, about eight a minute, the longest under 0.1 s. They are not shader compilation, and their cause is still under investigation.
+Short stutters remain even so: with the car nearly still, a stop of 0.1 to 0.17 s every ten seconds or so. They are not shader compilation, the graphics settings or the online session. See Stutter.
+
+# Stutter
+
+The game's protection rewrites its own code all the time. Rosetta translates each rewritten piece again and keeps the translations in a store; when the store fills, Rosetta empties it in one go, and every thread that needs a translation waits meanwhile. That is the stop. Rosetta does the same with no game and no Wine: `tools/rosetta-store-stop/trapfreeze.c` in MacGameFix's source shows it.
+
+The FH6 `d3d12.dll` can make Rosetta empty the store more often, while it holds less, so each stop is shorter. It is off unless you ask for it, before `%command%`:
+
+| Variable and value | What it does |
+|---|---|
+| `MGF_FH6_ROSETTA_PACER=40` | Runs a thread that keeps Rosetta's store small. The number is how much of the time it works, from 1 to 100. |
+| `MGF_FH6_ROSETTA_PACER=40,4096` | The same, with the size in bytes of the code it runs each time (2048 to 65536; 4096 if left out). |
+
+Played on a MacBook Pro M4 Max on 2026-11-16, standing in the world, 75 to 90 seconds a value, the frame rate the same in all of them:
+
+| Value | Stops of 0.1 s or more | Longest |
+|---|---|---|
+| off | 2 to 4 | 0.13 to 0.17 s |
+| `15` | 12 | 0.13 s |
+| `25` | 1 | 0.10 s |
+| `40` | 1 | 0.10 s |
+| `50` | 0 | 0.09 s |
+| `65` | 0 | 0.08 s |
+| `100` | 1 | 0.11 s, with a pause of 0.09 s every second |
+
+More is not better. The thread takes the translator from the game's own threads, and from about `65` up the game's usual short pause, about 0.055 s every second or so, grows instead: at `100` it is worse than off. `40` to `50` is where the long stops go and the short pause barely changes (0.06 s). Another processor may want another value, a faster one most likely a lower one.
+
+To look for yours without starting the game again: with the variable set, write a file `pacer.txt` in the `mgf` folder of the game's prefix (`drive_c/mgf`), holding just the number, or the number and the size. The game reads it twice a second and uses it in place of the variable while the file is there. `fh6-pacer-<number>.log` in the same folder gets a line every ten seconds whose last figure is the longest stop the thread itself met, in millionths of a second.
+
+Only on Rosetta, and only one run a value so far.
 
 # Heat
 
