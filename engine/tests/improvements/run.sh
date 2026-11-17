@@ -37,17 +37,39 @@ check 'cw x86_64-unix/ntdll.so && ours x86_64-windows/winebus.sys && ours x86_64
 check '[ "$(st --part=rosetta)" = absent ] && [ "$(st --part=controls)" = installed ]' "then Rosetta's is absent, not outdated, and the controls installed"
 E --part=rosetta >/dev/null
 check '[ "$(st --part=rosetta)" = installed ] && [ "$(st --part=controls)" = installed ] && ours x86_64-unix/ntdll.so' "putting Rosetta's back in keeps the controls on the list"
-check '! [ -f "$MGVF_ENGINE_BACKUP/crossover-$B-fex/off.list" ]' "and it is no longer noted as off"
 E --restore --part=controls >/dev/null
 check 'cw x86_64-unix/winebus.so && cw x86_64-windows/mmdevapi.dll && ours x86_64-unix/ntdll.so' "taking the controls out leaves Rosetta's in"
 check '[ "$(st --part=controls)" = absent ] && [ "$(st --part=rosetta)" = installed ]' "controls absent, Rosetta's installed"
 E --restore --part=rosetta >/dev/null
 check 'cw x86_64-unix/ntdll.so && ! [ -d "$MGVF_ENGINE_BACKUP/crossover-$B-fex" ] && [ "$(st)" = absent ]' "the last one out removes the backup folder: all CrossOver's own"
-# An install made before the improvements were split (controls only), then a
-# catalog with ntdll.so: the new improvement reads as an update, as before.
+# One improvement alone, never the other (issue #50): the other is absent, not outdated,
+# and nothing is said to have replaced it.
 E --part=controls >/dev/null
-check '[ "$(st --part=rosetta)" = outdated ]' "an install without Rosetta's, beside a catalog with it, says outdated for it"
+check '[ "$(st --part=controls)" = installed ] && [ "$(st --part=rosetta)" = absent ] && cw x86_64-unix/ntdll.so' "the controls alone: Rosetta's, never installed, is absent"
+check '[ "$(E --status --part=rosetta | wc -l)" -eq 1 ]' "and nothing is said to have replaced it"
+check '[ "$(st)" = half ]' "both together read half: one of the two is in"
+E --restore --part=controls >/dev/null
 E --part=rosetta >/dev/null
+check '[ "$(st --part=rosetta)" = installed ] && [ "$(st --part=controls)" = absent ] && cw x86_64-unix/winebus.so' "Rosetta's alone: the controls, never installed, are absent"
+E --restore --part=rosetta >/dev/null
+# Newer modules add a file to an improvement that is in: that one has an update, the
+# other is still absent.
+mv "$CAT/engine-$B-x86_64-unix-winebus.so" "$T/held"
+E --part=controls >/dev/null
+mv "$T/held" "$CAT/engine-$B-x86_64-unix-winebus.so"
+check '[ "$(st --part=controls)" = outdated ] && [ "$(st --part=rosetta)" = absent ]' "a module added to the controls is an update of the controls alone"
+E --part=controls >/dev/null
+check '[ "$(st --part=controls)" = installed ] && ours x86_64-unix/winebus.so' "which installing again brings in"
+# CrossOver's own files back over an improvement that is in: absent, and said so.
+for f in $FILES; do [ "$f" = x86_64-unix/ntdll.so ] || printf "CodeWeavers' %s wine-11.17-1\n" "$f" >"$R/lib/wine/$f"; done
+check '[ "$(st --part=controls)" = absent ] && E --status --part=controls | grep -q "Something replaced"' "the controls replaced from outside: absent, and it says something replaced them"
+check '[ "$(E --status --part=rosetta | wc -l)" -eq 1 ]' "while nothing is said about Rosetta's"
+E --part=controls >/dev/null
+# The note an older script left when an improvement was taken out is not needed and goes.
+echo rosetta >"$MGVF_ENGINE_BACKUP/crossover-$B-fex/off.list"
+check '[ "$(st --part=rosetta)" = absent ]' "an older script's note changes nothing"
+E --part=rosetta >/dev/null
+check '! [ -f "$MGVF_ENGINE_BACKUP/crossover-$B-fex/off.list" ]' "and the next install removes it"
 E --restore >/dev/null
 check 'cw x86_64-unix/ntdll.so && cw x86_64-unix/winebus.so && ! [ -d "$MGVF_ENGINE_BACKUP/crossover-$B-fex" ]' "a plain restore takes everything out"
 check '[ "$(E --part=nothing | tail -1)" = "Unknown improvement: nothing" ]' "an unknown improvement is refused"
