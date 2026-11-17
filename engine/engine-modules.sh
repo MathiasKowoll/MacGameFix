@@ -11,8 +11,8 @@
 #   rosetta   Rosetta's CPU for copy protection: ntdll.so, which also carries the
 #             timer thread's fix (0021), on the FEX side too where a build has one
 # Without --part every improvement the build carries is meant, as before there were two.
-# An improvement removed with --part is noted in the backup folder, so that its status
-# is absent and not outdated while the other one stays in.
+# An improvement is in when the list in the backup folder names one of its modules. One
+# that was never installed, or was taken out with --part, is absent whatever the other is.
 #
 # <CrossOver folder> is the folder that holds lib/wine: a NotProton runner's
 #   ~/Library/Application Support/notproton/runners/crossover-<build>[-fex]/CrossOver
@@ -109,8 +109,14 @@ for f in $FILES; do in_part "$f" && KEEP="$KEEP $f"; done
 FILES="$KEEP"
 sha() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1; }
 recorded() { [ -f "$SAVE/installed.list" ] && sed -n "s|^\([0-9a-f]*\)  $1\$|\1|p" "$SAVE/installed.list"; }
-# The improvements taken out on their own, one name a line.
-is_off() { [ -f "$SAVE/off.list" ] && grep -qx "$(part_of "$1")" "$SAVE/off.list"; }
+# Whether the improvement a module belongs to is in: the list names one of its modules.
+part_in() {
+  local p h f
+  p="$(part_of "$1")"
+  [ -f "$SAVE/installed.list" ] || return 1
+  while read -r h f; do [ "$(part_of "$f")" = "$p" ] && return 0; done <"$SAVE/installed.list"
+  return 1
+}
 
 state() {
   local n=0 ours=0 old=0 f t
@@ -118,9 +124,9 @@ state() {
     n=$((n + 1)); t="$(sha "$LIB/$f")"
     if [ "$t" = "$(sha "$(src "$f")")" ]; then ours=$((ours + 1))
     elif [ -n "$t" ] && [ "$t" = "$(recorded "$f")" ]; then old=$((old + 1))
-    # A file newer modules add, beside an install that did not have it: an update,
-    # unless its improvement was taken out on its own.
-    elif [ -n "$t" ] && [ -f "$SAVE/installed.list" ] && [ -z "$(recorded "$f")" ] && ! is_off "$f"; then
+    # A file newer modules add to an improvement that is in: an update. The same file
+    # of an improvement that is not in is CrossOver's own, and nothing of ours.
+    elif [ -n "$t" ] && [ -z "$(recorded "$f")" ] && part_in "$f"; then
       old=$((old + 1)); fi
   done
   if [ "$n" -gt 0 ] && [ "$ours" -eq "$n" ]; then echo installed
@@ -132,7 +138,11 @@ state() {
 if [ "$MODE" = --status ]; then
   [ -n "$FILES" ] || { say "There is nothing of this improvement for CrossOver $BUILD yet."; say nomodules; exit 0; }
   s="$(state)"
-  [ "$s" = absent ] && [ -f "$SAVE/installed.list" ] && say "Something replaced the modules since they were installed."
+  if [ "$s" = absent ]; then
+    for f in $FILES; do
+      part_in "$f" && { say "Something replaced the modules since they were installed."; break; }
+    done
+  fi
   say "$s"; exit 0
 fi
 
@@ -204,10 +214,7 @@ install)
     printf '%s  %s\n' "$s" "$f" >>"$SAVE/installed.list.new"
   done
   mv "$SAVE/installed.list.new" "$SAVE/installed.list"
-  if [ -f "$SAVE/off.list" ]; then
-    for f in $FILES; do grep -vx "$(part_of "$f")" "$SAVE/off.list" >"$SAVE/off.list.new"; mv "$SAVE/off.list.new" "$SAVE/off.list"; done
-    [ -s "$SAVE/off.list" ] || rm -f "$SAVE/off.list"
-  fi
+  rm -f "$SAVE/off.list"      # a note older scripts kept; the list alone says what is in
   resign
   say "Installed the modules for CrossOver $BUILD into $ROOT." ;;
 --restore)
@@ -228,8 +235,8 @@ install)
     put "$SAVE/$f" "$LIB/$f" -p || refused "$LIB/$f"
     say "  $f"
   done
-  # One improvement out: its lines leave the list and it is noted as off. The folder goes
-  # with the last of them, as it went with everything before.
+  # One improvement out: its lines leave the list. The folder goes with the last of
+  # them, as it went with everything before.
   if [ "$PART" != all ] && [ -f "$SAVE/installed.list" ]; then
     : >"$SAVE/installed.list.new"
     while read -r h f; do in_part "$f" || printf '%s  %s\n' "$h" "$f" >>"$SAVE/installed.list.new"; done <"$SAVE/installed.list"
@@ -238,7 +245,7 @@ install)
   if [ "$PART" = all ] || [ ! -s "$SAVE/installed.list" ]; then
     rm -rf "$SAVE"
   else
-    grep -qx "$PART" "$SAVE/off.list" 2>/dev/null || echo "$PART" >>"$SAVE/off.list"
+    rm -f "$SAVE/off.list"
   fi
   resign
   say "Put CrossOver's own files back in $ROOT." ;;
