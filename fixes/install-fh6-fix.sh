@@ -176,10 +176,31 @@ cmp -s "$WORK/real.exports" "$WORK/proxy.exports" || {
   exit 1
 }
 
+# NotProton's Game Mode runs the game from its own copy of the runner, and makes that copy
+# again, before the game next runs from it, whenever the copy's .stamp no longer says what the
+# runner's lib/wine looks like (runner_stamp in NotProton's compat_run.sh): new Wine modules
+# going into the runner do that. A copy in that state is on its way out, so it is not looked
+# at: what it still holds, an earlier ntdll.so for one, must neither make the fix read half
+# nor stop an install until the game is started again. A copy with no .stamp, or one whose
+# .stamp is about another runner, is looked at as before.
+clone_current() {
+  local stamp="$1/.stamp" line f
+  [ -f "$stamp" ] && /usr/bin/grep -Fq -- "$RUNNER/lib/wine " "$stamp" || return 0
+  while IFS= read -r line; do
+    /usr/bin/grep -Fqx -- "$line" "$stamp" || return 1
+  done < <(stat -f '%N %i %Fm' "$RUNNER/lib/wine" "$RUNNER/lib/wine"/* 2>/dev/null)
+  # The loader and, on a runner without a wine.app, ntdll.so are in the stamp too.
+  for f in "$RUNNER/lib/wine/x86_64-unix/wine" "$RUNNER/lib/wine/x86_64-unix/ntdll.so"; do
+    /usr/bin/grep -Fq -- "$f " "$stamp" || continue
+    /usr/bin/grep -Fqx -- "$(stat -f '%N %i %Fm' "$f" 2>/dev/null)" "$stamp" || return 1
+  done
+  return 0
+}
+
 CLONE=""
 if [ -f "$(dirname "$PFX")/notproton-build" ]; then
   candidate="$HOME/Library/Application Support/notproton/launchers/2483190/runner"
-  [ ! -x "$candidate/bin/wine" ] || CLONE="$candidate"
+  [ ! -x "$candidate/bin/wine" ] || ! clone_current "$candidate" || CLONE="$candidate"
 fi
 if [ -n "$CLONE" ]; then
   CLONE_BACKEND="$(find_d3dmetal "$CLONE")" || {

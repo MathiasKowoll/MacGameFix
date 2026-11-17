@@ -625,6 +625,29 @@ printf 'my own plugin\n' > "$f6pl/notproton-rosetta-trap-boost.dylib"
 f6do --install > "$f6/plugin2.log" 2>&1 && [ "$(cat "$f6pl/notproton-rosetta-trap-boost.dylib")" = "my own plugin" ] \
   && say ok "fh6 on a fake prefix: a user's own priority plugin is kept" \
   || say FAIL "fh6: own plugin ($(tail -2 "$f6/plugin2.log" | tr '\n' ' '))"
+# FH6's runner clone holding an earlier ntdll.so, as new Wine modules in the runner leave it.
+# While the clone is the runner's current copy it is looked at: the fix reads half and an
+# install refuses what it did not put there. Once NotProton is going to make the clone again
+# (its .stamp no longer says what the runner's lib/wine looks like) it is not looked at.
+f6cso="$f6clone/lib/wine/x86_64-unix/ntdll.so"
+cp "$f6cso" "$f6/clone-ntdll.so"; printf 'stock\n' > "$f6cso.mgf-fh6-original"; printf 'an earlier build\n' > "$f6cso"
+[ "$(f6st)" = half ] && ! f6do --install > "$f6/clone1.log" 2>&1 && /usr/bin/grep -q 'changed outside MacGameFix' "$f6/clone1.log" \
+  && say ok "fh6 runner clone: an earlier ntdll.so in a clone with no stamp reads half and is not replaced" \
+  || say FAIL "fh6 clone: no stamp ($(f6st), $(tail -1 "$f6/clone1.log"))"
+printf '%s/lib/wine 1 1.000000000\n' "$f6run" > "$f6clone/.stamp"
+[ "$(f6st)" = installed ] && f6do --install > "$f6/clone2.log" 2>&1 && [ "$(f6st)" = installed ] \
+  && [ "$(cat "$f6cso")" = "an earlier build" ] \
+  && say ok "fh6 runner clone: one NotProton will make again is not looked at: installed, and an install goes through" \
+  || say FAIL "fh6 clone: stale stamp ($(f6st), $(tail -1 "$f6/clone2.log"))"
+stat -f '%N %i %Fm' "$f6run/lib/wine" "$f6run/lib/wine"/* > "$f6clone/.stamp"
+[ "$(f6st)" = half ] \
+  && say ok "fh6 runner clone: one whose stamp is the runner's is looked at" \
+  || say FAIL "fh6 clone: current stamp ($(f6st))"
+printf '/another/runner/lib/wine 1 1.000000000\n' > "$f6clone/.stamp"
+[ "$(f6st)" = half ] \
+  && say ok "fh6 runner clone: a stamp about another runner changes nothing" \
+  || say FAIL "fh6 clone: another runner's stamp ($(f6st))"
+rm -f "$f6clone/.stamp" "$f6cso.mgf-fh6-original"; cp "$f6/clone-ntdll.so" "$f6cso"
 f6do --restore > /dev/null 2>&1
 
 # 41303 with engine patch 0025: the chain's switches are in ntdll.dll, so the launch options
