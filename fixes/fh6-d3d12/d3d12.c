@@ -1061,6 +1061,7 @@ static void patch_queue_vtbl(void *iface)
 
 #include <stdarg.h>
 #include "faillog.h"
+#include "pacer.h"
 #if MGF_FH6_PROFILE
 /* FH5 alone needs its 24-to-32-byte descriptor-handle translation.  FH6 uses
  * the increment D3DMetal reports, so its build keeps the diagnostic layer but
@@ -1214,6 +1215,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
 #endif
         fl_init();
         stride_init();
+        pacer_init();   // MGF_FH6_ROSETTA_PACER=<duty> only
         QueryPerformanceFrequency(&f); qpc_freq = (UINT64)f.QuadPart;
         // HB_TSSHIM_DEBUG=1: pipelines and feature queries; 2: also every resource and view (hundreds of MB, slow)
         { char v[8]; DWORD n = GetEnvironmentVariableA("HB_TSSHIM_DEBUG", v, sizeof v); dbg = (hb_debug && n) ? (n < sizeof v && v[0] == '2' ? 2 : 1) : 0; }

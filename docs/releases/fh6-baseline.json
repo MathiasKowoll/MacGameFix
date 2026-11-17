@@ -17,7 +17,8 @@
     "fixes/notproton-rosetta-trap-boost.dylib": "28315251485196c816b3579c90a8e9fa81a4bb7b9b61d87c4269c8972c9f4197"
   },
   "distribution_files_later": {
-    "2026-11-12, fixes/notproton-rosetta-trap-boost.dylib": "the quiet build of engine/sources/fh6-20261111/rosetta-trap-boost.c; ad hoc 882d6a31ff083c1478559c002447b58c4cb96eb855af8c4683511c2f4651d0f7, as played"
+    "2026-11-12, fixes/notproton-rosetta-trap-boost.dylib": "the quiet build of engine/sources/fh6-20261111/rosetta-trap-boost.c; ad hoc 882d6a31ff083c1478559c002447b58c4cb96eb855af8c4683511c2f4651d0f7, as played",
+    "2026-11-16, fixes/d3d12-fh6.dll": "with fh6-d3d12/pacer.h (MGF_FH6_ROSETTA_PACER, off unless set); 4028c3f34c3b8acb97143665660591347a34ceb1f9249e460c5bba74d8a8e35e. Played with the pacer in a diagnostic build of the same source, not in this file"
   },
   "distribution_signing": "Mach-O copies only: Developer ID signature and timestamp; otool -t unchanged. Installed binaries untouched."
 }
