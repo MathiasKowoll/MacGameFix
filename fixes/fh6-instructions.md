@@ -33,7 +33,7 @@ Short stutters remain even so: with the car nearly still, a stop of 0.1 to 0.17 
 
 # Stutter
 
-The game's protection rewrites its own code all the time. Rosetta translates each rewritten piece again and keeps the translations in a store; when the store fills, Rosetta empties it in one go, and every thread that needs a translation waits meanwhile. That is the stop. Rosetta does the same with no game and no Wine: `tools/rosetta-store-stop/trapfreeze.c` in MacGameFix's source shows it.
+The game's protection rewrites its own code all the time. Rosetta translates each rewritten piece again and keeps the translations in a store; when the store fills, Rosetta empties it in one go, and every thread that needs a translation waits meanwhile. That is the stop. Rosetta does the same with no game and no Wine: `tools/rosetta-store-stop/trapfreeze.c` in MacGameFix's source shows it. It is reported to Apple as FB25605182. Only a change in Rosetta takes the stop away; what follows makes it shorter. If you see the stop as well, a report of your own to Apple that names that number adds weight to it.
 
 The FH6 `d3d12.dll` can make Rosetta empty the store more often, while it holds less, so each stop is shorter. It is off unless you ask for it, before `%command%`:
 

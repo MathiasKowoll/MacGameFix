@@ -1,5 +1,6 @@
 /* trapfreeze.c: Rosetta stops every thread that needs its translator, now and then, when code is rewritten
  * all the time. No Wine and no game: this is what Forza Horizon 6 shows at rest (fixes/fh6-d3d12/pacer.h).
+ * Reported to Apple as FB25605182, with this file attached.
  *
  *   clang -O2 -arch x86_64 -o trapfreeze trapfreeze.c -lpthread        (x86_64, so it runs under Rosetta)
  *   ./trapfreeze <seconds> <trappers> <writers> <pages> [code bytes] [writes a second per writer] [mode]
