@@ -79,7 +79,7 @@
         "WINE_SOFTWARE_BRIDGE_RESUME": "0",
         "WINE_SOFTWARE_ALU_BRIDGE": "1"
       },
-      "symptom": "WIP: sign-in and driving validated; reduced recurring stutter with the new Rosetta runtime"
+      "symptom": "Sign-in, online, open world and races played at 60 fps on Rosetta; needs the launch options in its instructions"
     },
     "game.exe": {
       "title": "Persona 5 Strikers",

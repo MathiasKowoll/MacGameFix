@@ -7,7 +7,7 @@ small macOS application that installs, checks and removes them. One more is
 for a macOS game: it turns on the MetalFX denoiser that Cyberpunk 2077 ships
 and leaves off, by changing the game's own app.
 
-Most game-folder fixes do not replace a CrossOver module. FH6 WIP additionally uses the paired ntdll from the existing Rosetta improvement. The other Windows game fixes work with
+Most game-folder fixes do not replace a CrossOver module. FH6 additionally uses the paired ntdll from the existing Rosetta improvement. The other Windows game fixes work with
 CrossOver as CodeWeavers ships it, with CrossOver Preview, and with Steam Play
 tools for macOS such as [NotProton](https://github.com/NotProtonNot/NotProton):
 a proxy DLL beside the game, and for a few titles registry keys in the game's
@@ -292,7 +292,7 @@ open Steam there (engine/README.md, "The options").
 | Devil May Cry 5 | Crashes when a skill preview plays | D3DMetal |
 | DYNASTY WARRIORS: ORIGINS | Cutscenes with sound and no picture | D3DMetal, CrossOver Preview 27 |
 | Forza Horizon 5 | Never leaves the loading screen after Xbox sign-in | D3DMetal 4, a prefix |
-| Forza Horizon 6 — WIP | Sign-in and driving validated; reduced recurring stutter | D3DMetal 4, Preview 41073 Rosetta improvement, a prefix |
+| Forza Horizon 6 | Sign-in, online, open world and races played at 60 fps; needs the launch options in its instructions | D3DMetal 4, Preview 41073 Rosetta improvement, a prefix |
 | God of War | White specks on characters in dim light | D3DMetal or DXMT |
 | God of War Ragnarök | Adaptive triggers never reach the pad | A DualSense or DualSense Edge, Bluetooth as a cable over Bluetooth |
 | KINGDOM HEARTS Dream Drop Distance | Cutscenes with a solid green picture; a crash dialog on exit | D3DMetal, a prefix |
