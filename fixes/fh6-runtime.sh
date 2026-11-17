@@ -40,8 +40,8 @@ fh6_runtime_ok() {
 fh6_options() { MGF_FH6_CHAIN_IN_NTDLL="$(fh6_chain_in_ntdll)" /usr/bin/perl "$HERE/fh6-launch-options.pl" "$1" "$PFX"; }
 fh6_preflight() {
   [ -n "$FH6_BUILD" ] || {
-    echo 'error: FH6 WIP requires the standard NotProton runner for CrossOver Preview 27.0.0.41073 or 27.0.0.41303, using Rosetta.' >&2; return 1; }
-  [ "$(fh6sha "$GAME/forzahorizon6.exe")" = "$GAME_SHA" ] || { echo 'error: this FH6 executable has not been validated for the WIP runtime. Nothing changed.' >&2; return 1; }
+    echo 'error: FH6 requires the standard NotProton runner for CrossOver Preview 27.0.0.41073 or 27.0.0.41303, using Rosetta.' >&2; return 1; }
+  [ "$(fh6sha "$GAME/forzahorizon6.exe")" = "$GAME_SHA" ] || { echo 'error: this FH6 executable has not been validated for this runtime. Nothing changed.' >&2; return 1; }
   fh6_pe_ok "$NT_DLL" && [ -f "$NT_UNIX" ] || { echo 'error: download this prerelease’s Wine modules in Improvements first.' >&2; return 1; }
   # All runtime copies must be backed up before an update. Unknown copies are not overwritten.
   local root f live stock
@@ -90,7 +90,7 @@ fh6_install_runtime() {
     cat > "$plugins/rosetta-trap-boost.conf" <<'CONF'
 [NOTPROTON_ROSETTA_TRAP_BOOST]
 label = Rosetta exception priority
-description = Raises Rosetta exception delivery priority for the FH6 WIP profile
+description = Raises Rosetta exception delivery priority for the FH6 profile
 section = dev
 on = 1
 inject = 1

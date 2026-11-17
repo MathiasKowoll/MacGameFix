@@ -54,7 +54,7 @@ enum EnginePart: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .controls: return "Haptics, adaptive triggers, Bluetooth as a cable, and XInput's vibration."
-        case .rosetta: return "CPU compatibility under Rosetta, plus corrected timers and guarded exception acceleration for FH6 (WIP) on Preview 41073."
+        case .rosetta: return "CPU compatibility under Rosetta, plus corrected timers and guarded exception acceleration for FH6 on Preview 41073."
         }
     }
 
