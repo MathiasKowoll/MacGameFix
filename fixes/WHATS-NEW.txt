@@ -3,6 +3,3 @@
 # catalog.json as "notes"; the app shows them with the update and the agent in its
 # notification. Rewrite them with every change to the fixes: what stays here is said
 # again with the next catalog. Lines that start with # are not carried.
-Forza Horizon 6 is no longer marked WIP.
-Forza Horizon 6: its instructions give the whole launch line, with the pacer that ends the stalls.
-Forza Horizon 6 installs again when NotProton is about to remake the game's runner copy.
