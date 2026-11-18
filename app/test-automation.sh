@@ -766,6 +766,7 @@ newagent() { MACGAMEFIX_CATALOG_SOURCE="$T/release2" MACGAMEFIX_CATALOG_PUBKEY="
 before="$(readlink "$SUPPORT/MacGameFix/catalog/current")"
 printf '{"kept":[],"updates":true,"askFirst":true}' > "$SUPPORT/MacGameFix/automatic.json"; due
 check 'out="$(newagent)"; has "$out" "New fixes are ready (catalog 4000000005)" && has "$out" "Fake Game runs its movies. A second thing." && [ "$(readlink "$SUPPORT/MacGameFix/catalog/current")" = "$before" ] && [ "$(waiting)" = 4000000005 ]' "asked first, a newer catalog is offered and nothing is installed"
+check 'out="$("$BIN" --updates-report 2>&1)"; has "$out" "fixes | catalog $before, of " && has "$out" "notice | An update is available: new fixes." && has "$out" "button | Update" && ! has "$out" "Relaunch"' "the notice offers the new fixes with Update, and there is no Relaunch for a catalog"
 due
 check '! has "$(newagent)" "New fixes are ready" && [ "$(readlink "$SUPPORT/MacGameFix/catalog/current")" = "$before" ]' "and offered once"
 printf '{"kept":[],"updates":false,"askFirst":false}' > "$SUPPORT/MacGameFix/automatic.json"; due
@@ -775,6 +776,17 @@ printf '{"kept":[],"updates":true,"askFirst":false}' > "$SUPPORT/MacGameFix/auto
 out="$(newagent)"
 check '[ "$(readlink "$SUPPORT/MacGameFix/catalog/current")" = 4000000005 ] && [ "$(waiting)" = 0 ]' "automatic, it is installed and no longer waiting"
 check 'has "$out" "The fixes were updated. Fake Game runs its movies. A second thing."' "and the agent says what it brings"
+
+echo "== what Settings › Updates says"
+# --updates-report prints the section's lines and the notice's, from the words the window uses.
+upd() { "$BIN" --updates-report "$@" 2>&1 || true; }
+every() { printf '{"kept":[],"updates":%s,"askFirst":false,"updateMinutes":%s}' "$1" "$2" > "$SUPPORT/MacGameFix/automatic.json"; upd; }
+out="$(upd)"
+check 'has "$out" "app | MacGameFix $APPV" && has "$out" "fixes | catalog 4000000005, of " && has "$out" "modules | catalog "' "the app's version and each catalog in use, by its number and its day"
+check 'has "$out" "looks | every hour" && has "$out" "notice | none"' "updates are looked for every hour, and with nothing waiting there is no notice"
+check 'has "$(every true 10)" "looks | every 10 minutes" && has "$(every true 1440)" "looks | once a day" && has "$(every true 120)" "looks | every 2 hours"' "another interval in the settings file is said as it is"
+check 'has "$(every true 1)" "looks | every 10 minutes" && has "$(every false 60)" "looks | never"' "nothing under ten minutes, and never with updates off"
+printf '{"kept":[],"updates":true,"askFirst":false}' > "$SUPPORT/MacGameFix/automatic.json"
 
 echo "== the Wine modules, on their own"
 # A Wine modules' catalog of fake modules for build 27.0.0.41069, signed with the test key.
@@ -985,6 +997,7 @@ if [ -z "$AUTH" ]; then
   release new 9.9.9
   check 'has "$(appcheck new)" "available 9.9.9"' "a newer MacGameFix is found"
   check 'has "$(appupdate new)" "not signed with a Developer ID" && [ "$(copyv)" = "$APPV" ]' "a build signed ad hoc does not replace itself"
+  check 'out="$(MACGAMEFIX_APP_SOURCE="$A/rel-new" "$COPY" --updates-report --downloaded 2>&1)"; has "$out" "notice | An update is available: MacGameFix 9.9.9." && has "$out" "button | none" && has "$out" "cannot | " && ! has "$out" "Relaunch"' "and its notice has no button: neither Update nor Relaunch"
   echo "  skip  this build has no Developer ID: the replacement itself is not checked"
 else
   variant new 9.9.9 "$AUTH"
@@ -1003,6 +1016,23 @@ else
   check '! has "$(MACGAMEFIX_APP_SOURCE="$A/rel-new" "$BIN" --agent-once 2>&1)" "is available" && ! has "$(menu)" "app |"' "with the setting off, the agent does not look"
   printf '{"kept":[],"updates":false,"modulesUpdates":false}' > "$SUPPORT/MacGameFix/automatic.json"
 
+  # The notice's one button. Relaunch is for a new MacGameFix alone, downloaded and
+  # checked, with no catalog waiting; and then it is always there.
+  notice() { MACGAMEFIX_APP_SOURCE="$A/rel-$1" "$COPY" --updates-report "${@:2}" 2>&1 || true; }
+  fixeswait() { /usr/bin/python3 - "$SUPPORT/MacGameFix/agent-state.json" "$1" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1])); d["available"] = int(sys.argv[2]); json.dump(d, open(sys.argv[1], "w"))
+PY
+  }
+  check 'out="$(notice new)"; has "$out" "notice | An update is available: MacGameFix 9.9.9." && has "$out" "button | Update" && ! has "$out" "Relaunch"' "a newer MacGameFix not yet downloaded is offered with Update"
+  check 'out="$(notice new --downloaded)"; has "$out" "notice | MacGameFix 9.9.9 is ready. Relaunch to finish updating." && has "$out" "button | Relaunch"' "downloaded and checked, it has Relaunch"
+  check '[ "$(copyv)" = "$APPV" ] && [ "$(ls "$A/installed")" = MacGameFix.app ]' "and nothing was put in the app's place before Relaunch"
+  fixeswait 4999999999
+  check 'out="$(notice new --downloaded)"; has "$out" "notice | An update is available: MacGameFix 9.9.9, new fixes." && has "$out" "button | Update" && ! has "$out" "Relaunch"' "with new fixes waiting beside it, Update comes first"
+  check 'out="$("$COPY" --updates-report --downloaded 2>&1)"; has "$out" "notice | An update is available: new fixes." && has "$out" "button | Update" && ! has "$out" "Relaunch"' "new fixes alone never have Relaunch"
+  fixeswait 0
+  check 'has "$("$COPY" --updates-report --downloaded 2>&1)" "notice | none"' "and with nothing new there is no notice"
+
   # What is refused, and leaves the copy as it was.
   cp -R "$A/new" "$A/changed"; printf 'x' >> "$A/changed/MacGameFix.app/Contents/Resources/games.json"
   release changed 9.9.9
@@ -1010,6 +1040,7 @@ else
   variant adhoc 9.9.9 -
   release adhoc 9.9.9
   check 'has "$(appupdate adhoc)" "not signed as MacGameFix is" && [ "$(copyv)" = "$APPV" ]' "one signed ad hoc is refused"
+  check 'out="$(notice adhoc --downloaded)"; has "$out" "refused | " && has "$out" "button | Update" && ! has "$out" "Relaunch"' "and a download that was refused never has Relaunch"
   variant other 9.9.8 "$AUTH"
   release other 9.9.9
   mv "$A/rel-other/MacGameFix-9.9.9.zip" "$A/rel-other/x.zip"
@@ -1105,6 +1136,7 @@ PY
   GIVEN="$A/given/MacGameFix.app/Contents/MacOS/MacGameFix"
   check 'has "$("$GIVEN" --app-update-check 2>&1)" "up to date" && [ -z "$(stublog)" ]' "a test that names its own release does not reach the address the build was given"
   check 'has "$(env -u MACGAMEFIX_APP_SOURCE "$GIVEN" --app-update-check 2>&1)" "available 9.9.9" && [ "$(stublog)" = "token given;latest 200 MacGameFix/$APPV;" ]' "and with none named, the build's own address and key are asked"
+  check 'out="$(MACGAMEFIX_APP_SOURCE="$A/rel-new" "$GIVEN" --updates-report --downloaded 2>&1)"; has "$out" "notice | An update is available: MacGameFix 9.9.9." && has "$out" "button | none" && has "$out" "cannot | " && ! has "$out" "Relaunch"' "a copy that cannot replace itself has no button for the new MacGameFix: neither Update nor Relaunch"
   kill "$STUB_PID" 2>/dev/null; STUB_PID=0
   check 'has "$(asked "key+with a space")" "up to date"' "and one that is not there"
 

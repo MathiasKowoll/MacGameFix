@@ -27,6 +27,9 @@ is the tab, then the state or sheet; pages link to them by name, so a name stays
 The two of a game's instructions were taken later the same day, from the app as published at c3f1df6 (catalog
 1794705165), after #77 put the whole line first.
 
+`settings.png` was taken again on 2026-11-18 from a build of the branch that added the catalogs' numbers and
+"Looks for updates" to Settings › Updates (its catalogs are that build's own, 1795015469), in an empty home.
+
 Not pictured: the Not fixed filter, and the two questions asked before an improvement goes into every CrossOver
 or into a CrossOver app. In `improvements-fans.png` the helper reads as older than the app's, which is how that
 build told every new build apart; since #78 it compares versions, and that line shows only for a real update.

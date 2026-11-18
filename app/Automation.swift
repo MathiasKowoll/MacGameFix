@@ -69,11 +69,22 @@ struct AutoSettings: Codable {
     /// never installed without the user asking.
     var appUpdates = true
     /// How often the releases are asked, in minutes, for the two catalogs and the app
-    /// alike: 10, 60 or 1440 in Settings. One pass asks GitHub's API once (Updater.release),
-    /// and GitHub gives an address without an account 60 answers an hour, so nothing
-    /// under ten minutes is taken.
+    /// alike. Settings says it and has no control for it: it is changed in this file.
+    /// One pass asks GitHub's API once (Updater.release), and GitHub gives an address
+    /// without an account 60 answers an hour, so nothing under ten minutes is taken.
     var updateMinutes = 60
     var updateEvery: TimeInterval { TimeInterval(max(10, updateMinutes) * 60) }
+    /// The same in words, as Settings says it: "every hour", "every 10 minutes", "once a day".
+    var updateWords: String {
+        let minutes = max(10, updateMinutes)
+        if minutes == 60 { return "every hour" }
+        if minutes == 1440 { return "once a day" }
+        if minutes % 1440 == 0 { return "every \(minutes / 1440) days" }
+        if minutes % 60 == 0 { return "every \(minutes / 60) hours" }
+        return "every \(minutes) minutes"
+    }
+    /// Nothing is looked for: either catalog's switch off is the one choice at Off.
+    var updatesOff: Bool { !updates || !modulesUpdates }
     /// The CrossOver folders the user put the Wine modules into, which the agent
     /// keeps them in, and those the user took them out of, which it leaves alone.
     var modulesKept: [String] = []
