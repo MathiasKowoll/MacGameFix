@@ -137,6 +137,12 @@ struct EngineBuild: Decodable {
     let crossover: String
     let wine: String
     let files: [String: String]
+    /// "maintained" or "kept" (engine/support.json); a catalog older than that file says nothing.
+    var support: String?
+
+    /// An older Preview's modules: they stay as they were last built, and nothing new is
+    /// built or checked for them. The stable CrossOver and the latest Preview are maintained.
+    var kept: Bool { support == "kept" }
 }
 
 enum Engine {
@@ -156,6 +162,11 @@ enum Engine {
         }
         return nil
     }
+
+    /// What a CrossOver whose modules are only kept is told, wherever it is listed.
+    static let keptNote = "No longer maintained"
+    static let keptDetail = "Its modules stay as they were last built: nothing new is built or tested for this CrossOver. "
+        + "The stable CrossOver and the latest Preview are maintained."
 
     static func builds(in catalog: URL) -> [EngineBuild] {
         struct Table: Decodable { let builds: [EngineBuild] }

@@ -64,6 +64,8 @@ for f in $ENGINE_FILES; do echo "CodeWeavers' $f" > "$RUNNER/lib/wine/$f"; done
 engine() { "$BIN" --engine-report 2>&1 | grep -F "runner · CrossOver Preview $1 |" || true; }
 check 'has "$(engine 20261006)" "| fex | absent"' "a runner of a carried build, both sides, is absent, named by its Preview's date"
 check 'has "$(engine 20261099)" "noModules"' "a runner of a build with no modules says so"
+# 20261006 is an older Preview: its modules are kept (engine/support.json), not maintained.
+check 'has "$(engine 20261006)" "| kept" && ! has "$(engine 20261099)" "| kept"' "a runner of a Preview that is only kept says so, and one with no modules does not"
 "$BIN" --engine-install "$RUNNER" >/dev/null 2>&1 || true
 same=1
 for f in $ENGINE_FILES; do
