@@ -27,7 +27,7 @@ archived repository.
 
 | Folder | What it holds |
 | --- | --- |
-| `app/` | The application: `Core.swift` (installers, games, libraries), `Engine.swift` (the Wine modules), `Pad.swift` (the Game Feel tab's options and what it writes for the modules), `Probe.swift` (the Report tab: what a game is made of, and its report; and a fix's report, which Games saves), `pad-presets.json` (options measured per title), `Automation.swift` (the background agent, signed catalog updates, reports), `MenuBar.swift` (the agent's menu bar item), `MacGameFix.swift` (the window), `AppIcon.icon` (the icon); `build-app.sh`, `test-automation.sh`, `notarize.sh` (Apple's notarisation and the release's app zip) and `test-notarize.sh`. |
+| `app/` | The application: `Core.swift` (installers, games, libraries), `Engine.swift` (the Wine modules), `Pad.swift` (the Game Feel tab's options and what it writes for the modules), `Probe.swift` (the Report tab: what a game is made of, and its report; and a fix's report, which Games saves), `pad-presets.json` (options measured per title), `Automation.swift` (the background agent, signed catalog updates, reports), `AppUpdate.swift` (a newer MacGameFix found, checked and put in this one's place), `MenuBar.swift` (the agent's menu bar item), `MacGameFix.swift` (the window), `AppIcon.icon` (the icon); `build-app.sh`, `test-automation.sh`, `notarize.sh` (Apple's notarisation and the release's app zip) and `test-notarize.sh`. |
 | `fixes/` | One installer per fix (`install-*.sh`), the DLLs they put in place, Cyberpunk 2077's recipe for each build of the game (`cp2077-denoiser.recipes`), the C source of each DLL and the scripts that build them (`build-proxy.sh`, `build-asf-reader.sh`, `check-builds.sh`), and the third-party notices. |
 | `process-features.json` | The table: per game executable, its symptom, backend, toolkit, codec and engine needs. The app is built from it. |
 | `tools/` | The probes and capture scripts the fixes were found with: video and Media Foundation observers, HID traces, a game survey; `capture-performance.sh`, which records two minutes of a game that runs slowly from outside it, and `read-performance.py`, which reads what it recorded ([how a player uses it](docs/performance-capture.md)); `vibration-md.py`, which writes the list of games played for vibration from its JSON; and `sign-payload.sh` and `check-signatures.sh`, which sign the Mach-O files the app carries with its Developer ID and check them. |
@@ -160,7 +160,7 @@ until you turn it on, and the fixes stay in the games' own folders as before.
     until you log in again or open the app. If it crashes, it starts again by
     itself.
 - **New fixes and new Wine modules.** The agent looks at the latest release of
-  this repository once a day. A release carries two catalogs, each signed and
+  this repository once an hour. A release carries two catalogs, each signed and
   versioned on its own: the game fixes (the installers and every file they use)
   and the Wine modules. New modules for a new CrossOver build come without
   touching the fixes, and the other way round. Each has its own choice: *Game
@@ -196,6 +196,24 @@ until you turn it on, and the fixes stay in the games' own folders as before.
     the window shows *Older build: install to update*; the agent installs it
     again once the game is closed. Spider-Man 2's says *Needs repair* instead,
     since its shaders are rebuilt for each game build as well.
+- **A new MacGameFix.** The catalogs bring fixes and modules; a new tab, an
+  option or a fix an older app cannot install needs a new app. The agent asks
+  once an hour whether there is a newer MacGameFix, and so does the window
+  while it is open. When there is one, a notification says so, the menu bar
+  carries *Update to MacGameFix …*, and the window shows it above the tabs:
+  - *What's New* opens the release's page.
+  - *Update* downloads the new app and checks it; nothing is replaced yet.
+    *Install and Relaunch* then puts it where this one is and opens it, and
+    the menu bar item starts again from the new one.
+  - The download is taken only when it is signed with the same Developer ID
+    and identifier as the MacGameFix asking, every file in it is what the
+    signature sealed, and its version is the one offered and newer than this
+    one. Anything else is refused and the app stays as it was.
+  - A copy that cannot replace itself says why and sends you to the release's
+    page: one macOS runs from a read-only place (move it to Applications), one
+    in a folder your account cannot change, and a build signed ad hoc.
+  - *Tell me about a new MacGameFix*, in Settings, turns the question off.
+    *Check Now* asks at once. Nothing is ever installed without *Update*.
 - **Reporting.** When a fix fails to install, the agent says so in a
   notification with a *Report on GitHub* button. It opens a new issue, already
   filled in with the game, the versions and the installer's last lines. Your

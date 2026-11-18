@@ -207,7 +207,7 @@ Below the rows:
 
 **3. "Updates" section** (1198-1218)
 - Picker **"New Wine modules"**: **"Automatic" / "Ask first" / "Off"** (224-229). The default is Automatic (Automation.swift:66-67).
-  - Tooltip: "New Wine modules from GitHub, on their own, once a day. On Automatic they also go back into the runners that are on after a CrossOver or NotProton update. “Ask first” checks the signature and tells you. A CrossOver app is only ever reported."
+  - Tooltip: "New Wine modules from GitHub, on their own, once an hour. On Automatic they also go back into the runners that are on after a CrossOver or NotProton update. “Ask first” checks the signature and tells you. A CrossOver app is only ever reported."
 - **"New Wine modules ready (<n>)"** with an **"Install"** button, in orange. It only appears after the agent, in Ask first mode, found and verified a newer catalog.
 - **"Catalog"**: the version number, with tooltip "Modules for: <CrossOver list>", and a **"Check Now"** button.
 - Important: "Check Now" and "Install" both call `checkForModules` (258-277). That downloads and installs a newer modules catalog right away. It is not just a check.
@@ -282,7 +282,7 @@ Below the rows:
 
 **"Game fix updates"** (2145-2167)
 - Picker **"Game fixes"**: "Automatic" / "Ask first" / "Off" (default Automatic).
-  - Tooltip: "New fixes from GitHub, looked for once a day. “Ask first” checks the signature and tells you; nothing is installed until you say so."
+  - Tooltip: "New fixes from GitHub, looked for once an hour. “Ask first” checks the signature and tells you; nothing is installed until you say so."
 - **"New fixes ready (<n>)"** with **"Install"**, in orange, when one is waiting.
 - **"Catalog"**: the version and **"Check Now"**. As in Wine Modules, this downloads and installs a newer catalog, then scans the games again (279-298).
 - Footer: "The Wine modules have their own, in Wine Modules."
@@ -614,7 +614,7 @@ The "Control-Command-F" in the Game Mode footer is advice for full screen in gam
 12. All alert: click "All", take the picture, then Cancel.
 13. App Management notice: after macOS refused a change, the lock notice shows at the top. Click "Open App Management…" for the System Settings pane.
 14. Behind: a row that is on but behind shows "Update" or "Install Again", and "Update All" appears.
-15. Module update waiting: set "New Wine modules" to "Ask first" and wait for the agent's daily check. "New Wine modules ready (<n>)" with "Install" appears.
+15. Module update waiting: set "New Wine modules" to "Ask first" and wait for the agent's hourly check. "New Wine modules ready (<n>)" with "Install" appears.
 
 **Game Feel** (needs modules installed in at least one CrossOver)
 

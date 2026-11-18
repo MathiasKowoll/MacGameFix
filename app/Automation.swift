@@ -65,6 +65,15 @@ struct AutoSettings: Codable {
     /// The same two for the Wine modules, which update on their own (Engine.swift).
     var modulesUpdates = true
     var modulesAskFirst = false
+    /// Look for a newer MacGameFix in the releases and say so (AppUpdate.swift). It is
+    /// never installed without the user asking.
+    var appUpdates = true
+    /// How often the releases are asked, in minutes, for the two catalogs and the app
+    /// alike: 10, 60 or 1440 in Settings. One pass asks GitHub's API once (Updater.release),
+    /// and GitHub gives an address without an account 60 answers an hour, so nothing
+    /// under ten minutes is taken.
+    var updateMinutes = 60
+    var updateEvery: TimeInterval { TimeInterval(max(10, updateMinutes) * 60) }
     /// The CrossOver folders the user put the Wine modules into, which the agent
     /// keeps them in, and those the user took them out of, which it leaves alone.
     var modulesKept: [String] = []
@@ -97,6 +106,8 @@ struct AutoSettings: Codable {
         askFirst = try c.decodeIfPresent(Bool.self, forKey: .askFirst) ?? false
         modulesUpdates = try c.decodeIfPresent(Bool.self, forKey: .modulesUpdates) ?? true
         modulesAskFirst = try c.decodeIfPresent(Bool.self, forKey: .modulesAskFirst) ?? false
+        appUpdates = try c.decodeIfPresent(Bool.self, forKey: .appUpdates) ?? true
+        updateMinutes = try c.decodeIfPresent(Int.self, forKey: .updateMinutes) ?? 60
         modulesKept = try c.decodeIfPresent([String].self, forKey: .modulesKept) ?? []
         modulesDeclined = try c.decodeIfPresent([String].self, forKey: .modulesDeclined) ?? []
         rosettaKept = try c.decodeIfPresent([String].self, forKey: .rosettaKept) ?? []
@@ -195,6 +206,12 @@ struct AgentState: Codable {
     var lastModulesCheck = Date.distantPast
     var lastModulesUpdate = ""
     var availableModules = 0
+    /// The same for the app itself: when the releases were last asked, what was said,
+    /// and the newer MacGameFix found, with its release's page; "" for none.
+    var lastAppCheck = Date.distantPast
+    var lastApp = ""
+    var availableApp = ""
+    var availableAppPage = ""
     /// The CrossOver folders the agent has seen, to tell a new NotProton runner
     /// from one the user simply never chose; and what it last said of each.
     var engineSeen: [String]?
@@ -213,6 +230,10 @@ struct AgentState: Codable {
         lastModulesCheck = try c.decodeIfPresent(Date.self, forKey: .lastModulesCheck) ?? .distantPast
         lastModulesUpdate = try c.decodeIfPresent(String.self, forKey: .lastModulesUpdate) ?? ""
         availableModules = try c.decodeIfPresent(Int.self, forKey: .availableModules) ?? 0
+        lastAppCheck = try c.decodeIfPresent(Date.self, forKey: .lastAppCheck) ?? .distantPast
+        lastApp = try c.decodeIfPresent(String.self, forKey: .lastApp) ?? ""
+        availableApp = try c.decodeIfPresent(String.self, forKey: .availableApp) ?? ""
+        availableAppPage = try c.decodeIfPresent(String.self, forKey: .availableAppPage) ?? ""
         engineSeen = try c.decodeIfPresent([String].self, forKey: .engineSeen)
         engineNoted = try c.decodeIfPresent([String: String].self, forKey: .engineNoted) ?? [:]
     }
@@ -223,6 +244,20 @@ struct AgentState: Codable {
     }
     var waitingModules: Int? {
         availableModules > (Catalog.active(.modules).manifest?.version ?? 0) ? availableModules : nil
+    }
+    /// The newer MacGameFix found, while it is still newer than the one running: the
+    /// app that took its place no longer has it waiting.
+    var waitingApp: String? {
+        !availableApp.isEmpty && Catalog.versionLess(Catalog.appVersion, availableApp) ? availableApp : nil
+    }
+
+    /// What a look at the releases found of the app, kept for the menu and the window.
+    mutating func note(app offer: AppUpdate.Offer?, at now: Date) {
+        lastAppCheck = now
+        availableApp = offer?.version ?? ""
+        availableAppPage = offer?.page?.absoluteString ?? ""
+        lastApp = offer.map { "MacGameFix \($0.version) is available." }
+            ?? "MacGameFix is up to date (\(Catalog.appVersion))."
     }
 
     /// Where each kind's check is remembered.
@@ -262,14 +297,13 @@ struct AgentState: Codable {
 enum Agent {
     /// Looks again at a game that has not changed after this long anyway.
     static let recheck: TimeInterval = 6 * 3600
-    static let updateEvery: TimeInterval = 24 * 3600
 
     /// One kind of catalog, when it is time or when asked: asked first, the
     /// release's catalog is verified and offered once and nothing is installed;
     /// otherwise it is taken. `force` is the user asking, which installs.
-    private static func updateCatalog(_ kind: CatalogKind, now: Date, force: Bool, on: Bool, ask: Bool,
+    private static func updateCatalog(_ kind: CatalogKind, now: Date, force: Bool, on: Bool, ask: Bool, every: TimeInterval,
                                       state: inout AgentState, events: inout [AgentEvent]) async {
-        guard force || (on && now.timeIntervalSince(state[keyPath: AgentState.checked(kind)]) > updateEvery)
+        guard force || (on && now.timeIntervalSince(state[keyPath: AgentState.checked(kind)]) > every)
         else { return }
         state[keyPath: AgentState.checked(kind)] = now
         let what = kind == .fixes ? "New fixes" : "New Wine modules"
@@ -313,20 +347,41 @@ enum Agent {
         }
     }
 
+    /// A newer MacGameFix, when it is time or when asked: said once for each version,
+    /// and never installed from here. The window does that, when the user asks.
+    private static func lookForApp(now: Date, force: Bool, on: Bool, every: TimeInterval,
+                                   state: inout AgentState, events: inout [AgentEvent]) async {
+        guard force || (on && now.timeIntervalSince(state.lastAppCheck) > every) else { return }
+        do {
+            let offer = try await AppUpdate.check()
+            if let offer, state.availableApp != offer.version {
+                events.append(AgentEvent(date: now, game: "",
+                                         message: "MacGameFix \(offer.version) is available. Open MacGameFix to update.",
+                                         failed: false))
+            }
+            state.note(app: offer, at: now)
+        } catch {
+            state.lastAppCheck = now
+            state.lastApp = "Update check failed: \(error.localizedDescription)"
+        }
+    }
+
     /// One look at every marked game, and at the releases when it is time.
     /// `everything` looks at each marked game even when nothing changed it, and
     /// `updateNow` asks the releases at once; the menu's two commands.
     /// Returns what it did, for the log and the tests.
     static func pass(now: Date = Date(), notify: Bool, everything: Bool = false,
-                     updateNow: Bool = false, modulesNow: Bool = false) async -> [AgentEvent] {
+                     updateNow: Bool = false, modulesNow: Bool = false, appNow: Bool = false) async -> [AgentEvent] {
         let settings = AutoSettings.load()
         var state = AgentState.load()
         var events: [AgentEvent] = []
 
+        let every = settings.updateEvery
         await updateCatalog(.fixes, now: now, force: updateNow, on: settings.updates, ask: settings.askFirst,
-                            state: &state, events: &events)
+                            every: every, state: &state, events: &events)
         await updateCatalog(.modules, now: now, force: modulesNow, on: settings.modulesUpdates,
-                            ask: settings.modulesAskFirst, state: &state, events: &events)
+                            ask: settings.modulesAskFirst, every: every, state: &state, events: &events)
+        await lookForApp(now: now, force: appNow, on: settings.appUpdates, every: every, state: &state, events: &events)
         var kept = settings
         events += await Engine.keep(&kept, state: &state, now: now)
         if kept.modulesKept != settings.modulesKept || kept.rosettaKept != settings.rosettaKept { kept.save() }
@@ -585,9 +640,7 @@ enum Updater {
             return (source.appendingPathComponent("\(stem).json"), source.appendingPathComponent("\(stem).json.sig"),
                     source.appendingPathComponent("\(stem).zip"))
         }
-        struct Asset: Decodable { let name: String; let browser_download_url: URL }
-        struct Release: Decodable { let assets: [Asset] }
-        let release = try JSONDecoder().decode(Release.self, from: try await fetch(releases))
+        let release = try await release()
         func named(_ n: String) throws -> URL {
             guard let a = release.assets.first(where: { $0.name == n }) else { throw Failure.missing(n) }
             return a.browser_download_url
@@ -595,7 +648,30 @@ enum Updater {
         return (try named("\(stem).json"), try named("\(stem).json.sig"), try named("\(stem).zip"))
     }
 
-    private static func fetch(_ url: URL) async throws -> Data {
+    /// A release as GitHub's API gives it: what the catalogs and the app (AppUpdate.swift)
+    /// read of it.
+    struct Release: Decodable {
+        struct Asset: Decodable { let name: String; let browser_download_url: URL }
+        let tag_name: String?
+        let html_url: URL?
+        let assets: [Asset]
+    }
+
+    private static let asked = NSLock()
+    private static var answers: [URL: (at: Date, release: Release)] = [:]
+
+    /// What GitHub says of a release, asked once for everything one pass wants of it:
+    /// the answer is kept for a minute. An address without an account gets 60 answers
+    /// an hour, and one GitHub answers with "not modified" counts as any other
+    /// (measured 2026-11-17: x-ratelimit-used went from 2 to 3 on a 304).
+    static func release(at url: URL = releases) async throws -> Release {
+        if let kept = asked.withLock({ answers[url] }), Date().timeIntervalSince(kept.at) < 60 { return kept.release }
+        let release = try JSONDecoder().decode(Release.self, from: try await fetch(url))
+        asked.withLock { answers[url] = (Date(), release) }
+        return release
+    }
+
+    static func fetch(_ url: URL) async throws -> Data {
         if url.isFileURL { return try Data(contentsOf: url) }
         var request = URLRequest(url: url)
         request.setValue("MacGameFix/\(Catalog.appVersion)", forHTTPHeaderField: "User-Agent")

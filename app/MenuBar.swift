@@ -195,6 +195,10 @@ final class MenuBarAgent: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let lines = KeptLine.all(settings: .load(), state: state)
 
         menu.addItem(note("MacGameFix", bold: true))
+        // A newer MacGameFix the agent found: the window is where it is installed.
+        if let version = state.waitingApp {
+            menu.addItem(action("Update to MacGameFix \(version)…", #selector(openWindowItem)))
+        }
         if lines.isEmpty {
             menu.addItem(note("No game is marked “Keep it applied”."))
         } else {

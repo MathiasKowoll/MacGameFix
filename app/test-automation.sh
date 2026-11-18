@@ -5,7 +5,8 @@
 # while the game runs, and when the installer fails, waiting for a recipe for a
 # macOS game's new build until a catalog brings one, and left alone where that
 # game's installer refuses; and a fix's report, with the two forms Games opens
-# with it. Nothing here touches the
+# with it; and a newer MacGameFix found, refused when it is not signed as this
+# one is, and put in a copy of this app's place. Nothing here touches the
 # real Steam libraries or GitHub: MACGAMEFIX_HOME points everything at a
 # throwaway home, and the fixes catalog is a fake one signed with a test key.
 #
@@ -22,6 +23,12 @@ export MACGAMEFIX_HOME="$T/home"
 # What the Steam store says of each app, saved: no test asks the network.
 export MACGAMEFIX_STORE_DIR="$T/store"
 mkdir -p "$MACGAMEFIX_STORE_DIR"
+# Every pass of the agent asks whether there is a newer MacGameFix: a release of this
+# very version answers, so none of them asks the site or GitHub.
+APPV="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$HERE/MacGameFix.app/Contents/Info.plist")"
+export MACGAMEFIX_APP_SOURCE="$T/app-none"
+mkdir -p "$MACGAMEFIX_APP_SOURCE"
+printf '{"tag_name":"v%s","assets":[]}' "$APPV" > "$MACGAMEFIX_APP_SOURCE/release.json"
 printf '{"4242":{"success":true,"data":{"categories":[{"id":28,"description":"Full controller support"}]}}}' > "$MACGAMEFIX_STORE_DIR/4242.json"
 SUPPORT="$MACGAMEFIX_HOME/Library/Application Support"
 GAME="$SUPPORT/Steam/steamapps/common/Fake Game"
@@ -925,5 +932,112 @@ printf '{"kept":[],"updates":false,"modulesUpdates":false}' > "$SUPPORT/MacGameF
 check '[ ! -e "$WT/ModeGame.exe" ]' "with it off, the agent does nothing"
 unset MACGAMEFIX_TEMP_DIR
 rm -rf "$GB" "$SUPPORT/Steam/steamapps/common/NP Game"
+
+echo "== a newer MacGameFix"
+# The app asked about is a copy of this build, so that what is replaced is the copy.
+# The newer ones are this build too, with another version and signed again with the
+# identity that signed it: without a Developer ID no copy replaces itself, and only
+# that refusal is checked.
+A="$T/app"
+mkdir -p "$A/installed"
+cp -R "$HERE/MacGameFix.app" "$A/installed/"
+COPY="$A/installed/MacGameFix.app/Contents/MacOS/MacGameFix"
+copyv() { /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$A/installed/MacGameFix.app/Contents/Info.plist"; }
+AUTH="$(codesign -dvv "$HERE/MacGameFix.app" 2>&1 | sed -n 's/^Authority=\(Developer ID Application: .*\)$/\1/p' | head -1)"
+variant() { # <name> <version> <identity>: a copy of the build under that version, signed
+  mkdir -p "$A/$1"
+  cp -R "$HERE/MacGameFix.app" "$A/$1/"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $2" -c "Set :CFBundleVersion $2" "$A/$1/MacGameFix.app/Contents/Info.plist"
+  if [ "$3" = - ]; then codesign --force --deep --sign - "$A/$1/MacGameFix.app" >/dev/null 2>&1
+  else codesign --force --options runtime --timestamp=none --sign "$3" "$A/$1/MacGameFix.app" >/dev/null 2>&1; fi
+}
+release() { # <name> <version GitHub names>: the folder's app as GitHub's latest release
+  mkdir -p "$A/rel-$1"
+  (cd "$A/$1" && ditto -c -k --norsrc --noextattr --keepParent MacGameFix.app "$A/rel-$1/MacGameFix-$2.zip")
+  (cd "$A/rel-$1" && shasum -a 256 "MacGameFix-$2.zip" > "MacGameFix-$2.zip.sha256")
+  /usr/bin/python3 - "$A/rel-$1" "$2" <<'PY'
+import json, pathlib, sys
+d, v = pathlib.Path(sys.argv[1]), sys.argv[2]
+names = (f"MacGameFix-{v}.zip", f"MacGameFix-{v}.zip.sha256")
+json.dump({"tag_name": "v" + v, "html_url": f"https://example.invalid/releases/tag/v{v}",
+           "assets": [{"name": n, "browser_download_url": (d / n).as_uri()} for n in names]}, open(d / "release.json", "w"))
+PY
+}
+appcheck() { MACGAMEFIX_APP_SOURCE="$A/rel-$1" "$COPY" --app-update-check 2>&1 || true; }
+appupdate() { MACGAMEFIX_APP_SOURCE="$A/rel-$1" "$COPY" --app-update 2>&1 || true; }
+appdue() { /usr/bin/python3 - "$SUPPORT/MacGameFix/agent-state.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1])); d["lastAppCheck"] = -1e9; json.dump(d, open(sys.argv[1], "w"))
+PY
+}
+check 'has "$("$COPY" --app-update-check 2>&1)" "up to date ($APPV)"' "a release of this very version is nothing new"
+if [ -z "$AUTH" ]; then
+  variant new 9.9.9 -
+  release new 9.9.9
+  check 'has "$(appcheck new)" "available 9.9.9"' "a newer MacGameFix is found"
+  check 'has "$(appupdate new)" "not signed with a Developer ID" && [ "$(copyv)" = "$APPV" ]' "a build signed ad hoc does not replace itself"
+  echo "  skip  this build has no Developer ID: the replacement itself is not checked"
+else
+  variant new 9.9.9 "$AUTH"
+  release new 9.9.9
+  check 'has "$(appcheck new)" "available 9.9.9"' "a newer MacGameFix is found"
+  # The agent says so once, the menu carries it, and with the setting off it does not look.
+  printf '{"kept":[],"updates":false,"modulesUpdates":false}' > "$SUPPORT/MacGameFix/automatic.json"; appdue
+  check 'has "$(MACGAMEFIX_APP_SOURCE="$A/rel-new" "$BIN" --agent-once 2>&1)" "MacGameFix 9.9.9 is available"' "the agent says so"
+  check 'has "$(menu)" "app | Update to MacGameFix 9.9.9"' "and the menu offers it"
+  appdue
+  check '! has "$(MACGAMEFIX_APP_SOURCE="$A/rel-new" "$BIN" --agent-once 2>&1)" "is available"' "once for a version"
+  appdue; "$BIN" --agent-once >/dev/null 2>&1
+  check '! has "$(menu)" "app |"' "and no longer once the release is this version"
+  printf '{"kept":[],"updates":false,"modulesUpdates":false,"appUpdates":false}' > "$SUPPORT/MacGameFix/automatic.json"; appdue
+  check '! has "$(MACGAMEFIX_APP_SOURCE="$A/rel-new" "$BIN" --agent-once 2>&1)" "is available" && ! has "$(menu)" "app |"' "with the setting off, the agent does not look"
+  printf '{"kept":[],"updates":false,"modulesUpdates":false}' > "$SUPPORT/MacGameFix/automatic.json"
+
+  # What is refused, and leaves the copy as it was.
+  cp -R "$A/new" "$A/changed"; printf 'x' >> "$A/changed/MacGameFix.app/Contents/Resources/games.json"
+  release changed 9.9.9
+  check 'has "$(appupdate changed)" "not signed as MacGameFix is" && [ "$(copyv)" = "$APPV" ]' "an app changed after it was signed is refused"
+  variant adhoc 9.9.9 -
+  release adhoc 9.9.9
+  check 'has "$(appupdate adhoc)" "not signed as MacGameFix is" && [ "$(copyv)" = "$APPV" ]' "one signed ad hoc is refused"
+  variant other 9.9.8 "$AUTH"
+  release other 9.9.9
+  mv "$A/rel-other/MacGameFix-9.9.9.zip" "$A/rel-other/x.zip"
+  (cd "$A/other" && ditto -c -k --norsrc --noextattr --keepParent MacGameFix.app "$A/rel-other/MacGameFix-9.9.9.zip")
+  (cd "$A/rel-other" && rm x.zip && shasum -a 256 MacGameFix-9.9.9.zip > MacGameFix-9.9.9.zip.sha256)
+  check 'has "$(appupdate other)" "is MacGameFix 9.9.8, not 9.9.9" && [ "$(copyv)" = "$APPV" ]' "one of another version than the release names is refused"
+  cp -R "$A/rel-new" "$A/rel-sum"
+  /usr/bin/python3 - "$A/rel-sum" <<'PY'
+import json, pathlib, sys
+d = pathlib.Path(sys.argv[1]); r = json.load(open(d / "release.json"))
+for a in r["assets"]: a["browser_download_url"] = (d / a["name"]).as_uri()
+json.dump(r, open(d / "release.json", "w"))
+(d / "MacGameFix-9.9.9.zip.sha256").write_text("0" * 64 + "  MacGameFix-9.9.9.zip\n")
+PY
+  check 'has "$(appupdate sum)" "does not match the release" && [ "$(copyv)" = "$APPV" ]' "a download that does not match the checksum is refused"
+  check '[ "$(ls "$A/installed")" = MacGameFix.app ] && codesign --verify --deep --strict "$A/installed/MacGameFix.app" 2>/dev/null' "and every refusal left the app whole, with nothing beside it"
+
+  # The site answers first; GitHub only when the site gives nothing that can be read.
+  SUM="$(cut -d' ' -f1 "$A/rel-new/MacGameFix-9.9.9.zip.sha256")"
+  /usr/bin/python3 - "$A" "$SUM" "$APPV" <<'PY'
+import json, pathlib, sys
+a, s, v = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+row = {"version": "9.9.9", "tag": "v9.9.9", "prerelease": False, "releaseUrl": "https://example.invalid/releases/tag/v9.9.9",
+       "downloadUrl": (a / "rel-new" / "MacGameFix-9.9.9.zip").as_uri(), "sha256": s.upper(), "sizeBytes": 1, "minimumSystem": "14.0"}
+json.dump(row, open(a / "site-new.json", "w"))
+json.dump(dict(row, version=v), open(a / "site-same.json", "w"))
+json.dump(dict(row, downloadUrl="ftp://example.invalid/MacGameFix-9.9.9.zip"), open(a / "site-ftp.json", "w"))
+(a / "site-broken.json").write_text("<html>502</html>")
+PY
+  check 'has "$(MACGAMEFIX_APP_SITE="$A/site-new.json" "$COPY" --app-update-check 2>&1)" "available 9.9.9"' "the site's answer is taken"
+  check 'has "$(MACGAMEFIX_APP_SITE="$A/site-same.json" appcheck new)" "up to date"' "and GitHub is not asked when the site answers"
+  check 'has "$(MACGAMEFIX_APP_SITE="$A/site-broken.json" appcheck new)" "available 9.9.9" && has "$(MACGAMEFIX_APP_SITE="$A/none.json" appcheck new)" "available 9.9.9"' "a site that answers nothing readable, or not at all, leaves the question to GitHub"
+  check 'has "$(MACGAMEFIX_APP_SITE="$A/site-ftp.json" "$COPY" --app-update-check 2>&1)" "up to date"' "a download the site names over anything but HTTPS is not taken"
+
+  # And the one that is taken.
+  check 'has "$(MACGAMEFIX_APP_SITE="$A/site-new.json" "$COPY" --app-update 2>&1)" "installed 9.9.9" && [ "$(copyv)" = 9.9.9 ]' "a newer MacGameFix signed as this one is put in its place"
+  check '[ "$(ls "$A/installed")" = MacGameFix.app ] && codesign --verify --deep --strict "$A/installed/MacGameFix.app" 2>/dev/null' "whole, with nothing left beside it"
+  check 'has "$(appcheck new)" "up to date (9.9.9)"' "and it finds nothing newer than itself"
+fi
 
 [ "$fail" = 0 ] && echo "==> MacGameFix automation: the Wine modules and their own updates, signed catalogs taken automatically or asked first, what each game runs on, the agent's updates, waits and reports, a macOS game waiting for a recipe or refused by its installer, the menu bar's summary, a fix's report and its forms" || exit 1
