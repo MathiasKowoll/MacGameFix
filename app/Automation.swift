@@ -69,14 +69,18 @@ struct AutoSettings: Codable {
     /// never installed without the user asking.
     var appUpdates = true
     /// How often the releases are asked, in minutes, for the two catalogs and the app
-    /// alike. Settings says it and has no control for it: it is changed in this file.
-    /// One pass asks GitHub's API once (Updater.release), and GitHub gives an address
-    /// without an account 60 answers an hour, so nothing under ten minutes is taken.
+    /// alike: Settings › Updates chooses it (AutoSettings.intervals), and any other
+    /// value written into this file is kept and said as it is. One pass asks GitHub's
+    /// API once (Updater.release), and GitHub gives an address without an account 60
+    /// answers an hour, so nothing under ten minutes is taken.
     var updateMinutes = 60
     var updateEvery: TimeInterval { TimeInterval(max(10, updateMinutes) * 60) }
+    /// The intervals Settings offers, in minutes.
+    static let intervals = [10, 60, 1440]
     /// The same in words, as Settings says it: "every hour", "every 10 minutes", "once a day".
-    var updateWords: String {
-        let minutes = max(10, updateMinutes)
+    var updateWords: String { AutoSettings.words(updateMinutes) }
+    static func words(_ minutes: Int) -> String {
+        let minutes = max(10, minutes)
         if minutes == 60 { return "every hour" }
         if minutes == 1440 { return "once a day" }
         if minutes % 1440 == 0 { return "every \(minutes / 1440) days" }
@@ -274,6 +278,13 @@ struct AgentState: Codable {
     /// app that took its place no longer has it waiting.
     var waitingApp: String? {
         !availableApp.isEmpty && Catalog.versionLess(Catalog.appVersion, availableApp) ? availableApp : nil
+    }
+
+    /// When anything new was last looked for, by the agent or by the window: the latest
+    /// of the three questions, which one pass asks together. Nil before the first.
+    var lastLook: Date? {
+        let latest = max(lastUpdateCheck, lastModulesCheck, lastAppCheck)
+        return latest > Date(timeIntervalSince1970: 0) ? latest : nil
     }
 
     /// Everything the releases bring, in one line: what waits for the user, or that
