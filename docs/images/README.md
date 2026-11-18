@@ -12,7 +12,7 @@ is the tab, then the state or sheet; pages link to them by name, so a name stays
 | `games-instructions-heat.png` | The same sheet, scrolled: Frame rate, Heat, and the optional variables |
 | `improvements.png` | Improvements: DualSense controllers and Copy protection under Rosetta, a switch per CrossOver app and NotProton runner |
 | `improvements-rosetta.png` | The same tab, scrolled: Copy protection under Rosetta with its All and None, and Game Mode |
-| `improvements-fans.png` | The same tab, scrolled to the end: Game Mode, Fans with the two variables to copy, and the modules' updates |
+| `improvements-fans.png` | The same tab, scrolled to the end: Game Mode, Fans with the two variables to copy, and Runners |
 | `game-feel.png` | Game Feel: every game's options, and each game's own |
 | `game-feel-every-game.png` | Every Game's Settings: the options and the haptics' strength |
 | `game-feel-every-game-triggers.png` | The same sheet, scrolled: the tries and the trigger effects |
@@ -30,9 +30,13 @@ The two of a game's instructions were taken later the same day, from the app as 
 `settings.png` was taken again on 2026-11-18 from a build of the branch that added the catalogs' numbers and
 "Looks for updates" to Settings › Updates (its catalogs are that build's own, 1795015469), in an empty home.
 
+`improvements-fans.png` was taken again the same day from main at 8081f0a (1.6.4 with #104), which ends the tab
+in Runners: the modules' updates moved to Settings in 1.6.4. Its home is empty but for three NotProton runner
+folders that hold CrossOver's file names only, with no modules in them. Fans shows the Mac's own helper, which
+the home does not stand in for: it is installed, and the line under the variables is the last of its log.
+
 Not pictured: the Not fixed filter, and the two questions asked before an improvement goes into every CrossOver
-or into a CrossOver app. In `improvements-fans.png` the helper reads as older than the app's, which is how that
-build told every new build apart; since #78 it compares versions, and that line shows only for a real update.
+or into a CrossOver app.
 
 ## How they are taken
 
