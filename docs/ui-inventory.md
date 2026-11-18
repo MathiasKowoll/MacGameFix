@@ -282,17 +282,21 @@ Below the rows:
 
 **"Updates"**: one choice and one check for everything a release brings (MacGameFix itself, the game fixes, the Wine modules).
 - Picker **"Updates"**: "Automatic" / "Ask first" / "Off" (default Automatic).
-  - Tooltip: "MacGameFix, its game fixes and its Wine modules, looked for once an hour. Automatic takes the fixes and the modules as they come and downloads a new MacGameFix, which starts when you choose Relaunch. “Ask first” tells you, and takes nothing until you choose Update. Off does not look."
+  - Tooltip: "MacGameFix, its game fixes and its Wine modules, looked for <how often, as below>. Automatic takes the fixes and the modules as they come and downloads a new MacGameFix, which starts when you choose Relaunch. “Ask first” tells you, and takes nothing until you choose Update. Off does not look."
   - A settings file from an older MacGameFix may hold one choice for the fixes and another for the modules: the more careful of the two becomes the one choice, and is written back, when the window opens.
-- **"MacGameFix <version>"**, with "Fixes of <date>, Wine modules of <date>" below it (each catalog's version is the moment it was built), and **"Check Now"**.
+- **"MacGameFix <version>"**, with two lines below it, "Fixes: catalog <number>, of <date>" and "Wine modules: catalog <number>, of <date>" (a catalog's version is the moment it was built, and the number is how release notes and reports name it), and **"Check Now"**.
+  - Tooltip: "The MacGameFix that is running and the two catalogs in use. A catalog's version is the moment it was made: the number a release's notes and a report name it by."
   - "Check Now" looks now and takes what is new: both catalogs are installed whatever the choice says, and a newer MacGameFix is downloaded and checked.
-- One line below: "An update is available: <what>." in orange while something waits, otherwise what the last check said ("Everything is up to date.").
+- **"Looks for updates"**: "Every hour", or "Never" with the choice at Off. It is read, not chosen: the interval is `updateMinutes` in `automatic.json` (60; nothing under 10 is taken), and another value shows as "Every 10 minutes", "Every 2 hours", "Once a day".
+  - Tooltip: "How often MacGameFix asks whether anything is new: the app, the fixes and the Wine modules are asked about together. What is found is taken or told as the choice above says."
+- One line below, in orange while something waits, with the notice's own words ("An update is available: <what>." or "MacGameFix <version> is ready. Relaunch to finish updating."), otherwise what the last check said ("Everything is up to date.").
 - Footer: "One update brings everything: MacGameFix, the game fixes and the Wine modules."
 
 **The notice above the tabs** (`UpdateBanner`), in every tab, only while something waits:
 - "An update is available: <MacGameFix <version>, new fixes, new Wine modules>." with **"Update"**: takes the catalogs that wait and downloads the new MacGameFix.
 - "Downloading MacGameFix <version>…" while it comes.
 - "MacGameFix <version> is ready. Relaunch to finish updating." with **"Relaunch"**: puts the new app in this one's place, starts the menu bar item from it and opens it.
+- The one button is **"Relaunch"** only for a new MacGameFix, downloaded and checked, with no catalog waiting, and always then. New fixes or Wine modules never have it: they are in use once taken. With a catalog waiting beside a downloaded MacGameFix the button is "Update" first, and "Relaunch" follows. (`UpdateWords.step`; `--updates-report [--downloaded]` prints the line and the button for the tests.)
 - **"What's New"** opens the release's page, when a new MacGameFix is part of it.
 - Below, up to six short lines of what the update brings, each with a bullet: a new MacGameFix's from its release notes, a catalog's from its own notes.
 - A copy that cannot replace itself says why in small print ("… Take the new MacGameFix from its page: What's New."), and a failure shows in orange.
@@ -510,7 +514,7 @@ The "Control-Command-F" in the Game Mode footer is advice for full screen in gam
 **Command-line flags**, all in one binary (2264-2514):
 - `--agent`: the menu bar agent
 - `--review`: opens the window with only the games to review
-- One-off commands that print or write and then exit: `--agent-once`, `--menu-report`, `--pad-write`, `--pad-export <file>`, `--pad-report`, `--games-report` (named in the README), `--game-mode-keep|--game-mode-remove|--game-mode-report`, `--engine-report`, `--pad-game-report <appid> <path>`, `--probe-report <appid> <path> [symptom]`, `--probe-games`, `--pad-share-url <appid>`, `--pad-vibrates-url <appid>`, `--fix-report <game name> <path> [works|without]`, `--fix-works-url <game name>`, `--works-without-url <game name>`, `--engine-install|--engine-remove <root>`, `--update-from <dir> [--pubkey --kind modules]`, `--new-signing-key <file>`, `--make-catalog <out> --key <file> [--from]`
+- One-off commands that print or write and then exit: `--agent-once`, `--menu-report`, `--pad-write`, `--pad-export <file>`, `--pad-report`, `--games-report` (named in the README), `--game-mode-keep|--game-mode-remove|--game-mode-report`, `--engine-report`, `--pad-game-report <appid> <path>`, `--probe-report <appid> <path> [symptom]`, `--probe-games`, `--pad-share-url <appid>`, `--pad-vibrates-url <appid>`, `--fix-report <game name> <path> [works|without]`, `--fix-works-url <game name>`, `--works-without-url <game name>`, `--engine-install|--engine-remove <root>`, `--update-from <dir> [--pubkey --kind modules]`, `--updates-report [--downloaded]`, `--new-signing-key <file>`, `--make-catalog <out> --key <file> [--from]`
   - `--fix-report`, `--fix-works-url` and `--works-without-url` (2404-2433) find the game in Games by its catalog name and ask its installer, as the window does. Each refuses as its button would, printing "<game>: <state>; <It Works…|Works Without the Fix…> needs <Installed|Not installed>" and exiting 1, and writes the report or prints the form's link otherwise. The rule is the buttons' own (`FixReport.target`). They have no window: `MACGAMEFIX_SESSION_LOG`, a file standing for Settings › Log, gives the game's blocks to the report and the log field as the window's log would (2400-2403); without it, the report's Settings › Log section says none. The tests use it.
 
 **Background agent** (`--agent`)

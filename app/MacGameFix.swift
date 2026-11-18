@@ -294,7 +294,7 @@ final class Model: ObservableObject {
     /// choice for the fixes and another for the modules may hold two answers: the more
     /// careful one is taken, so nothing starts arriving that somebody had turned off.
     var updateMode: UpdateMode {
-        if !settings.updates || !settings.modulesUpdates { return .off }
+        if settings.updatesOff { return .off }
         return settings.askFirst || settings.modulesAskFirst ? .ask : .automatic
     }
 
@@ -336,13 +336,21 @@ final class Model: ObservableObject {
             + (waitingModules == nil ? [] : Notes.highlights(waitingModulesNotes))
     }
 
-    /// The catalogs in use, by the day each was made: their versions are that moment.
-    var catalogDates: String {
-        func day(_ version: Int) -> String {
-            Date(timeIntervalSince1970: TimeInterval(version)).formatted(date: .abbreviated, time: .omitted)
-        }
-        return "Fixes of \(day(catalogVersion)), Wine modules of \(day(modulesVersion))"
+    /// The catalogs in use, a line each: its version and the day it was made.
+    var catalogLines: String {
+        "Fixes: \(UpdateWords.catalog(catalogVersion))\nWine modules: \(UpdateWords.catalog(modulesVersion))"
     }
+
+    /// What the notice's button does and what its line says (UpdateWords), for what
+    /// waits now. Settings says the same line.
+    var noticeStep: UpdateWords.Step {
+        UpdateWords.step(catalogsWait: waitingCatalog != nil || waitingModules != nil,
+                         appReady: appReady != nil, appCannot: appCannot != nil)
+    }
+    var noticeLine: String { UpdateWords.notice(noticeStep, parts: waitingParts, ready: appReady?.version) }
+
+    /// How often anything new is looked for, as Settings says it.
+    var looksEvery: String { updateMode == .off ? "never" : settings.updateWords }
 
     /// Everything at once, when the user asks: every newer catalog is taken, a newer
     /// MacGameFix is looked for, and one this copy can take is downloaded and checked.
@@ -1093,6 +1101,36 @@ struct ContentView: View {
     }
 }
 
+/// What Settings › Updates and the notice above the tabs say, in one place: the
+/// window and --updates-report, which the tests read, have the same words.
+enum UpdateWords {
+    /// A catalog in use: its version, which is the moment it was made, and that day.
+    static func catalog(_ version: Int) -> String {
+        guard version > 0 else { return "no catalog" }
+        let day = Date(timeIntervalSince1970: TimeInterval(version)).formatted(date: .abbreviated, time: .omitted)
+        return "catalog \(version), of \(day)"
+    }
+
+    /// What the notice's one button does. Relaunch belongs to a new MacGameFix alone:
+    /// it shows once that app is downloaded and checked and no catalog waits, and it
+    /// always shows then. New fixes and Wine modules never ask for one: they are in use
+    /// as soon as they are taken. With a catalog waiting beside the app, Update comes
+    /// first and takes it, and Relaunch follows. A new MacGameFix this copy cannot put
+    /// in its own place, with nothing else waiting, has no button but What's New.
+    enum Step: String { case relaunch = "Relaunch", update = "Update", nothing = "none" }
+
+    static func step(catalogsWait: Bool, appReady: Bool, appCannot: Bool) -> Step {
+        if appReady && !catalogsWait { return .relaunch }
+        return catalogsWait || !appCannot ? .update : .nothing
+    }
+
+    /// The notice's line: `parts` is what waits, `ready` the downloaded app's version.
+    static func notice(_ step: Step, parts: [String], ready: String?) -> String {
+        if step == .relaunch, let ready { return "MacGameFix \(ready) is ready. Relaunch to finish updating." }
+        return "An update is available: \(parts.joined(separator: ", "))."
+    }
+}
+
 /// What waits for the user, above every tab, as one update with one button: a newer
 /// MacGameFix, and the catalogs the agent was told to ask about first. On Automatic
 /// the catalogs are in place by the time anybody looks, and only a new MacGameFix
@@ -1101,31 +1139,32 @@ struct UpdateBanner: View {
     @ObservedObject var model: Model
 
     var body: some View {
-        let appOnly = model.waitingCatalog == nil && model.waitingModules == nil
+        let step = model.noticeStep
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.down.circle.fill").foregroundStyle(.tint)
                 if model.appWorking, let offer = model.appOffer {
                     ProgressView().controlSize(.small)
                     Text("Downloading MacGameFix \(offer.version)…")
-                } else if appOnly, let ready = model.appReady {
-                    Text("MacGameFix \(ready.version) is ready. Relaunch to finish updating.")
                 } else {
-                    Text("An update is available: \(model.waitingParts.joined(separator: ", ")).")
+                    Text(verbatim: model.noticeLine)
                 }
                 Spacer()
                 if let page = model.appOffer?.page {
                     Button("What's New") { NSWorkspace.shared.open(page) }
                 }
-                if appOnly, model.appReady != nil {
+                switch step {
+                case .relaunch:
                     Button("Relaunch") { model.installAppAndRelaunch() }
                         .buttonStyle(.borderedProminent).disabled(model.busy)
                         .help("Puts the new MacGameFix in this one's place and opens it.")
-                } else if !appOnly || model.appCannot == nil {
+                case .update:
                     Button("Update") { model.updateNow() }
                         .buttonStyle(.borderedProminent).disabled(model.busy || model.appWorking)
                         .help("Takes everything that is new: the game fixes, the Wine modules and MacGameFix itself, "
                               + "which is checked to be signed as this one is and starts when you choose Relaunch.")
+                case .nothing:
+                    EmptyView()
                 }
             }
             ForEach(model.whatsNew.prefix(6), id: \.self) { line in
@@ -2563,7 +2602,7 @@ struct SettingsView: View {
                 Picker("Updates", selection: Binding(get: { model.updateMode }, set: { model.setUpdateMode($0) })) {
                     ForEach(Model.UpdateMode.allCases) { Text($0.label).tag($0) }
                 }
-                .help("MacGameFix, its game fixes and its Wine modules, looked for once an hour. Automatic takes the "
+                .help("MacGameFix, its game fixes and its Wine modules, looked for \(model.settings.updateWords). Automatic takes the "
                       + "fixes and the modules as they come and downloads a new MacGameFix, which starts when you "
                       + "choose Relaunch. “Ask first” tells you, and takes nothing until you choose Update. Off does "
                       + "not look.")
@@ -2572,11 +2611,17 @@ struct SettingsView: View {
                         .help("Looks now, and takes what is new: the fixes, the Wine modules and MacGameFix itself.")
                 } label: {
                     Text(verbatim: "MacGameFix \(Catalog.appVersion)")
-                    Text(model.catalogDates)
+                    Text(verbatim: model.catalogLines)
                 }
+                .help("The MacGameFix that is running and the two catalogs in use. A catalog's version is the moment "
+                      + "it was made: the number a release's notes and a report name it by.")
+                LabeledContent("Looks for updates") {
+                    Text(verbatim: model.looksEvery.prefix(1).uppercased() + model.looksEvery.dropFirst())
+                }
+                .help("How often MacGameFix asks whether anything is new: the app, the fixes and the Wine modules are "
+                      + "asked about together. What is found is taken or told as the choice above says.")
                 if model.hasBanner {
-                    Text("An update is available: \(model.waitingParts.joined(separator: ", ")).")
-                        .font(.caption).foregroundStyle(.orange)
+                    Text(verbatim: model.noticeLine).font(.caption).foregroundStyle(.orange)
                 } else if !model.updateLine.isEmpty {
                     Text(model.updateLine).font(.caption).foregroundStyle(.secondary)
                 }
@@ -2691,6 +2736,7 @@ struct MacGameFixApp: App {
 /// starts and which lives in the menu bar; and, for the tests and the release,
 /// --agent-once, --menu-report, --games-report, --engine-report,
 /// --engine-install, --engine-remove, --update-from, --app-update-check, --app-update,
+/// --updates-report,
 /// --make-catalog, --new-signing-key, and the reports' --probe-report, --fix-report,
 /// --fix-works-url and --works-without-url, which do one thing and exit.
 @main
@@ -2720,6 +2766,41 @@ enum Entry {
             }
             if let version = state.waitingApp { print("app | Update to MacGameFix \(version)…") }
             exit(0)
+        }
+        if args.contains("--updates-report") {
+            // What Settings › Updates shows, and what the notice above the tabs says and
+            // offers for what waits. With --downloaded a newer MacGameFix is downloaded and
+            // checked first, as Update does and as Automatic has done by the time anybody
+            // looks; nothing is put in this app's place.
+            let downloaded = args.contains("--downloaded")
+            wait {
+                let settings = AutoSettings.load(), state = AgentState.load()
+                print("app | MacGameFix \(Catalog.appVersion)")
+                print("fixes | \(UpdateWords.catalog(Catalog.active().manifest?.version ?? 0))")
+                print("modules | \(UpdateWords.catalog(Catalog.active(.modules).manifest?.version ?? 0))")
+                print("looks | \(settings.updatesOff ? "never" : settings.updateWords)")
+                let offer = settings.appUpdates ? try? await AppUpdate.check() : nil
+                let cannot = AppUpdate.whyNot()
+                var ready: String?
+                if downloaded, let offer, cannot == nil {
+                    do {
+                        let checked = try await AppUpdate.prepare(offer)
+                        ready = checked.version
+                        try? FileManager.default.removeItem(at: checked.staging)
+                    } catch {
+                        print("refused | \(error.localizedDescription)")
+                    }
+                }
+                let parts = (offer.map { ["MacGameFix \($0.version)"] } ?? [])
+                    + (state.waiting != nil ? ["new fixes"] : []) + (state.waitingModules != nil ? ["new Wine modules"] : [])
+                guard !parts.isEmpty else { print("notice | none"); return 0 }
+                let step = UpdateWords.step(catalogsWait: state.waiting != nil || state.waitingModules != nil,
+                                            appReady: ready != nil, appCannot: cannot != nil)
+                print("notice | \(UpdateWords.notice(step, parts: parts, ready: ready))")
+                print("button | \(step.rawValue)")
+                if offer != nil, let cannot { print("cannot | \(cannot)") }
+                return 0
+            }
         }
         if args.contains("--app-update-check") || args.contains("--app-update") {
             // A newer MacGameFix, asked about; and with --app-update taken, checked and
