@@ -789,7 +789,17 @@ before: ours call `strcpy`, `wcslen` and `__chkstk` where CodeWeavers' call `mem
 files do not have. CodeWeavers' `winebus.so` lists `libinotify.0.dylib` and a third rpath
 here too, and imports no symbol ours does not.
 
-None of it is played on 26.3, the haptics on a cable included.
+Run on 2026-11-18 with `tests/pad-probe/run.sh` in two copies of the 26.3 NotProton runner,
+an Edge connected on Bluetooth, the options at their defaults. With the four modules the
+runner had: the pad is `hid#vid_054c&pid_0df2` with a container Wine made up, the ANSI read
+of its container gives no WCHAR string, the four XInput slots are empty and none of the
+eight audio endpoints has a container. With these fifteen: the pad is
+`hid#vid_054c&pid_0df2&col01` with `{32C48EF2-27F2-4948-9654-152804AF6378}`, its location's,
+from both functions; XInput slot 0 is connected; and a ninth endpoint, "DualSense Edge
+Wireless Controller", has that container. Both prefixes were created by the run, and Wine
+wrote the same errors in both.
+
+No game is played on 26.3 with them yet, the haptics on a cable included.
 
 | CrossOver | Sources | Wine | Intel (x86_64) | FEX (arm64) |
 |---|---|---|---|---|
@@ -907,9 +917,12 @@ modules:
 2. Pick the series for that Wine. If the patches no longer apply, make a new
    series next to the others, as `wine-11.0` was made for CrossOver 26.3.
 3. Build both sides, if the build has a FEX side.
-4. Play one haptics game on a cable with the new modules, then add the build to
+4. Run `tests/pad-probe/run.sh` on a copy of the build with the new modules in it and a
+   pad connected: it prints what a game would find (the pad's container, the XInput slots,
+   the pad's audio endpoint).
+5. Play one haptics game on a cable with the new modules, then add the build to
    the table above.
-5. For a new Preview, name the Preview before it under `"kept"` in `support.json`
+6. For a new Preview, name the Preview before it under `"kept"` in `support.json`
    ("Which CrossOver builds are maintained"); for a new stable CrossOver, the stable
    one before it.
 
