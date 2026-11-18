@@ -5,3 +5,4 @@
 # the next catalog. Lines that start with # are not carried.
 A protected game no longer hangs or closes when something pauses one of its threads (CrossOver Preview 41303, under Rosetta).
 An improvement that was never installed in a runner reads as absent, not as outdated.
+A DualSense over Bluetooth, shown as wired, has its haptics again on CrossOver Preview 41303.
