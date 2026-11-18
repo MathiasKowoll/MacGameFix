@@ -205,12 +205,11 @@ Below the rows:
   - **"Update All"**: only appears when some row is behind. Tooltip: "Brings the modules up to date in every CrossOver that is on and behind."
   - **"Look Again"**: scans the CrossOver installs again.
 
-**3. "Updates" section** (1198-1218)
-- Picker **"New Wine modules"**: **"Automatic" / "Ask first" / "Off"** (224-229). The default is Automatic (Automation.swift:66-67).
-  - Tooltip: "New Wine modules from GitHub, on their own, once a day. On Automatic they also go back into the runners that are on after a CrossOver or NotProton update. “Ask first” checks the signature and tells you. A CrossOver app is only ever reported."
-- **"New Wine modules ready (<n>)"** with an **"Install"** button, in orange. It only appears after the agent, in Ask first mode, found and verified a newer catalog.
-- **"Catalog"**: the version number, with tooltip "Modules for: <CrossOver list>", and a **"Check Now"** button.
-- Important: "Check Now" and "Install" both call `checkForModules` (258-277). That downloads and installs a newer modules catalog right away. It is not just a check.
+**3. "Runners" section**
+- Toggle **"Also into runners for new CrossOver builds"**. Tooltip: "With updates on Automatic: when NotProton adds a runner for a new CrossOver build and there are modules for it, each improvement goes there too, once a runner that is on has it."
+- **"Update All (<n>)"**, only when some row is behind, and **"Look Again"**.
+- Footer: "New Wine modules come with MacGameFix's updates, in Settings. This MacGameFix has modules for: <CrossOver list>."
+- The choice of how new modules arrive and their "Check Now" are no longer here: Settings › Updates has one of each for everything.
   - Getting a new catalog does not change any CrossOver. The rows then show "Older modules: install again", along with "Update" and "Update All".
 
 ### 2.3 Game Feel (`ControllersView`, 1411-1505)
@@ -280,12 +279,22 @@ Below the rows:
 - An error from installing or removing, in red.
 - Footer: "Write them in a game's launch options in Steam, before %command%, for example MGF_FANS=max NOTPROTON_ENV_WINENCPU=8 %command%. For the games NotProton runs. Apple silicon only."
 
-**"Game fix updates"** (2145-2167)
-- Picker **"Game fixes"**: "Automatic" / "Ask first" / "Off" (default Automatic).
-  - Tooltip: "New fixes from GitHub, looked for once a day. “Ask first” checks the signature and tells you; nothing is installed until you say so."
-- **"New fixes ready (<n>)"** with **"Install"**, in orange, when one is waiting.
-- **"Catalog"**: the version and **"Check Now"**. As in Wine Modules, this downloads and installs a newer catalog, then scans the games again (279-298).
-- Footer: "The Wine modules have their own, in Wine Modules."
+**"Updates"**: one choice and one check for everything a release brings (MacGameFix itself, the game fixes, the Wine modules).
+- Picker **"Updates"**: "Automatic" / "Ask first" / "Off" (default Automatic).
+  - Tooltip: "MacGameFix, its game fixes and its Wine modules, looked for once an hour. Automatic takes the fixes and the modules as they come and downloads a new MacGameFix, which starts when you choose Relaunch. “Ask first” tells you, and takes nothing until you choose Update. Off does not look."
+  - A settings file from an older MacGameFix may hold one choice for the fixes and another for the modules: the more careful of the two becomes the one choice, and is written back, when the window opens.
+- **"MacGameFix <version>"**, with "Fixes of <date>, Wine modules of <date>" below it (each catalog's version is the moment it was built), and **"Check Now"**.
+  - "Check Now" looks now and takes what is new: both catalogs are installed whatever the choice says, and a newer MacGameFix is downloaded and checked.
+- One line below: "An update is available: <what>." in orange while something waits, otherwise what the last check said ("Everything is up to date.").
+- Footer: "One update brings everything: MacGameFix, the game fixes and the Wine modules."
+
+**The notice above the tabs** (`UpdateBanner`), in every tab, only while something waits:
+- "An update is available: <MacGameFix <version>, new fixes, new Wine modules>." with **"Update"**: takes the catalogs that wait and downloads the new MacGameFix.
+- "Downloading MacGameFix <version>…" while it comes.
+- "MacGameFix <version> is ready. Relaunch to finish updating." with **"Relaunch"**: puts the new app in this one's place, starts the menu bar item from it and opens it.
+- **"What's New"** opens the release's page, when a new MacGameFix is part of it.
+- Below, up to six short lines of what the update brings, each with a bullet: a new MacGameFix's from its release notes, a catalog's from its own notes.
+- A copy that cannot replace itself says why in small print ("… Take the new MacGameFix from its page: What's New."), and a failure shows in orange.
 
 **"Recent"**. Only shown when the agent has recorded events (2169-2185).
 - Up to 5 of the newest events, as "<game>: <message>" (orange if it failed), with the abbreviated date.
@@ -472,12 +481,12 @@ It only exists while the agent runs: "Run from the menu bar" is on.
    - "<n> not looked at yet" (clock)
 4. If controllers are connected, between separators: "<name>: NN%", plus ", charging" or ", charged", with a battery icon (211-221, 452-462).
 5. "Looking at the games…" while a pass runs, otherwise "Last look: <time>".
-6. Separator, then "Fixes catalog <n>" or the agent's last update line, and the last modules update line if there is one.
+   - Right under the title, when the agent found one: **"Update to MacGameFix <version>…"**, which opens the window.
+6. Separator, then one line for every update: "An update is available: <what>.", "Update check failed: <why>" or "MacGameFix <version> and its fixes are up to date."
 7. **"Look at the Games Now"**: checks every kept game even if Steam didn't change it. Disabled while a pass runs or when no game is kept.
-8. **"Check for New Fixes"**, which reads **"Install New Fixes (catalog <n>)"** when a verified catalog is waiting.
-   - It forces an update that installs a newer fixes catalog, even in "Ask first" or "Off" mode, because the forced path skips the ask branch (Automation.swift:229-235).
-   - Afterwards it posts a notification with the update line (153).
-9. **"Install New Wine Modules (catalog <n>)"**: only shown when a modules catalog is waiting. It forces the modules update and posts a notification (154-156).
+8. **"Check for Updates"**, which reads **"Install the Update"** when a verified catalog is waiting.
+   - It asks now about both catalogs and the app, and installs a newer catalog of either kind even in "Ask first" or "Off" mode, because the forced path skips the ask branch.
+   - Afterwards it posts one notification with that same line.
 10. **"Open MacGameFix…"**: brings an open window forward, or launches the window (286-297).
 11. Separator, then **"Quit MacGameFix"**: asks any open window to quit (a window that is installing finishes first), then quits the agent (274-281).
     - The LaunchAgent only restarts after a crash. It comes back at the next login, or when the window is opened.
@@ -614,7 +623,7 @@ The "Control-Command-F" in the Game Mode footer is advice for full screen in gam
 12. All alert: click "All", take the picture, then Cancel.
 13. App Management notice: after macOS refused a change, the lock notice shows at the top. Click "Open App Management…" for the System Settings pane.
 14. Behind: a row that is on but behind shows "Update" or "Install Again", and "Update All" appears.
-15. Module update waiting: set "New Wine modules" to "Ask first" and wait for the agent's daily check. "New Wine modules ready (<n>)" with "Install" appears.
+15. Update waiting: set Settings › "Updates" to "Ask first" and wait for the agent's hourly check. The notice above the tabs appears with "Update".
 
 **Game Feel** (needs modules installed in at least one CrossOver)
 
@@ -659,6 +668,5 @@ These matter for the guide. The quoted on-screen labels in the code are what use
 - The README calls the update choices *Install them automatically / Ask before installing them / Do not look for them*; the picker says "Automatic" / "Ask first" / "Off" (224-229).
 - The README's icon choices are "raccoon and a gamepad, a gamepad, or nothing"; the picker says "Raccoon and gamepad" / "Gamepad" / "Battery only".
 - The README says *Keep it applied*; the column is titled "Keep", and that phrase only appears in its tooltip and in the menu bar.
-- The README says *Install New Wine Modules … in Settings*. In the window, that button ("New Wine modules ready" › "Install") is in the Wine Modules tab, and the agent's own notification also says "Settings".
 - The README describes an Update button "for every CrossOver app and NotProton runner". It only appears when a row that is on is behind.
-- "Check Now" in the window and "Check for New Fixes" in the menu bar both install a newer catalog right away, whatever the update mode. The README presents them as looking for updates.
+- "Check Now" in the window and "Check for Updates" in the menu bar both install a newer catalog right away, whatever the update mode.

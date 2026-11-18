@@ -573,6 +573,40 @@ struct CatalogManifest: Codable {
     var files: [String: String]
     /// In a release's catalog.json only: the SHA-256 of catalog.zip.
     var zipSHA256: String?
+    /// What this catalog brings, a line for each thing, for the notice and the
+    /// notification: fixes/WHATS-NEW.txt or engine/WHATS-NEW.txt as the build found it.
+    /// A catalog from before 1.6.4 has none.
+    var notes: String?
+}
+
+/// What an update brings, as its publisher wrote it: a catalog's notes, a line for
+/// each thing, or a release's notes in Markdown.
+enum Notes {
+    /// The things it brings, one short line each: of a list, each item's bold lead
+    /// ("- **Fans at full speed.** macOS raises…" gives "Fans at full speed.") or its
+    /// first sentence; of plain lines, each line's first sentence. Headings, nested
+    /// items and whatever follows the first `limit` are left out.
+    static func highlights(_ text: String?, limit: Int = 4) -> [String] {
+        let lines = (text ?? "").components(separatedBy: .newlines)
+        let items = lines.filter { $0.hasPrefix("- ") || $0.hasPrefix("* ") }.map { String($0.dropFirst(2)) }
+        let plain = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty && !$0.hasPrefix("#") && !$0.hasPrefix(" ") }
+        return (items.isEmpty ? plain : items).compactMap { item -> String? in
+            var lead = item.trimmingCharacters(in: .whitespaces)
+            if lead.hasPrefix("**"), let end = lead.dropFirst(2).range(of: "**") {
+                lead = String(lead.dropFirst(2)[..<end.lowerBound])
+            } else if let stop = lead.range(of: ". ") {
+                lead = String(lead[..<stop.upperBound])
+            }
+            lead = lead.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "`", with: "")
+                .trimmingCharacters(in: .whitespaces)
+            return lead.isEmpty ? nil : lead
+        }.prefix(limit).map { $0 }
+    }
+
+    /// The same in one line, for a notification.
+    static func line(_ text: String?) -> String {
+        highlights(text, limit: 3).map { $0.hasSuffix(".") ? $0 : $0 + "." }.joined(separator: " ")
+    }
 }
 
 /// The two catalogs a release carries, each signed and versioned on its own, so

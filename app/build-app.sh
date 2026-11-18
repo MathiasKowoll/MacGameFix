@@ -52,7 +52,7 @@ APP="$HERE/MacGameFix.app"
 MACOS="$APP/Contents/MacOS"
 RES="$APP/Contents/Resources"
 CACHE="${TMPDIR:-/tmp}/mgf-swift-cache"
-VERSION="1.6.3"
+VERSION="1.6.4"
 PRERELEASE_TAG=""
 # The oldest app that can use the catalog this build writes: the first with a
 # catalog it can take from a release.
@@ -62,6 +62,19 @@ MODULES_MIN_APP="1.6.1"
 # The private half of the key whose public half Automation.swift carries. It
 # never enters the repository; without it the build writes no release catalog.
 SIGNING_KEY="${MACGAMEFIX_SIGNING_KEY:-$HOME/.config/macgamefix/catalog-signing.key}"
+
+# Where the service that keeps the table of the app's versions is, and the key of the
+# app's OAuth client there (AppUpdate.swift): two lines, BASE=https://… and SECRET=…,
+# in a file that never enters the repository. Without it the app asks GitHub whether
+# there is a newer MacGameFix, as a build of anybody else's does.
+UPDATES_CONF="${MACGAMEFIX_UPDATES_CONF:-$HOME/.config/macgamefix/updates.conf}"
+UPDATES_BASE=""
+UPDATES_SECRET=""
+if [ -f "$UPDATES_CONF" ]; then
+  UPDATES_BASE="$(sed -n 's/^BASE=//p' "$UPDATES_CONF" | head -1)"
+  UPDATES_SECRET="$(sed -n 's/^SECRET=//p' "$UPDATES_CONF" | head -1)"
+  case "$UPDATES_BASE$UPDATES_SECRET" in *[\<\>\&]*) echo "error: $UPDATES_CONF holds a character an Info.plist cannot" >&2; exit 1 ;; esac
+fi
 
 SIGN_ID="${MACGAMEFIX_CODESIGN_IDENTITY:-}"
 SIGN_WHY=""
@@ -200,7 +213,7 @@ rm -rf "$APP"
 mkdir -p "$MACOS" "$RES" "$CACHE"
 
 echo "==> compiling"
-swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/Fans.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Probe.swift" "$HERE/Automation.swift" "$HERE/MenuBar.swift" "$HERE/Instructions.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
+swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/Fans.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Probe.swift" "$HERE/Automation.swift" "$HERE/AppUpdate.swift" "$HERE/MenuBar.swift" "$HERE/Instructions.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
   -o "$MACOS/MacGameFix" \
   -framework SwiftUI -framework AppKit -framework IOKit -framework UserNotifications -framework GameController \
   -framework AVFoundation -framework CoreAudio -framework AudioToolbox \
@@ -219,11 +232,18 @@ if [ "$SIGN_ID" != - ]; then
 fi
 
 echo "==> Info.plist"
+if [ -n "$UPDATES_BASE" ] && [ -n "$UPDATES_SECRET" ]; then
+  echo "    a newer MacGameFix is asked of $UPDATES_BASE"
+else
+  echo "    note: no $UPDATES_CONF with BASE and SECRET, so this build asks GitHub whether there is a newer MacGameFix"
+fi
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>MacGameFixPrereleaseTag</key><string>$PRERELEASE_TAG</string>
+  <key>MacGameFixUpdatesBase</key><string>$UPDATES_BASE</string>
+  <key>MacGameFixUpdatesSecret</key><string>$UPDATES_SECRET</string>
   <key>CFBundleName</key><string>MacGameFix</string>
   <key>CFBundleDisplayName</key><string>MacGameFix</string>
   <key>CFBundleIdentifier</key><string>io.github.macgamefix</string>
@@ -280,17 +300,24 @@ echo "    ${#ENGINE[@]} files"
 # catalog.json and modules.json: what each catalog is -- built now, so a newer
 # build wins -- and every file with its hash. The agent compares a release's
 # catalogs with them, each on its own: the game fixes, and the Wine modules.
-manifest() { # <name> <minimum app> <files...>
+# "notes" is what the catalog brings, a line for each thing, as fixes/WHATS-NEW.txt and
+# engine/WHATS-NEW.txt say it when the catalog is built: the app shows it with the
+# update, and the agent in its notification. Lines that start with # are not carried.
+manifest() { # <name> <minimum app> <notes file> <files...>
   /usr/bin/python3 - "$RES" "$@" <<'PY'
 import hashlib, json, pathlib, sys, time
-res, out, minimum, names = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4:]
+res, out, minimum, notes, names = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3], pathlib.Path(sys.argv[4]), sys.argv[5:]
 files = {n: hashlib.sha256((res / n).read_bytes()).hexdigest() for n in names}
-json.dump({"version": int(time.time()), "minimumApp": minimum, "files": files},
-          open(res / out, "w"), indent=2, sort_keys=True)
+manifest = {"version": int(time.time()), "minimumApp": minimum, "files": files}
+if notes.is_file():
+    said = "\n".join(l.rstrip() for l in notes.read_text().splitlines() if l.strip() and not l.startswith("#"))
+    if said:
+        manifest["notes"] = said
+json.dump(manifest, open(res / out, "w"), indent=2, sort_keys=True)
 PY
 }
-manifest catalog.json "$CATALOG_MIN_APP" games.json "${PAYLOAD[@]}"
-manifest modules.json "$MODULES_MIN_APP" "${ENGINE[@]}"
+manifest catalog.json "$CATALOG_MIN_APP" "$ROOT/fixes/WHATS-NEW.txt" games.json "${PAYLOAD[@]}"
+manifest modules.json "$MODULES_MIN_APP" "$ROOT/engine/WHATS-NEW.txt" "${ENGINE[@]}"
 
 # No entitlements. Read from the code, the hardened runtime asks for one only
 # for what the app does not do: it compiles no code at run time (no JIT), loads
