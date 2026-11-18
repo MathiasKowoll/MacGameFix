@@ -36,6 +36,136 @@
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/9ec59e2d6a58cd0f24483a0299b7e29993056644/engine/patches/wine-11.0/0003-mmdevapi.patch"
         },
         {
+          "name": "0004-winebus-bluetooth.patch",
+          "file": "engine/patches/wine-11.0/0004-winebus-bluetooth.patch",
+          "subject": "A Bluetooth DualSense or Edge is shown to the game as the same pad on a cable",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0004-winebus-bluetooth.patch"
+        },
+        {
+          "name": "0005-winecoreaudio-bluetooth.patch",
+          "file": "engine/patches/wine-11.0/0005-winecoreaudio-bluetooth.patch",
+          "subject": "A Bluetooth pad gets the audio output its wired self would have, for its haptics",
+          "modules": [
+            "winecoreaudio.drv"
+          ],
+          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0005-winecoreaudio-bluetooth.patch"
+        },
+        {
+          "name": "0006-winebus-xinput-and-triggers.patch",
+          "file": "engine/patches/wine-11.0/0006-winebus-xinput-and-triggers.patch",
+          "subject": "XInput's rumble on the pad's motors, trigger effects chosen in Game Feel, a steadier Bluetooth stream",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0006-winebus-xinput-and-triggers.patch"
+        },
+        {
+          "name": "0007-hidclass-xinput.patch",
+          "file": "engine/patches/wine-11.0/0007-hidclass-xinput.patch",
+          "subject": "A pad with a haptics collection is also offered to XInput",
+          "modules": [
+            "hidclass.sys"
+          ],
+          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0007-hidclass-xinput.patch"
+        },
+        {
+          "name": "0008-xinput-sony-order.patch",
+          "file": "engine/patches/wine-11.0/0008-xinput-sony-order.patch",
+          "subject": "XInput reads a Sony pad's own descriptor in Sony's order",
+          "modules": [
+            "xinput1_3"
+          ],
+          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0008-xinput-sony-order.patch"
+        },
+        {
+          "name": "0009-mmdevapi-setupapi-endpoints.patch",
+          "file": "engine/patches/wine-11.0/0009-mmdevapi-setupapi-endpoints.patch",
+          "subject": "Audio endpoints are listed through SetupAPI as Windows lists them, with the pad's container",
+          "modules": [
+            "mmdevapi"
+          ],
+          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0009-mmdevapi-setupapi-endpoints.patch"
+        },
+        {
+          "name": "0010-setupapi-base-containerid-wchar.patch",
+          "file": "engine/patches/wine-11.0/0010-setupapi-base-containerid-wchar.patch",
+          "subject": "SetupDiGetDeviceRegistryPropertyA returns SPDRP_BASE_CONTAINERID as a WCHAR string, as Windows does",
+          "modules": [
+            "setupapi"
+          ],
+          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0010-setupapi-base-containerid-wchar.patch"
+        },
+        {
+          "name": "0011-xaudio2-mastering-voice-device.patch",
+          "file": "engine/patches/wine-11.0/0011-xaudio2-mastering-voice-device.patch",
+          "subject": "An XAudio2 mastering voice opens the device the game names, not the default one",
+          "modules": [
+            "xaudio2_7"
+          ],
+          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0011-xaudio2-mastering-voice-device.patch"
+        },
+        {
+          "name": "0012-winecoreaudio-edge-output-name.patch",
+          "file": "engine/patches/wine-11.0/0012-winecoreaudio-edge-output-name.patch",
+          "subject": "An Edge shown as a DualSense has the DualSense's audio device on a cable too",
+          "modules": [
+            "winecoreaudio.drv"
+          ],
+          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0012-winecoreaudio-edge-output-name.patch"
+        },
+        {
+          "name": "0013-winebus-dualshock4.patch",
+          "file": "engine/patches/wine-11.0/0013-winebus-dualshock4.patch",
+          "subject": "The pad shown to a game as a USB DualShock 4 (pad_as=dualshock4)",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0013-winebus-dualshock4.patch"
+        },
+        {
+          "name": "0014-winebus-trigger-replace-and-live-settings.patch",
+          "file": "engine/patches/wine-11.0/0014-winebus-trigger-replace-and-live-settings.patch",
+          "subject": "A chosen trigger effect can replace the game's own, and Game Feel's changes reach a running game",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0014-winebus-trigger-replace-and-live-settings.patch"
+        },
+        {
+          "name": "0015-winebus-input-rate-once-a-minute.patch",
+          "file": "engine/patches/wine-11.0/0015-winebus-input-rate-once-a-minute.patch",
+          "subject": "With diagnostics on, the pad's input rate is logged once a minute, not every 2 s",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0015-winebus-input-rate-once-a-minute.patch"
+        },
+        {
+          "name": "0016-winebus-rumble-flag-0x02-keeps-the-motors.patch",
+          "file": "engine/patches/wine-11.0/0016-winebus-rumble-flag-0x02-keeps-the-motors.patch",
+          "subject": "Over Bluetooth a game report with the rumble flag 0x02 alone keeps the motors, as the pad does on a cable",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0016-winebus-rumble-flag-0x02-keeps-the-motors.patch"
+        },
+        {
           "name": "0017-ntdll-rosetta-cpu-fidelity.patch",
           "file": "engine/patches/wine-11.0/0017-ntdll-rosetta-cpu-fidelity.patch",
           "subject": "Under Rosetta the CPU looks more like the x86 one copy protection checks for: CPUID leaf 7 bits on request, CLWB and RDPID, debug-register breakpoints, non-canonical faults",

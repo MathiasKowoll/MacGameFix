@@ -5,8 +5,18 @@
   "patches": "wine-11.0",
   "files": {
     "x86_64-unix/ntdll.so": "1d5cfbb6ec2133adbaa56584ea7991690185922f3833ede91ff2a3e39f69d7fb",
-    "x86_64-unix/winecoreaudio.so": "4be4fbfe75df635c9a1073c1a946f1b598667be9446dc4f821b719b52ff1c455",
-    "x86_64-windows/mmdevapi.dll": "2fbab2f617124a9ad5e1b380996d2b4a330eddd0f76dd6afb4c50cdea0c7eba6",
-    "x86_64-windows/winebus.sys": "9760923623bedfa289731a4a03785417045c4ffdb587a63794423d491398e278"
+    "x86_64-unix/winebus.so": "95d54d97fce850496cfdd19abac9dc2450bdb2d9cb7ea8f87f807928b26848d5",
+    "x86_64-unix/winecoreaudio.so": "3e5942b67bdc84fcd2f61424d047ed9570238d177a05398251b5bec670742494",
+    "x86_64-windows/hidclass.sys": "f9628983469035a4a6cbf86a7c82e025296d0c49b604dc23afe37ad54f550883",
+    "x86_64-windows/mmdevapi.dll": "0cde4a904d5c2a610d7edd6610940d1ef75df5add1ba531ff05a64f25e6392f8",
+    "x86_64-windows/setupapi.dll": "73ba0449fcfde8ba87e17d83f8a52f941fcb82f6a44af69a7f8866d0ed54782a",
+    "x86_64-windows/winebus.sys": "9760923623bedfa289731a4a03785417045c4ffdb587a63794423d491398e278",
+    "x86_64-windows/xaudio2_9.dll": "5a104b15ed0a8094211092fe8d3bafa1e42c5727485b4dbe6db302a77c38fe26",
+    "x86_64-windows/xinput1_1.dll": "e6fe0c138d6031ced047b53a8ab60fa044cc7ce0effecac3ff73dbaf0568f832",
+    "x86_64-windows/xinput1_2.dll": "8393cd663f90a10a4541a1d4f7befe231ca7d17bf026777606a707ef42b4fc31",
+    "x86_64-windows/xinput1_3.dll": "16327bbd1ed9f04e009573337594bd183056b46103bfa5ca435230d22c9486d5",
+    "x86_64-windows/xinput1_4.dll": "6d104288980630d5db9516635596f9ff6a05b84d1f4d213529a0e7c4dd4dd47e",
+    "x86_64-windows/xinput9_1_0.dll": "d722aa931fbb497c2b56ab7ce1211c1501bd98dd12be0f38f88b997b10ba753c",
+    "x86_64-windows/xinputuap.dll": "ee8582526e6131952345589d7781e231e021e14486bd4644905f4adb9de626cd"
   }
 }
