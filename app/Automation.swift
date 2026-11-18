@@ -675,6 +675,8 @@ enum Updater {
         if url.isFileURL { return try Data(contentsOf: url) }
         var request = URLRequest(url: url)
         request.setValue("MacGameFix/\(Catalog.appVersion)", forHTTPHeaderField: "User-Agent")
+        // Nothing here is a session: a cookie a server sets is neither kept nor sent back.
+        request.httpShouldHandleCookies = false
         let (data, response) = try await URLSession.shared.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw Failure.missing(url.lastPathComponent) }
         return data
