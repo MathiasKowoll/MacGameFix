@@ -1495,7 +1495,7 @@
       "executable": "witcher3.exe",
       "carrierDirectory": "bin/x64_dx12",
       "alsoRuns": [],
-      "summary": "Refuses the stream-output pipeline that crashes D3DMetal's shader converter, and lets the game offer DLSS.",
+      "summary": "Refuses the stream-output pipeline that crashes D3DMetal's shader converter, and lets the game offer DLSS and frame generation.",
       "page": "legacy/wiki/The-Witcher-3.md",
       "installs": [
         "amd_fidelityfx_loader_dx12-w3.dll",
@@ -1510,6 +1510,11 @@
           "name": "tholtman1-del",
           "url": "https://github.com/tholtman1-del/witcher3-crossover-fix",
           "note": "The diagnosis of the black screen and the rule that refuses the pipeline (MIT)."
+        },
+        {
+          "name": "sbhaleraoopen",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/issues/26",
+          "note": "The check that kept frame generation off under Wine and the bytes it is found by; maple-quartz18 confirmed them on 5.01c."
         }
       ],
       "excerpts": [
@@ -1520,8 +1525,8 @@
           "language": "c",
           "startLine": 101,
           "endLine": 112,
-          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/w3-streamout-fix.c#L101-L112",
+          "commit": "8b3a7abe54860cc4ac90c78825390086849cf16a",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8b3a7abe54860cc4ac90c78825390086849cf16a/fixes/w3-streamout-fix.c#L101-L112",
           "code": "static BOOL refuse(BOOL gs, BOOL ps, UINT so_entries)\n{\n#ifdef W3_RTPROBE\n    if (allow_gs_without_ps && gs && !so_entries && !ps)\n    {\n        logline(\"let through geometry-shader pipeline %ld with no pixel shader and no stream output\",\n                InterlockedIncrement(&let_through));\n        return FALSE;\n    }\n#endif\n    return gs && (so_entries || !ps);\n}"
         },
         {
@@ -1531,9 +1536,20 @@
           "language": "c",
           "startLine": 119,
           "endLine": 139,
-          "commit": "fd82acba69ac668e14f53027e22e21eb1346dc52",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/fd82acba69ac668e14f53027e22e21eb1346dc52/fixes/w3-streamout-fix.c#L119-L139",
+          "commit": "8b3a7abe54860cc4ac90c78825390086849cf16a",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8b3a7abe54860cc4ac90c78825390086849cf16a/fixes/w3-streamout-fix.c#L119-L139",
           "code": "static HRESULT WINAPI my_gfx(void *dev, const void *desc, REFIID iid, void **out)\n{\n    const char *d = desc;\n    InterlockedIncrement(&seen_gfx);\n    if (d && refuse(has_shader(d + 72), has_shader(d + 24), *(const UINT *)(d + 96)))\n    {\n        LONG n = InterlockedIncrement(&refused);\n        logline(\"refused stream-output pipeline %ld (graphics desc, %u entries)\", n, *(const UINT *)(d + 96));\n        if (out) *out = NULL;\n        return E_INVALIDARG;\n    }\n#ifdef W3_RTPROBE\n    {\n        HRESULT hr = real_gfx(dev, desc, iid, out);\n        if (FAILED(hr)) logline(\"CreateGraphicsPipelineState failed: %08lx\", (unsigned long)hr);\n        return hr;\n    }\n#else\n    return real_gfx(dev, desc, iid, out);\n#endif\n}"
+        },
+        {
+          "file": "fixes/w3-streamout-fix.c",
+          "symbol": "allow_frame_generation",
+          "note": "The game's DLSS-G check stops reading the flag its Wine check sets, so the menu offers frame generation; the flag stays set and ray tracing stays off.",
+          "language": "c",
+          "startLine": 809,
+          "endLine": 843,
+          "commit": "8b3a7abe54860cc4ac90c78825390086849cf16a",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8b3a7abe54860cc4ac90c78825390086849cf16a/fixes/w3-streamout-fix.c#L809-L843",
+          "code": "static void allow_frame_generation(void)\n{\n    static const unsigned char head[] = { 0xc6, 0x41, 0x1a, 0x00, 0x48, 0x8b, 0xd9, 0x80, 0x3d };\n    unsigned char *exe = (unsigned char *)GetModuleHandleW(NULL), *found = NULL;\n    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(exe + ((IMAGE_DOS_HEADER *)exe)->e_lfanew);\n    IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);\n    int i, count = 0;\n    DWORD old;\n    for (i = 0; i < nt->FileHeader.NumberOfSections; i++, sec++)\n    {\n        unsigned char *p = exe + sec->VirtualAddress, *end;\n        if (!(sec->Characteristics & IMAGE_SCN_MEM_EXECUTE) || sec->Misc.VirtualSize < 32) continue;\n        end = p + sec->Misc.VirtualSize - 16;\n        while (p < end && (p = memchr(p, 0xc6, (size_t)(end - p))))\n        {\n            /* head, a 32-bit displacement, the 0 it is compared with, and je rel8 */\n            if (!memcmp(p, head, sizeof(head)) && p[13] == 0x00 && p[14] == 0x74) { found = p + 14; count++; }\n            p++;\n        }\n    }\n    if (count != 1)\n    {\n        logline(\"frame generation: the DLSS-G check was found %d times, not once; left as it is\", count);\n        return;\n    }\n    if (!VirtualProtect(found, 1, PAGE_EXECUTE_READWRITE, &old))\n    {\n        logline(\"frame generation: the DLSS-G check at witcher3.exe+0x%lx could not be written\", (unsigned long)(found - exe));\n        return;\n    }\n    *found = 0xeb;\n    VirtualProtect(found, 1, old, &old);\n    FlushInstructionCache(GetCurrentProcess(), found, 1);\n    logline(\"frame generation: the DLSS-G check at witcher3.exe+0x%lx no longer reads the Wine flag\", (unsigned long)(found - exe));\n}"
         }
       ],
       "symptom": "A black window at full CPU on every launch; once past it, DLSS listed as not supported",

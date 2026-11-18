@@ -34,7 +34,7 @@
  * and the bytes after it, so the next build that moves the code is diagnosed
  * from the log alone. Measured 2026-09-30 on D3DMetal 4.0b2: slInit returns 0,
  * DLSS is offered, and on it looks right -- D3DMetal carries Streamline's DLSS
- * to MetalFX. Frame generation does not work.
+ * to MetalFX. Frame generation: see FRAME GENERATION, by allow_frame_generation.
  *
  * RAY TRACING, LEFT OFF ON PURPOSE. In build 25773555 the menu shows ray
  * tracing off. Measured 2026-10-09: of the other Wine checks, the call that
@@ -772,6 +772,106 @@ static void iat_hook(const char *dll, const char *name, void *repl, void **was)
     logline("import %s!%s not found", dll, name);
 }
 
+/* A marker file beside this DLL. */
+static BOOL beside(HINSTANCE inst, const char *name)
+{
+    char p[MAX_PATH + 48];
+    DWORD n = GetModuleFileNameA(inst, p, MAX_PATH);
+    char *s = n ? strrchr(p, '\\') : NULL;
+    if (!s) return FALSE;
+    strcpy(s + 1, name);
+    return GetFileAttributesA(p) != INVALID_FILE_ATTRIBUTES;
+}
+
+/* FRAME GENERATION. The Wine check that turns ray tracing off sets a flag, and
+ * one of the places that read it is the game's DLSS-G feature check: while the
+ * flag says Wine, frame generation is reported unsupported. That one reader is
+ * made to skip the flag -- `mov byte [rcx+0x1a],0; mov rbx,rcx; cmp byte
+ * [rip+flag],0; je` becomes `...; jmp` -- and the flag itself is left alone, so
+ * ray tracing stays off as the header says it must. The code is found by its
+ * bytes, not by an address, and only when it is there exactly once: in build
+ * 26238013 (5.01c) it is at witcher3.exe+0x1b7d3e0. Found and reported by
+ * github.com/MathiasKowoll/MacGameFix/issues/26, which patched the file; the
+ * same site is "DLSS-G not forced unsupported" in gabrielmaialva33's Proton
+ * notes. w3-no-frame-generation.txt beside this DLL leaves the check as it is.
+ *
+ * WHAT IT GIVES, MEASURED 2026-11-18 on build 26238013 with NotProton, the
+ * Wine of CrossOver Preview 20261015, D3DMetal 4 and an M4 Max: the menu lets
+ * frame generation be switched on, the setting is saved (DLSSGMode=1), and
+ * Streamline answers that DLSS-G is supported (slIsFeatureSupported(1000) is
+ * 0). With it on, Metal's own record showed no more frames presented than
+ * before: 90-92 a second before and 84-88 after on the Metal 4 path, a median
+ * of 53 on the Metal 3 path (D3DM_MTL4=0), and the game's processor time did
+ * not change. The issue reports 110-120 shown on CrossOver Preview with
+ * D3DM_MAX_FPS=120. So the game's side is open, and whether D3DMetal then
+ * generates frames is not settled here; the W3_FGPROBE build below asks
+ * Streamline, and has not yet been run with the option on. */
+static void allow_frame_generation(void)
+{
+    static const unsigned char head[] = { 0xc6, 0x41, 0x1a, 0x00, 0x48, 0x8b, 0xd9, 0x80, 0x3d };
+    unsigned char *exe = (unsigned char *)GetModuleHandleW(NULL), *found = NULL;
+    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(exe + ((IMAGE_DOS_HEADER *)exe)->e_lfanew);
+    IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
+    int i, count = 0;
+    DWORD old;
+    for (i = 0; i < nt->FileHeader.NumberOfSections; i++, sec++)
+    {
+        unsigned char *p = exe + sec->VirtualAddress, *end;
+        if (!(sec->Characteristics & IMAGE_SCN_MEM_EXECUTE) || sec->Misc.VirtualSize < 32) continue;
+        end = p + sec->Misc.VirtualSize - 16;
+        while (p < end && (p = memchr(p, 0xc6, (size_t)(end - p))))
+        {
+            /* head, a 32-bit displacement, the 0 it is compared with, and je rel8 */
+            if (!memcmp(p, head, sizeof(head)) && p[13] == 0x00 && p[14] == 0x74) { found = p + 14; count++; }
+            p++;
+        }
+    }
+    if (count != 1)
+    {
+        logline("frame generation: the DLSS-G check was found %d times, not once; left as it is", count);
+        return;
+    }
+    if (!VirtualProtect(found, 1, PAGE_EXECUTE_READWRITE, &old))
+    {
+        logline("frame generation: the DLSS-G check at witcher3.exe+0x%lx could not be written", (unsigned long)(found - exe));
+        return;
+    }
+    *found = 0xeb;
+    VirtualProtect(found, 1, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), found, 1);
+    logline("frame generation: the DLSS-G check at witcher3.exe+0x%lx no longer reads the Wine flag", (unsigned long)(found - exe));
+}
+
+/* THE STEAM DECK'S THREAD MASKS, LEFT ALONE. Two more of the Wine checks sit
+ * in one function that gives the game's task threads their processors. Under
+ * Wine it reads the kind of machine the game believes it is on (12, 13 or 14
+ * for three answers of one of its own objects, 1 otherwise), and for kinds 12
+ * and 13 answers a two-processor mask (3, or 12) where it otherwise answers
+ * none: a Steam Deck's layout. MacGameFix issue 26 reports smoother frame
+ * pacing with Wine hidden from those two checks, from play and not measured.
+ * Measured here on 2026-11-18 (NotProton, M4 Max): the kind is 1, so the
+ * function answers "no mask" whether it finds Wine or not, and hiding it
+ * changes nothing. They are therefore answered as every other check is, and
+ * the kind is logged, read from where the code after the call reads it:
+ *   test rax,rax; je rel8; mov edx,[rip+kind]; cmp edx,12
+ *   test rax,rax; je rel8; test ebx,ebx; jne rel8; mov eax,[rip+kind]; add eax,-12
+ * A log that says 12 or 13 is the case to look at again. */
+static LONG deck_said;
+static BOOL deck_threads_check(const unsigned char *ret, int *kind)
+{
+    const unsigned char *next = NULL;
+    if (!readable(ret, 18) || ret[0] != 0x48 || ret[1] != 0x85 || ret[2] != 0xc0 || ret[3] != 0x74) return FALSE;
+    if (ret[5] == 0x8b && ret[6] == 0x15 && ret[11] == 0x83 && ret[12] == 0xfa && ret[13] == 0x0c)
+        next = ret + 11;
+    else if (ret[5] == 0x85 && ret[6] == 0xdb && ret[7] == 0x75 && ret[9] == 0x8b && ret[10] == 0x05
+             && ret[15] == 0x83 && ret[16] == 0xc0 && ret[17] == 0xf4)
+        next = ret + 15;
+    if (!next) return FALSE;
+    next += *(const int *)(next - 4);
+    *kind = readable(next, 4) ? *(const int *)next : -1;
+    return TRUE;
+}
+
 typedef FARPROC (WINAPI *gpa_fn)(HMODULE, LPCSTR);
 static gpa_fn o_GetProcAddress;
 static FARPROC WINAPI p_GetProcAddress(HMODULE m, LPCSTR name)
@@ -790,6 +890,18 @@ static FARPROC WINAPI p_GetProcAddress(HMODULE m, LPCSTR name)
         {
             logline("wine_get_version hidden from the Streamline check");
             return NULL;
+        }
+        {
+            int kind;
+            if (deck_threads_check(ret, &kind))
+            {
+                /* Asked for every task thread: said for the first few. */
+                if (InterlockedIncrement(&deck_said) <= 4)
+                    logline("wine_get_version asked by the thread-mask check at witcher3.exe+0x%lx, answered; the game's machine kind is %d%s",
+                            (unsigned long)(ret - (const unsigned char *)GetModuleHandleW(NULL)), kind,
+                            kind == 12 || kind == 13 ? ", a Steam Deck's: it gets two-processor masks" : "");
+                return o_GetProcAddress(m, name);
+            }
         }
         if (readable(ret, 8))
         {
@@ -838,6 +950,84 @@ static void hook_imports(void)
 }
 #endif
 
+#ifdef W3_FGPROBE
+/* Diagnostic build only (W3_FGPROBE), never shipped: MGVF_CFLAGS=-DW3_FGPROBE.
+ * With frame generation switched on in the menu the game presented no more
+ * frames than before (2026-11-18). This asks Streamline, reading only: what it
+ * answers for each feature the game asks about, which feature functions the
+ * game takes, the options the game sets for DLSS-G and the state Streamline
+ * reports back (its status flags and how many frames it says it presents for
+ * each one rendered). Nothing the game passes is changed. */
+typedef int (*fg_supported_fn)(unsigned int feature, const void *adapter);
+typedef int (*fg_getfn_fn)(unsigned int feature, const char *name, void **fn);
+typedef int (*fg_state_fn)(const void *viewport, void *state, const void *options);
+typedef int (*fg_setopt_fn)(const void *viewport, const void *options);
+static fg_supported_fn fg_o_supported;
+static fg_getfn_fn fg_o_getfn;
+static fg_state_fn fg_o_state;
+static fg_setopt_fn fg_o_setopt;
+static LONG fg_supported_said, fg_getfn_said, fg_state_said, fg_setopt_said;
+static unsigned int fg_last_state[4] = { 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff };
+static unsigned int fg_last_opt[3] = { 0xffffffff, 0xffffffff, 0xffffffff };
+static int fg_last_setopt_result = -1;
+
+static int fg_supported(unsigned int feature, const void *adapter)
+{
+    int r = fg_o_supported(feature, adapter);
+    if (InterlockedIncrement(&fg_supported_said) <= 40) logline("fg probe: slIsFeatureSupported(%u) -> %d", feature, r);
+    return r;
+}
+
+/* sl::DLSSGState after its 32-byte header: VRAM estimate (8), status, least
+ * width or height, frames presented for each one rendered, most it can generate. */
+static int fg_state(const void *viewport, void *state, const void *options)
+{
+    int r = fg_o_state(viewport, state, options);
+    if (state && readable(state, 56))
+    {
+        const unsigned int *v = (const unsigned int *)((const char *)state + 40);
+        if ((v[0] != fg_last_state[0] || v[1] != fg_last_state[1] || v[2] != fg_last_state[2] || v[3] != fg_last_state[3])
+            && InterlockedIncrement(&fg_state_said) <= 200)
+        {
+            fg_last_state[0] = v[0]; fg_last_state[1] = v[1]; fg_last_state[2] = v[2]; fg_last_state[3] = v[3];
+            logline("fg probe: slDLSSGGetState -> %d: status 0x%x, least size %u, frames presented for each rendered %u, most generated %u (struct version %u)",
+                    r, v[0], v[1], v[2], v[3], (unsigned int)*(const size_t *)((const char *)state + 24));
+        }
+    }
+    return r;
+}
+
+/* sl::DLSSGOptions after its header: mode (0 off, 1 on, 2 auto), frames to generate, flags. */
+static int fg_setopt(const void *viewport, const void *options)
+{
+    int r = fg_o_setopt(viewport, options);
+    if (options && readable(options, 44))
+    {
+        const unsigned int *v = (const unsigned int *)((const char *)options + 32);
+        if ((v[0] != fg_last_opt[0] || v[1] != fg_last_opt[1] || v[2] != fg_last_opt[2] || r != fg_last_setopt_result)
+            && InterlockedIncrement(&fg_setopt_said) <= 100)
+        {
+            fg_last_opt[0] = v[0]; fg_last_opt[1] = v[1]; fg_last_opt[2] = v[2]; fg_last_setopt_result = r;
+            logline("fg probe: slDLSSGSetOptions(mode %u, frames to generate %u, flags 0x%x) -> %d", v[0], v[1], v[2], r);
+        }
+    }
+    return r;
+}
+
+static int fg_getfn(unsigned int feature, const char *name, void **fn)
+{
+    int r = fg_o_getfn(feature, name, fn);
+    if (InterlockedIncrement(&fg_getfn_said) <= 80)
+        logline("fg probe: slGetFeatureFunction(%u, %s) -> %d", feature, name && readable(name, 1) ? name : "?", r);
+    if (r == 0 && fn && *fn && name && readable(name, 1))
+    {
+        if (!strcmp(name, "slDLSSGGetState")) { fg_o_state = (fg_state_fn)*fn; *fn = (void *)fg_state; }
+        else if (!strcmp(name, "slDLSSGSetOptions")) { fg_o_setopt = (fg_setopt_fn)*fn; *fn = (void *)fg_setopt; }
+    }
+    return r;
+}
+#endif
+
 /* Hook the moment d3d12.dll is loaded: the pipeline is built during startup,
  * and a hook that arrives after it is no hook at all. */
 static DWORD WINAPI worker(void *unused)
@@ -865,7 +1055,7 @@ static DWORD WINAPI worker(void *unused)
 
 BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
 {
-    (void)inst; (void)reserved;
+    (void)reserved;
     if (reason != DLL_PROCESS_ATTACH) return TRUE;
     logf_ = fopen(LOG_PATH, "w");
     logline("w3-streamout-fix loaded");
@@ -935,9 +1125,15 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
         iat_hook("KERNEL32.dll", "TerminateProcess", (void *)p_TerminateProcess, (void **)&o_TerminateProcess);
     }
 #endif
+    if (beside(inst, "w3-no-frame-generation.txt")) logline("frame generation: left as the game decides it (w3-no-frame-generation.txt)");
+    else allow_frame_generation();
     iat_hook("KERNEL32.dll", "GetProcAddress", (void *)p_GetProcAddress, (void **)&o_GetProcAddress);
 #ifdef W3_PROBE
     hook_imports();
+#endif
+#ifdef W3_FGPROBE
+    iat_hook("sl.interposer.dll", "slIsFeatureSupported", (void *)fg_supported, (void **)&fg_o_supported);
+    iat_hook("sl.interposer.dll", "slGetFeatureFunction", (void *)fg_getfn, (void **)&fg_o_getfn);
 #endif
     CloseHandle(CreateThread(NULL, 0, worker, NULL, 0, NULL));
     return TRUE;

@@ -1073,6 +1073,9 @@ how, is in the game's page under `legacy/wiki/`.
 - **[witcher3-crossover-fix](https://github.com/tholtman1-del/witcher3-crossover-fix)
   by tholtman1-del** (MIT): the diagnosis of The Witcher 3's black screen and
   the rule that refuses the pipeline.
+- **sbhaleraoopen** ([issue 26](https://github.com/MathiasKowoll/MacGameFix/issues/26)):
+  the check that kept The Witcher 3's frame generation off under Wine, and the
+  bytes it is found by; **maple-quartz18** confirmed them on 5.01c.
 - **[SpiderMan2Fix](https://github.com/macprotips/SpiderMan2Fix) by macprotips.**
   The Spider-Man 2 fix is theirs; this adds a carrier that needs no DLL override,
   and a barrier after the volumetric fog copy.

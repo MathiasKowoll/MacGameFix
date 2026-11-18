@@ -18,7 +18,7 @@
 # The same proxy lets the game offer DLSS. The game turns NVIDIA Streamline
 # off when it finds Wine, so the menu said DLSS was not supported; the one
 # check that decides it is told there is no Wine, and D3DMetal then carries
-# DLSS to MetalFX. Frame generation still does not work.
+# DLSS to MetalFX. The menu offers frame generation too (w3-streamout-fix.c).
 #
 # It also gives the launch a bin/x64. 5.00b ships only bin/x64_dx12, and a
 # launch that still asks for bin/x64/witcher3.exe fails with "path not found".
@@ -35,7 +35,7 @@
 #
 # MGVF-SCOPE: folder
 # MGVF-GAME: The Witcher 3: Wild Hunt | witcher3.exe | bin/x64_dx12
-# MGVF-WHY: Refuses the stream-output pipeline that crashes D3DMetal's shader converter, and lets the game offer DLSS.
+# MGVF-WHY: Refuses the stream-output pipeline that crashes D3DMetal's shader converter, and lets the game offer DLSS and frame generation.
 
 set -euo pipefail
 
