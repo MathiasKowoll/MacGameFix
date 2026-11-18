@@ -3,6 +3,4 @@
 # "notes"; the app shows them with the update and the agent in its notification.
 # Rewrite them with every change to the modules: what stays here is said again with
 # the next catalog. Lines that start with # are not carried.
-A protected game no longer hangs or closes when something pauses one of its threads (CrossOver Preview 41303, under Rosetta).
-An improvement that was never installed in a runner reads as absent, not as outdated.
-A DualSense over Bluetooth, shown as wired, has its haptics again on CrossOver Preview 41303.
+CrossOver Preview 20261006 and 20261015 are no longer maintained: their modules stay as they are, and new ones come for CrossOver 26.3 and the latest Preview.
