@@ -159,17 +159,26 @@ until you turn it on, and the fixes stay in the games' own folders as before.
   - *Quit MacGameFix* stops the agent, and closes the window if it is open,
     until you log in again or open the app. If it crashes, it starts again by
     itself.
-- **New fixes and new Wine modules.** The agent looks at the latest release of
-  this repository once an hour. A release carries two catalogs, each signed and
-  versioned on its own: the game fixes (the installers and every file they use)
-  and the Wine modules. New modules for a new CrossOver build come without
-  touching the fixes, and the other way round. Each has its own choice: *Game
-  fixes* in Settings, *New modules* in Improvements:
-  - *Install them automatically*: the agent takes the catalog without a new app.
-  - *Ask before installing them*: the agent checks the catalog's signature and
-    tells you, and installs nothing. *Install New Fixes* or *Install New Wine
-    Modules*, in the menu bar or in Settings, takes it.
-  - *Do not look for them*: the agent does not ask the releases.
+- **Updates: one for everything.** A release brings three things: MacGameFix
+  itself, the game fixes (the installers and every file they use) and the Wine
+  modules. The fixes and the modules are two catalogs, each signed and
+  versioned on its own, so new modules for a new CrossOver build come without
+  touching the fixes and neither needs a new app. To you they are one update,
+  with one choice in Settings, *Updates*, and one *Check Now*:
+  - *Automatic*: the agent looks once an hour and takes the fixes and the
+    modules as they come. A new MacGameFix is downloaded and checked while the
+    window is open, and starts when you choose *Relaunch*.
+  - *Ask first*: the agent checks what is new and tells you, and takes
+    nothing. *Update*, above the tabs, or *Install the Update* in the menu bar
+    takes it.
+  - *Off*: nothing is looked for.
+
+  What waits shows above the tabs as one notice with one button, and the menu
+  bar has one line and one command for it. The notice and the agent's
+  notification say what the update brings, in a few short lines: a catalog
+  carries them under its signature (`fixes/WHATS-NEW.txt` and
+  `engine/WHATS-NEW.txt` when it was built), and a new MacGameFix's come from
+  its release notes.
 
   Improvements lists, under each improvement, every CrossOver app and NotProton
   runner by its release ("CrossOver Preview 20261015"), with a switch, and *All*
@@ -196,15 +205,15 @@ until you turn it on, and the fixes stay in the games' own folders as before.
     the window shows *Older build: install to update*; the agent installs it
     again once the game is closed. Spider-Man 2's says *Needs repair* instead,
     since its shaders are rebuilt for each game build as well.
-- **A new MacGameFix.** The catalogs bring fixes and modules; a new tab, an
-  option or a fix an older app cannot install needs a new app. The agent asks
-  once an hour whether there is a newer MacGameFix, and so does the window
-  while it is open. When there is one, a notification says so, the menu bar
-  carries *Update to MacGameFix …*, and the window shows it above the tabs:
+- **A new MacGameFix.** A new tab, an option or a fix an older app cannot
+  install needs a new app, and it comes with the same update. The agent says so
+  in a notification, the menu bar carries *Update to MacGameFix …*, and the
+  window shows it above the tabs:
   - *What's New* opens the release's page.
   - *Update* downloads the new app and checks it; nothing is replaced yet.
-    *Install and Relaunch* then puts it where this one is and opens it, and
-    the menu bar item starts again from the new one.
+    *Relaunch* then puts it where this one is and opens it, and the menu bar
+    item starts again from the new one. On *Automatic* it is downloaded
+    already, and only *Relaunch* is left.
   - The download is taken only when it is signed with the same Developer ID
     and identifier as the MacGameFix asking, every file in it is what the
     signature sealed, and its version is the one offered and newer than this
@@ -212,8 +221,6 @@ until you turn it on, and the fixes stay in the games' own folders as before.
   - A copy that cannot replace itself says why and sends you to the release's
     page: one macOS runs from a read-only place (move it to Applications), one
     in a folder your account cannot change, and a build signed ad hoc.
-  - *Tell me about a new MacGameFix*, in Settings, turns the question off.
-    *Check Now* asks at once. Nothing is ever installed without *Update*.
   - The question goes to MacGameFix's service, which keeps a table of the
     versions and where each one's zip is on GitHub, and to GitHub's own API when
     the service does not answer. The app sends its version and nothing about
@@ -899,6 +906,14 @@ with `xcrun notarytool store-credentials`).
 - **The key is not a secret once it ships:** it is in every copy of the app.
   It names the app to the service, which lets that client read the table of
   versions and nothing more. It never enters the repository.
+
+**What an update brings.** `fixes/WHATS-NEW.txt` and `engine/WHATS-NEW.txt` hold,
+a line for each thing, what the catalog being built brings since the one
+before it, in words for whoever plays. The build puts them into `catalog.json`
+and `modules.json` as `notes`, under the signature. Rewrite them with every
+change, before building: what stays there is said again with the next catalog.
+A new app's come from its release notes: the bold lead of each item is what the
+notice and the notification show.
 
 **A change to the fixes or the Wine modules alone needs no new app.** Installed
 apps take each catalog from the latest release on their own, so the release

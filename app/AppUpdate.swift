@@ -55,6 +55,8 @@ enum AppUpdate {
         var sha256File: URL? = nil
         /// The release's page: its notes, and the app for whoever takes it by hand.
         let page: URL?
+        /// The release's notes, when whoever answered gave them (Notes reads them).
+        var notes: String? = nil
     }
 
     /// A downloaded app that passed every check, waiting to take this one's place.
@@ -117,6 +119,7 @@ enum AppUpdate {
         let downloadUrl: URL
         let sha256: String?
         let releaseUrl: URL?
+        let notes: String?
     }
 
     private static let held = NSLock()
@@ -179,7 +182,8 @@ enum AppUpdate {
         if saved != nil || service != nil, let row = try? await latestRow(),
            ["https", "file"].contains(row.downloadUrl.scheme ?? "") {
             guard Catalog.versionLess(current, row.version) else { return nil }
-            return Offer(version: row.version, zip: row.downloadUrl, sha256: row.sha256?.lowercased(), page: row.releaseUrl)
+            return Offer(version: row.version, zip: row.downloadUrl, sha256: row.sha256?.lowercased(), page: row.releaseUrl,
+                         notes: row.notes)
         }
         return try await checkGitHub(current: current)
     }
@@ -195,7 +199,7 @@ enum AppUpdate {
         guard let zip = release.assets.first(where: { $0.name == name }) else { return nil }
         return Offer(version: version, zip: zip.browser_download_url,
                      sha256File: release.assets.first { $0.name == name + ".sha256" }?.browser_download_url,
-                     page: release.html_url)
+                     page: release.html_url, notes: release.body)
     }
 
     /// Why this copy cannot put another in its own place, or nil when it can. It is

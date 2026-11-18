@@ -747,9 +747,13 @@ echo "== new fixes, asked first"
 cp -R "$RES" "$T/res2"
 /usr/bin/python3 - "$T/res2/catalog.json" <<'PY'
 import json, sys
-d = json.load(open(sys.argv[1])); d["version"] = 4000000005; json.dump(d, open(sys.argv[1], "w"))
+d = json.load(open(sys.argv[1])); d["version"] = 4000000005
+# What the catalog says it brings, a line for each thing.
+d["notes"] = "Fake Game runs its movies. And more words about it.\nA second thing"
+json.dump(d, open(sys.argv[1], "w"))
 PY
 "$BIN" --make-catalog "$T/release2" --key "$T/test.key" --from "$T/res2" >/dev/null
+check '/usr/bin/grep -q "Fake Game runs its movies" "$T/release2/catalog.json"' "a release's catalog carries what it brings, under its signature"
 due() { /usr/bin/python3 - "$SUPPORT/MacGameFix/agent-state.json" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1])); d["lastUpdateCheck"] = -1e9; json.dump(d, open(sys.argv[1], "w"))
@@ -759,15 +763,16 @@ waiting() { /usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[
 newagent() { MACGAMEFIX_CATALOG_SOURCE="$T/release2" MACGAMEFIX_CATALOG_PUBKEY="$PUB" "$BIN" --agent-once 2>&1; }
 before="$(readlink "$SUPPORT/MacGameFix/catalog/current")"
 printf '{"kept":[],"updates":true,"askFirst":true}' > "$SUPPORT/MacGameFix/automatic.json"; due
-check 'has "$(newagent)" "New fixes are ready (catalog 4000000005)" && [ "$(readlink "$SUPPORT/MacGameFix/catalog/current")" = "$before" ] && [ "$(waiting)" = 4000000005 ]' "asked first, a newer catalog is offered and nothing is installed"
+check 'out="$(newagent)"; has "$out" "New fixes are ready (catalog 4000000005)" && has "$out" "Fake Game runs its movies. A second thing." && [ "$(readlink "$SUPPORT/MacGameFix/catalog/current")" = "$before" ] && [ "$(waiting)" = 4000000005 ]' "asked first, a newer catalog is offered and nothing is installed"
 due
 check '! has "$(newagent)" "New fixes are ready" && [ "$(readlink "$SUPPORT/MacGameFix/catalog/current")" = "$before" ]' "and offered once"
 printf '{"kept":[],"updates":false,"askFirst":false}' > "$SUPPORT/MacGameFix/automatic.json"; due
 newagent >/dev/null
 check '[ "$(readlink "$SUPPORT/MacGameFix/catalog/current")" = "$before" ]' "with updates off, the agent takes nothing"
 printf '{"kept":[],"updates":true,"askFirst":false}' > "$SUPPORT/MacGameFix/automatic.json"; due
-newagent >/dev/null
+out="$(newagent)"
 check '[ "$(readlink "$SUPPORT/MacGameFix/catalog/current")" = 4000000005 ] && [ "$(waiting)" = 0 ]' "automatic, it is installed and no longer waiting"
+check 'has "$out" "The fixes were updated. Fake Game runs its movies. A second thing."' "and the agent says what it brings"
 
 echo "== the Wine modules, on their own"
 # A Wine modules' catalog of fake modules for build 27.0.0.41069, signed with the test key.
@@ -959,7 +964,9 @@ release() { # <name> <version GitHub names>: the folder's app as GitHub's latest
 import json, pathlib, sys
 d, v = pathlib.Path(sys.argv[1]), sys.argv[2]
 names = (f"MacGameFix-{v}.zip", f"MacGameFix-{v}.zip.sha256")
-json.dump({"tag_name": "v" + v, "html_url": f"https://example.invalid/releases/tag/v{v}",
+# The release's notes as they are written: a heading, items with a bold lead, nested ones.
+body = f"## MacGameFix {v}\n\n### App\n\n- **One update for everything.** More words about it.\n  - A nested item.\n- A second thing. And more.\n"
+json.dump({"tag_name": "v" + v, "html_url": f"https://example.invalid/releases/tag/v{v}", "body": body,
            "assets": [{"name": n, "browser_download_url": (d / n).as_uri()} for n in names]}, open(d / "release.json", "w"))
 PY
 }
@@ -981,9 +988,10 @@ else
   variant new 9.9.9 "$AUTH"
   release new 9.9.9
   check 'has "$(appcheck new)" "available 9.9.9"' "a newer MacGameFix is found"
+  check 'has "$(appcheck new)" "brings One update for everything. A second thing."' "with what it brings, from the release's notes"
   # The agent says so once, the menu carries it, and with the setting off it does not look.
   printf '{"kept":[],"updates":false,"modulesUpdates":false}' > "$SUPPORT/MacGameFix/automatic.json"; appdue
-  check 'has "$(MACGAMEFIX_APP_SOURCE="$A/rel-new" "$BIN" --agent-once 2>&1)" "MacGameFix 9.9.9 is available"' "the agent says so"
+  check 'has "$(MACGAMEFIX_APP_SOURCE="$A/rel-new" "$BIN" --agent-once 2>&1)" "MacGameFix 9.9.9 is available. Open MacGameFix to update. One update for everything. A second thing."' "the agent says so, and what it brings"
   check 'has "$(menu)" "app | Update to MacGameFix 9.9.9"' "and the menu offers it"
   appdue
   check '! has "$(MACGAMEFIX_APP_SOURCE="$A/rel-new" "$BIN" --agent-once 2>&1)" "is available"' "once for a version"
@@ -1023,13 +1031,14 @@ PY
 import json, pathlib, sys
 a, s, v = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 row = {"version": "9.9.9", "tag": "v9.9.9", "prerelease": False, "releaseUrl": "https://example.invalid/releases/tag/v9.9.9",
-       "downloadUrl": (a / "rel-new" / "MacGameFix-9.9.9.zip").as_uri(), "sha256": s.upper(), "sizeBytes": 1, "minimumSystem": "14.0"}
+       "downloadUrl": (a / "rel-new" / "MacGameFix-9.9.9.zip").as_uri(), "sha256": s.upper(), "sizeBytes": 1, "minimumSystem": "14.0",
+       "notes": "- **Said by the service.** And more."}
 json.dump(row, open(a / "site-new.json", "w"))
 json.dump(dict(row, version=v), open(a / "site-same.json", "w"))
 json.dump(dict(row, downloadUrl="ftp://example.invalid/MacGameFix-9.9.9.zip"), open(a / "site-ftp.json", "w"))
 (a / "site-broken.json").write_text("<html>502</html>")
 PY
-  check 'has "$(MACGAMEFIX_APP_SITE="$A/site-new.json" "$COPY" --app-update-check 2>&1)" "available 9.9.9"' "the service's answer is taken"
+  check 'out="$(MACGAMEFIX_APP_SITE="$A/site-new.json" "$COPY" --app-update-check 2>&1)"; has "$out" "available 9.9.9" && has "$out" "brings Said by the service."' "the service's answer is taken, with what it says the version brings"
   check 'has "$(MACGAMEFIX_APP_SITE="$A/site-same.json" appcheck new)" "up to date"' "and GitHub is not asked when the service answers"
   check 'has "$(MACGAMEFIX_APP_SITE="$A/site-broken.json" appcheck new)" "available 9.9.9" && has "$(MACGAMEFIX_APP_SITE="$A/none.json" appcheck new)" "available 9.9.9"' "a service that answers nothing readable, or not at all, leaves the question to GitHub"
   check 'has "$(MACGAMEFIX_APP_SITE="$A/site-ftp.json" "$COPY" --app-update-check 2>&1)" "up to date"' "a download the service names over anything but HTTPS is not taken"

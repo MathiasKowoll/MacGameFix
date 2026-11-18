@@ -1,0 +1,7 @@
+# What the Wine modules' catalog brings since the one before it: a line for each
+# thing, in words for whoever plays. The build puts these lines into modules.json as
+# "notes"; the app shows them with the update and the agent in its notification.
+# Rewrite them with every change to the modules: what stays here is said again with
+# the next catalog. Lines that start with # are not carried.
+A protected game no longer hangs or closes when something pauses one of its threads (CrossOver Preview 41303, under Rosetta).
+An improvement that was never installed in a runner reads as absent, not as outdated.

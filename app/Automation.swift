@@ -212,6 +212,11 @@ struct AgentState: Codable {
     var lastApp = ""
     var availableApp = ""
     var availableAppPage = ""
+    /// What each thing that waits brings, as its publisher wrote it (Notes): the two
+    /// catalogs asked about first, and the newer MacGameFix.
+    var availableNotes = ""
+    var availableModulesNotes = ""
+    var availableAppNotes = ""
     /// The CrossOver folders the agent has seen, to tell a new NotProton runner
     /// from one the user simply never chose; and what it last said of each.
     var engineSeen: [String]?
@@ -234,6 +239,9 @@ struct AgentState: Codable {
         lastApp = try c.decodeIfPresent(String.self, forKey: .lastApp) ?? ""
         availableApp = try c.decodeIfPresent(String.self, forKey: .availableApp) ?? ""
         availableAppPage = try c.decodeIfPresent(String.self, forKey: .availableAppPage) ?? ""
+        availableNotes = try c.decodeIfPresent(String.self, forKey: .availableNotes) ?? ""
+        availableModulesNotes = try c.decodeIfPresent(String.self, forKey: .availableModulesNotes) ?? ""
+        availableAppNotes = try c.decodeIfPresent(String.self, forKey: .availableAppNotes) ?? ""
         engineSeen = try c.decodeIfPresent([String].self, forKey: .engineSeen)
         engineNoted = try c.decodeIfPresent([String: String].self, forKey: .engineNoted) ?? [:]
     }
@@ -251,11 +259,26 @@ struct AgentState: Codable {
         !availableApp.isEmpty && Catalog.versionLess(Catalog.appVersion, availableApp) ? availableApp : nil
     }
 
+    /// Everything the releases bring, in one line: what waits for the user, or that
+    /// nothing does. The menu's line, and the notification after Check for Updates.
+    var updateSummary: String {
+        var parts: [String] = []
+        if let version = waitingApp { parts.append("MacGameFix \(version)") }
+        if waiting != nil { parts.append("new fixes") }
+        if waitingModules != nil { parts.append("new Wine modules") }
+        if !parts.isEmpty { return "An update is available: " + parts.joined(separator: ", ") + "." }
+        if let failed = [lastUpdate, lastModulesUpdate, lastApp].first(where: { $0.hasPrefix("Update check failed") }) {
+            return failed
+        }
+        return "MacGameFix \(Catalog.appVersion) and its fixes are up to date."
+    }
+
     /// What a look at the releases found of the app, kept for the menu and the window.
     mutating func note(app offer: AppUpdate.Offer?, at now: Date) {
         lastAppCheck = now
         availableApp = offer?.version ?? ""
         availableAppPage = offer?.page?.absoluteString ?? ""
+        availableAppNotes = offer?.notes ?? ""
         lastApp = offer.map { "MacGameFix \($0.version) is available." }
             ?? "MacGameFix is up to date (\(Catalog.appVersion))."
     }
@@ -269,6 +292,9 @@ struct AgentState: Codable {
     }
     static func offered(_ kind: CatalogKind) -> WritableKeyPath<AgentState, Int> {
         kind == .fixes ? \.available : \.availableModules
+    }
+    static func offeredNotes(_ kind: CatalogKind) -> WritableKeyPath<AgentState, String> {
+        kind == .fixes ? \.availableNotes : \.availableModulesNotes
     }
 
     static func load() -> AgentState {
@@ -309,16 +335,20 @@ enum Agent {
         let what = kind == .fixes ? "New fixes" : "New Wine modules"
         if ask && !force {
             do {
-                if let version = try await Updater.check(kind) {
+                if let (version, notes) = try await Updater.check(kind) {
                     if state[keyPath: AgentState.offered(kind)] != version {
+                        let brings = Notes.line(notes)
                         events.append(AgentEvent(date: now, game: "",
                                                  message: "\(what) are ready (catalog \(version)). Install them from the "
-                                                     + "menu bar or MacGameFix's Settings.", failed: false))
+                                                     + "menu bar or MacGameFix's Settings." + (brings.isEmpty ? "" : " " + brings),
+                                                 failed: false))
                     }
                     state[keyPath: AgentState.offered(kind)] = version
+                    state[keyPath: AgentState.offeredNotes(kind)] = notes ?? ""
                     state[keyPath: AgentState.line(kind)] = "\(what) are ready: catalog \(version)."
                 } else {
                     state[keyPath: AgentState.offered(kind)] = 0
+                    state[keyPath: AgentState.offeredNotes(kind)] = ""
                     state[keyPath: AgentState.line(kind)] =
                         "The \(kind.noun) are up to date (catalog \(Catalog.active(kind).manifest?.version ?? 0))."
                 }
@@ -331,15 +361,19 @@ enum Agent {
         do {
             let line = try await Updater.update(kind)
             state[keyPath: AgentState.offered(kind)] = 0
+            state[keyPath: AgentState.offeredNotes(kind)] = ""
             state[keyPath: AgentState.line(kind)] = line
             let added = kind == .fixes
                 ? Catalog.games(in: Catalog.active().dir).map(\.name).filter { !before.contains($0) } : []
+            // What the catalog taken brings, in its publisher's words, after what is said anyway.
+            let brings = line.hasPrefix(what) ? Notes.line(Catalog.active(kind).manifest?.notes) : ""
             if !added.isEmpty {
-                events.append(AgentEvent(date: now, game: "", message: "New fixes: " + added.joined(separator: ", "),
-                                         failed: false))
+                events.append(AgentEvent(date: now, game: "", message: "New fixes: " + added.joined(separator: ", ")
+                                             + (brings.isEmpty ? "" : ". " + brings), failed: false))
             } else if line.hasPrefix(what) {
                 events.append(AgentEvent(date: now, game: "",
-                                         message: kind == .fixes ? "The fixes were updated." : "The Wine modules were updated.",
+                                         message: (kind == .fixes ? "The fixes were updated." : "The Wine modules were updated.")
+                                             + (brings.isEmpty ? "" : " " + brings),
                                          failed: false))
             }
         } catch {
@@ -355,9 +389,10 @@ enum Agent {
         do {
             let offer = try await AppUpdate.check()
             if let offer, state.availableApp != offer.version {
+                let brings = Notes.line(offer.notes)
                 events.append(AgentEvent(date: now, game: "",
-                                         message: "MacGameFix \(offer.version) is available. Open MacGameFix to update.",
-                                         failed: false))
+                                         message: "MacGameFix \(offer.version) is available. Open MacGameFix to update."
+                                             + (brings.isEmpty ? "" : " " + brings), failed: false))
             }
             state.note(app: offer, at: now)
         } catch {
@@ -557,16 +592,17 @@ enum Updater {
         return (try JSONDecoder().decode(CatalogManifest.self, from: manifestData), manifestData, zipURL)
     }
 
-    /// The version of a newer catalog this app can take, its signature checked
-    /// but nothing downloaded or installed; nil when the fixes are up to date.
+    /// The version of a newer catalog this app can take and what it says it brings,
+    /// its signature checked but nothing downloaded or installed; nil when the fixes
+    /// are up to date.
     static func check(_ kind: CatalogKind = .fixes, from source: URL? = Updater.source,
-                      publicKey key: String = Updater.key) async throws -> Int? {
+                      publicKey key: String = Updater.key) async throws -> (version: Int, notes: String?)? {
         let (manifest, _, _) = try await signedManifest(kind, source, key: key)
         guard manifest.version > (Catalog.active(kind).manifest?.version ?? 0) else { return nil }
         guard !Catalog.versionLess(Catalog.appVersion, manifest.minimumApp) else {
             throw Failure.app(manifest.minimumApp)
         }
-        return manifest.version
+        return (manifest.version, manifest.notes)
     }
 
     /// Takes a newer catalog of one kind from the latest release, or from
@@ -654,6 +690,8 @@ enum Updater {
         struct Asset: Decodable { let name: String; let browser_download_url: URL }
         let tag_name: String?
         let html_url: URL?
+        /// The release's notes, in Markdown.
+        let body: String?
         let assets: [Asset]
     }
 
@@ -689,7 +727,7 @@ enum Updater {
     /// signature of catalog.json with the private key at `keyFile`; modules.zip
     /// and the rest for the Wine modules.
     static func makeRelease(_ kind: CatalogKind = .fixes, from resources: URL, to out: URL, keyFile: URL,
-                            version: Int, minimumApp: String, names: [String]) throws {
+                            version: Int, minimumApp: String, names: [String], notes: String? = nil) throws {
         let fm = FileManager.default
         let stem = kind.stem
         try fm.createDirectory(at: out, withIntermediateDirectories: true)
@@ -711,7 +749,7 @@ enum Updater {
         ditto.waitUntilExit()
         try? fm.removeItem(at: flat)
         let manifest = CatalogManifest(version: version, minimumApp: minimumApp, files: files,
-                                       zipSHA256: hex(SHA256.hash(data: try Data(contentsOf: zip))))
+                                       zipSHA256: hex(SHA256.hash(data: try Data(contentsOf: zip))), notes: notes)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let manifestData = try encoder.encode(manifest)

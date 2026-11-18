@@ -300,17 +300,24 @@ echo "    ${#ENGINE[@]} files"
 # catalog.json and modules.json: what each catalog is -- built now, so a newer
 # build wins -- and every file with its hash. The agent compares a release's
 # catalogs with them, each on its own: the game fixes, and the Wine modules.
-manifest() { # <name> <minimum app> <files...>
+# "notes" is what the catalog brings, a line for each thing, as fixes/WHATS-NEW.txt and
+# engine/WHATS-NEW.txt say it when the catalog is built: the app shows it with the
+# update, and the agent in its notification. Lines that start with # are not carried.
+manifest() { # <name> <minimum app> <notes file> <files...>
   /usr/bin/python3 - "$RES" "$@" <<'PY'
 import hashlib, json, pathlib, sys, time
-res, out, minimum, names = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4:]
+res, out, minimum, notes, names = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3], pathlib.Path(sys.argv[4]), sys.argv[5:]
 files = {n: hashlib.sha256((res / n).read_bytes()).hexdigest() for n in names}
-json.dump({"version": int(time.time()), "minimumApp": minimum, "files": files},
-          open(res / out, "w"), indent=2, sort_keys=True)
+manifest = {"version": int(time.time()), "minimumApp": minimum, "files": files}
+if notes.is_file():
+    said = "\n".join(l.rstrip() for l in notes.read_text().splitlines() if l.strip() and not l.startswith("#"))
+    if said:
+        manifest["notes"] = said
+json.dump(manifest, open(res / out, "w"), indent=2, sort_keys=True)
 PY
 }
-manifest catalog.json "$CATALOG_MIN_APP" games.json "${PAYLOAD[@]}"
-manifest modules.json "$MODULES_MIN_APP" "${ENGINE[@]}"
+manifest catalog.json "$CATALOG_MIN_APP" "$ROOT/fixes/WHATS-NEW.txt" games.json "${PAYLOAD[@]}"
+manifest modules.json "$MODULES_MIN_APP" "$ROOT/engine/WHATS-NEW.txt" "${ENGINE[@]}"
 
 # No entitlements. Read from the code, the hardened runtime asks for one only
 # for what the app does not do: it compiles no code at run time (no JIT), loads
