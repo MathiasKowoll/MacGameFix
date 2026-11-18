@@ -906,6 +906,9 @@ with `xcrun notarytool store-credentials`).
 - **The key is not a secret once it ships:** it is in every copy of the app.
   It names the app to the service, which lets that client read the table of
   versions and nothing more. It never enters the repository.
+- **The tests never reach it:** with `MACGAMEFIX_APP_SOURCE` set, as
+  `test-automation.sh` sets it, the app leaves the address it was built with
+  alone and asks only a service the test names (`MACGAMEFIX_UPDATES_BASE`).
 
 **What an update brings.** `fixes/WHATS-NEW.txt` and `engine/WHATS-NEW.txt` hold,
 a line for each thing, what the catalog being built brings since the one

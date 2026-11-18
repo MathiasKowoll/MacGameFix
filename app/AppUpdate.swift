@@ -96,10 +96,14 @@ enum AppUpdate {
     /// Where the service is and the key of the app's client there: what the build was
     /// given (Info.plist, from build-app.sh), or MACGAMEFIX_UPDATES_BASE and
     /// MACGAMEFIX_UPDATES_SECRET for the tests and a development backend. nil in a
-    /// build that was given neither, which asks GitHub.
+    /// build that was given neither, which asks GitHub. A test that names its own
+    /// release (MACGAMEFIX_APP_SOURCE) asks no service but one it names as well: the
+    /// address the build was given is left alone, so no test reaches the real one.
     static var service: (base: URL, secret: String)? {
         let env = ProcessInfo.processInfo.environment
-        let base = env["MACGAMEFIX_UPDATES_BASE"] ?? Bundle.main.object(forInfoDictionaryKey: "MacGameFixUpdatesBase") as? String
+        let given = env["MACGAMEFIX_APP_SOURCE"] == nil
+            ? Bundle.main.object(forInfoDictionaryKey: "MacGameFixUpdatesBase") as? String : nil
+        let base = env["MACGAMEFIX_UPDATES_BASE"] ?? given
         let secret = env["MACGAMEFIX_UPDATES_SECRET"]
             ?? Bundle.main.object(forInfoDictionaryKey: "MacGameFixUpdatesSecret") as? String
         guard let base, let secret, !secret.isEmpty, let url = URL(string: base), url.scheme != nil else { return nil }

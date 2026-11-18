@@ -1092,6 +1092,17 @@ PY
   touch "$A/stub/down"
   check 'has "$(asked "key+with a space")" "up to date" && [ "$(stublog)" = "token given;latest 500;" ]' "and so does a service that fails"
   rm -f "$A/stub/down"
+  # The address and key the build was given (Info.plist): asked when nothing else is
+  # named, and left alone by a test that names its own release, as every test here
+  # does, so that none of them reaches the real service.
+  mkdir -p "$A/given"
+  cp -R "$HERE/MacGameFix.app" "$A/given/"
+  plutil -replace MacGameFixUpdatesBase -string "$STUB" "$A/given/MacGameFix.app/Contents/Info.plist"
+  plutil -replace MacGameFixUpdatesSecret -string "key+with a space" "$A/given/MacGameFix.app/Contents/Info.plist"
+  codesign --force --deep --sign - "$A/given/MacGameFix.app" >/dev/null 2>&1
+  GIVEN="$A/given/MacGameFix.app/Contents/MacOS/MacGameFix"
+  check 'has "$("$GIVEN" --app-update-check 2>&1)" "up to date" && [ -z "$(stublog)" ]' "a test that names its own release does not reach the address the build was given"
+  check 'has "$(env -u MACGAMEFIX_APP_SOURCE "$GIVEN" --app-update-check 2>&1)" "available 9.9.9" && [ "$(stublog)" = "token given;latest 200 MacGameFix/$APPV;" ]' "and with none named, the build's own address and key are asked"
   kill "$STUB_PID" 2>/dev/null; STUB_PID=0
   check 'has "$(asked "key+with a space")" "up to date"' "and one that is not there"
 
