@@ -779,7 +779,7 @@ in 311 lines, `winecoreaudio.drv/coreaudio.c` in 330, `setupapi/devinst.c` in 19
 - `0030` is not needed: Wine 11.0 has no `get_usb_device_info`, and answers
   `BusQueryContainerID` for every device.
 
-The modules go from four files to fifteen: `winebus.so`, `hidclass.sys`, `setupapi.dll`,
+The modules go from four files to fourteen: `winebus.so`, `hidclass.sys`, `setupapi.dll`,
 `xaudio2_9.dll` and the six `xinput` DLLs are replaced in a CrossOver 26.3 for the first time.
 `ntdll.so` and `winebus.sys` are the files that were there, since nothing they are built from
 changed. Each module exports what CodeWeavers' does. Their imports differ by toolchain, as
@@ -793,11 +793,15 @@ Run on 2026-11-18 with `tests/pad-probe/run.sh` in two copies of the 26.3 NotPro
 an Edge connected on Bluetooth, the options at their defaults. With the four modules the
 runner had: the pad is `hid#vid_054c&pid_0df2` with a container Wine made up, the ANSI read
 of its container gives no WCHAR string, the four XInput slots are empty and none of the
-eight audio endpoints has a container. With these fifteen: the pad is
+eight audio endpoints has a container. With these fourteen: the pad is
 `hid#vid_054c&pid_0df2&col01` with `{32C48EF2-27F2-4948-9654-152804AF6378}`, its location's,
 from both functions; XInput slot 0 is connected; and a ninth endpoint, "DualSense Edge
 Wireless Controller", has that container. Both prefixes were created by the run, and Wine
 wrote the same errors in both.
+
+The same day the app's installer put them into CrossOver 26.3 (the app, signed again ad hoc)
+and into its NotProton runner, CodeWeavers' fourteen files kept in the backup, and the probe
+printed the same on the runner itself.
 
 No game is played on 26.3 with them yet, the haptics on a cable included.
 
