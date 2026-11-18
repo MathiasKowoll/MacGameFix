@@ -3,4 +3,5 @@
 # "notes"; the app shows them with the update and the agent in its notification.
 # Rewrite them with every change to the modules: what stays here is said again with
 # the next catalog. Lines that start with # are not carried.
-CrossOver Preview 20261006 and 20261015 are no longer maintained: their modules stay as they are, and new ones come for CrossOver 26.3 and the latest Preview.
+CrossOver 26.3 has the controller improvements the Previews have: a DualSense over Bluetooth is shown to games as one on a cable, with its triggers and haptics; XInput games get rumble; a game that sets no trigger effect can have one; the DualShock 4 is covered.
+These 26.3 modules were checked with a probe of what a game finds, and have not been played in a game yet.
