@@ -8,8 +8,8 @@ Each game has a file in docs/fixes/games/. It holds what only a person can say: 
 tells the story, who the fix owes, and which functions show the fix. The rest is read from
 where it already lives, so nothing is written twice:
 
-  - the installer's MGVF lines (title, executable, scope, why), copied into the game's file by
-    hand when the game is added and checked here against the installer;
+  - the installer's MGVF lines (title, executable, scope, why) and its SPDX line, copied into
+    the game's file by hand when the game is added and checked here against the installer;
   - the summary table at the top of the game's page under legacy/wiki (Symptom, Cause, Fix,
     Backend, CrossOver), unless the game's file says it otherwise;
   - process-features.json, the app's own table by executable: the graphics backend, the Game
@@ -55,6 +55,14 @@ def summary_table(page):
             if m and m.group(1) in TABLE_KEYS:
                 values.setdefault(TABLE_KEYS[m.group(1)], m.group(2).strip())
     return values
+
+
+def installer_licence(installer):
+    with open(os.path.join(ROOT, 'fixes', installer), encoding='utf-8') as f:
+        for line in f:
+            if line.startswith('# SPDX-License-Identifier:'):
+                return line.split(':', 1)[1].strip()
+    fail(f'{installer} has no SPDX-License-Identifier line')
 
 
 def installer_line(installer, title):
@@ -108,6 +116,10 @@ def game(file, features):
     parts = installer_line(d['installer'], d['title'])
     if (parts[1] if len(parts) > 1 else '') != (d.get('executable') or ''):
         fail(f'{file}: executable {d.get("executable")!r} differs from the installer\'s {parts[1]!r}')
+    # The licence is an SPDX identifier and nothing else, the installer's own: whoever reads
+    # fixes.json compares it with a list. What a fix ships under another licence goes in credits.
+    if d.get('license') != installer_licence(d['installer']):
+        fail(f'{file}: license {d.get("license")!r} differs from the installer\'s {installer_licence(d["installer"])!r}')
     page = summary_table(d['page']) if d.get('page') else {}
     for key in TABLE_KEYS.values():
         d[key] = d.get(key) or page.get(key)
