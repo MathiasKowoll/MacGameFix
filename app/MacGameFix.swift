@@ -151,7 +151,9 @@ final class Model: ObservableObject {
         let state = AgentState.load()
         events = state.events.reversed()
         keptLines = KeptLine.all(settings: settings, state: state)
-        if !state.lastUpdate.isEmpty { updateLine = state.lastUpdate }
+        // One line for everything, as the menu bar has it; a line of this window's own
+        // check stays until the agent has something else to say.
+        if updateLine.isEmpty { updateLine = state.updateSummary }
         waitingCatalog = state.waiting
         waitingModules = state.waitingModules
         waitingNotes = state.availableNotes
@@ -383,7 +385,12 @@ final class Model: ObservableObject {
     /// already found (its address is not kept), and at once when the user asks.
     func lookForApp(force: Bool = false) {
         guard force || settings.appUpdates else { return }
-        let state = AgentState.load()
+        var state = AgentState.load()
+        // The MacGameFix that was waiting is this one now: it is no longer news.
+        if !state.availableApp.isEmpty, state.waitingApp == nil {
+            state.note(app: nil, at: state.lastAppCheck)
+            state.save()
+        }
         guard force || state.waitingApp != nil
                 || Date().timeIntervalSince(state.lastAppCheck) > settings.updateEvery else { return }
         Task {
