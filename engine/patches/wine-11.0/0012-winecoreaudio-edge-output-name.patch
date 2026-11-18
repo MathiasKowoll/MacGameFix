@@ -1,0 +1,120 @@
+--- a/dlls/winecoreaudio.drv/dualsense_bt.h
++++ b/dlls/winecoreaudio.drv/dualsense_bt.h
+@@ -116,12 +116,10 @@
+     pthread_mutex_unlock(&lock);
+ }
+ 
+-/* The game this process runs for: the Steam app id Steam and NotProton give a
++/* The game as winebus.so knows it: the Steam app id Steam and NotProton give a
+  * game (SteamAppId, SteamGameId, STEAM_COMPAT_APP_ID), else the one in a Steam
+- * Play prefix's path, compatdata/<id>/pfx, else in a CrossOver bottle the one
+- * of its exe. winebus.so's has the first two; it runs in winedevice.exe, which
+- * is no game. */
+-static void pad_game(char *id, size_t size)
++ * Play prefix's path, compatdata/<id>/pfx. Empty in a CrossOver bottle. */
++static void pad_game_as_winebus(char *id, size_t size)
+ {
+     static const char *const names[] = {"SteamAppId", "SteamGameId", "STEAM_COMPAT_APP_ID"};
+     const char *v;
+@@ -141,6 +139,14 @@
+         n = strspn(v, "0123456789");
+         if (n && n < size && !strncmp(v + n, "/pfx", 4)) snprintf(id, size, "%.*s", (int)n, v);
+     }
++}
++
++/* The game this process runs for: as winebus.so knows it, else in a CrossOver
++ * bottle the one of its exe. winebus.so has no exe to go by: it runs in
++ * winedevice.exe, which is no game. */
++static void pad_game(char *id, size_t size)
++{
++    pad_game_as_winebus(id, size);
+     if (!id[0]) pad_game_by_exe(id, size);
+ }
+ 
+@@ -174,9 +180,9 @@
+  * applies from the next one: pad.d/<app id>.conf for this game, then pad.conf
+  * for every game, in ~/Library/Application Support/MacGameFix; the first line
+  * with the key wins. Copies the value into value; empty when no line has it. */
+-static void mgf_value(const char *key, char *value, size_t size)
++static void mgf_value_for(const char *game, const char *key, char *value, size_t size)
+ {
+-    char path[1024], line[128], game[24];
++    char path[1024], line[128];
+     const char *home = getenv("HOME");
+     size_t length = strlen(key);
+     int pass;
+@@ -184,7 +190,6 @@
+ 
+     value[0] = 0;
+     if (!home) return;
+-    pad_game(game, sizeof(game));
+     for (pass = 0; pass < 2; pass++)
+     {
+         if (pass == 0 && !game[0]) continue;
+@@ -205,6 +210,14 @@
+     }
+ }
+ 
++static void mgf_value(const char *key, char *value, size_t size)
++{
++    char game[24];
++
++    pad_game(game, sizeof(game));
++    mgf_value_for(game, key, value, size);
++}
++
+ static void mgf_dir(char *dir, size_t size)
+ {
+     snprintf(dir, size, "/tmp/macgamefix-%u", (unsigned int)getuid());
+@@ -358,6 +371,34 @@
+     return kAudioHardwareUnknownPropertyError;
+ }
+ 
++static BOOL mgf_wired_pad(AudioDeviceID device, BOOL *edge);
++
++/* An Edge shown to the game as a standard DualSense (edge=dualsense) is one on a
++ * cable as well: its audio device, output and microphone, has the DualSense's
++ * name and product id there too, as a Bluetooth pad's output has from mgf_scan.
++ * A game can look for the pad's output by its name: under NotProton's bridge
++ * NINJA GAIDEN 4 read every output's name and vibrated, the bridge's output
++ * being "DualSense Wireless Controller (Bluetooth Bridge)", a text the macOS
++ * name of an Edge's, "DualSense Edge Wireless Controller", does not hold.
++ * The setting is read for the game as winebus.so knows it, so that both show
++ * the same pad and every process of a prefix writes mmdevapi the same name; it
++ * is read when a process lists its audio devices, winebus.so's when
++ * winedevice.exe starts. */
++static BOOL mgf_edge_as_dualsense(AudioObjectID id)
++{
++    static LONG logged;
++    char value[16], game[24];
++    BOOL edge;
++
++    if (!mgf_wired_pad(id, &edge) || !edge) return FALSE;
++    pad_game_as_winebus(game, sizeof(game));
++    mgf_value_for(game, "edge", value, sizeof(value));
++    if (strcmp(value, "dualsense")) return FALSE;
++    if (!__atomic_exchange_n(&logged, 1, __ATOMIC_RELAXED))
++        pad_log("the wired DualSense Edge's audio device is named as a DualSense's (edge=dualsense)\n");
++    return TRUE;
++}
++
+ static OSStatus mgf_AudioObjectGetPropertyDataSize(AudioObjectID id, const AudioObjectPropertyAddress *addr,
+                                                    UInt32 qsize, const void *q, UInt32 *size)
+ {
+@@ -417,6 +458,16 @@
+     {
+         *(UInt32 *)data = 0;  /* kAudioStreamPropertyLatency, the only one asked */
+         *size = sizeof(UInt32);
++        return noErr;
++    }
++    if ((addr->mSelector == kAudioObjectPropertyName || addr->mSelector == kAudioDevicePropertyModelUID) &&
++        *size >= sizeof(CFStringRef) && mgf_edge_as_dualsense(id))
++    {
++        /* The caller releases it, as it would CoreAudio's. The model's ids make
++         * the endpoint's instance id, as for a Bluetooth pad's output. */
++        *(CFStringRef *)data = CFStringCreateWithCString(NULL, addr->mSelector == kAudioObjectPropertyName ?
++                "DualSense Wireless Controller" : "DualSense Wireless Controller:054C:0CE6", kCFStringEncodingUTF8);
++        *size = sizeof(CFStringRef);
+         return noErr;
+     }
+     return AudioObjectGetPropertyData(id, addr, qsize, q, size, data);
