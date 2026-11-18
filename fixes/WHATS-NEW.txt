@@ -3,3 +3,4 @@
 # catalog.json as "notes"; the app shows them with the update and the agent in its
 # notification. Rewrite them with every change to the fixes: what stays here is said
 # again with the next catalog. Lines that start with # are not carried.
+The Witcher 3: the menu offers DLSS frame generation; the game no longer reports it unsupported.

@@ -62,6 +62,8 @@ final class Model: ObservableObject {
     @Published var agentOn = LaunchAgent.enabled
     @Published var events: [AgentEvent] = []
     @Published var updateLine = ""
+    /// When anything new was last looked for (AgentState.lastLook).
+    @Published var lastLook: Date?
     /// A newer catalog the agent verified and was told to ask about first.
     @Published var waitingCatalog: Int?
     @Published var waitingModules: Int?
@@ -165,6 +167,7 @@ final class Model: ObservableObject {
         // One line for everything, as the menu bar has it; a line of this window's own
         // check stays until the agent has something else to say.
         if updateLine.isEmpty { updateLine = state.updateSummary }
+        lastLook = state.lastLook
         waitingCatalog = state.waiting
         waitingModules = state.waitingModules
         waitingNotes = state.availableNotes
@@ -368,6 +371,19 @@ final class Model: ObservableObject {
     /// How often anything new is looked for, as Settings says it.
     var looksEvery: String { updateMode == .off ? "never" : settings.updateWords }
 
+    /// The intervals Settings offers, and the one in the settings file when it is another.
+    var updateIntervals: [Int] {
+        let now = max(10, settings.updateMinutes)
+        return (AutoSettings.intervals + (AutoSettings.intervals.contains(now) ? [] : [now])).sorted()
+    }
+
+    /// The agent reads the file at each pass, so the next one already goes by it.
+    func setUpdateMinutes(_ minutes: Int) {
+        settings.updateMinutes = minutes
+        settings.save()
+        objectWillChange.send()
+    }
+
     /// Everything at once, when the user asks: every newer catalog is taken, a newer
     /// MacGameFix is looked for, and one this copy can take is downloaded and checked.
     /// Asked for, it takes the catalogs whatever the choice says, as Check Now always did.
@@ -433,6 +449,7 @@ final class Model: ObservableObject {
             var state = AgentState.load()
             state.note(app: offer, at: Date())
             state.save()
+            lastLook = state.lastLook
             if offer != appOffer { appReady = nil }
             appOffer = offer
         } catch {
@@ -1166,6 +1183,14 @@ enum UpdateWords {
         if step == .relaunch, let ready { return "MacGameFix \(ready) is ready. Relaunch to finish updating." }
         return "An update is available: \(parts.joined(separator: ", "))."
     }
+
+    /// When anything new was last looked for, as Settings says it.
+    static func looked(_ date: Date?) -> String {
+        date.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Not yet"
+    }
+
+    /// A choice or a value with its first letter raised: "Every hour".
+    static func raised(_ words: String) -> String { words.prefix(1).uppercased() + words.dropFirst() }
 
     /// The games on this Mac whose fix is installed and has a newer build in the catalog
     /// in use: the window's second notice, and the agent's notification.
@@ -2686,11 +2711,20 @@ struct SettingsView: View {
                 }
                 .help("The MacGameFix that is running and the two catalogs in use. A catalog's version is the moment "
                       + "it was made: the number a release's notes and a report name it by.")
-                LabeledContent("Looks for updates") {
-                    Text(verbatim: model.looksEvery.prefix(1).uppercased() + model.looksEvery.dropFirst())
+                if model.updateMode == .off {
+                    LabeledContent("Looks for updates") { Text(verbatim: UpdateWords.raised(model.looksEvery)) }
+                } else {
+                    Picker("Looks for updates", selection: Binding(get: { max(10, model.settings.updateMinutes) },
+                                                                   set: { model.setUpdateMinutes($0) })) {
+                        ForEach(model.updateIntervals, id: \.self) { minutes in
+                            Text(verbatim: UpdateWords.raised(AutoSettings.words(minutes))).tag(minutes)
+                        }
+                    }
+                    .help("How often MacGameFix asks whether anything is new: the app, the fixes and the Wine modules "
+                          + "are asked about together. What is found is taken or told as the choice above says.")
                 }
-                .help("How often MacGameFix asks whether anything is new: the app, the fixes and the Wine modules are "
-                      + "asked about together. What is found is taken or told as the choice above says.")
+                LabeledContent("Last looked") { Text(verbatim: UpdateWords.looked(model.lastLook)) }
+                    .help("When MacGameFix last asked whether anything is new, from the menu bar or from this window.")
                 if model.hasBanner {
                     Text(verbatim: model.noticeLine).font(.caption).foregroundStyle(.orange)
                 } else if !model.updateLine.isEmpty {
@@ -2763,7 +2797,11 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear { if model.engineRows.isEmpty { model.scanEngine() } }
+        .onAppear {
+            if model.engineRows.isEmpty { model.scanEngine() }
+            // What the agent did since the window last asked: when it last looked, above all.
+            model.refreshEvents()
+        }
     }
 }
 
@@ -2850,6 +2888,7 @@ enum Entry {
                 print("fixes | \(UpdateWords.catalog(Catalog.active().manifest?.version ?? 0))")
                 print("modules | \(UpdateWords.catalog(Catalog.active(.modules).manifest?.version ?? 0))")
                 print("looks | \(settings.updatesOff ? "never" : settings.updateWords)")
+                print("looked | \(UpdateWords.looked(state.lastLook))")
                 // The second notice: the games here whose fix has a newer build in the catalog in use.
                 let dir = Catalog.active().dir
                 var behind: [String] = []

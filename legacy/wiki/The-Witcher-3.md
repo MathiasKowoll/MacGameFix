@@ -44,7 +44,15 @@ update moved the register that code compares (r14 became r13), so the match
 now accepts any register. The other calls still see Wine. With that one answer, `slInit` returns 0, Streamline
 loads `sl.common` and `sl.dlss`, reports DLSS and Ray Reconstruction as
 supported, and DLSS runs through D3DMetal's MetalFX path and looks right.
-Frame generation does not work.
+
+Frame generation is offered since 2026-11-18. The game's DLSS-G check reads the
+flag its ray-tracing Wine check sets, and reported frame generation unsupported
+while it said Wine; that one reader now skips the flag, which stays set
+([issue 26](https://github.com/MathiasKowoll/MacGameFix/issues/26) found it and
+its byte pattern). What it gives depends on D3DMetal: the issue reports 110-120
+frames shown on CrossOver Preview with `D3DM_MAX_FPS=120`; on NotProton,
+measured that day on an M4 Max, switching it on presented no more frames than
+before.
 
 ## Ray tracing
 

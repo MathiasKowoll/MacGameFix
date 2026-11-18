@@ -5,7 +5,7 @@
   "executable": "witcher3.exe",
   "carrierDirectory": "bin/x64_dx12",
   "alsoRuns": [],
-  "summary": "Refuses the stream-output pipeline that crashes D3DMetal's shader converter, and lets the game offer DLSS.",
+  "summary": "Refuses the stream-output pipeline that crashes D3DMetal's shader converter, and lets the game offer DLSS and frame generation.",
   "page": "legacy/wiki/The-Witcher-3.md",
   "installs": [
     "amd_fidelityfx_loader_dx12-w3.dll",
@@ -20,6 +20,11 @@
       "name": "tholtman1-del",
       "url": "https://github.com/tholtman1-del/witcher3-crossover-fix",
       "note": "The diagnosis of the black screen and the rule that refuses the pipeline (MIT)."
+    },
+    {
+      "name": "sbhaleraoopen",
+      "url": "https://github.com/MathiasKowoll/MacGameFix/issues/26",
+      "note": "The check that kept frame generation off under Wine and the bytes it is found by; maple-quartz18 confirmed them on 5.01c."
     }
   ],
   "excerpts": [
@@ -32,6 +37,11 @@
       "file": "w3-streamout-fix.c",
       "symbol": "my_gfx",
       "note": "The refusal: E_INVALIDARG before the pipeline reaches Apple's shader converter, which crashed on it and left the game deadlocked on a black screen."
+    },
+    {
+      "file": "w3-streamout-fix.c",
+      "symbol": "allow_frame_generation",
+      "note": "The game's DLSS-G check stops reading the flag its Wine check sets, so the menu offers frame generation; the flag stays set and ray tracing stays off."
     }
   ]
 }

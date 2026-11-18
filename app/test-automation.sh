@@ -786,6 +786,21 @@ check 'has "$out" "app | MacGameFix $APPV" && has "$out" "fixes | catalog 400000
 check 'has "$out" "looks | every hour" && has "$out" "notice | none"' "updates are looked for every hour, and with nothing waiting there is no notice"
 check 'has "$(every true 10)" "looks | every 10 minutes" && has "$(every true 1440)" "looks | once a day" && has "$(every true 120)" "looks | every 2 hours"' "another interval in the settings file is said as it is"
 check 'has "$(every true 1)" "looks | every 10 minutes" && has "$(every false 60)" "looks | never"' "nothing under ten minutes, and never with updates off"
+# When anything new was last looked for: the latest of the three questions, whoever asked.
+looked() { /usr/bin/python3 - "$SUPPORT/MacGameFix/agent-state.json" "$@" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+for key, value in zip(("lastUpdateCheck", "lastModulesCheck", "lastAppCheck"), sys.argv[2:]): d[key] = float(value)
+json.dump(d, open(sys.argv[1], "w"))
+PY
+}
+cp "$SUPPORT/MacGameFix/agent-state.json" "$T/state.before-looked"
+# Dates in the state file count from 2001: -1e9 is before any look, and 5e8 and 6e8 are days in 2016 and 2020.
+looked -1e9 -1e9 -1e9
+check 'has "$(upd)" "looked | Not yet"' "before the first look, Settings says it has not looked yet"
+looked 5e8 -1e9 6e8
+check 'out="$(upd)"; has "$out" "looked | " && has "$out" "2020" && ! has "$out" "2016" && ! has "$out" "Not yet"' "after it, the day and time of the latest of the three questions"
+cp "$T/state.before-looked" "$SUPPORT/MacGameFix/agent-state.json"
 printf '{"kept":[],"updates":true,"askFirst":false}' > "$SUPPORT/MacGameFix/automatic.json"
 
 echo "== the Wine modules, on their own"
