@@ -97,7 +97,7 @@ final class Model: ObservableObject {
     /// The Wine modules' catalog in use, apart from the fixes'.
     var modulesDir = URL(fileURLWithPath: ".")
 
-    private let extraKey = "extraFolders"
+    private let extraKey = Libraries.extraKey
 
     /// Posted when the user has seen what the agent did; the menu bar drops its dot.
     static let seenNotification = Notification.Name("io.github.macgamefix.seen")
@@ -465,6 +465,10 @@ final class Model: ObservableObject {
 
     var selected: [Hit] { hits.filter { $0.selected && $0.selectable } }
 
+    /// The games here whose fix is installed and has a newer build in the catalog in
+    /// use: the second notice above the tabs, with its Install.
+    var behind: [Hit] { hits.filter { $0.state == .outdated && $0.blocker == nil } }
+
     func note(_ s: String) { log.append(s) }
 
     func addFolder() {
@@ -544,11 +548,13 @@ final class Model: ObservableObject {
         }
     }
 
-    func apply(install: Bool) {
+    /// Installs or removes the selected games' fixes, or those of `only`: the games the
+    /// notice above the tabs names.
+    func apply(install: Bool, only: [Hit]? = nil) {
         guard !busy else { return }
         // A row waiting for a recipe is only removed: what MacGameFix kept for
         // the game's earlier builds goes.
-        let targets = selected.filter { install ? $0.blocker == nil && $0.state != .installed : $0.state != .absent }
+        let targets = (only ?? selected).filter { install ? $0.blocker == nil && $0.state != .installed : $0.state != .absent }
         guard !targets.isEmpty else {
             status = install ? "Nothing selected needs installing." : "Nothing selected is installed."
             return
@@ -1072,6 +1078,7 @@ struct ContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if model.hasBanner { UpdateBanner(model: model) }
+            if !model.behind.isEmpty { FixesBanner(model: model) }
             TabView {
                 GamesView(model: model).padding(.top, 6)
                     .tabItem { Text("Games") }
@@ -1129,6 +1136,17 @@ enum UpdateWords {
         if step == .relaunch, let ready { return "MacGameFix \(ready) is ready. Relaunch to finish updating." }
         return "An update is available: \(parts.joined(separator: ", "))."
     }
+
+    /// The games on this Mac whose fix is installed and has a newer build in the catalog
+    /// in use: the window's second notice, and the agent's notification.
+    static func behind(_ names: [String]) -> String {
+        "A newer fix is ready for: \(names.joined(separator: ", "))."
+    }
+
+    /// The games on this Mac that a catalog brought a first fix for: the agent's notification.
+    static func added(_ names: [String]) -> String {
+        "MacGameFix now has a fix for: \(names.joined(separator: ", ")), on this Mac."
+    }
 }
 
 /// What waits for the user, above every tab, as one update with one button: a newer
@@ -1177,6 +1195,29 @@ struct UpdateBanner: View {
             if !model.appError.isEmpty {
                 Text(model.appError).font(.caption).foregroundStyle(.orange)
             }
+        }
+        .font(.callout)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+/// The games on this Mac whose fix is installed and has a newer build in the catalog in
+/// use, above every tab, with one button that installs it in each. A catalog that was
+/// taken changes nothing in a game's folder by itself: a game marked Keep gets the newer
+/// build from the agent within its next look, and any other waits for this.
+struct FixesBanner: View {
+    @ObservedObject var model: Model
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.triangle.2.circlepath.circle.fill").foregroundStyle(.tint)
+            Text(verbatim: UpdateWords.behind(model.behind.map(\.game.name))).lineLimit(2)
+            Spacer()
+            Button("Install") { model.apply(install: true, only: model.behind) }
+                .disabled(model.busy)
+                .help("Installs the newer build of the fix in each of these games, as Install Selected does in Games.")
         }
         .font(.callout)
         .padding(.horizontal, 12)
@@ -2779,6 +2820,15 @@ enum Entry {
                 print("fixes | \(UpdateWords.catalog(Catalog.active().manifest?.version ?? 0))")
                 print("modules | \(UpdateWords.catalog(Catalog.active(.modules).manifest?.version ?? 0))")
                 print("looks | \(settings.updatesOff ? "never" : settings.updateWords)")
+                // The second notice: the games here whose fix has a newer build in the catalog in use.
+                let dir = Catalog.active().dir
+                var behind: [String] = []
+                for hit in Libraries.find(Catalog.games(in: dir), extra: []).hits
+                where !(hit.game.needsPrefix && hit.chosen.isEmpty) {
+                    let word = await Fixer.status(hit.game, folder: hit.folder, prefixes: hit.chosen.map(\.path.path), catalog: dir)
+                    if word == .outdated, !behind.contains(hit.game.name) { behind.append(hit.game.name) }
+                }
+                print("games | \(behind.isEmpty ? "none" : UpdateWords.behind(behind))")
                 let offer = settings.appUpdates ? try? await AppUpdate.check() : nil
                 let cannot = AppUpdate.whyNot()
                 var ready: String?

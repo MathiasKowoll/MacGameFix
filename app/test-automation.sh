@@ -864,6 +864,63 @@ printf '{"kept":[],"updates":false,"modulesUpdates":false}' > "$SUPPORT/MacGameF
 modagent >/dev/null
 check '! ours "$R1"' "with the Wine modules off, nothing is done"
 
+echo "== the games on this Mac that new fixes touch"
+# The next catalog carries build 3 of the fake fix and a first fix for a game that is on this
+# Mac, Fake New; Fake Game has build 2 in its folder and is not marked Keep.
+mkdir -p "$T/res3"; cp "$T/res2"/* "$T/res3/"
+sed -i '' -e 's/Build 2 of the fake fix/Build 3 of the fake fix/' -e 's/= 2 \]; then echo installed/= 3 ]; then echo installed/' \
+  -e 's/^echo 2 > /echo 3 > /' "$T/res3/install-fake.sh"
+/usr/bin/python3 - "$T/res3" <<'PY'
+import hashlib, json, pathlib, sys
+res = pathlib.Path(sys.argv[1])
+table = json.load(open(res / "games.json"))
+new = dict(table["games"][0]); new.update(name="Fake New", exe="FakeNew.exe")
+table["games"].append(new)
+json.dump(table, open(res / "games.json", "w"))
+d = json.load(open(res / "catalog.json")); d["version"] = 4000000007; d["notes"] = "Fake Game's fix, build 3"
+d["files"] = {n: hashlib.sha256((res / n).read_bytes()).hexdigest() for n in d["files"]}
+json.dump(d, open(res / "catalog.json", "w"))
+PY
+"$BIN" --make-catalog "$T/release3" --key "$T/test.key" --from "$T/res3" >/dev/null
+NEWGAME="$SUPPORT/Steam/steamapps/common/Fake New"
+mkdir -p "$NEWGAME"; touch "$NEWGAME/FakeNew.exe"
+echo 2 > "$GAME/fixed.marker"; steam 7 4
+thirdagent() { MACGAMEFIX_CATALOG_SOURCE="$T/release3" MACGAMEFIX_CATALOG_PUBKEY="$PUB" "$BIN" --agent-once 2>&1; }
+learned() { /usr/bin/python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("gamesCatalog", 0), len(d.get("fixesKnown") or []))' "$SUPPORT/MacGameFix/agent-state.json"; }
+check '[ "$(learned)" = "4000000005 5" ]' "the agent has learned the fixes of the catalog in use, and said nothing of them"
+printf '{"kept":[],"updates":true,"askFirst":true}' > "$SUPPORT/MacGameFix/automatic.json"; due
+out="$(thirdagent)"
+check 'has "$out" "New fixes are ready (catalog 4000000007)" && ! has "$out" "A newer fix is ready" && ! has "$out" "now has a fix"' "asked first, the catalog that waits is not looked into: no game is named yet"
+printf '{"kept":[],"updates":true,"askFirst":false}' > "$SUPPORT/MacGameFix/automatic.json"; due
+out="$(thirdagent)"
+check '[ "$(readlink "$SUPPORT/MacGameFix/catalog/current")" = 4000000007 ] && has "$out" "ok : A newer fix is ready for: Fake Game. Install it from MacGameFix'"'"'s Games tab; a game marked Keep gets it by itself."' "once the catalog is taken, a game here whose fix has a newer build is named"
+check 'has "$out" "ok : MacGameFix now has a fix for: Fake New, on this Mac."' "and so is a game here that got its first fix"
+check '[ "$(cat "$GAME/fixed.marker")" = 2 ] && [ ! -e "$NEWGAME/fixed.marker" ]' "nothing is installed in a game that is not marked Keep"
+check 'has "$(menu)" "news | yes"' "and the menu bar shows its dot"
+check 'has "$("$BIN" --updates-report 2>&1)" "games | A newer fix is ready for: Fake Game."' "the window's second notice names the game"
+due
+check '[ -z "$(thirdagent)" ]' "said once for a catalog"
+echo 3 > "$GAME/fixed.marker"
+check 'has "$("$BIN" --updates-report 2>&1)" "games | none"' "with the newer build installed, the window's notice is gone"
+# The same catalog arriving for a game marked Keep: the agent installs the newer build and says that alone.
+/usr/bin/python3 - "$SUPPORT/MacGameFix/agent-state.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1])); d["gamesCatalog"] = 4000000005; json.dump(d, open(sys.argv[1], "w"))
+PY
+echo 2 > "$GAME/fixed.marker"
+printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":true,"askFirst":false}' "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
+out="$(thirdagent)"
+check 'has "$out" "ok Fake Game: The fix is updated to the newer build." && ! has "$out" "A newer fix is ready" && [ "$(cat "$GAME/fixed.marker")" = 3 ]' "a game marked Keep gets the newer build by itself, and is not named as waiting"
+# A MacGameFix that has never looked: it learns what is there and says nothing.
+/usr/bin/python3 - "$SUPPORT/MacGameFix/agent-state.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1])); d.pop("gamesCatalog", None); d.pop("fixesKnown", None); json.dump(d, open(sys.argv[1], "w"))
+PY
+echo 2 > "$GAME/fixed.marker"
+printf '{"kept":[],"updates":false}' > "$SUPPORT/MacGameFix/automatic.json"
+check '[ -z "$(thirdagent)" ] && [ "$(learned)" = "4000000007 6" ]' "the first look only learns: a fix that was already behind is not announced"
+echo 3 > "$GAME/fixed.marker"; rm -rf "$NEWGAME"
+
 echo "== The App Management notice"
 check '[ "$("$BIN" --blocked-names "" "CrossOver A;CrossOver A;CrossOver B;CrossOver B" "CrossOver A;CrossOver A;CrossOver B;CrossOver B")" = "CrossOver A;CrossOver B" ]' "a CrossOver refused for two improvements is named once"
 check '[ "$("$BIN" --blocked-names "CrossOver A;CrossOver C" "CrossOver A;CrossOver B" "CrossOver B")" = "CrossOver C;CrossOver B" ]' "one allowed now leaves the notice, one not looked at stays"
