@@ -759,12 +759,44 @@ CodeWeavers' `ntdll.so` signals a relative timer of `rel_now - MAXLONGLONG` or
 `-MAXLONGLONG` within 100 ms on both sides, and its FEX one dies at offset 14; with
 these, neither timer is signalled, and offsets 0, 2, 13, 14 and 15 pass.
 
+### Wine 11.0 (26.3)
+
+`wine-11.0` had the haptics on a cable only (`0001`-`0003`). On 2026-11-18 it got the rest of
+the controller series, `0004`-`0016`, which are `wine-11.17`'s made again against Wine 11.0 so
+that each applies with no offset or fuzz. `bus_iohid.c`, where most of the series lives,
+differs from 11.17's in three lines; the patches' other files differ more (`xinput1_3/main.c`
+in 311 lines, `winecoreaudio.drv/coreaudio.c` in 330, `setupapi/devinst.c` in 1965,
+`hidclass.sys/pnp.c` in 58), and what the series changes in them sits in code the two share:
+
+- `0010` is the one patch written again. 11.17's hunk goes into
+  `SetupDiGetDeviceInterfaceDetailA` here (`patch` reports success, with fuzz 2), where the
+  names it uses do not exist; in Wine 11.0 `SetupDiGetDeviceRegistryPropertyA` reads the
+  registry itself, and the hunk goes in front of that.
+- `0008` applied with fuzz in three hunks and landed where it belongs; it was made again as
+  the others were.
+- `coreaudio.c` makes the same CoreAudio calls as 11.17's, all of which `dualsense_bt.h`
+  takes over (`0005`).
+- `0030` is not needed: Wine 11.0 has no `get_usb_device_info`, and answers
+  `BusQueryContainerID` for every device.
+
+The modules go from four files to fifteen: `winebus.so`, `hidclass.sys`, `setupapi.dll`,
+`xaudio2_9.dll` and the six `xinput` DLLs are replaced in a CrossOver 26.3 for the first time.
+`ntdll.so` and `winebus.sys` are the files that were there, since nothing they are built from
+changed. Each module exports what CodeWeavers' does. Their imports differ by toolchain, as
+before: ours call `strcpy`, `wcslen` and `__chkstk` where CodeWeavers' call `memcmp`, and
+`setupapi.dll` (cabinet, comdlg32, ole32, shell32, user32, wintrust) and `mmdevapi.dll`
+(winmm) name their delay-loaded DLLs in the PE's delay-import table, which CodeWeavers' 26.3
+files do not have. CodeWeavers' `winebus.so` lists `libinotify.0.dylib` and a third rpath
+here too, and imports no symbol ours does not.
+
+None of it is played on 26.3, the haptics on a cable included.
+
 | CrossOver | Sources | Wine | Intel (x86_64) | FEX (arm64) |
 |---|---|---|---|---|
 | Preview 27.0.0.41069 (20261006) | `crossover-sources-20261006.tar.gz` | 11.17 | played; see "Measured" | built, not played |
 | Preview 27.0.0.41073 (20261015) | `crossover-sources-20261015.tar.gz` | 11.17 | played; see "Measured" | built, not played |
 | Preview 27.0.0.41303 (20261111) | `crossover-sources-20261111.tar.gz` | 11.21 | built from `wine-11.21`; `0021` checked with the probe, not played | built; `0021` and `0022` checked with the probes, not played |
-| 26.3.0.39832 | `crossover-sources-26.3.0.tar.gz` | 11.0 | `0001`-`0003`, `0017` and `0018` only, built, not played: our PE imports differ from CodeWeavers' (toolchain), and our `mmdevapi.dll` also lists `winmm.dll` | no FEX side |
+| 26.3.0.39832 | `crossover-sources-26.3.0.tar.gz` | 11.0 | `0001`-`0016` (the controllers; `0004`-`0016` built on 2026-11-18) and the `ntdll.so` it had, built, not played; see "Wine 11.0 (26.3)" | no FEX side |
 
 `modules/<id>/` holds the files laid out as in `lib/wine` (`x86_64-windows`,
 `x86_64-unix`, `aarch64-windows`, `aarch64-unix`), plus `built-for.json` with the
@@ -808,10 +840,14 @@ do it.
    `x86_64` (the default) builds the Intel side and `arm64` the FEX side. A series
    without a FEX side (`wine-11.0`) refuses `arm64`.
 
-   Use `wine-11.17` for Wine 11.17 (CrossOver 27 Preview) and `wine-11.0` for
-   Wine 11.0 (CrossOver 26.3). They differ in `0002` (Wine 11.0's
-   `winecoreaudio` answers no property yet), and `wine-11.0` has no `0004` or
-   `0005` yet. A rebuild gives different bytes even with no source change, so
+   Use `wine-11.21` for Wine 11.21 (CrossOver 27 Preview 20261111), `wine-11.17` for
+   Wine 11.17 (the older Previews, kept and not built for any more) and `wine-11.0` for
+   Wine 11.0 (CrossOver 26.3). `wine-11.0` and `wine-11.17` differ in `0002` (Wine 11.0's
+   `winecoreaudio` answers no property yet) and in `0010` (Wine 11.0's
+   `SetupDiGetDeviceRegistryPropertyA` is another function body: `patch` puts 11.17's hunk
+   into `SetupDiGetDeviceInterfaceDetailA` with fuzz 2 and says it succeeded, and that does not
+   compile); `0004`-`0016` are otherwise 11.17's, made again against Wine 11.0 so that each
+   applies there with no offset or fuzz. A rebuild gives different bytes even with no source change, so
    compare builds by what they import and export, not by hash. `build.conf` in each series sets the
    minimum macOS version and the second rpath that CodeWeavers' own
    `winecoreaudio.so` has.
