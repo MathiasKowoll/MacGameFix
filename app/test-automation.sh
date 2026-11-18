@@ -915,6 +915,12 @@ check 'has "$(menu)" "news | yes"' "and the menu bar shows its dot"
 check 'has "$("$BIN" --updates-report 2>&1)" "games | A newer fix is ready for: Fake Game."' "the window's second notice names the game"
 due
 check '[ -z "$(thirdagent)" ]' "said once for a catalog"
+# A fix being tested is named only while the testing switch is on: Fake Trial is the same folder's.
+printf '{"kept":[],"updates":false,"testingFixes":true}' > "$SUPPORT/MacGameFix/automatic.json"
+check 'has "$("$BIN" --updates-report 2>&1)" "games | A newer fix is ready for: Fake Game, Fake Trial."' "with the testing switch on, a fix being tested that is behind is named too"
+printf '{"kept":[],"updates":false,"testingFixes":false}' > "$SUPPORT/MacGameFix/automatic.json"
+check 'out="$("$BIN" --updates-report 2>&1)"; has "$out" "games | A newer fix is ready for: Fake Game." && ! has "$out" "Fake Trial"' "and with it off again, it is not"
+printf '{"kept":[],"updates":true,"askFirst":false}' > "$SUPPORT/MacGameFix/automatic.json"
 echo 3 > "$GAME/fixed.marker"
 check 'has "$("$BIN" --updates-report 2>&1)" "games | none"' "with the newer build installed, the window's notice is gone"
 # The same catalog arriving for a game marked Keep: the agent installs the newer build and says that alone.

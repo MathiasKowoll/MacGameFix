@@ -35,7 +35,18 @@ final class Model: ObservableObject {
     @Published var hits: [Hit] = []
     @Published var libraries: [URL] = []
     @Published var log: [String] = []
-    @Published var busy = false { didSet { WindowApp.busy = busy } }
+    @Published var busy = false {
+        didSet {
+            WindowApp.busy = busy
+            // A look that was asked for while something else ran (scan) starts once that ends.
+            if !busy && scanWaits {
+                scanWaits = false
+                Task { @MainActor in self.scan() }
+            }
+        }
+    }
+    /// A look at the games was asked for while the window was busy: it runs when it is free.
+    private var scanWaits = false
     @Published var status = ""
 
     @Published var games: [Game] = []
@@ -256,6 +267,11 @@ final class Model: ObservableObject {
         settings.testingFixes = on
         settings.save()
         loadCatalog()
+        // Off: the fixes being tested leave the list at once, and with them their rows and
+        // the notice above the tabs that names a game whose fix is behind. The look below
+        // would do it too, but only when it ends, and not at all while another one ran.
+        let listed = Set(games.map(\.name))
+        hits.removeAll { !listed.contains($0.game.name) }
         objectWillChange.send()
         scan()
     }
@@ -484,7 +500,10 @@ final class Model: ObservableObject {
 
     /// The games here whose fix is installed and has a newer build in the catalog in
     /// use: the second notice above the tabs, with its Install.
-    var behind: [Hit] { hits.filter { $0.state == .outdated && $0.blocker == nil } }
+    var behind: [Hit] {
+        let listed = Set(games.map(\.name))
+        return hits.filter { $0.state == .outdated && $0.blocker == nil && listed.contains($0.game.name) }
+    }
 
     func note(_ s: String) { log.append(s) }
 
@@ -507,7 +526,9 @@ final class Model: ObservableObject {
     }
 
     func scan() {
-        guard !busy else { return }
+        // Busy with another look or an install: this one waits for it, so a change made
+        // meanwhile (the testing switch, a folder added) is not left out of the list.
+        guard !busy else { scanWaits = true; return }
         busy = true
         status = "Looking for games…"
         let extra = extraFolders
@@ -523,7 +544,14 @@ final class Model: ObservableObject {
                     if !chosen.isEmpty { hits[i].chosen = chosen }
                 }
             }
-            for i in hits.indices { hits[i] = await probe(hits[i]) }
+            // By its id, not its place: the list can change while an installer is asked (the
+            // testing switch takes its games out at once), and a place kept across that wait
+            // may no longer be there.
+            for id in hits.map(\.id) {
+                guard let i = hits.firstIndex(where: { $0.id == id }) else { continue }
+                let probed = await probe(hits[i])
+                if let j = hits.firstIndex(where: { $0.id == id }) { hits[j] = probed }
+            }
             busy = false
             status = found.isEmpty ? "No supported game found in these folders." : "\(found.count) game(s) found."
             // The CrossOver installs too, which a tab opened during this look could not ask for.
@@ -592,6 +620,8 @@ final class Model: ObservableObject {
                 await Task.yield()
                 if let i = hits.firstIndex(where: { $0.id == hit.id }) {
                     var h = await probe(hits[i])
+                    // The list may have changed while the installer was asked: found again by its id.
+                    guard let j = hits.firstIndex(where: { $0.id == hit.id }) else { continue }
                     // The re-probe is the authority, not the exit code.
                     let took = install ? h.state == .installed
                         : h.state == .absent || (hit.state == .noRecipe && h.state == .noRecipe)
@@ -600,7 +630,7 @@ final class Model: ObservableObject {
                     // A success is already in the state beside it, and in the status line.
                     else { h.outcome = nil }
                     h.selected = false
-                    hits[i] = h
+                    hits[j] = h
                 }
             }
             busy = false
