@@ -188,7 +188,9 @@ without the patches, it never sends a motor value.
 that changed it, and the code the page shows, cut from the patches. `tools/export-engine-docs.py`
 writes it from two hand-written files: `docs/engine/patches.json`, one line per patch saying what
 it does (a patch without one fails), and `docs/engine/excerpts.json`, which function to cut, or
-which hunk. After committing a change to a patch, run the script and commit what it writes; the
+which hunk. It also lists every CrossOver build there are modules for, with its series and
+whether it is maintained or only kept (`crossover`; see "Which CrossOver builds are
+maintained"). After committing a change to a patch, run the script and commit what it writes; the
 Engine docs check (`--check`) fails a pull request that leaves it behind.
 
 ### The options
@@ -839,6 +841,27 @@ do it.
    old series. Run with the script itself on a small fake tree, its tools stubbed,
    not yet on a Wine build.
 
+## Which CrossOver builds are maintained
+
+Two are: the stable CrossOver (26.3 now) and the latest Preview (20261111, build
+27.0.0.41303, now). New patches are built for those two, and what is played is played on them.
+
+The modules of an older Preview are **kept, without support**: they stay in the catalog as
+they were last built, and the app still installs and removes them, so a CrossOver that is
+not updated goes on as it was. Nothing new is built or checked for them, a fix that needs a
+newer patch does not reach them, and a report from one is answered with "update to the
+latest Preview, or use the stable CrossOver". Kept since 2026-11-18: Preview 20261006
+(27.0.0.41069) and Preview 20261015 (27.0.0.41073), both on the `wine-11.17` series, which
+gets no new patches either.
+
+`support.json` here holds it: `"kept"` names each build that is only kept, with the day it
+stopped being maintained. `app/bundle-engine.py` writes `"support"` (`maintained` or `kept`)
+for every build into the catalog's `engine-modules.json`, and refuses two maintained Previews,
+so a new Preview's modules cannot be bundled before the one before it is named there. From it
+the app says "No longer maintained" under such a CrossOver in the Improvements tab, in
+`--engine-report` (`| kept`) and in the reports it writes; `tools/export-engine-docs.py` puts
+the same list into `docs/engine/engine.json` (`crossover`) for the site.
+
 ## A new CrossOver build
 
 Every CrossOver build, Preview or stable (CrossOver 27 included), needs its own
@@ -850,6 +873,9 @@ modules:
 3. Build both sides, if the build has a FEX side.
 4. Play one haptics game on a cable with the new modules, then add the build to
    the table above.
+5. For a new Preview, name the Preview before it under `"kept"` in `support.json`
+   ("Which CrossOver builds are maintained"); for a new stable CrossOver, the stable
+   one before it.
 
 ## Installing them
 

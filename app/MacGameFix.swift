@@ -630,6 +630,12 @@ extension Model {
 
     /// Only a CrossOver there are modules for, of its exact build and Wine, can be turned on.
     func engineSelectable(_ row: EngineRow) -> Bool { row.state != .noModules && row.state != .unknown }
+    /// Whether this CrossOver's modules are only kept (engine/support.json), not maintained.
+    func engineOnlyKept(_ build: String) -> Bool { engineBuilds.first { $0.build == build }?.kept ?? false }
+    /// A state as a report words it: a CrossOver that is no longer maintained says so.
+    func engineStateLine(_ row: EngineRow) -> String {
+        engineOnlyKept(row.target.build) ? "\(row.state.label), \(Engine.keptNote.lowercased())" : row.state.label
+    }
 
     /// An improvement's switch is the action: on installs it into that CrossOver and
     /// keeps it there, off puts CrossOver's own files back and leaves it alone. A
@@ -865,7 +871,7 @@ extension Model {
     private func savePadReport(_ game: InstalledGame, as kind: String) -> Bool {
         let store = PadStore.exists ? PadStore.load() : pad
         let text = store.report(appid: game.appid, name: game.name, presets: padPresets,
-                                engines: engineRows.map { ("\($0.target.name) — \($0.part.short)", $0.target.build, $0.state.label) })
+                                engines: engineRows.map { ("\($0.target.name) — \($0.part.short)", $0.target.build, engineStateLine($0)) })
         return saveReport(text, as: kind, for: game.name)
     }
 
@@ -907,7 +913,7 @@ extension Model {
     /// A game's report, saved where the user chooses, and the issue form for a game
     /// that does not work opened with the game and what goes wrong in it.
     func probeReport(_ game: ProbeGame, symptom: ProbeSymptom, findings: ProbeFindings) {
-        let engines = engineRows.map { ("\($0.target.name) — \($0.part.short)", $0.target.build, $0.state.label) }
+        let engines = engineRows.map { ("\($0.target.name) — \($0.part.short)", $0.target.build, engineStateLine($0)) }
         let log = (try? String(contentsOf: PadStore.log, encoding: .utf8)) ?? ""
         let padLines = log.split(separator: "\n").map(String.init).filter { $0.contains(" game=\(game.appid) ") }
         let text = Probe.report(game, symptom: symptom.rawValue, findings: findings, fix: probeFixes[game.id],
@@ -939,7 +945,7 @@ extension Model {
         busy = true
         status = "Making \(hit.game.name)'s fix report…"
         let session = FixReport.session(log, game: hit.game.name, folder: hit.folder)
-        let engines = engineRows.map { ("\($0.target.name) — \($0.part.short)", $0.target.build, $0.state.label) }
+        let engines = engineRows.map { ("\($0.target.name) — \($0.part.short)", $0.target.build, engineStateLine($0)) }
         let catalog = resources
         Task {
             let made = await FixReport.make(hit, kind: kind, catalog: catalog, session: session, engines: engines)
@@ -2473,6 +2479,9 @@ struct EngineSwitch: View {
                     if let o = row.outcome { Text(o).foregroundStyle(.orange) }
                 }
                 .font(.caption)
+                if model.engineOnlyKept(row.target.build) {
+                    Text(Engine.keptNote).font(.caption).foregroundStyle(.orange).help(Engine.keptDetail)
+                }
             }
             Spacer()
             // On, and something put CrossOver's own files back or newer modules came.
@@ -2823,9 +2832,11 @@ enum Entry {
             // Every CrossOver app and NotProton runner, and what the Wine modules' installer says of
             // it: all of them, then each improvement.
             let (dir, _) = Catalog.active(.modules)
+            let builds = Engine.builds(in: dir)
             wait {
                 for t in Engine.targets() {
                     var line = "\(t.name) | \(t.build)\(t.fex ? " | fex" : "") | \(await Engine.status(t, catalog: dir))"
+                    if builds.first(where: { $0.build == t.build })?.kept ?? false { line += " | kept" }
                     for part in EnginePart.allCases { line += " | \(part.rawValue) \(await Engine.status(t, part: part, catalog: dir))" }
                     print(line)
                 }

@@ -191,6 +191,7 @@ One row per CrossOver app (in /Applications and ~/Applications) and per NotProto
 - **Caption**: "<build> · <state>", or "<build> · no modules for this build" when no modules exist (2071-2072).
   - States (Engine.swift:41-57): "…", "Installed" (green), "Older modules: install again" (orange), "Partly installed" (orange), "Not installed", "No modules for this build yet".
   - After a failed run, an orange "Failed — see the log in Settings" is added (563).
+  - Under a CrossOver whose modules are only kept (an older Preview; `engine/support.json`), an orange "No longer maintained", with the tooltip "Its modules stay as they were last built: nothing new is built or tested for this CrossOver. The stable CrossOver and the latest Preview are maintained." (`Engine.keptNote`, `Engine.keptDetail`). The reports the app writes add ", no longer maintained" to such a CrossOver's state.
 - **"Update"** (state Older modules) or **"Install Again"** (Not installed or Partly installed). These only appear when the switch is on but the modules are behind (797-799, 2080-2083).
 - **Switch**: on installs the modules, off removes them (470-474).
   - Turning on a CrossOver app first shows the "Change CrossOver itself?" alert (section 3). Turning on a runner, or turning anything off, shows no question.

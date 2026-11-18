@@ -17,6 +17,9 @@ Every series in engine/patches/ is listed with its patches by name, the modules 
 (the dlls/ folders it touches) and a permalink pinned to the last commit that changed it, as
 tools/export-fix-docs.py pins its excerpts.
 
+"crossover" lists every CrossOver build there are modules for, with its series and whether it
+is maintained or only kept (engine/support.json).
+
 Standard library only: it runs with the macOS /usr/bin/python3, like build-app.sh.
 SPDX-License-Identifier: GPL-3.0-or-later
 """
@@ -135,6 +138,37 @@ def builds(subjects):
     return out
 
 
+def crossover():
+    """Every CrossOver build the modules were made for, and whether it is still maintained.
+
+    The stable CrossOver and the latest Preview are; an older Preview's modules are kept as
+    they were last built (engine/support.json names them with the day they stopped), and
+    nothing new is built or checked for them."""
+    with open(os.path.join(ROOT, 'engine', 'support.json'), encoding='utf-8') as f:
+        kept = json.load(f).get('kept', {})
+    folder = os.path.join(ROOT, 'engine', 'modules')
+    out = []
+    for build in sorted(os.listdir(folder)):
+        meta = os.path.join(folder, build, 'built-for.json')
+        if not os.path.isfile(meta):
+            continue
+        with open(meta, encoding='utf-8') as f:
+            d = json.load(f)
+        entry = {
+            'build': build,
+            'name': d.get('crossover', build),
+            'wine': d['wine'].replace('Wine version ', ''),
+            'series': d.get('patches'),
+            'support': 'kept' if build in kept else 'maintained',
+        }
+        if build in kept:
+            entry['keptSince'] = kept[build]
+        out.append(entry)
+    for build in sorted(set(kept) - {e['build'] for e in out}):
+        fail(f'engine/support.json keeps {build}, which has no modules')
+    return out
+
+
 def excerpts(wanted):
     out = {}
     for key, e in wanted.items():
@@ -165,6 +199,7 @@ def main():
         'schema': 1,
         'repository': REPOSITORY,
         'builds': builds(read_json('patches.json')),
+        'crossover': crossover(),
         'excerpts': excerpts(read_json('excerpts.json')),
     }
     text = json.dumps(doc, ensure_ascii=False, indent=2) + '\n'
