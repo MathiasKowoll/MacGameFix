@@ -51,9 +51,12 @@ symptom, the cause and the fix are read from.
 - An excerpt names a function (`symbol`), or a range between two patterns
   (`from`, `to`) for a script or a recipe. It is cut from the source on every
   export, so it follows the code; nothing is pasted by hand.
-- `license` is the installer's SPDX line. The fixes are GPL-3.0-or-later; the
-  Wine modules in `engine/` are LGPL-2.1-or-later, which is what makes them
-  fit for Wine.
+- `license` is the installer's SPDX line, the identifier and nothing else, and
+  the export fails if the two differ. The fixes are GPL-3.0-or-later, but for
+  Forza Horizon 5, which is GPL-3.0-only: it derives from work published under
+  version 3 with no later one offered. What a fix ships under another licence
+  (a DLL in the public domain, say) goes in `credits`. The Wine modules in
+  `engine/` are LGPL-2.1-or-later, which is what makes them fit for Wine.
 - A fix that came from someone else's work says so in `credits`, with a link to
   the original repository. A commit message is not credit.
 

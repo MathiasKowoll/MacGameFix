@@ -1565,12 +1565,12 @@
         "wolffix_core.c",
         "wolffix.def"
       ],
-      "license": "GPL-3.0-or-later (installer); the DLL and its source are public domain (Unlicense)",
+      "license": "GPL-3.0-or-later",
       "credits": [
         {
           "name": "macprotips",
           "url": "https://github.com/macprotips/WolfAmongUsFix",
-          "note": "Found why the trails happen, wrote the d3d11.dll that rewrites the shaders' sample reads and a test program for D3DMetal (WolfAmongUsFix 1.0). MacGameFix ships the DLL as published, with its source."
+          "note": "Found why the trails happen, wrote the d3d11.dll that rewrites the shaders' sample reads and a test program for D3DMetal (WolfAmongUsFix 1.0). MacGameFix ships the DLL as published, with its source: both are public domain (Unlicense), and the installer is GPL-3.0-or-later."
         }
       ],
       "excerpts": [
