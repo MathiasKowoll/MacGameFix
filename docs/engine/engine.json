@@ -594,6 +594,16 @@
           ],
           "commit": "0037103a8c4e1fdbf8beb9d5b6db28416ba1b07d",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/0037103a8c4e1fdbf8beb9d5b6db28416ba1b07d/engine/patches/wine-11.21/0029-ntdll-exception-ahead-of-suspend.patch"
+        },
+        {
+          "name": "0030-winebus-bluetooth-pad-usb-again.patch",
+          "file": "engine/patches/wine-11.21/0030-winebus-bluetooth-pad-usb-again.patch",
+          "subject": "A Bluetooth pad shown as wired is a USB device with its location's container again, as its haptics output has: Wine 11.21 took the USB bus type back from it and answers a container only for devices with several interfaces",
+          "modules": [
+            "winebus.sys"
+          ],
+          "commit": "e94594f1f5d08de9d359ac85064917beec42da84",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/e94594f1f5d08de9d359ac85064917beec42da84/engine/patches/wine-11.21/0030-winebus-bluetooth-pad-usb-again.patch"
         }
       ]
     }

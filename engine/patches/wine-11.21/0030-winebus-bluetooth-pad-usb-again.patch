@@ -1,0 +1,44 @@
+--- a/dlls/winebus.sys/bus_iohid.c
++++ b/dlls/winebus.sys/bus_iohid.c
+@@ -2365,7 +2365,11 @@
+         return;
+     }
+ 
+-    if (desc.bus_type == BUS_TYPE_USB) get_usb_device_info(IOHIDDeviceGetService(IOHIDDevice), &desc);
++    /* A Bluetooth pad shown as wired has no USB interface to read. Asked for one,
++     * get_usb_device_info (new in Wine 11.21) fails and takes the USB bus type away
++     * again: the pad was WINEBUS\VID_054C&PID_0CE6 where Wine 11.17 had it as
++     * USB\VID_054C&PID_0CE6, and no longer had its location's container. */
++    if (desc.bus_type == BUS_TYPE_USB && !bt_wired) get_usb_device_info(IOHIDDeviceGetService(IOHIDDevice), &desc);
+ 
+     if (IOHIDDeviceOpen(IOHIDDevice, 0) != kIOReturnSuccess)
+     {
+--- a/dlls/winebus.sys/main.c
++++ b/dlls/winebus.sys/main.c
+@@ -824,6 +824,7 @@
+         case BusQueryContainerID:
+         {
+             struct device_extension *ext = (struct device_extension *)device->DeviceExtension;
++            GUID guid;
+ 
+             TRACE("BusQueryContainerID\n");
+ 
+@@ -832,8 +833,17 @@
+              * the same container ID. On native this comes from their parent
+              * device, but since we currently don't replicate the full device
+              * hierachy we will create a matching container ID here ourselves.
++             *
++             * A device with one interface has a USB location as well, and its audio
++             * endpoints get their container from it (patch 0001): a Bluetooth DualSense
++             * shown as wired is one. Left unanswered, the PnP manager makes up a container
++             * for it and the pad's haptics output has another: {ca7cef8a-e1b9-11f1-...}
++             * against {32C48EF2-27F2-...} in a prefix's registry (2026-11-17), where FC27
++             * never opened the Bluetooth pad's haptics output and had opened that of a pad
++             * on a cable (three interfaces, one container). Wine 11.17 answered for every
++             * device.
+              */
+-            if (ext->desc.interface != -1)
++            if (ext->desc.interface != -1 || get_usb_container_id(&ext->desc, &guid))
+             {
+                 irp->IoStatus.Information = (ULONG_PTR)get_container_id(ext);
+                 break;
