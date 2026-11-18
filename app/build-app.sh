@@ -63,6 +63,19 @@ MODULES_MIN_APP="1.6.1"
 # never enters the repository; without it the build writes no release catalog.
 SIGNING_KEY="${MACGAMEFIX_SIGNING_KEY:-$HOME/.config/macgamefix/catalog-signing.key}"
 
+# Where the service that keeps the table of the app's versions is, and the key of the
+# app's OAuth client there (AppUpdate.swift): two lines, BASE=https://… and SECRET=…,
+# in a file that never enters the repository. Without it the app asks GitHub whether
+# there is a newer MacGameFix, as a build of anybody else's does.
+UPDATES_CONF="${MACGAMEFIX_UPDATES_CONF:-$HOME/.config/macgamefix/updates.conf}"
+UPDATES_BASE=""
+UPDATES_SECRET=""
+if [ -f "$UPDATES_CONF" ]; then
+  UPDATES_BASE="$(sed -n 's/^BASE=//p' "$UPDATES_CONF" | head -1)"
+  UPDATES_SECRET="$(sed -n 's/^SECRET=//p' "$UPDATES_CONF" | head -1)"
+  case "$UPDATES_BASE$UPDATES_SECRET" in *[\<\>\&]*) echo "error: $UPDATES_CONF holds a character an Info.plist cannot" >&2; exit 1 ;; esac
+fi
+
 SIGN_ID="${MACGAMEFIX_CODESIGN_IDENTITY:-}"
 SIGN_WHY=""
 IDENTITIES="$(security find-identity -v -p codesigning 2>/dev/null || true)"
@@ -219,11 +232,18 @@ if [ "$SIGN_ID" != - ]; then
 fi
 
 echo "==> Info.plist"
+if [ -n "$UPDATES_BASE" ] && [ -n "$UPDATES_SECRET" ]; then
+  echo "    a newer MacGameFix is asked of $UPDATES_BASE"
+else
+  echo "    note: no $UPDATES_CONF with BASE and SECRET, so this build asks GitHub whether there is a newer MacGameFix"
+fi
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>MacGameFixPrereleaseTag</key><string>$PRERELEASE_TAG</string>
+  <key>MacGameFixUpdatesBase</key><string>$UPDATES_BASE</string>
+  <key>MacGameFixUpdatesSecret</key><string>$UPDATES_SECRET</string>
   <key>CFBundleName</key><string>MacGameFix</string>
   <key>CFBundleDisplayName</key><string>MacGameFix</string>
   <key>CFBundleIdentifier</key><string>io.github.macgamefix</string>

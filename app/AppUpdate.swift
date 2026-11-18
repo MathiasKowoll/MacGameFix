@@ -6,10 +6,18 @@
 // unseen. This asks whether there is a newer MacGameFix, and puts it in this
 // one's place when the user says so.
 //
-// WHO IS ASKED. MacGameFix's site, which keeps a table of the versions and where
-// each one's zip is on GitHub; and GitHub's API when the site does not answer,
-// or while this build knows no address for it. GitHub's API gives an address
-// without an account 60 answers an hour, which is why it is the second.
+// WHO IS ASKED. MacGameFix's service, which keeps a table of the versions and
+// where each one's zip is on GitHub; and GitHub's API when the service gives no
+// answer, or in a build that was not given the service (a build of somebody
+// else's, a development build). GitHub's API gives an address without an
+// account 60 answers an hour, which is why it is the second.
+//
+// The service answers this app's own OAuth client and nobody else: the app asks
+// for a token with the client's key (client credentials) and reads the table
+// with it. The key reaches the build from outside the repository
+// (build-app.sh) and is in every copy of the app, so it is not a secret: it
+// names the app, and the service lets that client read the table and nothing
+// more.
 //
 // WHAT IS TRUSTED. Neither of them, nor the checksum either gives: they say
 // where a zip is, and a wrong answer must end in a refusal here, not in an
@@ -81,27 +89,94 @@ enum AppUpdate {
             .map { URL(fileURLWithPath: $0).appendingPathComponent("release.json") } ?? latest
     }
 
-    /// The site's answer for the latest version: MACGAMEFIX_APP_SITE for the tests,
-    /// else the address this build knows, if it knows one.
-    static let siteAddress: URL? = nil
-    static var site: URL? {
-        ProcessInfo.processInfo.environment["MACGAMEFIX_APP_SITE"].map { URL(fileURLWithPath: $0) } ?? siteAddress
+    // MARK: The service
+
+    /// Where the service is and the key of the app's client there: what the build was
+    /// given (Info.plist, from build-app.sh), or MACGAMEFIX_UPDATES_BASE and
+    /// MACGAMEFIX_UPDATES_SECRET for the tests and a development backend. nil in a
+    /// build that was given neither, which asks GitHub.
+    static var service: (base: URL, secret: String)? {
+        let env = ProcessInfo.processInfo.environment
+        let base = env["MACGAMEFIX_UPDATES_BASE"] ?? Bundle.main.object(forInfoDictionaryKey: "MacGameFixUpdatesBase") as? String
+        let secret = env["MACGAMEFIX_UPDATES_SECRET"]
+            ?? Bundle.main.object(forInfoDictionaryKey: "MacGameFixUpdatesSecret") as? String
+        guard let base, let secret, !secret.isEmpty, let url = URL(string: base), url.scheme != nil else { return nil }
+        return (url, secret)
+    }
+    static let client = "Itsomax_MacGameFix_Updates"
+    static let scope = "Itsomax.MacGameFix.AppReleases"
+
+    /// The service's answer saved in a file, for the tests that ask nobody.
+    static var saved: URL? {
+        ProcessInfo.processInfo.environment["MACGAMEFIX_APP_SITE"].map { URL(fileURLWithPath: $0) }
     }
 
-    /// One row of the site's table, as it answers: the fields read here.
-    private struct SiteVersion: Decodable {
+    /// One row of the service's table, as it answers: the fields read here.
+    private struct Row: Decodable {
         let version: String
         let downloadUrl: URL
         let sha256: String?
         let releaseUrl: URL?
     }
 
-    /// The newer MacGameFix there is, or nil when this one is the latest. The site
-    /// is asked first; what it says is taken, and GitHub is asked only when it
-    /// gives no answer that can be read.
+    private static let held = NSLock()
+    private static var token: (value: String, until: Date)?
+
+    private static func send(_ request: URLRequest) async throws -> (status: Int, body: Data) {
+        var request = request
+        request.setValue("MacGameFix/\(Catalog.appVersion)", forHTTPHeaderField: "User-Agent")
+        request.httpShouldHandleCookies = false
+        request.timeoutInterval = 20
+        let (data, response) = try await URLSession.shared.data(for: request)
+        return ((response as? HTTPURLResponse)?.statusCode ?? 0, data)
+    }
+
+    /// A token for the app's client, kept until two minutes before it ends and asked
+    /// for again only then; `fresh` asks now, after the service refused the one held.
+    private static func bearer(_ service: (base: URL, secret: String), fresh: Bool = false) async throws -> String {
+        if !fresh, let kept = held.withLock({ token }), kept.until > Date() { return kept.value }
+        var request = URLRequest(url: service.base.appendingPathComponent("connect/token"))
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        var form = URLComponents()
+        form.queryItems = [URLQueryItem(name: "grant_type", value: "client_credentials"),
+                           URLQueryItem(name: "client_id", value: client),
+                           URLQueryItem(name: "client_secret", value: service.secret),
+                           URLQueryItem(name: "scope", value: scope)]
+        // A form's "+" is a space: one inside the key must go as %2B.
+        request.httpBody = Data((form.percentEncodedQuery ?? "").replacingOccurrences(of: "+", with: "%2B").utf8)
+        struct Answer: Decodable { let access_token: String; let expires_in: Double? }
+        let (status, body) = try await send(request)
+        guard status == 200, let answer = try? JSONDecoder().decode(Answer.self, from: body) else {
+            throw Updater.Failure.missing("a token from the service (\(status))")
+        }
+        held.withLock { token = (answer.access_token, Date().addingTimeInterval(max(0, (answer.expires_in ?? 0) - 120))) }
+        return answer.access_token
+    }
+
+    /// The latest version the service's table has. A token the service refuses is
+    /// asked for once more; anything else that is not an answer throws, and GitHub is
+    /// asked instead.
+    private static func latestRow() async throws -> Row {
+        if let saved { return try JSONDecoder().decode(Row.self, from: try Data(contentsOf: saved)) }
+        guard let service else { throw Updater.Failure.missing("the service's address") }
+        let url = service.base.appendingPathComponent("api/macgamefix/app-releases/latest")
+        for fresh in [false, true] {
+            var request = URLRequest(url: url)
+            request.setValue("Bearer " + (try await bearer(service, fresh: fresh)), forHTTPHeaderField: "Authorization")
+            let (status, body) = try await send(request)
+            if status == 401, !fresh { continue }
+            guard status == 200 else { break }
+            return try JSONDecoder().decode(Row.self, from: body)
+        }
+        throw Updater.Failure.missing("an answer from the service")
+    }
+
+    /// The newer MacGameFix there is, or nil when this one is the latest. The service
+    /// is asked first and what it says is taken; GitHub is asked only when it gives no
+    /// answer that can be read, or names a download over anything but HTTPS.
     static func check(current: String = Catalog.appVersion) async throws -> Offer? {
-        if let site, let data = try? await Updater.fetch(site),
-           let row = try? JSONDecoder().decode(SiteVersion.self, from: data),
+        if saved != nil || service != nil, let row = try? await latestRow(),
            ["https", "file"].contains(row.downloadUrl.scheme ?? "") {
             guard Catalog.versionLess(current, row.version) else { return nil }
             return Offer(version: row.version, zip: row.downloadUrl, sha256: row.sha256?.lowercased(), page: row.releaseUrl)

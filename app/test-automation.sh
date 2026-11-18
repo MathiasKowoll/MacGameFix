@@ -18,7 +18,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 BIN="$HERE/MacGameFix.app/Contents/MacOS/MacGameFix"
 [ -x "$BIN" ] || { echo "build MacGameFix.app first (build-app.sh)" >&2; exit 1; }
 T="${KEEP_T:-$(mktemp -d)}"
-trap '[ "${GAME_PID:-0}" -gt 0 ] && kill "$GAME_PID" 2>/dev/null; [ -n "${KEEP:-}" ] || rm -rf "$T"' EXIT
+trap '[ "${GAME_PID:-0}" -gt 0 ] && kill "$GAME_PID" 2>/dev/null; [ "${STUB_PID:-0}" -gt 0 ] && kill "$STUB_PID" 2>/dev/null; [ -n "${KEEP:-}" ] || rm -rf "$T"' EXIT
 export MACGAMEFIX_HOME="$T/home"
 # What the Steam store says of each app, saved: no test asks the network.
 export MACGAMEFIX_STORE_DIR="$T/store"
@@ -1017,7 +1017,7 @@ PY
   check 'has "$(appupdate sum)" "does not match the release" && [ "$(copyv)" = "$APPV" ]' "a download that does not match the checksum is refused"
   check '[ "$(ls "$A/installed")" = MacGameFix.app ] && codesign --verify --deep --strict "$A/installed/MacGameFix.app" 2>/dev/null' "and every refusal left the app whole, with nothing beside it"
 
-  # The site answers first; GitHub only when the site gives nothing that can be read.
+  # The service answers first; GitHub only when the service gives nothing that can be read.
   SUM="$(cut -d' ' -f1 "$A/rel-new/MacGameFix-9.9.9.zip.sha256")"
   /usr/bin/python3 - "$A" "$SUM" "$APPV" <<'PY'
 import json, pathlib, sys
@@ -1029,10 +1029,62 @@ json.dump(dict(row, version=v), open(a / "site-same.json", "w"))
 json.dump(dict(row, downloadUrl="ftp://example.invalid/MacGameFix-9.9.9.zip"), open(a / "site-ftp.json", "w"))
 (a / "site-broken.json").write_text("<html>502</html>")
 PY
-  check 'has "$(MACGAMEFIX_APP_SITE="$A/site-new.json" "$COPY" --app-update-check 2>&1)" "available 9.9.9"' "the site's answer is taken"
-  check 'has "$(MACGAMEFIX_APP_SITE="$A/site-same.json" appcheck new)" "up to date"' "and GitHub is not asked when the site answers"
-  check 'has "$(MACGAMEFIX_APP_SITE="$A/site-broken.json" appcheck new)" "available 9.9.9" && has "$(MACGAMEFIX_APP_SITE="$A/none.json" appcheck new)" "available 9.9.9"' "a site that answers nothing readable, or not at all, leaves the question to GitHub"
-  check 'has "$(MACGAMEFIX_APP_SITE="$A/site-ftp.json" "$COPY" --app-update-check 2>&1)" "up to date"' "a download the site names over anything but HTTPS is not taken"
+  check 'has "$(MACGAMEFIX_APP_SITE="$A/site-new.json" "$COPY" --app-update-check 2>&1)" "available 9.9.9"' "the service's answer is taken"
+  check 'has "$(MACGAMEFIX_APP_SITE="$A/site-same.json" appcheck new)" "up to date"' "and GitHub is not asked when the service answers"
+  check 'has "$(MACGAMEFIX_APP_SITE="$A/site-broken.json" appcheck new)" "available 9.9.9" && has "$(MACGAMEFIX_APP_SITE="$A/none.json" appcheck new)" "available 9.9.9"' "a service that answers nothing readable, or not at all, leaves the question to GitHub"
+  check 'has "$(MACGAMEFIX_APP_SITE="$A/site-ftp.json" "$COPY" --app-update-check 2>&1)" "up to date"' "a download the service names over anything but HTTPS is not taken"
+
+  # The service itself, as a stand-in on this Mac: a token for the app's client, then
+  # the table with it. GitHub's stand-in is the release of this very version, so
+  # "available" can only be the service's word.
+  mkdir -p "$A/stub"
+  cat > "$A/stub.py" <<'PY'
+import http.server, json, pathlib, sys, urllib.parse
+d = pathlib.Path(sys.argv[1]); row = pathlib.Path(sys.argv[2]).read_bytes(); issued = []
+class H(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def answer(self, status, body):
+        self.send_response(status); self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+    def note(self, line):
+        with open(d / "log", "a") as f: f.write(line + "\n")
+    def do_POST(self):
+        form = urllib.parse.parse_qs(self.rfile.read(int(self.headers.get("Content-Length", 0))).decode())
+        good = (self.path == "/connect/token" and form.get("grant_type") == ["client_credentials"]
+                and form.get("client_id") == ["Itsomax_MacGameFix_Updates"] and form.get("client_secret") == ["key+with a space"]
+                and form.get("scope") == ["Itsomax.MacGameFix.AppReleases"])
+        self.note("token " + ("given" if good else "refused"))
+        if not good: return self.answer(401, b'{"error":"invalid_client"}')
+        issued.append("tok-%d" % (len(issued) + 1))
+        self.answer(200, json.dumps({"access_token": issued[-1], "token_type": "Bearer", "expires_in": 3600}).encode())
+    def do_GET(self):
+        held = self.headers.get("Authorization", "")
+        if self.path != "/api/macgamefix/app-releases/latest": return self.answer(404, b"{}")
+        if (d / "down").exists(): self.note("latest 500"); return self.answer(500, b'{"error":{}}')
+        if (d / "expire").exists():
+            (d / "expire").unlink(); self.note("latest 401"); return self.answer(401, b"")
+        if not issued or held != "Bearer " + issued[-1]: self.note("latest 401"); return self.answer(401, b"")
+        self.note("latest 200 " + self.headers.get("User-Agent", "") + (" cookie" if self.headers.get("Cookie") else ""))
+        self.answer(200, row)
+s = http.server.HTTPServer(("127.0.0.1", 0), H)
+(d / "port").write_text(str(s.server_address[1]))
+s.serve_forever()
+PY
+  /usr/bin/python3 "$A/stub.py" "$A/stub" "$A/site-new.json" & STUB_PID=$!
+  for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$A/stub/port" ] && break; /bin/sleep 0.3; done
+  STUB="http://127.0.0.1:$(cat "$A/stub/port")"
+  asked() { MACGAMEFIX_UPDATES_BASE="$STUB" MACGAMEFIX_UPDATES_SECRET="$1" "$COPY" --app-update-check 2>&1 || true; }
+  stublog() { tr '\n' ';' < "$A/stub/log"; : > "$A/stub/log"; }
+  : > "$A/stub/log"
+  check 'has "$(asked "key+with a space")" "available 9.9.9" && [ "$(stublog)" = "token given;latest 200 MacGameFix/$APPV;" ]' "the service is asked with a token for the app's client, and no cookie"
+  touch "$A/stub/expire"
+  check 'has "$(asked "key+with a space")" "available 9.9.9" && [ "$(stublog)" = "token given;latest 401;token given;latest 200 MacGameFix/$APPV;" ]' "a token the service refuses is asked for once more"
+  check 'has "$(asked "another key")" "up to date" && [ "$(stublog)" = "token refused;" ]' "a key the service does not know is tried once, and leaves the question to GitHub"
+  touch "$A/stub/down"
+  check 'has "$(asked "key+with a space")" "up to date" && [ "$(stublog)" = "token given;latest 500;" ]' "and so does a service that fails"
+  rm -f "$A/stub/down"
+  kill "$STUB_PID" 2>/dev/null; STUB_PID=0
+  check 'has "$(asked "key+with a space")" "up to date"' "and one that is not there"
 
   # And the one that is taken.
   check 'has "$(MACGAMEFIX_APP_SITE="$A/site-new.json" "$COPY" --app-update 2>&1)" "installed 9.9.9" && [ "$(copyv)" = 9.9.9 ]' "a newer MacGameFix signed as this one is put in its place"

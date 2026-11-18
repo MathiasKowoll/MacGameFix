@@ -214,6 +214,10 @@ until you turn it on, and the fixes stay in the games' own folders as before.
     in a folder your account cannot change, and a build signed ad hoc.
   - *Tell me about a new MacGameFix*, in Settings, turns the question off.
     *Check Now* asks at once. Nothing is ever installed without *Update*.
+  - The question goes to MacGameFix's service, which keeps a table of the
+    versions and where each one's zip is on GitHub, and to GitHub's own API when
+    the service does not answer. The app sends its version and nothing about
+    you or your Mac. A build of your own asks GitHub only.
 - **Reporting.** When a fix fails to install, the agent says so in a
   notification with a *Report on GitHub* button. It opens a new issue, already
   filled in with the game, the versions and the installer's last lines. Your
@@ -883,6 +887,18 @@ with `xcrun notarytool store-credentials`).
   `Automation.swift`. Losing it means a new key in a new app, since catalogs
   signed with another key are refused. `MacGameFix --new-signing-key <file>`
   makes one and prints the public half.
+
+**The service that says whether there is a newer app.**
+- **What the build needs:** `~/.config/macgamefix/updates.conf` (or
+  `$MACGAMEFIX_UPDATES_CONF`) with two lines, `BASE=https://…` for where the
+  service is and `SECRET=…` for the key of the app's OAuth client there. The
+  build writes both into the app's `Info.plist` and says which service it
+  named.
+- **Without it:** the build says so, and the app asks GitHub's latest release
+  instead. Nothing else changes.
+- **The key is not a secret once it ships:** it is in every copy of the app.
+  It names the app to the service, which lets that client read the table of
+  versions and nothing more. It never enters the repository.
 
 **A change to the fixes or the Wine modules alone needs no new app.** Installed
 apps take each catalog from the latest release on their own, so the release
