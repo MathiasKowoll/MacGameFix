@@ -721,6 +721,31 @@ with no fuzz. Wine 11.21 changed three things the series touches, all in
   read `desc.index`.
 - `bus_iohid.c` includes `<IOKit/usb/IOUSBLib.h>`; `0004`'s includes follow it.
 
+The port missed two more, both of which took the haptics away from a Bluetooth pad
+shown as wired (`0004`), and `0030` puts them back as Wine 11.17 had them:
+
+- `bus_iohid.c` asks every USB device for its USB interface (`get_usb_device_info`)
+  and sets the bus type to unknown when there is none. The pad has none, so it was
+  `WINEBUS\VID_054C&PID_0CE6` where Wine 11.17 had `USB\VID_054C&PID_0CE6`. `0030`
+  does not ask it.
+- `winebus.sys` answers `BusQueryContainerID` only for a device with several
+  interfaces. A DualSense on a cable has three; the Bluetooth pad has one, so the
+  PnP manager made up a container for it while its haptics output kept the
+  location's (`0001`). `0030` answers for a device with a USB location as well.
+
+Found on 2026-11-17 with FC27, which pairs the pad with its haptics output by
+container: in the prefix's registry the pad had `{ca7cef8a-e1b9-11f1-...}` and its
+output `{32C48EF2-27F2-...}`, and in the launches over Bluetooth logged since 2026-11-13
+the game never opened that output, while on a cable (both `{00100000-27F2-...}`) it had.
+A bottle last run on Wine 11.17 has the same pad as `USB\VID_054C&PID_0DF2` with
+`{32C48EF2-27F2-...}`. With `0030` in the runner the game opened the Bluetooth
+haptics output and the pad vibrated (DualSense Edge shown as a DualSense, XInput
+off, one session). The game ended twice at start-up that night, once before `0030`
+had any effect, with the same dump as an earlier launch on the published modules
+(a jump to one of its own functions' address plus `0x40000000`); what causes it was
+not established. Not played: another title, a standard DualSense over Bluetooth,
+the FEX side.
+
 CodeWeavers' 41303 `winebus.so` links `libinotify` (only `bus_udev.c`, which
 watches Linux's `/dev/input`, uses it; it imports none of its symbols) and has one
 more rpath. Ours is built without it, as for 41073. Every other module matches
