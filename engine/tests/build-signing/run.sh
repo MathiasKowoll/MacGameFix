@@ -1,10 +1,16 @@
 #!/bin/bash
 # build.sh's signing, on a fake tree: build.sh itself, copied byte for byte, run
 # on a Wine source tree that is two files, its tools stubbed (configure writes a
-# Makefile; make writes PE files that are a few bytes and builds the two unix
-# modules as real dylibs from a line of C; llvm-strip copies), so the steps after
-# make run as they do on a real build: strip, the second rpath, the signature
-# and built-for.json. No Wine is built.
+# Makefile; make writes PE files that are a few bytes and builds the unix modules
+# as real dylibs from a line of C; llvm-strip copies), so the steps after make
+# run as they do on a real build: strip, the second rpath, the signature and
+# built-for.json. No Wine is built.
+#
+# The unix modules are the three build.sh signs on each side: winebus.so,
+# winecoreaudio.so and ntdll.so. The Intel side's ntdll.so comes from the same
+# make as the others (dlls/ntdll/all); the FEX side's from a tree and a build
+# directory of its own, with the patches the series names in NTDLL_ARM64, so the
+# fake series has one patch and names it.
 #
 #   /bin/bash engine/tests/build-signing/run.sh
 #
@@ -29,8 +35,9 @@ bad() { echo "  FAIL  $1"; fail=1; }
 mkdir -p "$work/engine/patches/fake" "$work/src" "$work/mingw/bin" "$work/sdl"
 cp "$build_sh" "$work/engine/build.sh"
 cmp -s "$build_sh" "$work/engine/build.sh" || { echo "could not copy build.sh"; exit 1; }
-printf 'MIN=14.0\nRPATH2=@loader_path/../../../lib/x86_64\nRPATH2_ARM64=@loader_path/../../../lib/aarch64\n' \
+printf 'MIN=14.0\nRPATH2=@loader_path/../../../lib/x86_64\nRPATH2_ARM64=@loader_path/../../../lib/aarch64\nNTDLL_ARM64="0001-fake.patch"\n' \
   > "$work/engine/patches/fake/build.conf"
+printf -- '--- /dev/null\n+++ b/patched-by-the-series\n@@ -0,0 +1 @@\n+yes\n' > "$work/engine/patches/fake/0001-fake.patch"
 echo "Wine version 11.17" > "$work/src/VERSION"
 printf '#!/bin/sh\necho "all:" > Makefile\n' > "$work/src/configure"
 chmod +x "$work/src/configure"
@@ -38,12 +45,14 @@ chmod +x "$work/src/configure"
 printf '#!/bin/sh\n' > "$work/mingw/bin/x86_64-w64-mingw32-clang"
 # llvm-strip -o <out> <in>
 printf '#!/bin/sh\ncp "$3" "$2"\n' > "$work/mingw/bin/llvm-strip"
-# make, in the build directory (build-<id>-<arch>): every PE file build.sh takes,
-# for both sides, and the two unix modules for this one.
+# make, in the build directory (build-<id>-<arch>, or build-<id>-arm64-ntdll for the
+# FEX side's ntdll.so): every PE file build.sh takes, for both sides, the two unix
+# modules every build has for this one, and ntdll.so when it is asked for, as
+# build.sh asks: dlls/ntdll/all.
 cat > "$work/mingw/bin/make" <<'MAKE'
 #!/bin/sh
 set -e
-case "$(basename "$PWD")" in *-arm64) cpu=arm64 ;; *) cpu=x86_64 ;; esac
+case "$(basename "$PWD")" in *-arm64|*-arm64-ntdll) cpu=arm64 ;; *) cpu=x86_64 ;; esac
 for pe in x86_64-windows aarch64-windows; do
   for f in winebus.sys/winebus.sys mmdevapi/mmdevapi.dll hidclass.sys/hidclass.sys setupapi/setupapi.dll \
            xaudio2_9/xaudio2_9.dll xinput1_1/xinput1_1.dll xinput1_2/xinput1_2.dll xinput1_3/xinput1_3.dll \
@@ -55,6 +64,11 @@ mkdir -p dlls/winebus.sys dlls/winecoreaudio.drv
 echo 'int fake_module(void) { return 1; }' > fake.c
 /usr/bin/clang -arch "$cpu" -dynamiclib -Wl,-headerpad_max_install_names -o dlls/winebus.sys/winebus.so fake.c
 /usr/bin/clang -arch "$cpu" -dynamiclib -Wl,-headerpad_max_install_names -o dlls/winecoreaudio.drv/winecoreaudio.so fake.c
+for target in "$@"; do
+  [ "$target" = dlls/ntdll/all ] || continue
+  mkdir -p dlls/ntdll
+  /usr/bin/clang -arch "$cpu" -dynamiclib -Wl,-headerpad_max_install_names -o dlls/ntdll/ntdll.so fake.c
+done
 MAKE
 chmod +x "$work/mingw/bin/make" "$work/mingw/bin/llvm-strip" "$work/mingw/bin/x86_64-w64-mingw32-clang"
 
@@ -66,7 +80,7 @@ run() { # <build id> <arch> [<identity>]; an empty identity is none
 check() { # <build id> <arch> <adhoc|team id>
   local dir="$work/engine/modules/$1" unix so d n=0
   case "$2" in arm64) unix=aarch64-unix ;; *) unix=x86_64-unix ;; esac
-  for so in "$dir/$unix/winebus.so" "$dir/$unix/winecoreaudio.so"; do
+  for so in "$dir/$unix/winebus.so" "$dir/$unix/winecoreaudio.so" "$dir/$unix/ntdll.so"; do
     [ -f "$so" ] || { bad "$1 $2: $(basename "$so") was not written"; return; }
     want="$(/usr/bin/python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["files"].get(sys.argv[2], ""))' \
       "$dir/built-for.json" "$unix/$(basename "$so")")"
@@ -88,7 +102,7 @@ check() { # <build id> <arch> <adhoc|team id>
     fi
     n=$((n + 1))
   done
-  ok "$1 $2: both unix modules $( [ "$3" = adhoc ] && echo "ad hoc" || echo "signed by $3, with a secure timestamp and the hardened runtime"), as built-for.json records"
+  ok "$1 $2: the three unix modules $( [ "$3" = adhoc ] && echo "ad hoc" || echo "signed by $3, with a secure timestamp and the hardened runtime"), as built-for.json records"
 }
 
 echo "== without an identity"
@@ -130,7 +144,7 @@ else
   done
   # The identity's modules are the ad hoc build's code: otool -t the same.
   for unix in x86_64-unix aarch64-unix; do
-    for m in winebus.so winecoreaudio.so; do
+    for m in winebus.so winecoreaudio.so ntdll.so; do
       cmp -s <(otool -t "$work/engine/modules/0.0.0.1/$unix/$m" | tail -n +2) <(otool -t "$work/engine/modules/0.0.0.2/$unix/$m" | tail -n +2) \
         || bad "$unix/$m: otool -t differs between the ad hoc and the Developer ID build"
     done
