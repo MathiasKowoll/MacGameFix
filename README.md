@@ -62,7 +62,9 @@ Denuvo-protected games such as Phantom Blade Zero, Persona 4 Golden and
 STAR WARS: Galactic Racer; the games played, reported or in progress are in
 [`docs/improvements`](docs/improvements)), see
 [`engine/README.md`](engine/README.md), each with a switch and an Update button for every CrossOver
-app and NotProton runner; then *Game Mode*, which changes nothing in CrossOver, and the modules' own
+app and NotProton runner (the stable CrossOver and the latest Preview are maintained; an older
+Preview's modules are kept as they were last built, without support, and the tab says "No longer
+maintained" under it); then *Game Mode*, which changes nothing in CrossOver, and the modules' own
 updates; **Game Feel**, the DualSense's options for every game
 and, in a table of the Steam games on this Mac, for each one, with what the
 modules saw each game do; **Report**, for a game that does not work (see

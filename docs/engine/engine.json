@@ -608,6 +608,38 @@
       ]
     }
   ],
+  "crossover": [
+    {
+      "build": "26.3.0.39832",
+      "name": "CrossOver 26.3",
+      "wine": "11.0",
+      "series": "wine-11.0",
+      "support": "maintained"
+    },
+    {
+      "build": "27.0.0.41069",
+      "name": "CrossOver Preview 20261006",
+      "wine": "11.17",
+      "series": "wine-11.17",
+      "support": "kept",
+      "keptSince": "2026-11-18"
+    },
+    {
+      "build": "27.0.0.41073",
+      "name": "CrossOver Preview 20261015",
+      "wine": "11.17",
+      "series": "wine-11.17",
+      "support": "kept",
+      "keptSince": "2026-11-18"
+    },
+    {
+      "build": "27.0.0.41303",
+      "name": "CrossOver Preview 20261111",
+      "wine": "11.21",
+      "series": "wine-11.21",
+      "support": "maintained"
+    }
+  ],
   "excerpts": {
     "container": {
       "file": "engine/patches/wine-11.17/0001-winebus.patch",
