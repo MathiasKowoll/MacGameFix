@@ -301,6 +301,11 @@ Below the rows:
 - Below, up to six short lines of what the update brings, each with a bullet: a new MacGameFix's from its release notes, a catalog's from its own notes.
 - A copy that cannot replace itself says why in small print ("… Take the new MacGameFix from its page: What's New."), and a failure shows in orange.
 
+**The second notice above the tabs** (`FixesBanner`), in every tab, while a game on this Mac has a fix installed that the catalog in use carries a newer build of (its row in Games says "Older build: install to update"):
+- "A newer fix is ready for: <games>." with **"Install"**: installs the newer build in each of them, as "Install Selected" does.
+- A catalog that was taken changes nothing in a game's folder by itself, so the notice stays until the newer build is installed. A game marked Keep is named only until the agent's next look, which installs it.
+- `--updates-report` prints it for the tests, as `games | <the line>` or `games | none`.
+
 **"Recent"**. Only shown when the agent has recorded events (2169-2185).
 - Up to 5 of the newest events, as "<game>: <message>" (orange if it failed), with the abbreviated date.
 - A **"Report…"** button when the event has a report link.
@@ -522,11 +527,18 @@ The "Control-Command-F" in the Game Mode footer is advice for full screen in gam
 - It does a pass at start and every 120 s (MenuBar.swift:114-118). Battery readings refresh every 60 s and when a controller connects or disconnects.
 - Each pass (Automation.swift:279-397) does the following.
 
-*Fixes catalog.* At most once every 24 h, if updates are on.
+*Fixes catalog.* At most once an hour (`updateMinutes`), if updates are on.
 - In "Ask first" mode it only verifies the signature. Once per version it notes: "New fixes are ready (catalog <n>). Install them from the menu bar or MacGameFix's Settings."
 - In "Automatic" mode it installs, then notes "New fixes: <names>" or "The fixes were updated."
 
-*Wine modules catalog.* The same, with "New Wine modules are ready (catalog <n>). Install them from the menu bar or MacGameFix's Settings." and "The Wine modules were updated."
+*The games on this Mac that new fixes touch* (`Agent.noteGames`). When another fixes catalog comes into use, however it came (taken by the agent, by "Update" in the window, or inside a new MacGameFix), once for each catalog:
+- "A newer fix is ready for: <games>. Install it from MacGameFix's Games tab; a game marked Keep gets it by itself." names the games not marked Keep whose installed fix has a newer build in the catalog. Nothing is installed in them.
+- "MacGameFix now has a fix for: <games>, on this Mac. Install it from MacGameFix's Games tab." names the games here that the catalog had no fix for before.
+- Both show the menu bar's dot. Each game's installer is only asked its state. A game Steam is still writing is not asked.
+- The first look only learns which fixes there are and says nothing. In "Ask first" mode no game is named while the catalog waits: it is not downloaded yet.
+- A game marked Keep is left to the look at each kept game, below, which installs the newer build.
+
+*Wine modules catalog.* The same as the fixes catalog, with "New Wine modules are ready (catalog <n>). Install them from the menu bar or MacGameFix's Settings." and "The Wine modules were updated."
 - That message says "Settings", but the window's install button for modules is in the Wine Modules tab.
 
 *Wine modules in each CrossOver*, when modules updates are on (Engine.swift:198-249).

@@ -207,6 +207,10 @@ until you turn it on, and the fixes stay in the games' own folders as before.
     the window shows *Older build: install to update*; the agent installs it
     again once the game is closed. Spider-Man 2's says *Needs repair* instead,
     since its shaders are rebuilt for each game build as well.
+  - A newer build of a fix in a game that is not marked is not installed by
+    itself. The agent names the game in a notification, and the window shows
+    *A newer fix is ready for: …* above the tabs, with *Install*. A game on
+    this Mac that gets its first fix is named in a notification too.
 - **A new MacGameFix.** A new tab, an option or a fix an older app cannot
   install needs a new app, and it comes with the same update. The agent says so
   in a notification, the menu bar carries *Update to MacGameFix …*, and the

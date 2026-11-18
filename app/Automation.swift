@@ -232,6 +232,10 @@ struct AgentState: Codable {
     /// from one the user simply never chose; and what it last said of each.
     var engineSeen: [String]?
     var engineNoted: [String: String] = [:]
+    /// The catalog of fixes whose games on this Mac were last looked at (Agent.noteGames),
+    /// and the fixes it had, by name: nil until the first look, which only learns them.
+    var gamesCatalog = 0
+    var fixesKnown: [String]?
 
     init() {}
 
@@ -255,6 +259,8 @@ struct AgentState: Codable {
         availableAppNotes = try c.decodeIfPresent(String.self, forKey: .availableAppNotes) ?? ""
         engineSeen = try c.decodeIfPresent([String].self, forKey: .engineSeen)
         engineNoted = try c.decodeIfPresent([String: String].self, forKey: .engineNoted) ?? [:]
+        gamesCatalog = try c.decodeIfPresent(Int.self, forKey: .gamesCatalog) ?? 0
+        fixesKnown = try c.decodeIfPresent([String].self, forKey: .fixesKnown)
     }
 
     /// The waiting catalog, while it is still newer than the one in use.
@@ -412,6 +418,44 @@ enum Agent {
         }
     }
 
+    /// The games on this Mac that a catalog of fixes coming into use touches, said once
+    /// for each catalog: a fix that is installed and has a newer build in it, and a fix
+    /// it did not have before for a game that is here. However the catalog came: taken
+    /// by the agent, by Update in the window, or inside a new MacGameFix. A game marked
+    /// Keep is left to the look after this one, which installs the newer build and says
+    /// so. The first look only learns which fixes there are, so a MacGameFix that starts
+    /// doing this does not begin with a notification about what was there all along.
+    /// Each game's installer is asked with --status, which changes nothing; a game Steam
+    /// is still writing is not asked.
+    private static func noteGames(_ games: [Game], catalog dir: URL, version: Int, settings: AutoSettings,
+                                  state: inout AgentState, now: Date) async -> [AgentEvent] {
+        guard version != state.gamesCatalog else { return [] }
+        let known = state.fixesKnown.map { Set($0) }
+        state.gamesCatalog = version
+        state.fixesKnown = games.map(\.name)
+        guard let known else { return [] }
+        let kept = Set(settings.kept.map(\.key))
+        var behind: [String] = [], added: [String] = []
+        for hit in Libraries.find(games, extra: Libraries.extraFolders).hits where !kept.contains(hit.key) {
+            if let steam = SteamApp.of(folder: hit.folder), !steam.settled { continue }
+            if hit.game.needsPrefix && hit.chosen.isEmpty { continue }
+            let word = await Fixer.status(hit.game, folder: hit.folder, prefixes: hit.chosen.map(\.path.path), catalog: dir)
+            let name = hit.game.name
+            if word == .outdated, !behind.contains(name) { behind.append(name) }
+            if word == .absent, !known.contains(name), !added.contains(name) { added.append(name) }
+        }
+        var events: [AgentEvent] = []
+        if !behind.isEmpty {
+            events.append(AgentEvent(date: now, game: "", message: UpdateWords.behind(behind)
+                + " Install it from MacGameFix's Games tab; a game marked Keep gets it by itself.", failed: false))
+        }
+        if !added.isEmpty {
+            events.append(AgentEvent(date: now, game: "", message: UpdateWords.added(added)
+                + " Install it from MacGameFix's Games tab.", failed: false))
+        }
+        return events
+    }
+
     /// One look at every marked game, and at the releases when it is time.
     /// `everything` looks at each marked game even when nothing changed it, and
     /// `updateNow` asks the releases at once; the menu's two commands.
@@ -450,6 +494,8 @@ enum Agent {
 
         let (catalogDir, manifest) = Catalog.active()
         let games = Catalog.games(in: catalogDir)
+        events += await noteGames(games, catalog: catalogDir, version: manifest?.version ?? 0, settings: settings,
+                                  state: &state, now: now)
         for kept in settings.kept {
             guard let game = games.first(where: { $0.name == kept.name }) else { continue }
             let folder = URL(fileURLWithPath: kept.folder)

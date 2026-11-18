@@ -557,6 +557,16 @@ extension Libraries {
         hits.sort { $0.game.name.lowercased() < $1.game.name.lowercased() }
         return (libs, hits)
     }
+
+    /// Where the window keeps the folders the user added, in the app's defaults.
+    static let extraKey = "extraFolders"
+
+    /// Those folders, for the agent, which is this app too and reads the same defaults.
+    /// None under MACGAMEFIX_HOME: the tests' home holds no folder of the user's.
+    static var extraFolders: [URL] {
+        guard ProcessInfo.processInfo.environment["MACGAMEFIX_HOME"] == nil else { return [] }
+        return (UserDefaults.standard.stringArray(forKey: extraKey) ?? []).map { URL(fileURLWithPath: $0) }
+    }
 }
 
 // MARK: - The catalog in use
