@@ -41,6 +41,8 @@ Wherever a quoted string is built from a value, `<…>` stands for that value.
 - Install/Remove with nothing to do: "Nothing selected needs installing." / "Nothing selected is installed." (377)
 - Installing or removing fixes:
   - "Installing <game> (<i> of <n>)…" / "Removing <game> (<i> of <n>)…" (386)
+  - while an installer says how far it is (lines of `MGVF-PROGRESS <done> <total>`, which never reach the log): a 160 pt bar in place of the spinner, and "Installing <game> (<i> of <n>): <p> %". Only Ori and the Will of the Wisps' installer says it today.
+  - an install that took 30 seconds or more ends with a notification from the window, titled with the game: "The fix is installed: the game is ready to play." or "The install did not finish. MacGameFix's log says why." The window asks for the alert permission then, if the agent never did. A window closed meanwhile still finishes the install before it quits.
   - then "Done: <n> game(s)." or "Done, <f> of <n> need attention." (408)
 - Scanning CrossOver: "Looking at CrossOver and the NotProton runners…", then "No CrossOver or NotProton runner found." or "<n> CrossOver install(s) found." (805, 812)
 - Installing or removing Wine modules:

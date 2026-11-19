@@ -205,6 +205,14 @@
       "env": {},
       "symptom": "Failed to play movie"
     },
+    "oriwotw.exe": {
+      "title": "Ori and the Will of the Wisps",
+      "backend": "d3dmetal",
+      "codec": "",
+      "gptk": "",
+      "env": {},
+      "symptom": "Hitches whenever something new comes on screen"
+    },
     "PBZ.exe": {
       "title": "Phantom Blade Zero",
       "backend": "d3dmetal",

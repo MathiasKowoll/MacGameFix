@@ -116,6 +116,8 @@ case "${2:-}" in
   --restore) rm -f "$dir/fixed.marker"; exit 0 ;;
 esac
 echo "installing into $dir"
+# As an installer that takes minutes says how far it is, when it is asked to.
+if [ "${MGVF_PROGRESS:-0}" = 1 ]; then echo "MGVF-PROGRESS 1 2"; fi
 if [ -f "$dir/FAIL" ]; then echo "cannot write $dir/fake.dll"; exit 1; fi
 echo 2 > "$dir/fixed.marker"
 SH
@@ -257,6 +259,7 @@ OUT="$(agent)"
 check 'has "$OUT" "FAILED Fake Game: The installer failed (status 1)."' "a failing installer is reported"
 REPORT="$(echo "$OUT" | sed -n 's/^report //p' | /usr/bin/python3 -c 'import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read()))')"
 check 'has "$REPORT" "issues/new" && has "$REPORT" "cannot write ~/Library"' "with a filled-in issue holding the installer output"
+check 'has "$REPORT" "installing into" && ! has "$REPORT" "MGVF-PROGRESS"' "and none of the lines the installer says its progress with"
 check '! has "$REPORT" "$MACGAMEFIX_HOME"' "and the home folder replaced by ~"
 check '[ "$(/usr/bin/python3 -c "import json,sys; print(len(json.load(open(sys.argv[1]))[\"events\"]))" "$SUPPORT/MacGameFix/agent-state.json")" = 5 ]' "the agent's events are kept for the window"
 OUT="$(menu)"

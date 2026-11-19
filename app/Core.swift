@@ -765,28 +765,43 @@ enum Fixer {
     /// agent share, so the two never run an installer at once.
     /// The installer once for each prefix a fix that writes registry keys was
     /// given, stopping at the first that fails; once, for any other fix.
+    /// An installer that takes minutes says how far it is, when asked to (MGVF_PROGRESS=1), with
+    /// lines of "MGVF-PROGRESS <done> <total>". They go to `onProgress` as a fraction and never
+    /// to `onLine`: whoever passes none simply does not see them.
     static func run(_ game: Game, folder: URL, prefixes: [String], catalog: URL, _ extra: [String],
+                    onProgress: (@Sendable (Double) -> Void)? = nil,
                     onLine: @escaping @Sendable (String) -> Void) async -> Int32 {
         guard game.needsPrefix, !prefixes.isEmpty else {
-            return await run(game, folder: folder, prefix: nil, catalog: catalog, extra, onLine: onLine)
+            return await run(game, folder: folder, prefix: nil, catalog: catalog, extra, onProgress: onProgress, onLine: onLine)
         }
         for p in prefixes {
-            let code = await run(game, folder: folder, prefix: p, catalog: catalog, extra, onLine: onLine)
+            let code = await run(game, folder: folder, prefix: p, catalog: catalog, extra, onProgress: onProgress, onLine: onLine)
             if code != 0 { return code }
         }
         return 0
     }
 
+    /// "MGVF-PROGRESS <done> <total>" as a fraction from 0 to 1; nil for any other line.
+    static func progress(_ line: String) -> Double? {
+        let parts = line.split(separator: " ")
+        guard parts.count == 3, parts[0] == "MGVF-PROGRESS", let done = Double(parts[1]),
+              let total = Double(parts[2]), total > 0 else { return nil }
+        return min(1, max(0, done / total))
+    }
+
     static func run(_ game: Game, folder: URL, prefix: String?, catalog: URL, _ extra: [String],
+                    onProgress: (@Sendable (Double) -> Void)? = nil,
                     onLine: @escaping @Sendable (String) -> Void) async -> Int32 {
         let lock = InstallLock()
         defer { lock.release() }
         let script = catalog.appendingPathComponent(game.script).path
-        var env: [String: String] = ["MGVF_MODULES": Catalog.active(.modules).dir.path]
+        var env: [String: String] = ["MGVF_MODULES": Catalog.active(.modules).dir.path, "MGVF_PROGRESS": "1"]
         if game.needsPrefix, let prefix { env["MGVF_BOTTLE"] = prefix }
         // Where a fix that changes a game's app keeps its original.
         if game.inApp { env["MGVF_APP_BACKUP"] = Paths.appBackup.path }
-        return await runStreaming("/bin/bash", [script, folder.path] + extra, environment: env, onLine: onLine)
+        return await runStreaming("/bin/bash", [script, folder.path] + extra, environment: env) { line in
+            if let fraction = progress(line) { onProgress?(fraction) } else { onLine(line) }
+        }
     }
 }
 

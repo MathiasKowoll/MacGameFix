@@ -50,6 +50,10 @@
 # Run it again after an update to macOS, to the runner or to the game: --status
 # says "broken" once any of them is not what the shaders were compiled with.
 #
+# HOW FAR IT IS. With MGVF_PROGRESS=1, as the app runs it, the compiling prints
+# lines of "MGVF-PROGRESS <done> <total>", which the app draws as a bar; without
+# it, a line in words at every twentieth of the way.
+#
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # MGVF-SCOPE: folder
@@ -308,9 +312,14 @@ for attempt in 1 2 3 4 5 6; do
   pid=$!; seen=-1; still=0
   while kill -0 "$pid" 2>/dev/null; do
     n="$(drawn)"
-    step=$(( (skip + n) * 20 / (total > 0 ? total : 1) ))
-    if [ "$step" -gt "$shown" ] && [ $((skip + n)) -gt 0 ]; then
-      shown="$step"; echo "  $((skip + n)) of $total"
+    if [ "${MGVF_PROGRESS:-0}" = 1 ]; then
+      # A program that draws the progress asked for it: one line a look.
+      [ "$n" = "$seen" ] || echo "MGVF-PROGRESS $((skip + n)) $total"
+    else
+      step=$(( (skip + n) * 20 / (total > 0 ? total : 1) ))
+      if [ "$step" -gt "$shown" ] && [ $((skip + n)) -gt 0 ]; then
+        shown="$step"; echo "  $((skip + n)) of $total"
+      fi
     fi
     if [ "$n" = "$seen" ]; then
       still=$((still + 1)); [ $((still * POLL)) -gt 300 ] && break

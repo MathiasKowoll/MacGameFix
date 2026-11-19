@@ -664,7 +664,9 @@ Measured on 2026-11-18 on an M4 Max, from Metal's own record of the game:
 a frame more than 50 ms late; 6 compiled and 1,092 taken from the cache in 158
 seconds after, 21 seconds with a frame that late. Compiling took 272 seconds.
 The games row reads **Needs repair** once macOS, the runner or the game is
-not what the shaders were compiled with: install again.
+not what the shaders were compiled with: install again. While it compiles, the
+window shows a bar with the percentage, and a notification says when the game
+is ready (see [A fix that takes minutes](#a-fix-that-takes-minutes)).
 
 ### God of War: the specks without the solid grass
 
@@ -834,6 +836,18 @@ who turned it on. In the repository, an installer marks it with
 `games.json`'s `testing` table, which apps before 1.6.0 never read. Its
 `# MGVF-CREDIT: <name> | <url>` lines name whose work it is, in the app and in
 [Credits](#credits).
+
+### A fix that takes minutes
+
+An installer that works for minutes says how far it is. The app runs every
+installer with `MGVF_PROGRESS=1`, and one that prints lines of
+`MGVF-PROGRESS <done> <total>` then gets a bar in the window's status line,
+with the percentage, instead of those lines in the log. An install that took
+30 seconds or more ends with a notification: the fix is installed and the game
+is ready, or it did not finish. Closing the window does not stop it: the app
+quits once the install is done. Ori and the Will of the Wisps' is the first.
+Without `MGVF_PROGRESS`, as from a terminal, the installer prints its progress
+in words.
 
 ## Reporting a problem
 

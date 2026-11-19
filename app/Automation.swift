@@ -924,6 +924,17 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             UNNotificationRequest(identifier: event.id.uuidString, content: content, trigger: nil))
     }
 
+    /// From the window, which never started the agent's voice: asks for the permission the agent
+    /// would have asked for, then says it. Without the permission nothing is shown.
+    static func say(_ game: String, _ message: String) async {
+        let center = UNUserNotificationCenter.current()
+        guard (try? await center.requestAuthorization(options: [.alert])) == true else { return }
+        let content = UNMutableNotificationContent()
+        content.title = game
+        content.body = message
+        try? await center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+    }
+
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler done: @escaping () -> Void) {
         if response.actionIdentifier == "report",
