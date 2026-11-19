@@ -4,7 +4,7 @@
 
 The games played for vibration with a DualSense or DualSense Edge on a Mac. A game is added after a session, from what was felt and what the Wine modules logged, never from what it should do. Each test names its controller and its connection.
 
-Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 27), Steam Input off for the game, unless a result says otherwise. Updated 2026-11-01.
+Played with MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 27), Steam Input off for the game, unless a result says otherwise. Updated 2026-11-18.
 
 **How a game vibrates** decides what Game Feel needs to give it:
 
@@ -56,6 +56,7 @@ plays its haptics as audio on the pad's output, whatever its library.
 | [Grand Theft Auto V Enhanced](#3240220) | Motors | Raw HID | DualSense Edge: Works (2026-10-26) | DualSense Edge: Works (2026-10-26) |
 | [The Last of Us Part II Remastered](#2531310) | Haptics | Raw HID | Not played yet | DualSense Edge: Works (2026-10-26) |
 | [Phantom Blade Zero](#4115450) | Haptics | SDL | Not played yet | DualSense Edge: Works (2026-11-01); DualSense Edge: Works (2026-11-01) |
+| [Ori and the Will of the Wisps](#1057090) | XInput | XInput | DualSense Edge: Works (2026-11-18) | Not played yet |
 
 <a id="2651280"></a>
 ## Marvel's Spider-Man 2
@@ -768,6 +769,22 @@ What was measured:
 
 - The game read the pad's feature reports 0x09, 0x20 and 0x05, set trigger effects, claimed the motor power at 0x00 on the DualSense Edge too, and played haptics on the Bluetooth haptics output. It never wrote to XInput.
 - Played on CrossOver Preview 27 (41073) under NotProton, on the Intel side, with MacGameFix's Phantom Blade Zero fix and the Wine modules' Copy protection under Rosetta.
+
+<a id="1057090"></a>
+## Ori and the Will of the Wisps
+
+With the pad shown as an XInput controller, the game reads it and its rumble plays on the motors.
+
+- **Status:** Works
+- **Library:** XInput
+- **Technology:** XInput only: the store does not list the DualSense for it. Game Feel gives it the pad as an XInput controller.
+- **Features:** XInput rumble
+- **Settings:** The pad as an XInput controller (by the store's rule).
+- **Steam app:** 1057090
+
+Tested:
+
+- DualSense Edge, Cable: Works (2026-11-18). 53 rumbles in the session, 397 ms each at the median; the player called the controls great. NotProton with CrossOver Preview 20261111's Wine, under Rosetta.
 
 ## Adding a game
 
