@@ -1,0 +1,33 @@
+--- a/dlls/user32/misc.c
++++ b/dlls/user32/misc.c
+@@ -468,6 +468,19 @@
+ }
+ 
+ /**********************************************************************
++ * GetPointerDevice [USER32.@]
++ */
++BOOL WINAPI GetPointerDevice(HANDLE device, POINTER_DEVICE_INFO *info)
++{
++    static int once;
++
++    if (!once++) FIXME("(%p %p): stub\n", device, info);
++
++    SetLastError(ERROR_INVALID_PARAMETER);
++    return FALSE;
++}
++
++/**********************************************************************
+  * GetPointerDevices [USER32.@]
+  */
+ BOOL WINAPI GetPointerDevices(UINT32 *device_count, POINTER_DEVICE_INFO *devices)
+--- a/dlls/user32/user32.spec
++++ b/dlls/user32/user32.spec
+@@ -625,7 +625,7 @@
+ @ stdcall GetParent(long)
+ @ stdcall GetPhysicalCursorPos(ptr)
+ # @ stub GetPointerCursorId
+-# @ stub GetPointerDevice
++@ stdcall GetPointerDevice(ptr ptr)
+ # @ stub GetPointerDeviceCursors
+ # @ stub GetPointerDeviceInputSpace
+ # @ stub GetPointerDeviceOrientation

@@ -560,6 +560,53 @@ that side does with a program's `syscall` instruction was not looked at. Forza H
 was played with `0028` alone (menus, a load and the open world, as before it); it has not
 been played with `0029` yet.
 
+## 2XKO's copy protection, and an ntdll.dll shaped like Windows'
+
+2XKO (Riot, free to play; Vanguard left it in patch 1.3.3b) starts `Lion-Win64-Shipping.exe`,
+whose `stub.dll` unpacks the game in its `DllMain`. Among the first things it does is read
+`C:\windows\system32\ntdll.dll` from disk and parse it. With the `ntdll.dll` these modules
+installed since `0023` it ran off the end of what it had read, took its failure path through
+a chain of nested exceptions, and the process died a second later with `0xC000001D` (or, on
+the way there, overflowed its stack in the dispatcher): the game's `.text` was never made
+executable. `0023` gave `ntdll.dll` 40 MB of static diagnostic storage, so its `.data` was
+`0x2610e9c` bytes in memory against `0x1000` in the file, and `SizeOfImage` `0x26ca000`.
+CodeWeavers' own `ntdll.dll`, 26.3's, and one built here from 41303's sources without the
+series all passed. With the stores taken out of the image the whole series passes. What the
+protection reads on disk matters, not what is loaded: CodeWeavers' file on disk with this
+series' file loaded passes, and this series' file on disk fails whatever is loaded.
+
+| Patch | Module | Change |
+|---|---|---|
+| `0031-ntdll-diagnostic-stores-on-demand.patch` | `ntdll.dll` (Intel side) | The FH6 diagnostic stores, `__wine_exception_burst_records` (16 MB), `__wine_bridge_refusal_records` (21 MB), `__wine_software_exception_bridge_census` (2 MB) and `__wine_software_exception_chain_diagnostics` (51 KB), are allocated when their capture is switched on (`WINE_EXCEPTION_BURST_AUTO`, `WINE_BRIDGE_REFUSAL_TRACE`, the private probe's mode), prefaulted as the static ones were. Their exports are now pointers, NULL until then: a reader takes the export's value, not its address. `.data` is back to `0x44bc` and `SizeOfImage` to `0xbf000`. Nothing changes while no capture runs |
+
+The other four are the work of NotProton's creator (https://github.com/NotProtonNot/NotProton),
+who plays 2XKO on CrossOver Preview and handed them to the user on 2026-11-18: diffs against
+41303's sources and binaries built from them. Thanks to them, 2XKO runs here at all. Their binaries were checked against our own builds of the same diffs (exports and
+imports equal; the toolchain differs, theirs needs macOS 27.2 for `pipe2`) and are not used:
+these modules are built here.
+
+| Patch | Module | Change |
+|---|---|---|
+| `0032-ntdll-writecopy-pagefile-views-on-macos.patch` | `ntdll.so` (Intel side) | A copy-on-write view of a section backed by the page file is mapped writable and shared, not copy-on-write, outside Linux. Without it (and everything else in place) the game wrote nothing more after starting and exited after 66 s, short of the screen with which it starts; with it, it reached its sign-in screen in 30 s. It changes every game's mapping of such sections |
+| `0033-win32u-draw-into-other-process-top-level-windows.patch` | `win32u.so` | A shared-memory window surface flushed to a top-level window of another process is drawn at the window's visible origin. The Riot Client draws its window from another process (Electron). With CrossOver's own `win32u.so` the client's Wine process crashed in its main run loop (macOS reports for "Menu Helper", 2026-11-17 and 19); with this patch the client showed and worked. Which of the two the patch answers for was not isolated |
+| `0034-kernelbase-device-paths-from-GetMappedFileNameW.patch` | `kernelbase.dll` | `GetMappedFileNameW` answers with a device path, `\Device\HarddiskVolume1\...`, as Windows does, instead of `\??\C:\...`. Copy protection checks where its modules are mapped with it |
+| `0035-user32-GetPointerDevice-stub.patch` | `user32.dll` | `GetPointerDevice`, which the game imports, exists and fails with `ERROR_INVALID_PARAMETER` |
+
+`build.sh` builds `kernelbase.dll`, `user32.dll` and `win32u.so` when the series' `build.conf`
+says `PROTECTION_MODULES=yes`. `win32u.so` is built as CodeWeavers build theirs, with FreeType
+and MoltenVK, in a build directory of its own (`build-<id>-<arch>-win32u`) configured with them;
+the libraries for its link tests come from a CrossOver of the build (`CROSSOVER_LIB`, a
+NotProton runner's by default). `engine-modules.sh` puts all three in the Rosetta improvement
+with `ntdll`, since they are for copy protection.
+
+Measured on 2026-11-19 (M4 Max, macOS 27.2.1, CrossOver Preview 41303 in its Steam bottle,
+the player's patches on CodeWeavers' files): the game reached its title screen and played,
+signed in through the Riot Client. Two minutes in training mode: 52.2 frames a second
+(57.2 the median second, 60 the cap), 5.6 ms of graphics a frame, no shaders compiled, but a
+gap over 100 ms in 35 of 121 seconds, coming in runs of several seconds, the longest 432 ms,
+and one second at 1 frame. The processor ran at full speed with no thermal warning. Not yet
+explained; the protection decrypting code on first use is the suspect.
+
 ## Measured
 
 Measured on 2026-10-18 on CrossOver Preview 27.0.0.41069, in a NotProton runner,
