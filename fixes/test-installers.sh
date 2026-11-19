@@ -705,4 +705,93 @@ f6bdo --restore > "$f6/bottle-restore.log" 2>&1 && [ "$(f6bst)" = absent ] \
 printf "another advapi32\n" > "$f6b/drive_c/windows/system32/advapi32.dll"
 [ "$(f6bst)" = norecipe ] && say ok "fh6 in a CrossOver bottle: another advapi32 has no recipe" || say FAIL "fh6 bottle: other advapi32 ($(f6bst))"
 
+# Ori and the Will of the Wisps' shaders, compiled ahead of time: macprotips'
+# programs are fetched, the game's runner draws their list, and what comes out
+# goes where the game reads it. None of that is here, so the test makes all of
+# it: a release zip of its own (a reader that lists what a file in the game
+# folder names, a list of combinations), a runner whose loader writes the draws
+# it was asked for and a cache as D3DMetal and Metal would, and a cache folder.
+# Its whole life: refused with no runner, with a download that is not the pinned
+# one, while a process holds one of the game's cache files and for a game the
+# list was not recorded from, each with nothing changed; installed, the four
+# numbered files and D3DMetal's folder replaced and nothing left behind; a
+# loader that stops half way started again after its last draw; broken once the
+# game or D3DMetal is another; forgotten, with the compiled shaders left.
+o="$W/ori"; g="$o/steamapps/common/Ori and the Will of the Wisps"; mkdir -p "$g"; touch "$g/oriwotw.exe"
+printf '"AppState"\n{\n\t"appid"\t\t"1057090"\n\t"buildid"\t\t"100"\n}\n' > "$o/steamapps/appmanifest_1057090.acf"
+for n in 1 2 3 4 5 6; do echo "s$n"; done > "$g/shaders.txt"
+orun="$o/runner"; oload="$orun/lib/wine/x86_64-unix/wine.app/Contents/MacOS/wine"
+mkdir -p "$(dirname "$oload")" "$orun/bin" "$orun/share/crossover/data" "$orun/lib/apple_gptk/external/D3DMetal.framework/Resources"
+printf '"ProductVersion" = "27.0.0.1"\n' > "$orun/share/crossover/data/CrossOver.conf"
+echo "D3DMetal" > "$orun/lib/apple_gptk/external/D3DMetal.framework/D3DMetal"
+printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>CFBundleShortVersionString</key><string>4.0</string></dict></plist>\n' \
+  > "$orun/lib/apple_gptk/external/D3DMetal.framework/Resources/Info.plist"
+printf '#!/bin/sh\nexit 0\n' > "$orun/bin/wineserver"
+# The loader: <exe> <shaders> --plan <list> --skipdraws <n> --sleep <ms>, paths as Z:\... .
+cat > "$oload" <<'SH'
+#!/bin/bash
+unix() { printf '%s' "${1#Z:}" | tr '\\' '/'; }
+exe="$(unix "$1")"; plan="$(unix "$4")"; skip="$6"; root="$CX_ROOT"
+echo "$skip" >> "$root/skips.txt"
+lines="$(wc -l < "$plan" | tr -d ' ')"
+stop="$lines"; [ -f "$root/stop-half-way" ] && { stop=$((lines / 2)); rm -f "$root/stop-half-way"; }
+out="$MGVF_ORI_CACHES/d3dm/$(basename "$exe")/shaders.cache"
+mkdir -p "$out/1_2" "$out/MTLGPUFamilyTest"
+i="$skip"; while [ "$i" -lt "$stop" ]; do echo "DRAW $i" >> warm.log; echo "f$i" >> "$out/1_2/functions.data"; i=$((i + 1)); done
+echo "list" > "$out/1_2/functions.list"; echo "pipelines of $(basename "$exe")" > "$out/MTLGPUFamilyTest/pipeline_cache.bin"
+[ "$stop" = "$lines" ] || exit 1
+echo "SUMMARY $lines" >> warm.log
+SH
+chmod 755 "$oload" "$orun/bin/wineserver"
+mkdir -p "$o/zip/Test.app/Contents/Resources"
+printf '#!/bin/sh\nmkdir -p "$2" && while read -r n; do : > "$2/$n.dxbc"; done < "$1/shaders.txt"\n' > "$o/zip/Test.app/Contents/Resources/extract"
+chmod 755 "$o/zip/Test.app/Contents/Resources/extract"
+echo "not a program" > "$o/zip/Test.app/Contents/Resources/oriwarm_t.exe"
+for n in 1 2 3 4 5; do echo "s$n s6 a/D/b/c/1 l 16"; echo "s$n - a/D/b/c/1 l 16"; done | gzip > "$o/zip/Test.app/Contents/Resources/plan.txt.gz"
+(cd "$o/zip" && ditto -c -k --keepParent Test.app "$o/tools.zip")
+osha="$(shasum -a 256 "$o/tools.zip" | cut -d' ' -f1)"
+oc="$o/caches"; om="$oc/com.notproton.launcher.1057090/com.apple.metal/1_2"; mkdir -p "$om" "$oc/d3dm/oriwotw.exe/shaders.cache/MTLGPUFamilyTest"
+for n in "" 1 2 3; do echo "the game's own $n" > "$om/functions$n.data"; echo "l$n" > "$om/functions$n.list"; done
+echo "the game's own pipelines" > "$oc/d3dm/oriwotw.exe/shaders.cache/MTLGPUFamilyTest/pipeline_cache.bin"
+ori() { MGVF_ORI_RUNNER="$orun" MGVF_ORI_CACHES="$oc" MGVF_ORI_STORE="$o/store" MGVF_ORI_URL="file://$o/tools.zip" \
+  MGVF_ORI_SHA256="${OSHA:-$osha}" MGVF_ORI_POLL=1 /bin/bash "$FIX/install-ori-shaders.sh" "$g" "$@"; }
+orist() { ori --status 2>/dev/null | /usr/bin/grep -E '^(installed|absent|broken)$' | head -1; }
+oriown() { [ "$(cat "$om/functions2.data")" = "the game's own 2" ] && [ "$(cat "$oc/d3dm/oriwotw.exe/shaders.cache/MTLGPUFamilyTest/pipeline_cache.bin")" = "the game's own pipelines" ] && [ ! -e "$g/mgf-shaders-compiled.txt" ]; }
+[ "$(orist)" = absent ] && say ok "ori shaders: absent before" || say FAIL "ori shaders: absent before ($(orist))"
+! MGVF_ORI_RUNNER="$o/none" MGVF_ORI_CACHES="$oc" MGVF_ORI_STORE="$o/store" /bin/bash "$FIX/install-ori-shaders.sh" "$g" > "$o/norunner.log" 2>&1 \
+  && /usr/bin/grep -q 'Start the game once with NotProton' "$o/norunner.log" && oriown \
+  && say ok "ori shaders: refused where NotProton never started the game, nothing changed" || say FAIL "ori shaders: no runner ($(tail -1 "$o/norunner.log"))"
+! OSHA="$(printf '%064d' 0)" ori > "$o/sha.log" 2>&1 && /usr/bin/grep -q 'not the expected file' "$o/sha.log" && oriown && [ ! -d "$o/store/tools-000000000000" ] \
+  && say ok "ori shaders: a download that is not the pinned one is refused, nothing changed or kept" || say FAIL "ori shaders: wrong download ($(tail -1 "$o/sha.log"))"
+/usr/bin/perl -e 'use Fcntl qw(:flock); open(my $f, "<", $ARGV[0]) or die; flock($f, LOCK_EX) or die; open(my $r, ">", $ARGV[1]); close($r); sleep 120' "$om/functions2.data" "$o/held" &
+oholder=$!; while [ ! -e "$o/held" ]; do sleep 0.1; done
+! ori > "$o/held.log" 2>&1 && /usr/bin/grep -q 'is running' "$o/held.log" && oriown \
+  && say ok "ori shaders: refused while a process holds one of the game's cache files" || say FAIL "ori shaders: held ($(tail -1 "$o/held.log"))"
+kill "$oholder" 2>/dev/null; wait "$oholder" 2>/dev/null
+echo "s1" > "$g/shaders.txt"
+! ori > "$o/version.log" 2>&1 && /usr/bin/grep -q 'not the one the list was recorded from' "$o/version.log" && oriown \
+  && say ok "ori shaders: refused for a game the list was not recorded from, nothing changed" || say FAIL "ori shaders: other version ($(tail -1 "$o/version.log"))"
+for n in 1 2 3 4 5 6; do echo "s$n"; done > "$g/shaders.txt"
+ori > "$o/install.log" 2>&1; ocode=$?
+osame=yes; for n in "" 1 2 3; do cmp -s "$om/functions$n.data" "$om/functions.data" && cmp -s "$om/functions$n.list" "$om/functions.list" || osame=no; done
+[ "$ocode" = 0 ] && [ "$(orist)" = installed ] && [ "$osame" = yes ] && [ "$(wc -l < "$om/functions.data" | tr -d ' ')" = 10 ] \
+  && [ "$(cat "$oc/d3dm/oriwotw.exe/shaders.cache/MTLGPUFamilyTest/pipeline_cache.bin")" = "pipelines of mgf-oriwarm.exe" ] \
+  && /usr/bin/grep -q '^combinations = 10$' "$g/mgf-shaders-compiled.txt" \
+  && say ok "ori shaders: installed, the four numbered files the same and D3DMetal's folder the new one" \
+  || say FAIL "ori shaders: install ($ocode, $(orist), $(tail -2 "$o/install.log" | tr '\n' ' '))"
+[ ! -e "$oc/d3dm/mgf-oriwarm.exe" ] && [ ! -e "$o/store/work" ] && [ -z "$(find "$oc" -name '*.mgf-*')" ] && [ -x "$o/store/tools-${osha:0:12}/extract" ] \
+  && say ok "ori shaders: nothing left behind but the fetched programs" || say FAIL "ori shaders: left behind ($(find "$oc" "$o/store" -maxdepth 3 | tail -5 | tr '\n' ' '))"
+: > "$orun/skips.txt"; touch "$orun/stop-half-way"
+ori > "$o/again.log" 2>&1 && [ "$(tr '\n' ' ' < "$orun/skips.txt")" = "0 5 " ] && [ "$(wc -l < "$om/functions3.data" | tr -d ' ')" = 10 ] && [ "$(orist)" = installed ] \
+  && say ok "ori shaders: a loader that stops half way is started again after its last draw" || say FAIL "ori shaders: restart ($(tr '\n' ' ' < "$orun/skips.txt"), $(tail -1 "$o/again.log"))"
+sed -i '' 's/"100"/"101"/' "$o/steamapps/appmanifest_1057090.acf"
+[ "$(orist)" = broken ] && ori > /dev/null 2>&1 && [ "$(orist)" = installed ] \
+  && say ok "ori shaders: a game update shows broken, installing again compiles for it" || say FAIL "ori shaders: game update ($(orist))"
+echo "another" >> "$orun/lib/apple_gptk/external/D3DMetal.framework/D3DMetal"
+[ "$(orist)" = broken ] && say ok "ori shaders: another D3DMetal shows broken" || say FAIL "ori shaders: other D3DMetal ($(orist))"
+ori > /dev/null 2>&1
+last="$(ori --restore 2>/dev/null | head -1)"
+[ "${last%% *}" = restored ] && [ "$(orist)" = absent ] && [ ! -e "$o/store" ] && [ "$(wc -l < "$om/functions.data" | tr -d ' ')" = 10 ] \
+  && say ok "ori shaders: forgotten, the fetched programs gone and the compiled shaders left" || say FAIL "ori shaders: restore ($last, $(orist))"
+
 if [ "$fails" = 0 ]; then echo "==> every installer: installed, outdated, updated, restored; Cyberpunk 2077's app patched, signed and put back"; else echo "==> $fails failed"; exit 1; fi
