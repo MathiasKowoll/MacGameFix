@@ -518,7 +518,7 @@
       "status": "works",
       "technology": "CryEngine, reading the pad as an XInput controller. It ships Sony's pad library, which was not needed.",
       "library": "XInput",
-      "libraryNote": "It ships Sony's library, so It Vibrates… fills in Sony libScePad; its rumble goes through XInput.",
+      "libraryNote": "It ships Sony's library, so It Vibrates\u2026 fills in Sony libScePad; its rumble goes through XInput.",
       "vibration": "XInput",
       "features": [
         "XInput rumble",
@@ -911,7 +911,7 @@
       ]
     },
     {
-      "name": "God of War Ragnarök",
+      "name": "God of War Ragnar\u00f6k",
       "steamAppId": "2322010",
       "status": "works",
       "technology": "Its executable carries Sony's library (libScePad: adaptive triggers, haptics) and loads it through the PlayStation PC SDK, but under Wine Steam answers that it runs on a Steam Deck, and the game never loads the SDK. It then reads the controller as Steam presents it: with Steam Input on, through Steam's own XInput controller and Steam Input's controller type, which names a DualSense; with Steam Input off, through XInput alone.",
