@@ -3,5 +3,6 @@
 # "notes"; the app shows them with the update and the agent in its notification.
 # Rewrite them with every change to the modules: what stays here is said again with
 # the next catalog. Lines that start with # are not carried.
-CrossOver 26.3 has the controller improvements the Previews have: a DualSense over Bluetooth is shown to games as one on a cable, with its triggers and haptics; XInput games get rumble; a game that sets no trigger effect can have one; the DualShock 4 is covered.
-These 26.3 modules were checked with a probe of what a game finds, and have not been played in a game yet.
+2XKO (Riot) now starts and plays on CrossOver Preview 41303, in a CrossOver bottle and through NotProton (Rosetta), signed in through the Riot Client. The patches that make it run are the work of NotProton's creator: thank you.
+It stutters at times: its copy protection keeps the game's code encrypted, and Rosetta pays for every page it opens. How to set it up: docs/improvements/2xko.md.
+After this update each bottle and prefix of that CrossOver refreshes its copies of Wine's modules the next time it starts, which takes a few seconds once.
