@@ -9,7 +9,9 @@
 # The modules are two improvements, each installed and removed on its own:
 #   controls  the DualSense's haptics, triggers, Bluetooth and XInput: every module but ntdll.so
 #   rosetta   Rosetta's CPU for copy protection: ntdll.so, which also carries the
-#             timer thread's fix (0021), on the FEX side too where a build has one
+#             timer thread's fix (0021), on the FEX side too where a build has one; and
+#             where a build carries them, kernelbase.dll, user32.dll and win32u.so, which
+#             2XKO's copy protection and the Riot Client need (wine-11.21's 0033-0035)
 # Without --part every improvement the build carries is meant, as before there were two.
 # An improvement is in when the list in the backup folder names one of its modules. One
 # that was never installed, or was taken out with --part, is absent whatever the other is.
@@ -47,7 +49,7 @@ for arg in "$@"; do
 done
 ROOT="${ROOT%/}"
 # Which improvement a module belongs to.
-part_of() { case "${1##*/}" in ntdll.so|ntdll.dll) echo rosetta ;; *) echo controls ;; esac; }
+part_of() { case "${1##*/}" in ntdll.so|ntdll.dll|kernelbase.dll|user32.dll|win32u.so) echo rosetta ;; *) echo controls ;; esac; }
 in_part() { [ "$PART" = all ] || [ "$(part_of "$1")" = "$PART" ]; }
 BACKUPS="${MGVF_ENGINE_BACKUP:-$HOME/Library/Application Support/MacGameFix/engine-backup}"
 LIB="$ROOT/lib/wine"
@@ -95,7 +97,9 @@ for side in x86_64 aarch64; do
     # then setupapi.dll and xaudio2_9.dll, and ntdll.so (Rosetta's CPU fidelity on the
     # Intel side, the timer fix on both) with, on 41073's Intel side, its ntdll.dll,
     # came later; a build may not carry them.
-    for f in $side-unix/winebus.so $side-unix/ntdll.so $side-windows/ntdll.dll $side-windows/hidclass.sys $side-windows/setupapi.dll $side-windows/xaudio2_9.dll $XINPUT_DLLS; do
+    # kernelbase.dll, user32.dll and win32u.so (2XKO) came with 41303's 0033-0035.
+    for f in $side-unix/winebus.so $side-unix/ntdll.so $side-windows/ntdll.dll $side-windows/hidclass.sys $side-windows/setupapi.dll $side-windows/xaudio2_9.dll $XINPUT_DLLS \
+             $side-windows/kernelbase.dll $side-windows/user32.dll $side-unix/win32u.so; do
       case "$f" in */*) ;; *) f="$side-windows/$f" ;; esac
       [ -f "$(src "$f")" ] && FILES="$FILES $f"
     done
@@ -176,6 +180,16 @@ put() {
   return 1
 }
 
+# Wine copies its PE modules into every prefix's system32 when a prefix is made or updated,
+# and updates a prefix when wine.inf is newer than the prefix's .update-timestamp. Changing
+# modules alone leaves each prefix with copies of the old ones. A program that reads a
+# module from system32 instead of using the loaded one sees the old file: 2XKO's copy
+# protection reads ntdll.dll there and refuses the one 0023 made (0031). A newer wine.inf
+# has each prefix or bottle refresh its copies the next time it starts.
+refresh_prefixes() {
+  [ -f "$ROOT/share/wine/wine.inf" ] && touch "$ROOT/share/wine/wine.inf"
+}
+
 resign() {
   [ -n "$APP" ] || return 0
   say "Signing $(basename "$APP") again (ad hoc): CodeWeavers' signature no longer covers its files."
@@ -215,6 +229,7 @@ install)
   done
   mv "$SAVE/installed.list.new" "$SAVE/installed.list"
   rm -f "$SAVE/off.list"      # a note older scripts kept; the list alone says what is in
+  refresh_prefixes
   resign
   say "Installed the modules for CrossOver $BUILD into $ROOT." ;;
 --restore)
@@ -224,6 +239,8 @@ install)
            aarch64-windows/mmdevapi.dll aarch64-windows/hidclass.sys aarch64-unix/winecoreaudio.so \
            aarch64-unix/winebus.so aarch64-unix/ntdll.so x86_64-windows/setupapi.dll aarch64-windows/setupapi.dll \
            x86_64-windows/xaudio2_9.dll aarch64-windows/xaudio2_9.dll \
+           x86_64-windows/kernelbase.dll aarch64-windows/kernelbase.dll x86_64-windows/user32.dll \
+           aarch64-windows/user32.dll x86_64-unix/win32u.so aarch64-unix/win32u.so \
            $(for x in $XINPUT_DLLS; do printf 'x86_64-windows/%s aarch64-windows/%s ' "$x" "$x"; done); do
     in_part "$f" || continue
     if [ -f "$SAVE/$f.absent" ]; then
@@ -247,6 +264,7 @@ install)
   else
     rm -f "$SAVE/off.list"
   fi
+  refresh_prefixes
   resign
   say "Put CrossOver's own files back in $ROOT." ;;
 *) sed -n '4,6p' "$0"; exit 2 ;;

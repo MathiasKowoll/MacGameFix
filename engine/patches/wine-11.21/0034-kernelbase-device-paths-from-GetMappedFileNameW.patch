@@ -1,0 +1,43 @@
+--- a/dlls/kernelbase/debug.c
++++ b/dlls/kernelbase/debug.c
+@@ -1304,7 +1304,9 @@
+ {
+     ULONG_PTR buffer[(sizeof(MEMORY_SECTION_NAME) + MAX_PATH * sizeof(WCHAR)) / sizeof(ULONG_PTR)];
+     MEMORY_SECTION_NAME *mem = (MEMORY_SECTION_NAME *)buffer;
+-    DWORD len;
++    WCHAR device[MAX_PATH], drive[3];
++    const WCHAR *path;
++    DWORD len, device_len = 0, copied;
+ 
+     if (size && !name)
+     {
+@@ -1315,8 +1317,28 @@
+                                              mem, sizeof(buffer), NULL )))
+         return 0;
+ 
++    path = mem->SectionFileName.Buffer;
+     len = mem->SectionFileName.Length / sizeof(WCHAR);
+-    memcpy( name, mem->SectionFileName.Buffer, min( mem->SectionFileName.Length, size * sizeof(WCHAR) ));
++
++    if (len > 6 && !wcsncmp( path, L"\\??\\", 4 ) && path[5] == ':' && path[6] == '\\')
++    {
++        drive[0] = path[4];
++        drive[1] = ':';
++        drive[2] = 0;
++
++        if (QueryDosDeviceW( drive, device, ARRAY_SIZE(device) ))
++        {
++            device_len = wcslen( device );
++            path += 6;
++            len -= 6;
++        }
++    }
++
++    copied = min( device_len, size );
++    memcpy( name, device, copied * sizeof(WCHAR) );
++    memcpy( name + copied, path, min( len, size - copied ) * sizeof(WCHAR) );
++    len += device_len;
++
+     if (len >= size) SetLastError( ERROR_INSUFFICIENT_BUFFER );
+     name[min(len, size - 1)] = 0;
+     return len;

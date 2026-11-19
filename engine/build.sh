@@ -91,7 +91,8 @@ if [ -z "$suffix" ]; then
   series="$(for p in "$SERIES"/*.patch; do [ -f "$p" ] && cat "$p"; done | shasum -a 256 | cut -d' ' -f1)"
   if [ -d "$TREE" ] && [ "$(cat "$TREE/.series" 2>/dev/null)" != "$series" ]; then
     echo "==> $(basename "$TREE") does not carry $(basename "$SERIES") as it is now: making it again; both sides of $ID build from scratch"
-    rm -rf "$TREE" "$here/.build/build-$ID-x86_64" "$here/.build/build-$ID-arm64"
+    rm -rf "$TREE" "$here/.build/build-$ID-x86_64" "$here/.build/build-$ID-arm64" \
+      "$here/.build/build-$ID-x86_64-win32u" "$here/.build/build-$ID-arm64-win32u"
     for d in "$OUT"/*-windows "$OUT"/*-unix; do
       case "$d" in "$OUT/$PE"|"$OUT/$UNIX") continue ;; esac
       [ -d "$d" ] || continue
@@ -143,10 +144,59 @@ configure() {  # <tree> <build directory> [more LDFLAGS]
 
 echo "==> building $ARCH (log: $BUILD/make.log)"
 XINPUT="xinput1_1 xinput1_2 xinput1_3 xinput1_4 xinput9_1_0 xinputuap"
+# A series whose build.conf says PROTECTION_MODULES=yes also ships kernelbase.dll, user32.dll
+# and win32u.so (wine-11.21's 0033-0035, for 2XKO's copy protection and the Riot Client).
+PROTECTION_PE=""; [ -z "$suffix" ] && [ "${PROTECTION_MODULES:-}" = yes ] && PROTECTION_PE="dlls/kernelbase/all dlls/user32/all"
 (cd "$BUILD" && make -j10 dlls/winebus.sys/all dlls/mmdevapi/all dlls/winecoreaudio.drv/all dlls/hidclass.sys/all dlls/setupapi/all dlls/xaudio2_9/all \
-  dlls/xinput1_1/all dlls/xinput1_2/all dlls/xinput1_3/all dlls/xinput1_4/all dlls/xinput9_1_0/all dlls/xinputuap/all $NTDLL \
+  dlls/xinput1_1/all dlls/xinput1_2/all dlls/xinput1_3/all dlls/xinput1_4/all dlls/xinput9_1_0/all dlls/xinputuap/all $NTDLL $PROTECTION_PE \
   >"$BUILD/make.log" 2>&1) \
   || { tail -30 "$BUILD/make.log"; exit 1; }
+
+# win32u.so, built as CodeWeavers build theirs: with FreeType and Vulkan (MoltenVK), which it
+# opens by name when it runs (libfreetype.6.dylib, libMoltenVK.dylib). The build directory
+# above is configured without them, for the modules it makes, so win32u gets one of its own
+# from the same tree. FreeType's headers are the CrossOver sources' own, beside Wine's; the
+# two libraries are only for configure's link tests, from a CrossOver of this build
+# (CROSSOVER_LIB, its CrossOver/lib folder; a NotProton runner of this build by default),
+# copied to a path without spaces, which Wine's build system does not survive.
+WIN32U_SO=""
+if [ -n "$PROTECTION_PE" ]; then
+  LIBSIDE=x86_64; [ "$CPU" = arm64 ] && LIBSIDE=aarch64
+  CXLIB="${CROSSOVER_LIB:-}"
+  if [ -z "$CXLIB" ]; then
+    for r in "$HOME/Library/Application Support/notproton/runners/crossover-$ID-fex" "$HOME/Library/Application Support/notproton/runners/crossover-$ID"; do
+      [ -d "$r/CrossOver/lib/$LIBSIDE" ] && { CXLIB="$r/CrossOver/lib"; break; }
+    done
+  fi
+  FT_INCLUDE="$(dirname "$SRC")/freetype/include"
+  [ -f "$CXLIB/$LIBSIDE/libfreetype.6.dylib" ] && [ -f "$CXLIB/$LIBSIDE/libMoltenVK.dylib" ] \
+    || { echo "no libfreetype.6.dylib and libMoltenVK.dylib of CrossOver $ID for $LIBSIDE (set CROSSOVER_LIB to its CrossOver/lib)"; exit 1; }
+  [ -f "$FT_INCLUDE/ft2build.h" ] || { echo "FreeType's headers are not at $FT_INCLUDE"; exit 1; }
+  WLIBS="$here/.build/libs-$ID-$LIBSIDE"; WBUILD="$here/.build/build-$ID-$ARCH-win32u"
+  mkdir -p "$WLIBS"
+  cp "$CXLIB/$LIBSIDE/libfreetype.6.dylib" "$CXLIB/$LIBSIDE/libMoltenVK.dylib" "$WLIBS/"
+  ln -sf libfreetype.6.dylib "$WLIBS/libfreetype.dylib"
+  if [ ! -f "$WBUILD/Makefile" ]; then
+    echo "==> configuring $ARCH for win32u.so in $(basename "$WBUILD") (log: $WBUILD/configure.log)"
+    mkdir -p "$WBUILD"
+    (cd "$WBUILD" && CC="/usr/bin/clang -arch $CPU -isysroot $SDKROOT $MIN" CXX="/usr/bin/clang++ -arch $CPU -isysroot $SDKROOT $MIN" \
+      LDFLAGS="-isysroot $SDKROOT $MIN -L$WLIBS" "$TREE/configure" --host=$HOST --enable-archs=$ARCHS \
+      --with-freetype --with-vulkan --without-x --without-gstreamer --without-opengl \
+      --without-cups --without-dbus --without-fontconfig --without-gnutls --without-krb5 --without-gssapi \
+      --without-opencl --without-pcap --without-usb --without-v4l2 --without-sane --without-capi \
+      --without-gphoto --without-netapi --without-pulse --without-alsa --without-oss --without-udev \
+      $UNWIND_FLAG --without-ffmpeg --without-inotify \
+      FREETYPE_CFLAGS="-I$FT_INCLUDE" FREETYPE_LIBS="-L$WLIBS -lfreetype" \
+      SDL2_CFLAGS="-I$SDL2_INCLUDE -D_THREAD_SAFE" ac_cv_lib_soname_SDL2=libSDL2-2.0.0.dylib \
+      ac_cv_func_pipe2=no \
+      >"$WBUILD/configure.log" 2>&1) || { tail -20 "$WBUILD/configure.log"; exit 1; }
+  fi
+  grep -q 'SONAME_LIBFREETYPE "libfreetype.6.dylib"' "$WBUILD/include/config.h" && grep -q 'SONAME_LIBVULKAN "libMoltenVK.dylib"' "$WBUILD/include/config.h" \
+    || { echo "win32u.so would be built without FreeType or MoltenVK: see $WBUILD/include/config.h"; exit 1; }
+  echo "==> building win32u.so for $ARCH (log: $WBUILD/make.log)"
+  (cd "$WBUILD" && make -j10 dlls/win32u/all >"$WBUILD/make.log" 2>&1) || { tail -30 "$WBUILD/make.log"; exit 1; }
+  WIN32U_SO="$WBUILD/dlls/win32u/win32u.so"
+fi
 
 # The FEX side's ntdll.so, from the pristine sources and NTDLL_ARM64's patches alone. Its
 # tree carries their SHA-256 in .series as the main tree does, and is made again with its
@@ -188,7 +238,8 @@ fi
 # they are committed.
 rm -rf "${OUT:?}/$PE" "${OUT:?}/$UNIX" && mkdir -p "$OUT/$PE" "$OUT/$UNIX"
 for f in dlls/winebus.sys/$PE/winebus.sys dlls/mmdevapi/$PE/mmdevapi.dll dlls/hidclass.sys/$PE/hidclass.sys dlls/setupapi/$PE/setupapi.dll dlls/xaudio2_9/$PE/xaudio2_9.dll \
-         $(for x in $XINPUT; do printf 'dlls/%s/%s/%s.dll ' "$x" "$PE" "$x"; done) $NTDLL_DLL_PE; do
+         $(for x in $XINPUT; do printf 'dlls/%s/%s/%s.dll ' "$x" "$PE" "$x"; done) $NTDLL_DLL_PE \
+         ${PROTECTION_PE:+dlls/kernelbase/$PE/kernelbase.dll dlls/user32/$PE/user32.dll}; do
   llvm-strip -o "$OUT/$PE/$(basename "$f")" "$BUILD/$f"
 done
 IDENTITY="${MACGAMEFIX_CODESIGN_IDENTITY:-}"
@@ -199,7 +250,7 @@ else
   echo "==> signing $UNIX ad hoc (MACGAMEFIX_CODESIGN_IDENTITY is not set): run tools/sign-payload.sh before committing them"
 fi
 for f in "$BUILD/dlls/winebus.sys/winebus.so" "$BUILD/dlls/winecoreaudio.drv/winecoreaudio.so" \
-         ${NTDLL:+"$BUILD/dlls/ntdll/ntdll.so"} ${NTDLL_ARM64_SO:+"$NTDLL_ARM64_SO"}; do
+         ${NTDLL:+"$BUILD/dlls/ntdll/ntdll.so"} ${NTDLL_ARM64_SO:+"$NTDLL_ARM64_SO"} ${WIN32U_SO:+"$WIN32U_SO"}; do
   so="$OUT/$UNIX/$(basename "$f")"
   cp "$f" "$so"
   strip -x "$so"

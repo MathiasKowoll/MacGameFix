@@ -1,0 +1,114 @@
+--- a/dlls/ntdll/software_exception_chain.h
++++ b/dlls/ntdll/software_exception_chain.h
+@@ -116,7 +116,18 @@
+  * Per row: thread ID, then twenty {count, before RIP, after RIP, a, b} groups.
+  * Reasons are mutually exclusive first-exit reasons, not independent predicates.
+  * These captures are for classification, not unbiased performance measurement. */
+-LONG64 __wine_software_exception_chain_diagnostics[64][101];
++/* The diagnostic stores are allocated when their capture is switched on, never in the image:
++ * 40 MB of static storage made ntdll.dll's SizeOfImage 0x26ca000, and copy protection that
++ * reads system32\ntdll.dll from disk (2XKO's) refuses an image laid out like that.
++ * The exports are now pointers to the stores, NULL until a capture allocates them. */
++static void *diagnostic_storage(SIZE_T size)
++{
++    void *base=NULL;
++    if (NtAllocateVirtualMemory(GetCurrentProcess(),&base,0,&size,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE)) return NULL;
++    memset(base,0,size); /* prefault, as the static stores were before arming */
++    return base;
++}
++LONG64 (*__wine_software_exception_chain_diagnostics)[101];
+ static LONG64 *software_chain_diag_row(void)
+ {
+     LONG64 tid;
+@@ -124,6 +135,15 @@
+     /* Detailed diagnostics are private-probe-only in this build. FH6 keeps
+      * aggregate counters but performs no per-thread scan or opcode census. */
+     if (software_chain_mode != 1) return NULL;
++    if (!__wine_software_exception_chain_diagnostics)
++    {
++        void *rows=diagnostic_storage(64*101*sizeof(LONG64));
++        if (!rows) return NULL;
++        if (InterlockedCompareExchangePointer((void **)&__wine_software_exception_chain_diagnostics,rows,NULL))
++        {
++            SIZE_T size=0;NtFreeVirtualMemory(GetCurrentProcess(),&rows,&size,MEM_RELEASE);
++        }
++    }
+     tid = HandleToULong(NtCurrentTeb()->ClientId.UniqueThread);
+     for (i=0;i<64;i++)
+     {
+@@ -186,7 +206,7 @@
+     LONG ready;
+ };
+ C_ASSERT(sizeof(struct bridge_refusal_record)==80);
+-struct bridge_refusal_record __wine_bridge_refusal_records[REFUSAL_CAPACITY];
++struct bridge_refusal_record *__wine_bridge_refusal_records;
+ extern LONG64 __wine_exception_burst_control[8];
+ static LONG64 burst_clock(void);
+ static struct bridge_refusal_record *bridge_refusal_begin(CONTEXT *context)
+@@ -196,7 +216,7 @@
+     InterlockedIncrement64(&__wine_bridge_refusal_control[3]);
+     if(!__wine_bridge_refusal_control[0] || !__wine_exception_burst_control[0])goto unreserved;
+     index=InterlockedIncrement64(&__wine_bridge_refusal_control[1])-1;
+-    if(index>=REFUSAL_CAPACITY){InterlockedIncrement64(&__wine_bridge_refusal_control[2]);goto unreserved;}
++    if(index>=REFUSAL_CAPACITY || !__wine_bridge_refusal_records){InterlockedIncrement64(&__wine_bridge_refusal_control[2]);goto unreserved;}
+     r=&__wine_bridge_refusal_records[index];r->begin=burst_clock();r->rip=context->Rip;
+     r->tid=HandleToULong(NtCurrentTeb()->ClientId.UniqueThread);return r;
+ unreserved:
+@@ -212,11 +232,20 @@
+ /* Diagnostic census reads bytes at handler-return time. Opcode family buckets
+  * ignore operand-size/REX prefixes for grouping only, not for execution.
+  * [attempts, accepted, template refusal, target refusal, data refusal, RIP, bytes0, bytes1]. */
+-LONG64 __wine_software_exception_bridge_census[64][512][8];
++LONG64 (*__wine_software_exception_bridge_census)[512][8];
+ static LONG64 *software_bridge_census(CONTEXT *context,LONG64 *row)
+ {
+     BYTE code[16];SIZE_T bytes;unsigned int n=0,key;LONG64 *entry;
+     if(!row || NtReadVirtualMemory(GetCurrentProcess(),(void*)context->Rip,code,sizeof code,&bytes) || bytes!=sizeof code)return NULL;
++    if(!__wine_software_exception_bridge_census)
++    {
++        void *census=diagnostic_storage(64*512*8*sizeof(LONG64));
++        if(!census)return NULL;
++        if(InterlockedCompareExchangePointer((void **)&__wine_software_exception_bridge_census,census,NULL))
++        {
++            SIZE_T size=0;NtFreeVirtualMemory(GetCurrentProcess(),&census,&size,MEM_RELEASE);
++        }
++    }
+     while(n<8 && ((code[n]>=0x40 && code[n]<=0x4f) || code[n]==0x66 || code[n]==0xf2 || code[n]==0xf3))n++;
+     key=code[n]==0x0f?256+code[n+1]:code[n];
+     entry=__wine_software_exception_bridge_census[(row-&__wine_software_exception_chain_diagnostics[0][0])/101][key];
+@@ -613,7 +642,7 @@
+     ULONG tid, links, reason;
+     LONG ready;
+ };
+-struct exception_burst_record __wine_exception_burst_records[BURST_CAPACITY];
++struct exception_burst_record *__wine_exception_burst_records;
+ static LONG64 burst_clock(void)
+ {
+     LARGE_INTEGER q;
+@@ -637,14 +666,14 @@
+     if (value.Length == 5*sizeof(WCHAR) && !memcmp(buffer,L"probe",value.Length)) probe=TRUE;
+     else if (value.Length != sizeof(WCHAR) || buffer[0] != '1') return;
+     NtQueryPerformanceCounter(&q, &frequency);
+-    memset(__wine_exception_burst_records,0,sizeof(__wine_exception_burst_records));
++    if (!(__wine_exception_burst_records=diagnostic_storage(BURST_CAPACITY*sizeof(struct exception_burst_record)))) return;
+     {
+         WCHAR trace_value[4];UNICODE_STRING trace_name=RTL_CONSTANT_STRING(L"WINE_BRIDGE_REFUSAL_TRACE");
+         UNICODE_STRING value={0,sizeof(trace_value),trace_value};
+         if(!RtlQueryEnvironmentVariable_U(NULL,&trace_name,&value) && value.Length==sizeof(WCHAR) && trace_value[0]=='1')
+         {
+-            memset(__wine_bridge_refusal_records,0,sizeof(__wine_bridge_refusal_records));
+-            InterlockedCompareExchange64(&__wine_bridge_refusal_control[0],1,0);
++            if((__wine_bridge_refusal_records=diagnostic_storage(REFUSAL_CAPACITY*sizeof(struct bridge_refusal_record))))
++                InterlockedCompareExchange64(&__wine_bridge_refusal_control[0],1,0);
+         }
+     }
+     __wine_exception_burst_control[5]=frequency.QuadPart;
+@@ -738,7 +767,7 @@
+         if (__wine_exception_burst_control[0])
+         {
+             index = InterlockedIncrement64(&__wine_exception_burst_control[1]) - 1;
+-            if (index < BURST_CAPACITY)
++            if (index < BURST_CAPACITY && __wine_exception_burst_records)
+             {
+                 timing = &__wine_exception_burst_records[index];
+                 timing->tid = HandleToULong(NtCurrentTeb()->ClientId.UniqueThread);
