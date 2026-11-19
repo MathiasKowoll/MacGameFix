@@ -1148,6 +1148,11 @@ how, is in the game's page under `legacy/wiki/`.
   joined an online session on a Mac (two IPv4 options that macOS refuses on the
   game's dual-stack UDP socket) and wrote the ntdll patch that answers them
   (engine patch `0026`, #73), with its probes.
+- **[NotProtonNot](https://github.com/NotProtonNot)**, NotProton's creator,
+  wrote the four patches that let 2XKO through its copy protection under Rosetta
+  (engine patches `0032` to `0035`: writecopy page-file views, drawing into
+  another process's top-level window, device paths from GetMappedFileNameW and
+  a GetPointerDevice stub), and handed them to us (#117, #119).
 - **The Cyberpunk 2077 patch** comes from a community script published
   anonymously; its author is not known. MacGameFix writes one of its five
   words.
