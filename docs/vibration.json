@@ -1,6 +1,6 @@
 {
   "about": "The games played for vibration with a DualSense or DualSense Edge on a Mac. A game is added after a session, from what was felt and what the Wine modules logged, never from what it should do. Each test names its controller and its connection. docs/vibration.md is made from this file by tools/vibration-md.py.",
-  "updated": "2026-11-01",
+  "updated": "2026-11-18",
   "stack": "MacGameFix's Wine modules in a NotProton runner (CrossOver Preview 27), Steam Input off for the game, unless a result says otherwise.",
   "results": {
     "works": "Works",
@@ -1136,6 +1136,28 @@
           "date": "2026-11-01",
           "result": "works",
           "notes": "With macOS Game Mode on, in full screen: vibrates incredibly well (the user)."
+        }
+      ]
+    },
+    {
+      "name": "Ori and the Will of the Wisps",
+      "steamAppId": "1057090",
+      "status": "works",
+      "technology": "XInput only: the store does not list the DualSense for it. Game Feel gives it the pad as an XInput controller.",
+      "library": "XInput",
+      "vibration": "XInput",
+      "features": [
+        "XInput rumble"
+      ],
+      "description": "With the pad shown as an XInput controller, the game reads it and its rumble plays on the motors.",
+      "settings": "The pad as an XInput controller (by the store's rule).",
+      "tests": [
+        {
+          "controller": "DualSense Edge",
+          "connection": "cable",
+          "result": "works",
+          "date": "2026-11-18",
+          "notes": "53 rumbles in the session, 397 ms each at the median; the player called the controls great. NotProton with CrossOver Preview 20261111's Wine, under Rosetta."
         }
       ]
     }
