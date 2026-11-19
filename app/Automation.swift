@@ -110,6 +110,8 @@ struct AutoSettings: Codable {
     var gameMode = false
     /// Games also lists the fixes still being tested: games.json's "testing" table.
     var testingFixes = false
+    /// Each NotProton game's compiled shaders are kept whole (ShaderCache.swift).
+    var shaderCache = true
 
     init() {}
 
@@ -133,6 +135,7 @@ struct AutoSettings: Codable {
         batteryIcon = try c.decodeIfPresent(String.self, forKey: .batteryIcon) ?? "raccoon"
         gameMode = try c.decodeIfPresent(Bool.self, forKey: .gameMode) ?? false
         testingFixes = try c.decodeIfPresent(Bool.self, forKey: .testingFixes) ?? false
+        shaderCache = try c.decodeIfPresent(Bool.self, forKey: .shaderCache) ?? true
     }
 
     /// Whether the agent keeps an improvement in a CrossOver folder.
@@ -488,6 +491,8 @@ enum Agent {
         if kept.modulesKept != settings.modulesKept || kept.rosettaKept != settings.rosettaKept { kept.save() }
         // A game installed since, a CrossOver updated, or a temporary folder macOS emptied.
         if settings.gameMode { GameMode.keep().forEach { print($0) } }
+        // A game that was closed since the last look: its four cache files are made the same.
+        if settings.shaderCache { ShaderCache.keepAll().forEach { print($0) } }
         // What the Wine modules saw each game do, kept before a restart empties /tmp.
         if PadStore.exists {
             // Which game each exe is, for the modules in a CrossOver bottle.

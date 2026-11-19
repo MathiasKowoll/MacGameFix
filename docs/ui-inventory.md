@@ -280,6 +280,13 @@ Below the rows:
 - An error from installing or removing, in red.
 - Footer: "Write them in a game's launch options in Steam, before %command%, for example MGF_FANS=max NOTPROTON_ENV_WINENCPU=8 %command%. For the games NotProton runs. Apple silicon only."
 
+**"Shaders"** (Improvements tab, after Fans)
+- Header: stacked-squares symbol, "Shaders", "A game compiles each shader the first time it draws with it, and should not have to do it twice.", and "On" or "Off".
+- Toggle **"Keep each game's compiled shaders whole"** (default on).
+  - Tooltip: "macOS keeps the shaders a game compiled in one of four files, and hands the game whichever is free at its next start: sometimes an empty one, and the game compiles them all again. With this on, once a game is closed its fullest file is copied over the other three, so every start finds them. The copies take no space of their own."
+- With the toggle on, a line: "<n> game(s) with compiled shaders, <m> kept whole. A game is done once it is closed.", or "No game NotProton runs has compiled shaders yet." Turning the toggle on does the copies at once for every game that is closed; opening the tab only counts.
+- Footer: "For the games NotProton runs. Done from the menu bar while a game is closed; nothing is compiled, and nothing of CrossOver's own cache is touched."
+
 **"Updates"**: one choice and one check for everything a release brings (MacGameFix itself, the game fixes, the Wine modules).
 - Picker **"Updates"**: "Automatic" / "Ask first" / "Off" (default Automatic).
   - Tooltip: "MacGameFix, its game fixes and its Wine modules, looked for <how often, as below>. Automatic takes the fixes and the modules as they come and downloads a new MacGameFix, which starts when you choose Relaunch. “Ask first” tells you, and takes nothing until you choose Update. Off does not look."
@@ -549,6 +556,8 @@ The "Control-Command-F" in the Game Mode footer is advice for full screen in gam
   - A failed install gives "The Wine modules could not go into <name>: <last line>."
 
 *Game Mode.* If it is on, the links are put back.
+
+*Shaders.* If it is on, for each game NotProton runs whose four Metal cache files differ and are held by no process, the fullest is copied over the others (ShaderCache.swift). The agent's output has a line for each: "<bundle>: the fullest shader cache copied over <n> other(s)". Nothing is shown in the window or as a notification.
 
 *Game Feel.* If `pad.json` exists:
 - It refreshes `pad-exes.conf`, reads new lines from the modules' log, and asks the Steam store about new games.
