@@ -3,6 +3,3 @@
 # "notes"; the app shows them with the update and the agent in its notification.
 # Rewrite them with every change to the modules: what stays here is said again with
 # the next catalog. Lines that start with # are not carried.
-2XKO (Riot) now starts and plays on CrossOver Preview 41303, in a CrossOver bottle and through NotProton (Rosetta), signed in through the Riot Client. The patches that make it run are the work of NotProton's creator: thank you.
-It stutters at times: its copy protection keeps the game's code encrypted, and Rosetta pays for every page it opens. How to set it up: docs/improvements/2xko.md.
-After this update each bottle and prefix of that CrossOver refreshes its copies of Wine's modules the next time it starts, which takes a few seconds once.
