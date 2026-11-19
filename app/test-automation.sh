@@ -22,6 +22,8 @@ trap '[ "${GAME_PID:-0}" -gt 0 ] && kill "$GAME_PID" 2>/dev/null; [ "${STUB_PID:
 export MACGAMEFIX_HOME="$T/home"
 # What the Steam store says of each app, saved: no test asks the network.
 export MACGAMEFIX_STORE_DIR="$T/store"
+# Where macOS keeps each game's compiled shaders: a folder of the test's, never the real one.
+export MACGAMEFIX_CACHE_DIR="$T/cache"
 mkdir -p "$MACGAMEFIX_STORE_DIR"
 # Every pass of the agent asks whether there is a newer MacGameFix: a release of this
 # very version answers, so none of them asks the site or GitHub.
@@ -941,6 +943,46 @@ echo 2 > "$GAME/fixed.marker"
 printf '{"kept":[],"updates":false}' > "$SUPPORT/MacGameFix/automatic.json"
 check '[ -z "$(thirdagent)" ] && [ "$(learned)" = "4000000007 6" ]' "the first look only learns: a fix that was already behind is not announced"
 echo 3 > "$GAME/fixed.marker"; rm -rf "$NEWGAME"
+
+echo "== each game's compiled shaders, kept whole"
+# Metal's cache of one NotProton game: four files a process takes one of, with a list beside each.
+# Here one is full, two hold less and one is missing; and CrossOver's own folder, which every bottle
+# game shares, with files that differ.
+export MACGAMEFIX_CACHE_DIR="$T/cache"
+MC="$MACGAMEFIX_CACHE_DIR/com.notproton.launcher.4242/com.apple.metal/16777235_467"
+CXC="$MACGAMEFIX_CACHE_DIR/com.codeweavers.CrossOver.wineloader/com.apple.metal/16777235_467"
+mkdir -p "$MC" "$CXC"
+fill() { /usr/bin/python3 -c 'import sys; open(sys.argv[1], "w").write(sys.argv[2] * int(sys.argv[3]))' "$1" "$2" "$3"; }
+fill "$MC/functions.data" a 10; fill "$MC/functions.list" a 4
+fill "$MC/functions1.data" full 200; fill "$MC/functions1.list" full 20
+fill "$MC/functions2.data" b 100; fill "$MC/functions2.list" b 8
+fill "$CXC/functions.data" one 50; fill "$CXC/functions.list" one 5
+fill "$CXC/functions1.data" other 500; fill "$CXC/functions1.list" other 9
+cp "$MC/functions1.data" "$T/full.data"; cp "$MC/functions1.list" "$T/full.list"
+shaders() { "$BIN" --shader-cache-keep 2>&1; }
+allfull() { for n in functions functions1 functions2 functions3; do cmp -s "$MC/$n.data" "$T/full.data" && cmp -s "$MC/$n.list" "$T/full.list" || return 1; done; }
+out="$(shaders)"
+check 'has "$out" "com.notproton.launcher.4242: the fullest shader cache copied over 3 others" && allfull' "the fullest of a game's four cache files is copied over the other three, lists and all"
+check 'has "$out" "1 game with compiled shaders, 1 kept whole"' "and the game counts as whole"
+check 'out="$(shaders)"; ! has "$out" "copied" && allfull' "four files that are the same are left alone"
+check '[ "$(cat "$CXC/functions.data")" != "$(cat "$CXC/functions1.data")" ] && [ ! -e "$CXC/functions2.data" ]' "CrossOver's own folder, which every bottle game shares, is not touched"
+# The game ran and added to the file it took: that one is the fullest now. While a process still holds
+# any of the four, nothing is copied.
+fill "$MC/functions2.data" fullmore 300; fill "$MC/functions2.list" fullmore 30
+cp "$MC/functions2.data" "$T/full.data"; cp "$MC/functions2.list" "$T/full.list"
+# perl, not python3: /usr/bin/python3 is a launcher, and killing it can leave the python it started holding the lock.
+/usr/bin/perl -e 'use Fcntl ":flock"; $| = 1; open(my $f, "<", $ARGV[0]) or die; flock($f, LOCK_EX) or die; print "held\n"; sleep 60' "$MC/functions3.data" > "$T/held" &
+HOLD_PID=$!
+for i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$T/held" ] && break; /usr/bin/python3 -c 'import time; time.sleep(0.2)'; done
+check 'out="$(shaders)"; ! has "$out" "copied" && ! allfull' "while a process holds one of the four, nothing is copied"
+kill "$HOLD_PID" 2>/dev/null; wait "$HOLD_PID" 2>/dev/null || true
+agent >/dev/null || true
+check 'allfull' "once it is free, the agent's next look copies the fullest over the others"
+fill "$MC/functions.data" fullest 400; fill "$MC/functions.list" fullest 40
+printf '{"kept":[],"updates":false,"shaderCache":false}' > "$SUPPORT/MacGameFix/automatic.json"
+agent >/dev/null || true
+check '[ "$(cat "$MC/functions.data")" != "$(cat "$MC/functions1.data")" ]' "with the option off, the agent leaves the files as they are"
+printf '{"kept":[],"updates":true,"askFirst":false}' > "$SUPPORT/MacGameFix/automatic.json"
 
 echo "== The App Management notice"
 check '[ "$("$BIN" --blocked-names "" "CrossOver A;CrossOver A;CrossOver B;CrossOver B" "CrossOver A;CrossOver A;CrossOver B;CrossOver B")" = "CrossOver A;CrossOver B" ]' "a CrossOver refused for two improvements is named once"

@@ -54,6 +54,8 @@ final class Model: ObservableObject {
     @Published var settings = AutoSettings.load()
     /// Which CrossOvers Game Mode covers, or why none (GameMode.swift).
     @Published var gameModeLine = ""
+    /// How many games' compiled shaders there are and how many are whole (ShaderCache.swift).
+    @Published var shaderLine = ""
     /// The fan helper (Fans.swift): whether it is in place, what it last said, and what went
     /// wrong the last time it was installed or removed.
     @Published var fansState = Fans.state()
@@ -260,6 +262,24 @@ final class Model: ObservableObject {
     func refreshFans() {
         fansState = Fans.state()
         fansLine = Fans.lastLine()
+    }
+
+    /// Each game's compiled shaders kept whole, or left as macOS writes them. On, the games that are
+    /// closed are done at once; the agent does the rest as each game closes.
+    func setShaderCache(_ on: Bool) {
+        settings.shaderCache = on
+        settings.save()
+        objectWillChange.send()
+        refreshShaders(keep: on)
+    }
+
+    func refreshShaders(keep: Bool = false) {
+        Task {
+            shaderLine = await Task.detached { () -> String in
+                if keep { ShaderCache.keepAll() }
+                return ShaderCache.coverage()
+            }.value
+        }
     }
 
     /// Games lists the fixes still being tested too, or stops listing them.
@@ -1647,6 +1667,25 @@ struct EngineView: View {
             }
 
             Section {
+                Toggle("Keep each game's compiled shaders whole", isOn: Binding(get: { model.settings.shaderCache },
+                                                                              set: { model.setShaderCache($0) }))
+                    .help("macOS keeps the shaders a game compiled in one of four files, and hands the game whichever is "
+                          + "free at its next start: sometimes an empty one, and the game compiles them all again. With "
+                          + "this on, once a game is closed its fullest file is copied over the other three, so every "
+                          + "start finds them. The copies take no space of their own.")
+                if model.settings.shaderCache && !model.shaderLine.isEmpty {
+                    Text(model.shaderLine).font(.caption).foregroundStyle(.secondary)
+                }
+            } header: {
+                ImprovementHeader(symbol: "square.stack.3d.up", title: "Shaders",
+                                  summary: "A game compiles each shader the first time it draws with it, and should not have to do it twice.",
+                                  count: model.settings.shaderCache ? "On" : "Off")
+            } footer: {
+                Text("For the games NotProton runs. Done from the menu bar while a game is closed; nothing is compiled, and nothing of CrossOver's own cache is touched.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
                 Toggle("Also into runners for new CrossOver builds", isOn: Binding(
                     get: { model.settings.modulesNewBuilds },
                     set: { model.settings.modulesNewBuilds = $0; model.settings.save(); model.objectWillChange.send() }))
@@ -1674,6 +1713,8 @@ struct EngineView: View {
         .onAppear {
             if model.engineRows.isEmpty { model.scanEngine() }
             model.refreshFans()
+            // With the option on the window does it too, for whoever keeps the menu bar item off.
+            model.refreshShaders(keep: model.settings.shaderCache)
         }
     }
 }
@@ -3012,6 +3053,13 @@ enum Entry {
                 if let error = Fans.change(install: args[i] == "--fans-install") { print(error); exit(1) }
             }
             print(Fans.state().rawValue)
+            exit(0)
+        }
+        if args.contains("--shader-cache-keep") || args.contains("--shader-cache-report") {
+            // Each NotProton game's Metal cache made whole, as the agent does it; then, or alone
+            // with --shader-cache-report, how it stands.
+            if args.contains("--shader-cache-keep") { ShaderCache.keepAll().forEach { print($0) } }
+            print(ShaderCache.coverage())
             exit(0)
         }
         if args.contains("--game-mode-keep") || args.contains("--game-mode-remove") || args.contains("--game-mode-report") {

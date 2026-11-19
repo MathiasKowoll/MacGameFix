@@ -64,8 +64,9 @@ STAR WARS: Galactic Racer; the games played, reported or in progress are in
 [`engine/README.md`](engine/README.md), each with a switch and an Update button for every CrossOver
 app and NotProton runner (the stable CrossOver and the latest Preview are maintained; an older
 Preview's modules are kept as they were last built, without support, and the tab says "No longer
-maintained" under it); then *Game Mode*, which changes nothing in CrossOver, and the modules' own
-updates; **Game Feel**, the DualSense's options for every game
+maintained" under it); then *Game Mode*, *Fans* and *Shaders* (see
+[Each game's compiled shaders, kept whole](#each-games-compiled-shaders-kept-whole)), which change
+nothing in CrossOver, and the modules' own updates; **Game Feel**, the DualSense's options for every game
 and, in a table of the Steam games on this Mac, for each one, with what the
 modules saw each game do; **Report**, for a game that does not work (see
 [Reporting a problem](#reporting-a-problem)); and **Settings**, with the background agent, the game
@@ -288,6 +289,46 @@ performance mode, and show the game 8 processors (`NOTPROTON_ENV_WINENCPU=8`,
 which needs no helper). In one line:
 `MGF_FANS=max NOTPROTON_ENV_WINENCPU=8 D3DM_MAX_FPS=60 %command%`.
 **Improvements › Fans** shows the two variables to copy.
+
+## Each game's compiled shaders, kept whole
+
+A game compiles each shader the first time it draws with it, and Metal keeps the
+result so that the next start does not compile it again. It keeps it under the
+identifier of the app the game runs from, in one of four files
+(`functions.data`, `functions1.data`, `functions2.data`, `functions3.data` in
+`<user cache>/<bundle id>/com.apple.metal/<GPU and macOS>/`): a process takes
+one that no other process holds, reads that one alone and adds to it. NotProton
+starts each game from an app of its own (`com.notproton.launcher.<app id>`), and
+Steam's launcher for the game runs from the same one, so two processes take a
+file each, and which of them the game gets changes from one start to the next.
+When it gets an empty one it compiles everything again.
+
+Measured on 2026-11-18 with Ori and the Blind Forest: Definitive Edition on a
+MacBook Pro M4 Max, under NotProton (CrossOver Preview's Wine, D3DMetal 4). The
+game draws with every shader it has before it shows its menu:
+
+| Start | Compiled | Taken from the cache | Before the first frame |
+| --- | --- | --- | --- |
+| First, nothing kept yet | all of them | 0 | about three minutes |
+| Second, as macOS left the files | 3,650 | 1 | about half a minute |
+| Third, the fullest file copied over the other three | 0 | 3,510 | under a second |
+
+With **Improvements › Shaders** on, which it is unless you turn it off,
+MacGameFix's agent does that copy for every game NotProton runs, once the game
+and its launcher are closed: Metal keeps a lock on the file a process took, and
+nothing is copied while any of the four is held. A copy is an APFS clone and
+takes no space of its own until a game writes to it. What only a smaller file
+held is compiled once more the next time the game draws it. Nothing is compiled
+by MacGameFix, and no game file is changed.
+
+CrossOver's own games are left alone: every game in every bottle shares one
+folder (`com.codeweavers.CrossOver.wineloader`), each of its four files holds a
+different mix of games, and copying one over the others would throw away what
+the others hold.
+
+This does nothing for the first time a game draws something; that compilation
+still happens once. A game that compiles as it goes, such as Ori and the Will of
+the Wisps, gets the other half of it: places already seen stop hitching again.
 
 ## Game Mode for CrossOver's games
 
