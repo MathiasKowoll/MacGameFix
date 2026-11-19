@@ -1,3 +1,9 @@
+From: NotProtonNot <332734261+NotProtonNot@users.noreply.github.com>
+Subject: GetMappedFileNameW answers with a device path (\Device\HarddiskVolume1\...), as Windows does, which copy protection checks. From NotProton's creator
+
+Patch by NotProton's creator (https://github.com/NotProtonNot/NotProton), handed to
+MacGameFix. Only the file name changed here; the diff is theirs as given.
+
 --- a/dlls/kernelbase/debug.c
 +++ b/dlls/kernelbase/debug.c
 @@ -1304,7 +1304,9 @@
