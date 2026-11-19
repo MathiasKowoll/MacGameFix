@@ -1,3 +1,9 @@
+From: NotProtonNot <332734261+NotProtonNot@users.noreply.github.com>
+Subject: GetPointerDevice exists and fails with ERROR_INVALID_PARAMETER, for games that import it (2XKO). From NotProton's creator
+
+Patch by NotProton's creator (https://github.com/NotProtonNot/NotProton), handed to
+MacGameFix. Only the file name changed here; the diff is theirs as given.
+
 --- a/dlls/user32/misc.c
 +++ b/dlls/user32/misc.c
 @@ -468,6 +468,19 @@

@@ -1,3 +1,9 @@
+From: NotProtonNot <332734261+NotProtonNot@users.noreply.github.com>
+Subject: A window surface flushed to another process's top-level window is drawn at the window's visible origin, for the Riot Client's Electron window. From NotProton's creator
+
+Patch by NotProton's creator (https://github.com/NotProtonNot/NotProton), handed to
+MacGameFix. Only the file name changed here; the diff is theirs as given.
+
 --- a/dlls/win32u/dce.c
 +++ b/dlls/win32u/dce.c
 @@ -741,6 +741,7 @@
