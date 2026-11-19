@@ -1713,7 +1713,8 @@ struct EngineView: View {
         .onAppear {
             if model.engineRows.isEmpty { model.scanEngine() }
             model.refreshFans()
-            model.refreshShaders()
+            // With the option on the window does it too, for whoever keeps the menu bar item off.
+            model.refreshShaders(keep: model.settings.shaderCache)
         }
     }
 }
