@@ -1,0 +1,39 @@
+{
+  "title": "Ori and the Will of the Wisps",
+  "installer": "install-ori-shaders.sh",
+  "scope": "folder",
+  "executable": "oriwotw.exe",
+  "carrierDirectory": "",
+  "alsoRuns": [],
+  "summary": "Compiles the game's shaders ahead of time, so it no longer hitches when something new comes on screen. NotProton only; takes 5 to 30 minutes.",
+  "page": null,
+  "installs": [],
+  "builtFrom": [],
+  "license": "GPL-3.0-or-later",
+  "credits": [
+    {
+      "name": "macprotips",
+      "url": "https://github.com/macprotips/ori-shader-warmer",
+      "note": "Found why the game hitches, recorded the list of about 90,000 shader and state combinations from it, and wrote the program that reads the shaders out of the game and the one that draws them (Ori Shader Warmer 1.1). MacGameFix ships none of it: the installer fetches their release from their repository, pinned by sha256, and runs it with the runner NotProton starts the game from."
+    }
+  ],
+  "excerpts": [
+    {
+      "file": "install-ori-shaders.sh",
+      "from": "^wine_env\\(\\) \\{",
+      "to": "^\\}",
+      "note": "The drawing program runs with the game's own runner and D3DMetal, in a prefix made for it and thrown away."
+    },
+    {
+      "file": "install-ori-shaders.sh",
+      "from": "^# A copy is an APFS clone",
+      "to": "^done",
+      "note": "Metal's compiled functions go into the four numbered files of the bundle NotProton starts the game from: a process takes whichever is free."
+    }
+  ],
+  "symptom": "The game hitches whenever something new comes on screen, for the whole first playthrough.",
+  "cause": "Direct3D 11 does not tell the driver ahead of time which shaders a game will draw with, nor with which blend, depth and vertex settings, so D3DMetal builds the Metal pipeline for each combination at the first draw that uses it. The game has about 20,000 shaders and draws them in about 90,000 combinations. Measured here before the fix: 1,123 shaders compiled in 222 seconds of play, and 70 of those seconds held a frame more than 50 ms late.",
+  "fix": "macprotips' Ori Shader Warmer is fetched from their release, reads the shaders out of your copy of the game and draws every recorded combination once with the game's own NotProton runner, which took 272 seconds on an M4 Max. The compiled result is then put where a game started by NotProton reads it: D3DMetal's cache under the executable's name, and Metal's under the game's own bundle, in all four numbered files. Measured after: 6 shaders compiled and 1,092 taken from the cache in 158 seconds. Install again after an update to macOS, the runner or the game. Under CrossOver the result would replace the Metal cache every bottle shares, so the installer refuses there; macprotips' own app does it.",
+  "backend": "D3DMetal",
+  "crossover": null
+}

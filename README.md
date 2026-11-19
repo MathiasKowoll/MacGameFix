@@ -384,6 +384,7 @@ open Steam there (engine/README.md, "The options").
 | Nioh | "Failure to play movie", then a crash | DXMT |
 | Nioh 2 | Cutscene refuses to play, then a crash | DXMT |
 | Nioh 3 | "Failed to play movie" | D3DMetal |
+| Ori and the Will of the Wisps | Hitches whenever something new comes on screen | NotProton with a Rosetta runner, D3DMetal |
 | Persona 5 Strikers | Video never starts; sound only | DXMT |
 | Phantom Blade Zero | Never opens a window under Rosetta (Denuvo); black menu video | D3DMetal 4, the Wine modules on, a prefix |
 | RESIDENT EVIL 2 | Crashes when a video plays | D3DMetal |
@@ -639,6 +640,31 @@ lists cannot take a copy, because the game crashed within a minute when they did
 So there the fix corrects the T-pose but adds no fog barrier, and the black blocks
 in volumetric fog remain; `sm2-tpose-fix.log` says so. Played on 2026-10-25: four
 minutes, characters right, no crash. With D3DMetal 4 the fix works as before.
+
+### Ori and the Will of the Wisps downloads one thing too
+
+Its installer compiles the game's shaders ahead of time with
+[Ori Shader Warmer](https://github.com/macprotips/ori-shader-warmer) by
+macprotips: a program that reads the shaders out of your own copy of the game,
+one that draws them, and the list of about 90,000 combinations they recorded
+from the game. Their release is downloaded once from their repository, checked
+against a pinned sha256 and kept in `~/Library/Caches/MacGameFix`; MacGameFix
+ships none of it.
+
+It is for a game NotProton starts, with a Rosetta runner and D3DMetal. The
+drawing runs with the runner NotProton made for the game, for 5 to 30 minutes
+with the game closed, and the result goes under the game's own bundle
+(`com.notproton.launcher.1057090`) and executable, where the running game was
+seen to read it. Nothing another game uses is replaced. Under CrossOver every
+bottle shares one Metal cache and a build for Ori replaces it, so the installer
+refuses there; macprotips' own app does that.
+
+Measured on 2026-11-18 on an M4 Max, from Metal's own record of the game:
+1,123 shaders compiled in 222 seconds of play before, 70 of those seconds with
+a frame more than 50 ms late; 6 compiled and 1,092 taken from the cache in 158
+seconds after, 21 seconds with a frame that late. Compiling took 272 seconds.
+The games row reads **Needs repair** once macOS, the runner or the game is
+not what the shaders were compiled with: install again.
 
 ### God of War: the specks without the solid grass
 
@@ -1125,6 +1151,10 @@ how, is in the game's page under `legacy/wiki/`.
   the six changes, which the recipe carries byte for byte. It improves on the
   first fix, by Ariel O in CodeWeavers' compatibility database, spread on Reddit
   by u/ales_sandr.
+- **[Ori Shader Warmer](https://github.com/macprotips/ori-shader-warmer) by macprotips.**
+  Ori and the Will of the Wisps' fix is theirs: the cause, the recorded list of
+  combinations and the two programs. The installer downloads their release and
+  runs it for a game NotProton starts.
 - **[WolfAmongUsFix](https://github.com/macprotips/WolfAmongUsFix) by macprotips**
   (public domain): The Wolf Among Us Remastered's diagnosis and the `d3d11.dll`
   it installs, shipped as published with its source.

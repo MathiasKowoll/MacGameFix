@@ -3,4 +3,4 @@
 # catalog.json as "notes"; the app shows them with the update and the agent in its
 # notification. Rewrite them with every change to the fixes: what stays here is said
 # again with the next catalog. Lines that start with # are not carried.
-The Witcher 3: the menu offers DLSS frame generation; the game no longer reports it unsupported.
+Ori and the Will of the Wisps: its shaders can be compiled ahead of time, so it no longer hitches when something new comes on screen. For NotProton; takes 5 to 30 minutes.
