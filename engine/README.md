@@ -631,6 +631,42 @@ gap over 100 ms in 35 of 121 seconds, coming in runs of several seconds, the lon
 and one second at 1 frame. The processor ran at full speed with no thermal warning. Not yet
 explained; the protection decrypting code on first use is the suspect.
 
+## Red Dead Online: TCP connections without TCP options, on request
+
+`0037` (wine-11.21, both sides' `ntdll.so`) connects a process's TCP sockets with macOS's
+`TCP_NOOPT` when it is asked for: the SYN carries no MSS, window scale, SACK or timestamp
+option, and the connection uses none.
+
+- **Asked for with** `WINE_TCP_NOOPT=1` in the process's environment (a game's Steam launch
+  options: `WINE_TCP_NOOPT=1 %command%`), or with NotProton's own switch, the file
+  `notproton-tcp-noopt` beside the prefix (`compatdata/<app id>/notproton-tcp-noopt`).
+  `WINE_TCP_NOOPT=0` turns it off even where the file is. Read once per process.
+- **Why:** Red Dead Online's connection to its servers needs it on a Mac. NotProton's creator
+  (https://github.com/NotProtonNot/NotProton) found it and handed us a patch that sets it in
+  wineserver, where the `connect()` is made. Socket options belong to the socket, not to one
+  descriptor of it, so `0037` sets the same option on the same socket from ntdll, through the
+  process's own descriptor, just before ntdll hands `IOCTL_AFD_WINE_CONNECT` to wineserver
+  (`connect` and `ConnectEx` both go that way). It then ships in the `ntdll.so` MacGameFix
+  already carries instead of a `wineserver` of its own, and it is decided per process rather
+  than for the whole prefix.
+- **What it costs:** with no window scaling a connection keeps at most 64 KB in flight, and
+  with no MSS option the server sends segments of 536 bytes. Fine for a game's control
+  connection; slow for a large download over the same process. So it is never on by default.
+
+Measured on 2026-11-20 with `engine/tests/tcp-noopt/run.sh` in a copy of NotProton's 41303
+runner, both sides (a Winsock `connect()` to a listener on 127.0.0.1, which reads macOS's
+`TCP_CONNECTION_INFO` and `TCP_MAXSEG` of the connection it accepts):
+
+| ntdll.so | Asked for | TCP options of the connection | MSS the listener sees |
+|---|---|---|---|
+| main (`2a707b5a`) | `WINE_TCP_NOOPT=1`, or the file | timestamps, SACK, window scale | 4024 |
+| with `0037` | nothing | timestamps, SACK, window scale | 4024 |
+| with `0037` | `WINE_TCP_NOOPT=1` | none | 536 |
+| with `0037` | the file | none | 536 |
+| with `0037` | the file and `WINE_TCP_NOOPT=0` | timestamps, SACK, window scale | 4024 |
+
+The FEX side gives the same rows.
+
 ## Measured
 
 Measured on 2026-10-18 on CrossOver Preview 27.0.0.41069, in a NotProton runner,
