@@ -1,0 +1,68 @@
+From: MacGameFix
+Subject: TCP connections without TCP options, on request, for Red Dead Online
+
+WINE_TCP_NOOPT=1, or NotProton's notproton-tcp-noopt file beside the prefix, connects a
+process's TCP sockets with macOS's TCP_NOOPT. NotProton's creator
+(https://github.com/NotProtonNot/NotProton) found that Red Dead Online needs it and set it in
+wineserver's connect; this sets the same option on the same socket from ntdll, before ntdll
+hands the connect to wineserver, so it ships in ntdll.so and is decided per process.
+
+--- a/dlls/ntdll/unix/socket.c
++++ b/dlls/ntdll/unix/socket.c
+@@ -1603,8 +1603,38 @@
+     if (io) io->Status = STATUS_SUCCESS;
+     return STATUS_SUCCESS;
+ }
++
++
++#ifdef TCP_NOOPT
++/* MacGameFix: TCP connections without TCP options, on request. WINE_TCP_NOOPT=1 in a process's
++ * environment, or NotProton's notproton-tcp-noopt file beside its prefix
++ * (compatdata/<app id>/notproton-tcp-noopt), connects that process's TCP sockets with macOS's
++ * TCP_NOOPT: the SYN carries no MSS, window scale, SACK or timestamp option, and the
++ * connection uses none. Red Dead Online's connection to its servers needs it on a Mac;
++ * NotProton's creator found it and set it in wineserver, where the connect is made. It is set
++ * here, on the same socket, before ntdll hands the connect to wineserver, so that it is decided
++ * by each process and ships with the ntdll.so MacGameFix already carries. Without window
++ * scaling a connection keeps at most 64 KB in flight, so it is never on by default.
++ * WINE_TCP_NOOPT=0 turns it off even where the file is. Read once. */
++static BOOL tcp_noopt_enabled(void)
++{
++    static int enabled = -1;
+ 
++    if (enabled == -1)
++    {
++        const char *env = getenv( "WINE_TCP_NOOPT" ), *prefix = getenv( "WINEPREFIX" );
++        char path[4096];
+ 
++        if (env && env[0] >= '0' && env[0] <= '9') enabled = atoi( env ) > 0;
++        else enabled = prefix && (size_t)snprintf( path, sizeof(path), "%s/../notproton-tcp-noopt", prefix ) < sizeof(path)
++                       && !access( path, F_OK );
++        if (enabled) TRACE( "TCP connections are made without TCP options\n" );
++    }
++    return enabled;
++}
++#endif
++
++
+ /* WINE_DUALSTACK_IPV4_OPTIONS=0 turns the counterparts below off: the host's refusal is handed
+  * on as it was, for a program that does worse with the counterpart than with WSAEINVAL. Read once. */
+ static BOOL ipv4_option_counterparts_enabled(void)
+@@ -1777,6 +1807,17 @@
+             status = STATUS_BAD_DEVICE_TYPE;
+             break;
+         }
++
++        case IOCTL_AFD_WINE_CONNECT:
++#ifdef TCP_NOOPT
++            if (tcp_noopt_enabled() && get_sock_type( handle ) == SOCK_STREAM)
++            {
++                static const int one = 1;
++                do_setsockopt( handle, NULL, IPPROTO_TCP, TCP_NOOPT, &one, sizeof(one) );
++            }
++#endif
++            status = STATUS_BAD_DEVICE_TYPE;  /* wineserver makes the connect */
++            break;
+ 
+         case IOCTL_AFD_GETSOCKNAME:
+             if (in_size) FIXME( "unexpected input size %u\n", in_size );
