@@ -64,6 +64,7 @@
 #
 # MGVF-SCOPE: prefix
 # MGVF-NEEDS: rosetta
+# MGVF-INSTRUCTIONS: pbz-instructions.md
 # MGVF-GAME: Phantom Blade Zero | PBZ.exe | platform/steam
 # MGVF-WHY: Never opens a window under Rosetta: its Denuvo checks the CPU for instructions Rosetta does not have. The Wine modules' ntdll shows them to this executable alone, it loads Microsoft's Visual C++ runtime first, and an H.264 decoder that offers NV12 brings back the black menu video. In NotProton it also turns on a pipeline cache, so the shaders Metal's own cache has no room for are not compiled again at every start.
 #
