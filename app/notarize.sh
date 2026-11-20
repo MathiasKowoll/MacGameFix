@@ -7,9 +7,19 @@
 # <app> is app/MacGameFix.app, built by build-app.sh with a Developer ID, unless
 # another is named. The assets, MacGameFix-<version>.zip and
 # MacGameFix-<version>.zip.sha256, go into <folder>, app/dist by default, beside
-# the catalogs build-app.sh writes there. The credentials are a notarytool
-# keychain profile, made once with xcrun notarytool store-credentials:
-# $MACGAMEFIX_NOTARY_PROFILE, itsomax-desktop-notary unless set.
+# the catalogs build-app.sh writes there.
+#
+# The credentials are an App Store Connect API key named in a file, when the
+# file is there: $MACGAMEFIX_NOTARY_CONF, ~/.config/macgamefix/notary.conf
+# unless set, outside the repository and readable by its owner alone, with
+#     KEY=<path to the key's AuthKey_<key id>.p8>
+#     KEY_ID=<the key's id>
+#     ISSUER=<the issuer id>
+# Without it they are a notarytool keychain profile, made once with xcrun
+# notarytool store-credentials: $MACGAMEFIX_NOTARY_PROFILE,
+# itsomax-desktop-notary unless set. The file is there because the profile is
+# not kept where the security tool can see it, and it has vanished from this
+# Mac four times, with nothing here that deletes it: a key in a file stays.
 #
 #   1. The app is checked first: codesign --verify --deep --strict, and every
 #      Mach-O in it signed with the app's own team's Developer ID, a secure
@@ -62,6 +72,24 @@ APP="${APP%/}"
 say() { printf '%s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
+CONF="${MACGAMEFIX_NOTARY_CONF:-$HOME/.config/macgamefix/notary.conf}"
+CREDS=(--keychain-profile "$PROFILE")
+FROM="profile $PROFILE"
+if [ -f "$CONF" ]; then
+  KEY=""; KEY_ID=""; ISSUER=""
+  while IFS='=' read -r k v; do
+    v="${v%\"}"; v="${v#\"}"
+    case "$k" in KEY) KEY="${v/#\~/$HOME}" ;; KEY_ID) KEY_ID="$v" ;; ISSUER) ISSUER="$v" ;; esac
+  done < <(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^#/d' -e '/^$/d' "$CONF")
+  [ -n "$KEY" ] && [ -n "$KEY_ID" ] && [ -n "$ISSUER" ] || die "$CONF needs three lines: KEY=, KEY_ID= and ISSUER="
+  [ -f "$KEY" ] || die "$CONF names the key $KEY, which is not there"
+  case "$(stat -f '%Lp' "$CONF" "$KEY" | tr '\n' ' ')" in
+    *[0-7][1-7]" "*|*[1-7][0-7]" "*) say "    note: $CONF or its key can be read by others than you: chmod 600 both" ;;
+  esac
+  CREDS=(--key "$KEY" --key-id "$KEY_ID" --issuer "$ISSUER")
+  FROM="the API key $KEY_ID in $CONF"
+fi
+
 [ -d "$APP/Contents" ] || die "$APP is not an app; build it first (app/build-app.sh)"
 APP="$(cd "$APP" && pwd)"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist" 2>/dev/null)"
@@ -90,17 +118,23 @@ ditto -c -k --norsrc --noextattr --keepParent "$APP" "$ZIP" || die "could not zi
 say "==> zipped for Apple: $(du -h "$ZIP" | cut -f1 | tr -d ' ')"
 if [ "$DRY" = 1 ]; then
   say "dry run: would send it with"
-  say "    xcrun notarytool submit $ASSET --keychain-profile $PROFILE --wait --output-format json"
+  say "    xcrun notarytool submit $ASSET ${CREDS[*]} --wait --output-format json"
   say "and stops here; nothing was sent."
   exit 0
 fi
 
-say "==> sending it to Apple's notary service (profile $PROFILE); this waits for its answer"
-xcrun notarytool submit "$ZIP" --keychain-profile "$PROFILE" --wait --output-format json > "$WORK/submit" 2>&1
+say "==> sending it to Apple's notary service ($FROM); this waits for its answer"
+xcrun notarytool submit "$ZIP" "${CREDS[@]}" --wait --output-format json > "$WORK/submit" 2>&1
 rc=$?
 ID="$(/usr/bin/grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' "$WORK/submit" | tail -1 || true)"
 STATUS="$(sed -nE 's/.*"status"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p; s/^[[:space:]]*status:[[:space:]]*(.*[^[:space:]])[[:space:]]*$/\1/p' "$WORK/submit" | tail -1)"
 
+if /usr/bin/grep -q 'No Keychain password item found for profile' "$WORK/submit"; then
+  sed 's/^/    /' "$WORK/submit" >&2
+  say "The keychain has no profile $PROFILE. Make it again with xcrun notarytool store-credentials, or name"
+  say "the App Store Connect API key in $CONF (KEY=, KEY_ID=, ISSUER=), which needs no keychain."
+  exit 1
+fi
 if /usr/bin/grep -qiE 'required agreement|agreement (is )?(missing|expired)|status code:? *403' "$WORK/submit"; then
   sed 's/^/    /' "$WORK/submit" >&2
   say "Apple refused the submission because the team's account holder has not accepted Apple's current agreement."
@@ -114,7 +148,7 @@ Accepted) ;;
 Invalid|Rejected)
   mkdir -p "$OUT" || die "could not make $OUT"
   LOG="$OUT/notary-$ID.json"
-  if xcrun notarytool log --keychain-profile "$PROFILE" "$ID" "$LOG" > "$WORK/log" 2>&1 && [ -s "$LOG" ]; then
+  if xcrun notarytool log "${CREDS[@]}" "$ID" "$LOG" > "$WORK/log" 2>&1 && [ -s "$LOG" ]; then
     say "Apple's log: $LOG"
     /usr/bin/python3 -I - "$LOG" <<'PY'
 import json, sys
@@ -124,7 +158,7 @@ for i in log.get("issues") or []:
 PY
   else
     sed 's/^/    /' "$WORK/log" >&2
-    say "Apple's log could not be fetched: xcrun notarytool log --keychain-profile $PROFILE $ID"
+    say "Apple's log could not be fetched: xcrun notarytool log ${CREDS[*]} $ID"
   fi
   die "Apple did not notarise $(basename "$APP") ($STATUS)" ;;
 *)

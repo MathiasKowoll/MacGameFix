@@ -963,9 +963,21 @@ bundle differs from `fixes/` in a single byte.
   build signs ad hoc.
 
 **Notarising it.** `app/notarize.sh` sends the built app to Apple's notary
-service and waits for the answer, with the notarytool keychain profile
-`$MACGAMEFIX_NOTARY_PROFILE` (`itsomax-desktop-notary` unless set, made once
-with `xcrun notarytool store-credentials`).
+service and waits for the answer. Its credentials are an App Store Connect API
+key named in `~/.config/macgamefix/notary.conf` (`$MACGAMEFIX_NOTARY_CONF`),
+outside the repository and readable by its owner alone (`chmod 600`, the
+`.p8` too):
+
+```
+KEY=~/.config/macgamefix/AuthKey_<key id>.p8
+KEY_ID=<key id>
+ISSUER=<issuer id>
+```
+
+Without that file, they are the notarytool keychain profile
+`$MACGAMEFIX_NOTARY_PROFILE` (`itsomax-desktop-notary` unless set, made with
+`xcrun notarytool store-credentials`). The file came after the profile vanished
+from the build Mac four times, with nothing in this repository deleting it.
 - **Accepted:** it staples the ticket to the app, checks it with `xcrun stapler
   validate` and `spctl`, and writes `app/dist/MacGameFix-<version>.zip` and its
   `.sha256`, the app assets of the release. Run it after `build-app.sh`, which

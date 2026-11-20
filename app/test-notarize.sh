@@ -18,7 +18,10 @@
 #     nothing stapled, no assets;
 #   - Invalid: Apple's log fetched into the folder and its issue printed, a
 #     failure, no assets;
-#   - no keychain profile: notarytool's own words, a failure, no assets;
+#   - no keychain profile: notarytool's own words, what to do, a failure, no assets;
+#   - an API key named in a file: sent and Apple's log fetched with --key,
+#     --key-id and --issuer, no profile asked; a file missing a line, or naming a
+#     key that is not there, refused before anything is sent;
 #   - Accepted: the zip sent is the app at its top level with no AppleDouble
 #     entries, the ticket stapled, spctl asked, and MacGameFix-<version>.zip and
 #     its .sha256 written, the zip carrying the stapled app; the same from
@@ -49,6 +52,8 @@ bad() { echo "  FAIL  $1"; fail=1; }
 
 mkdir -p "$T/bin"
 FAKE_LOG="$T/calls"; export FAKE_LOG
+# The real ~/.config/macgamefix/notary.conf must not change what a case sends.
+MACGAMEFIX_NOTARY_CONF="$T/no-notary.conf"; export MACGAMEFIX_NOTARY_CONF
 cat > "$T/bin/xcrun" <<'XCRUN'
 #!/bin/bash
 # A fake of xcrun for app/test-notarize.sh. It never calls the real one.
@@ -201,6 +206,7 @@ echo "== no keychain profile"
 MACGAMEFIX_NOTARY_PROFILE=nobody case_run noprofile
 [ "$RC" = 1 ] && ! stapled && no_assets && /usr/bin/grep -q 'No Keychain password item found for profile: nobody' "$C/log" \
   && /usr/bin/grep -q -- '--keychain-profile nobody' "$FAKE_LOG" \
+  && /usr/bin/grep -q 'name$' "$C/log" && /usr/bin/grep -q 'the App Store Connect API key in .*no-notary.conf' "$C/log" \
   && ok "MACGAMEFIX_NOTARY_PROFILE used; notarytool's own words, a failure, no assets" \
   || { bad "no profile (exit $RC)"; sed 's/^/        /' "$C/log"; }
 
@@ -258,6 +264,39 @@ OLD=1 FAKE_VALIDATE=second-fails case_run accepted
   && /usr/bin/grep -q "the app in $ASSET does not verify or carries no ticket; nothing was written into" "$C/log" \
   && ok "a failure, and the older pair in the folder as it was, nothing beside it" \
   || { bad "the copy not validating (exit $RC): $(ls -lA "$C/out" | tr '\n' ';')"; sed 's/^/        /' "$C/log"; }
+
+echo "== an API key named in a file"
+mkdir -p "$T/key"; printf 'not a real key\n' > "$T/key/AuthKey_TESTKEY01.p8"; chmod 600 "$T/key/AuthKey_TESTKEY01.p8"
+printf '# the notary key\nKEY=%s\nKEY_ID=TESTKEY01\nISSUER="00000000-1111-2222-3333-444444444444"\n' "$T/key/AuthKey_TESTKEY01.p8" > "$T/key/notary.conf"
+chmod 600 "$T/key/notary.conf"
+WANT="--key $T/key/AuthKey_TESTKEY01.p8 --key-id TESTKEY01 --issuer 00000000-1111-2222-3333-444444444444"
+MACGAMEFIX_NOTARY_CONF="$T/key/notary.conf" case_run accepted
+[ "$RC" = 0 ] && stapled && [ -s "$C/out/$ASSET" ] \
+  && /usr/bin/grep -qF -e "notarytool submit " "$FAKE_LOG" && /usr/bin/grep -qF -e " $WANT --wait --output-format json" "$FAKE_LOG" \
+  && ! /usr/bin/grep -q -- '--keychain-profile' "$FAKE_LOG" && /usr/bin/grep -q 'the API key TESTKEY01 in' "$C/log" \
+  && ! /usr/bin/grep -q 'note: .* can be read by others' "$C/log" \
+  && ok "Accepted with --key, --key-id and --issuer from the file, the quotes taken off, no profile asked" \
+  || { bad "the key file, accepted (exit $RC): $(/usr/bin/grep '^notarytool submit' "$FAKE_LOG")"; sed 's/^/        /' "$C/log"; }
+MACGAMEFIX_NOTARY_CONF="$T/key/notary.conf" case_run invalid
+[ "$RC" = 1 ] && /usr/bin/grep -qF -e "notarytool log $WANT 2efe2717-52ef-43a5-96dc-0797e4ca1041 " "$FAKE_LOG" \
+  && [ -s "$C/out/notary-2efe2717-52ef-43a5-96dc-0797e4ca1041.json" ] \
+  && ok "Invalid: Apple's log fetched with the same key" \
+  || { bad "the key file, Invalid (exit $RC): $(/usr/bin/grep '^notarytool log' "$FAKE_LOG")"; sed 's/^/        /' "$C/log"; }
+chmod 644 "$T/key/notary.conf"
+MACGAMEFIX_NOTARY_CONF="$T/key/notary.conf" case_run accepted --dry-run
+[ "$RC" = 0 ] && ! submitted && /usr/bin/grep -q 'note: .* can be read by others than you: chmod 600 both' "$C/log" \
+  && /usr/bin/grep -qF -e "$WANT" "$C/log" \
+  && ok "a file others can read: a note to chmod 600; the dry run names the key" \
+  || { bad "the key file readable by others"; sed 's/^/        /' "$C/log"; }
+chmod 600 "$T/key/notary.conf"
+printf 'KEY=%s\nKEY_ID=TESTKEY01\n' "$T/key/AuthKey_TESTKEY01.p8" > "$T/key/short.conf"
+MACGAMEFIX_NOTARY_CONF="$T/key/short.conf" case_run accepted
+[ "$RC" = 1 ] && ! submitted && no_assets && /usr/bin/grep -q 'needs three lines: KEY=, KEY_ID= and ISSUER=' "$C/log" \
+  && ok "a file without ISSUER=: refused, nothing sent" || { bad "the short key file (exit $RC)"; sed 's/^/        /' "$C/log"; }
+printf 'KEY=%s\nKEY_ID=TESTKEY01\nISSUER=x\n' "$T/key/AuthKey_GONE.p8" > "$T/key/gone.conf"
+MACGAMEFIX_NOTARY_CONF="$T/key/gone.conf" case_run accepted
+[ "$RC" = 1 ] && ! submitted && no_assets && /usr/bin/grep -q 'names the key .*AuthKey_GONE.p8, which is not there' "$C/log" \
+  && ok "a file naming a key that is not there: refused, nothing sent" || { bad "the missing key (exit $RC)"; sed 's/^/        /' "$C/log"; }
 
 echo
 # Every call the fakes took, across all the cases: only what they fake.
