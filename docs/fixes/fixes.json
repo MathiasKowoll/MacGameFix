@@ -1370,10 +1370,10 @@
           "symbol": null,
           "note": "Ten values, for PBZ.exe only: the CPUID bits the Wine modules' ntdll adds when asked, Microsoft's Visual C++ runtime loaded before Wine's, and the H.264 decoder below loaded native.",
           "language": "bash",
-          "startLine": 200,
-          "endLine": 206,
-          "commit": "cc9c13a82bbb4d6fe827aa03996d9e48e2446b9a",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/cc9c13a82bbb4d6fe827aa03996d9e48e2446b9a/fixes/install-pbz-fix.sh#L200-L206",
+          "startLine": 201,
+          "endLine": 207,
+          "commit": "582b7db5448f2081e94c31484be614199428d8eb",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/582b7db5448f2081e94c31484be614199428d8eb/fixes/install-pbz-fix.sh#L201-L207",
           "code": "values() {\n  printf '%s|%s|%s\\n' \"$ENV_KEY\" \"$CPUID_NAME\" \"$CPUID_DATA\"\n  local d\n  for d in $DLLS; do printf '%s|*%s|native,builtin\\n' \"$DLL_KEY\" \"$d\"; done\n  # native,builtin: should the prefix lose our file, CrossOver's decoder loads.\n  printf '%s|*msmpeg2vdec|native,builtin\\n' \"$DLL_KEY\"\n}"
         },
         {
@@ -1403,10 +1403,10 @@
           "symbol": null,
           "note": "In a NotProton prefix: the signed plugin renamed into NotProton's plugins folder, a descriptor only when none names its id, and the switch in front of PBZ's own launch options.",
           "language": "bash",
-          "startLine": 259,
-          "endLine": 284,
-          "commit": "cc9c13a82bbb4d6fe827aa03996d9e48e2446b9a",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/cc9c13a82bbb4d6fe827aa03996d9e48e2446b9a/fixes/install-pbz-fix.sh#L259-L284",
+          "startLine": 260,
+          "endLine": 285,
+          "commit": "582b7db5448f2081e94c31484be614199428d8eb",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/582b7db5448f2081e94c31484be614199428d8eb/fixes/install-pbz-fix.sh#L260-L285",
           "code": "cache_install() {\n  mkdir -p \"$PLUGINS\"\n  # The library is renamed into place, so a game still running keeps the one it loaded.\n  if ! cmp -s \"$CACHE_LIVE\" \"$CACHE_LIB\"; then\n    if [ -f \"$CACHE_LIVE\" ] && ! cache_lib_ours; then\n      echo \"error: $CACHE_LIVE is a different library; it was not touched.\" >&2\n      return 1\n    fi\n    cp -p \"$CACHE_LIB\" \"$CACHE_LIVE.mgf-new\" && mv -f \"$CACHE_LIVE.mgf-new\" \"$CACHE_LIVE\"\n  fi\n  # One the user wrote stays: NotProton refuses a second descriptor for the same id.\n  if ! /usr/bin/grep -lqx \"\\[$CACHE_ID\\]\" \"$PLUGINS\"/*.conf 2>/dev/null; then\n    cat > \"$CACHE_CONF.mgf-new\" <<CONF\n[$CACHE_ID]\nlabel = Rosetta pipeline cache\ndescription = Keeps the GPU code of the pipelines D3DMetal compiles in a Rosetta game, beyond Metal's 1.1 GB cache\nsection = dev\non = 1\ninject = 1\nrequires = Library/Application Support/notproton/plugins/notproton-rosetta-pipeline-cache.dylib\nCONF\n    mv -f \"$CACHE_CONF.mgf-new\" \"$CACHE_CONF\"\n  fi\n  cache_options install >/dev/null\n  echo \"  pipeline cache: plugin in NotProton's plugins folder, $CACHE_ID=1 in PBZ's launch options\"\n}"
         }
       ],
