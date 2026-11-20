@@ -350,9 +350,18 @@ esac
 stopped || exit 1
 fh6_preflight || exit 1
 
+# A kept "original" byte for byte this fix's own DLL holds no original: the game ships its
+# D3D12 runtime in D3D12/ and no d3d12.dll of its own. It was seen on 2026-11-19, beside the
+# same DLL in place (a copy made on 2026-11-16, by a build or a hand before this check), and
+# stopped every install. --restore already took such a copy for no original, so it goes here
+# too, and the install carries on.
 if [ -f "$KEPT" ] && is_proxy "$KEPT"; then
-  echo "error: the kept game d3d12.dll is another proxy, not an original." >&2
-  exit 1
+  rm -f "$KEPT"
+  echo "the kept game d3d12.dll was this fix's own DLL, not an original; it was removed"
+fi
+if [ -f "$P_KEPT" ] && is_alias "$P_KEPT"; then
+  rm -f "$P_KEPT"
+  echo "the kept system32 apd12.dll was this fix's own alias, not an original; it was removed"
 fi
 if [ -f "$LIVE" ] && ! is_proxy "$LIVE" && [ -f "$KEPT" ]; then
   echo "error: both a different game d3d12.dll and a kept original exist." >&2
