@@ -210,6 +210,53 @@ last="$(pbz --restore 2>/dev/null | tail -1)"
   && [ "$(cat "$psys/msmpeg2vdec.dll")" = "CrossOver's own msmpeg2vdec" ] && [ ! -e "$psys/msmpeg2vdec.dll.mgvf-stock" ] \
   && say ok "pbz in a Steam Play prefix: restored, every value gone and CrossOver's decoder back" || say FAIL "pbz prefix: restore ($last, $(pbzst))"
 
+# In a NotProton prefix the fix also turns the pipeline cache on: the plugin and its
+# descriptor in NotProton's plugins folder and the switch in PBZ's Steam launch options.
+# A disposable HOME, and a copy of the launch-options editor that does not look for Steam.
+npc="$W/pbznp"; nhome="$npc/home"; npfx="$npc/compatdata/4115450/pfx"
+mkdir -p "$npfx/drive_c/windows/system32" "$nhome/Library/Application Support/notproton" "$npc/fixes"
+printf 'WINE REGISTRY Version 2\n#arch=win64\n' > "$npfx/user.reg"; touch "$npfx/system.reg"
+echo 27.0.0.41303-fex > "$npc/compatdata/4115450/notproton-build"
+for n in install-pbz-fix.sh bottles.sh msmpeg2vdec-sw.dll notproton-rosetta-pipeline-cache.dylib steam-launch-options.pl; do cp "$FIX/$n" "$npc/fixes/$n"; done
+sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$npc/fixes/steam-launch-options.pl"
+nvdf="$nhome/Library/Application Support/Steam/userdata/1/config/localconfig.vdf"; mkdir -p "$(dirname "$nvdf")"
+printf '"UserLocalConfigStore"\n{\n\t"Software" { "Valve" { "Steam" { "apps" {\n\t\t"4115450"\n\t\t{\n\t\t\t"LaunchOptions"\t\t"D3DM_SUPPORT_DXR=0 %%command%%"\n\t\t}\n\t} } } }\n}\n' > "$nvdf"
+nvdf0="$(cat "$nvdf")"
+nplug="$nhome/Library/Application Support/notproton/plugins"
+npst() { HOME="$nhome" MGVF_BOTTLE="$npfx" /bin/bash "$npc/fixes/install-pbz-fix.sh" "$npc/game" --status 2>/dev/null | tail -1; }
+npbz() { HOME="$nhome" MGVF_BOTTLE="$npfx" /bin/bash "$npc/fixes/install-pbz-fix.sh" "$npc/game" "$@"; }
+mkdir -p "$npc/game"
+[ "$(npst)" = absent ] && say ok "pbz in NotProton: absent before" || say FAIL "pbz NotProton: absent before ($(npst))"
+npbz > "$W/pbznp.install.log" 2>&1 || say FAIL "pbz NotProton: install failed: $(tail -2 "$W/pbznp.install.log")"
+[ "$(npst)" = installed ] && cmp -s "$nplug/notproton-rosetta-pipeline-cache.dylib" "$FIX/notproton-rosetta-pipeline-cache.dylib" \
+  && /usr/bin/grep -qx '\[NOTPROTON_ROSETTA_PIPELINE_CACHE\]' "$nplug/rosetta-pipeline-cache.conf" \
+  && /usr/bin/grep -qF '"NOTPROTON_ROSETTA_PIPELINE_CACHE=1 D3DM_SUPPORT_DXR=0 %command%"' "$nvdf" \
+  && say ok "pbz in NotProton: the plugin, its descriptor and the switch in front of the user's options" || say FAIL "pbz NotProton: installed ($(npst))"
+sed -i '' 's/NOTPROTON_ROSETTA_PIPELINE_CACHE=1 //' "$nvdf"
+[ "$(npst)" = half ] && say ok "pbz in NotProton: the switch taken out of the launch options is half" || say FAIL "pbz NotProton: half ($(npst))"
+npbz > /dev/null 2>&1 && [ "$(npst)" = installed ] && say ok "pbz in NotProton: installing again puts the switch back" || say FAIL "pbz NotProton: repair ($(npst))"
+# The user's own descriptor and an earlier unsigned build of the same code: the descriptor
+# stays, the library becomes the signed one.
+printf '[NOTPROTON_ROSETTA_PIPELINE_CACHE]\nlabel = mine\ninject = 1\nrequires = /abs/notproton-rosetta-pipeline-cache.dylib\n' > "$nplug/rosetta-pipeline-cache.conf"
+printf 'not the plugin\n' > "$nplug/notproton-rosetta-pipeline-cache.dylib"
+npbz > /dev/null 2>&1; [ "$(cat "$nplug/notproton-rosetta-pipeline-cache.dylib")" = "not the plugin" ] \
+  && say ok "pbz in NotProton: a library that is not ours is not overwritten" || say FAIL "pbz NotProton: foreign library overwritten"
+mine_sum="$(shasum -a 256 "$nplug/notproton-rosetta-pipeline-cache.dylib" | cut -d' ' -f1)"
+sed -i '' "s/^CACHE_EARLIER=\"/CACHE_EARLIER=\"$mine_sum /" "$npc/fixes/install-pbz-fix.sh"
+npbz > /dev/null 2>&1 && cmp -s "$nplug/notproton-rosetta-pipeline-cache.dylib" "$FIX/notproton-rosetta-pipeline-cache.dylib" \
+  && /usr/bin/grep -q '^label = mine$' "$nplug/rosetta-pipeline-cache.conf" && [ "$(npst)" = installed ] \
+  && say ok "pbz in NotProton: an earlier build is replaced, the user's descriptor kept" || say FAIL "pbz NotProton: earlier build ($(npst))"
+last="$(npbz --restore 2>/dev/null | tail -1)"
+[ "$last" = restored ] && [ "$(npst)" = absent ] && [ "$(cat "$nvdf")" = "$nvdf0" ] \
+  && [ -f "$nplug/notproton-rosetta-pipeline-cache.dylib" ] && /usr/bin/grep -q '^label = mine$' "$nplug/rosetta-pipeline-cache.conf" \
+  && say ok "pbz in NotProton: restored, the launch options as they were and the user's descriptor kept" || say FAIL "pbz NotProton: restore ($last, $(npst))"
+rm -f "$nplug/rosetta-pipeline-cache.conf"; npbz > /dev/null 2>&1; npbz --restore > /dev/null 2>&1
+[ ! -e "$nplug/rosetta-pipeline-cache.conf" ] && [ ! -e "$nplug/notproton-rosetta-pipeline-cache.dylib" ] && [ "$(cat "$nvdf")" = "$nvdf0" ] \
+  && say ok "pbz in NotProton: what the fix wrote is gone again after a restore" || say FAIL "pbz NotProton: own files left ($(ls "$nplug"))"
+printf '"UserLocalConfigStore" { "Software" { "Valve" { "Steam" { "apps" { "4115450" { "LaunchOptions" "wrapper %%command%%" } } } } } }\n' > "$nvdf"
+! npbz > /dev/null 2>&1 && [ ! -e "$nplug/notproton-rosetta-pipeline-cache.dylib" ] && ! /usr/bin/grep -q native "$npfx/user.reg" \
+  && say ok "pbz in NotProton: options it cannot edit stop the install before anything changes" || say FAIL "pbz NotProton: wrapper not refused up front"
+
 # Need for Speed Unbound's fix changes the game's renderer DLL by recipe, keyed
 # by its sha256. The game's DLL is not here, so the test makes one: the recipe's
 # "from" bytes at their offsets in a file of 0xcc, and recipe rows for it, the
