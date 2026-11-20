@@ -3,3 +3,4 @@
 # "notes"; the app shows them with the update and the agent in its notification.
 # Rewrite them with every change to the modules: what stays here is said again with
 # the next catalog. Lines that start with # are not carried.
+CrossOver Preview 41303: the change 2XKO's copy protection needs in how memory is shared now applies to the Riot Client and 2XKO alone; every other game gets CrossOver's own behaviour back.
