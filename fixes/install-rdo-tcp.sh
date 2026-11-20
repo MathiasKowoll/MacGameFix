@@ -41,6 +41,10 @@ set -euo pipefail
 
 usage() { sed -n '3,7p' "$0" >&2; exit 1; }
 [ $# -ge 1 ] || usage
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# Sourced for what it tells the app: an installer that sources bottles.sh is handed the
+# prefix it works on in MGVF_BOTTLE (games.json's needsPrefix).
+. "$HERE/bottles.sh"
 
 GAME="${1%/}"
 MODE="${2:---install}"

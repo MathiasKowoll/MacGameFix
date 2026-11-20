@@ -7,7 +7,9 @@
   "alsoRuns": [],
   "summary": "Red Dead Online never connects to its servers on a Mac: its TCP connections have to be made without TCP options. The Wine modules' ntdll does that for this game's prefix alone, with NotProton's own switch. NotProton with CrossOver Preview 41303 only.",
   "page": null,
-  "installs": [],
+  "installs": [
+    "bottles.sh"
+  ],
   "builtFrom": [],
   "license": "GPL-3.0-or-later",
   "credits": [
