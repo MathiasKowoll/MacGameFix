@@ -1429,7 +1429,9 @@
       "alsoRuns": [],
       "summary": "Red Dead Online never connects to its servers on a Mac: its TCP connections have to be made without TCP options. The Wine modules' ntdll does that for this game's prefix alone, with NotProton's own switch. NotProton with CrossOver Preview 41303 only.",
       "page": null,
-      "installs": [],
+      "installs": [
+        "bottles.sh"
+      ],
       "builtFrom": [],
       "license": "GPL-3.0-or-later",
       "credits": [
@@ -1445,10 +1447,10 @@
           "symbol": null,
           "note": "The switch is one empty file beside the prefix, NotProton's own; the runner's ntdll.so must carry engine patch 0037, which names that file.",
           "language": "bash",
-          "startLine": 69,
-          "endLine": 77,
-          "commit": "af5160b41e6dbd45c4e3ca508e9786d4ccf19036",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/af5160b41e6dbd45c4e3ca508e9786d4ccf19036/fixes/install-rdo-tcp.sh#L69-L77",
+          "startLine": 73,
+          "endLine": 81,
+          "commit": "24783c72a93d6d537a04cc7ce2a1c1dcfd21ecd0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/24783c72a93d6d537a04cc7ce2a1c1dcfd21ecd0/fixes/install-rdo-tcp.sh#L73-L81",
           "code": "SWITCH=\"$(dirname \"$PFX\")/notproton-tcp-noopt\"\n# notproton-build's first line names the runner: 27.0.0.41303 or 27.0.0.41303-fex; MGVF_CX, when\n# the app passes it, is that runner's CrossOver folder.\nBUILD=\"\"; IFS= read -r BUILD < \"$(dirname \"$PFX\")/notproton-build\" || true\nRUNNER=\"${MGVF_CX:-$HOME/Library/Application Support/notproton/runners/crossover-$BUILD/CrossOver}\"\nRUNNER=\"${RUNNER%/}\"\nNTDLL=\"$RUNNER/lib/wine/x86_64-unix/ntdll.so\"\n# 0037 carries the switch's file name; CrossOver's own ntdll.so and ours before it do not.\ncarries_fix() { [ -f \"$NTDLL\" ] && LC_ALL=C /usr/bin/grep -qa 'notproton-tcp-noopt' \"$NTDLL\"; }"
         }
       ],
@@ -1458,7 +1460,7 @@
       "backend": "Any: the fix is in the network, not the graphics.",
       "crossover": "CrossOver Preview 27 (27.0.0.41303), NotProton runner, 2026-11-20",
       "pageUrl": null,
-      "graphicsBackend": null,
+      "graphicsBackend": "d3dmetal",
       "gptk": null,
       "notNeededFromGptk": null
     },
