@@ -514,6 +514,8 @@ enum Agent {
                                   state: &state, now: now)
         for kept in settings.kept {
             guard let game = games.first(where: { $0.name == kept.name }) else { continue }
+            // Installed from the window only: it works for minutes (Game.byHand).
+            guard game.byHand == nil else { continue }
             let folder = URL(fileURLWithPath: kept.folder)
             guard game.isRooted(at: folder) else { continue }
             var memory = state.games[kept.key] ?? GameMemory()
@@ -922,6 +924,17 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         }
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: event.id.uuidString, content: content, trigger: nil))
+    }
+
+    /// From the window, which never started the agent's voice: asks for the permission the agent
+    /// would have asked for, then says it. Without the permission nothing is shown.
+    static func say(_ game: String, _ message: String) async {
+        let center = UNUserNotificationCenter.current()
+        guard (try? await center.requestAuthorization(options: [.alert])) == true else { return }
+        let content = UNMutableNotificationContent()
+        content.title = game
+        content.body = message
+        try? await center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,

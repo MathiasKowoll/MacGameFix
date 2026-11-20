@@ -48,6 +48,10 @@ final class Model: ObservableObject {
     /// A look at the games was asked for while the window was busy: it runs when it is free.
     private var scanWaits = false
     @Published var status = ""
+    /// How far the installer that is running says it is, from 0 to 1; nil for one that does not say.
+    @Published var progress: Double?
+    /// An install that took at least this long ends with a notification: the user has gone elsewhere.
+    static let longInstall: TimeInterval = 30
 
     @Published var games: [Game] = []
     @Published var catalogVersion = 0
@@ -630,14 +634,24 @@ final class Model: ObservableObject {
             var done = 0, failed = 0
             for hit in targets {
                 done += 1
-                status = "\(install ? "Installing" : "Removing") \(hit.game.name) (\(done) of \(targets.count))…"
+                let doing = "\(install ? "Installing" : "Removing") \(hit.game.name) (\(done) of \(targets.count))"
+                status = doing + "…"
                 note(""); note("▸ \(hit.game.name) — \(hit.folder.path)")
                 if hit.game.needsPrefix { for p in hit.chosen { note("  into the \(p.label)") } }
+                let started = Date()
                 let code = await Fixer.run(hit.game, folder: hit.folder, prefixes: hit.chosen.map(\.path.path),
-                                           catalog: resources, install ? [] : ["--restore"]) { line in
+                                           catalog: resources, install ? [] : ["--restore"],
+                                           onProgress: { fraction in
+                    Task { @MainActor in
+                        self.progress = fraction
+                        self.status = doing + ": \(Int(fraction * 100)) %"
+                    }
+                }) { line in
                     Task { @MainActor in self.note("  " + line) }
                 }
                 await Task.yield()
+                progress = nil
+                let long = install && Date().timeIntervalSince(started) >= Self.longInstall
                 if let i = hits.firstIndex(where: { $0.id == hit.id }) {
                     var h = await probe(hits[i])
                     // The list may have changed while the installer was asked: found again by its id.
@@ -651,6 +665,17 @@ final class Model: ObservableObject {
                     else { h.outcome = nil }
                     h.selected = false
                     hits[j] = h
+                    // Minutes went by: said where the user is now, the window may be closed or behind.
+                    // It is given a second: the window may be closed and waiting on this to quit, and
+                    // a question about notifications nobody answers must not hold it.
+                    if long {
+                        let name = hit.game.name, good = code == 0 && took
+                        Task.detached {
+                            await Notifier.say(name, good ? "The fix is installed: the game is ready to play."
+                                                          : "The install did not finish. MacGameFix's log says why.")
+                        }
+                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    }
                 }
             }
             busy = false
@@ -1161,7 +1186,13 @@ struct ContentView: View {
                     .tabItem { Text("Settings") }
             }
             HStack {
-                if model.busy { ProgressView().controlSize(.small) }
+                if model.busy {
+                    if let progress = model.progress {
+                        ProgressView(value: progress).frame(width: 160)
+                    } else {
+                        ProgressView().controlSize(.small)
+                    }
+                }
                 Text(model.status).font(.callout)
             }
         }
@@ -1463,7 +1494,8 @@ struct GamesView: View {
                                 .labelsHidden()
                                 .toggleStyle(.checkbox)
                                 .disabled((!hit.keepable && !model.isKept(hit)) || model.busy)
-                                .help("Keep it applied: put it back after a game update.")
+                                .help(hit.game.byHand.map { "Installed from here only. " + $0 }
+                                      ?? "Keep it applied: put it back after a game update.")
                         }
                     }
                     .width(44)
@@ -3031,6 +3063,7 @@ enum Entry {
             let (dir, _) = Catalog.active()
             for hit in Libraries.find(Catalog.games(in: dir), extra: []).hits {
                 var parts = [hit.game.name, hit.game.requirementNote ?? "no special requirement"]
+                if hit.game.byHand != nil { parts.append("installed from the window only") }
                 if hit.game.needsPrefix {
                     parts.append(hit.chosen.isEmpty ? "no prefix"
                                  : (hit.game.prefixDLLs ? "DLLs into the " : "keys into the ")

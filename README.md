@@ -138,7 +138,11 @@ The measured result and remaining validation are in
 From version 1.4.0 the app can look after the fixes by itself. All of it is off
 until you turn it on, and the fixes stay in the games' own folders as before.
 
-- **Keep it applied.** Mark a game with *Keep it applied*, and turn on *Run in
+- **Keep it applied.** Ori and the Will of the Wisps' fix cannot be kept: it
+  compiles for minutes with the Mac working hard, so it runs only when you
+  press Install. Every other game can be.
+
+  Mark a game with *Keep it applied*, and turn on *Run in
   the background, from the menu bar*. That starts a small agent (a LaunchAgent,
   `io.github.macgamefix.agent`) that starts when you log in and looks at the
   marked games every two minutes. When Steam updates or verifies a game and its
@@ -384,6 +388,7 @@ open Steam there (engine/README.md, "The options").
 | Nioh | "Failure to play movie", then a crash | DXMT |
 | Nioh 2 | Cutscene refuses to play, then a crash | DXMT |
 | Nioh 3 | "Failed to play movie" | D3DMetal |
+| Ori and the Will of the Wisps | Hitches whenever something new comes on screen | NotProton with a Rosetta runner, D3DMetal |
 | Persona 5 Strikers | Video never starts; sound only | DXMT |
 | Phantom Blade Zero | Never opens a window under Rosetta (Denuvo); black menu video | D3DMetal 4, the Wine modules on, a prefix |
 | RESIDENT EVIL 2 | Crashes when a video plays | D3DMetal |
@@ -640,6 +645,35 @@ So there the fix corrects the T-pose but adds no fog barrier, and the black bloc
 in volumetric fog remain; `sm2-tpose-fix.log` says so. Played on 2026-10-25: four
 minutes, characters right, no crash. With D3DMetal 4 the fix works as before.
 
+### Ori and the Will of the Wisps downloads one thing too
+
+Its installer compiles the game's shaders ahead of time with
+[Ori Shader Warmer](https://github.com/macprotips/ori-shader-warmer) by
+macprotips: a program that reads the shaders out of your own copy of the game,
+one that draws them, and the list of about 90,000 combinations they recorded
+from the game. Their release is downloaded once from their repository, checked
+against a pinned sha256 and kept in `~/Library/Caches/MacGameFix`; MacGameFix
+ships none of it.
+
+It is for a game NotProton starts, with a Rosetta runner and D3DMetal. The
+drawing runs with the runner NotProton made for the game, for 5 to 30 minutes
+with the game closed, and the result goes under the game's own bundle
+(`com.notproton.launcher.1057090`) and executable, where the running game was
+seen to read it. Nothing another game uses is replaced. Under CrossOver every
+bottle shares one Metal cache and a build for Ori replaces it, so the installer
+refuses there; macprotips' own app does that.
+
+Measured on 2026-11-18 on an M4 Max, from Metal's own record of the game:
+1,123 shaders compiled in 222 seconds of play before, 70 of those seconds with
+a frame more than 50 ms late; 6 compiled and 1,092 taken from the cache in 158
+seconds after, 21 seconds with a frame that late. Compiling took 272 seconds.
+The games row reads **Needs repair** once macOS, the runner or the game is
+not what the shaders were compiled with: install again. It cannot be marked
+Keep, so the agent never starts those minutes of compiling by itself while you
+may be about to play. While it compiles, the
+window shows a bar with the percentage, and a notification says when the game
+is ready (see [A fix that takes minutes](#a-fix-that-takes-minutes)).
+
 ### God of War: the specks without the solid grass
 
 God of War's white specks are fixed by loosening one depth test, and loosening it
@@ -808,6 +842,24 @@ who turned it on. In the repository, an installer marks it with
 `games.json`'s `testing` table, which apps before 1.6.0 never read. Its
 `# MGVF-CREDIT: <name> | <url>` lines name whose work it is, in the app and in
 [Credits](#credits).
+
+### A fix that takes minutes
+
+An installer that works for minutes says how far it is. The app runs every
+installer with `MGVF_PROGRESS=1`, and one that prints lines of
+`MGVF-PROGRESS <done> <total>` then gets a bar in the window's status line,
+with the percentage, instead of those lines in the log. An install that took
+30 seconds or more ends with a notification: the fix is installed and the game
+is ready, or it did not finish. Closing the window does not stop it: the app
+quits once the install is done. Ori and the Will of the Wisps' is the first.
+
+Such a fix is installed from the window only. Its installer says so with
+`# MGVF-BY-HAND: <why>`; `build-app.sh` puts it into `games.json`'s `byHand`
+table, which apps before this field never read, so no app that could keep it
+lists it. Its Keep box is off and cannot be checked, its tooltip gives the
+reason, and the agent skips it even if an older setting kept it.
+Without `MGVF_PROGRESS`, as from a terminal, the installer prints its progress
+in words.
 
 ## Reporting a problem
 
@@ -1125,6 +1177,10 @@ how, is in the game's page under `legacy/wiki/`.
   the six changes, which the recipe carries byte for byte. It improves on the
   first fix, by Ariel O in CodeWeavers' compatibility database, spread on Reddit
   by u/ales_sandr.
+- **[Ori Shader Warmer](https://github.com/macprotips/ori-shader-warmer) by macprotips.**
+  Ori and the Will of the Wisps' fix is theirs: the cause, the recorded list of
+  combinations and the two programs. The installer downloads their release and
+  runs it for a game NotProton starts.
 - **[WolfAmongUsFix](https://github.com/macprotips/WolfAmongUsFix) by macprotips**
   (public domain): The Wolf Among Us Remastered's diagnosis and the `d3d11.dll`
   it installs, shipped as published with its source.

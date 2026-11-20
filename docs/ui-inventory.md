@@ -41,6 +41,8 @@ Wherever a quoted string is built from a value, `<…>` stands for that value.
 - Install/Remove with nothing to do: "Nothing selected needs installing." / "Nothing selected is installed." (377)
 - Installing or removing fixes:
   - "Installing <game> (<i> of <n>)…" / "Removing <game> (<i> of <n>)…" (386)
+  - while an installer says how far it is (lines of `MGVF-PROGRESS <done> <total>`, which never reach the log): a 160 pt bar in place of the spinner, and "Installing <game> (<i> of <n>): <p> %". Only Ori and the Will of the Wisps' installer says it today.
+  - an install that took 30 seconds or more ends with a notification from the window, titled with the game: "The fix is installed: the game is ready to play." or "The install did not finish. MacGameFix's log says why." The window asks for the alert permission then, if the agent never did. A window closed meanwhile still finishes the install before it quits.
   - then "Done: <n> game(s)." or "Done, <f> of <n> need attention." (408)
 - Scanning CrossOver: "Looking at CrossOver and the NotProton runners…", then "No CrossOver or NotProton runner found." or "<n> CrossOver install(s) found." (805, 812)
 - Installing or removing Wine modules:
@@ -111,6 +113,7 @@ Wherever a quoted string is built from a value, `<…>` stands for that value.
   - Checking it saves the game, its folder and its chosen prefixes for the agent (147-158).
   - It is disabled when the row is blocked or the app is busy, except for a row waiting for a recipe: that one can be kept, and the agent installs its fix when a recipe arrives (1033; Core.swift:331). A row already kept can always be unchecked, blocked or not.
   - Checking it on a fix that changes a macOS game's app (Cyberpunk 2077) asks first, with the Keep form of alert L; Cancel leaves it unchecked (147-150).
+  - A fix installed from the window only (games.json's `byHand` table, the installer's `MGVF-BY-HAND` line; today Ori and the Will of the Wisps) cannot be checked. Its tooltip is "Installed from here only. " followed by the installer's reason. The agent skips such a game even if it is in the kept list.
   - Nothing in the window warns that it does nothing while the agent is off.
 
 **Status cell** (`GameStatusCell`, 1071-1095), top to bottom:

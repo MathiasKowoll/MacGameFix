@@ -188,6 +188,10 @@ struct Game: Decodable, Identifiable, Hashable {
     /// Special instructions the user needs, as Markdown (the installer's MGVF-INSTRUCTIONS
     /// file); absent for most fixes and from catalogs older than the field.
     let instructions: String?
+    /// For a fix installed only from the window, never by the agent, why (the installer's
+    /// MGVF-BY-HAND line): one that works for minutes. Only in games.json's "byHand" table,
+    /// which apps older than the field never read.
+    var byHand: String? = nil
 
     var id: String { name }
 
@@ -365,7 +369,8 @@ struct Hit: Identifiable {
     /// Whether Keep can be turned on: not for a row that is blocked, but for
     /// one waiting for a recipe, which the agent installs once it comes. A
     /// kept row can always be turned off.
-    var keepable: Bool { blocker == nil || state == .noRecipe }
+    /// A fix installed only from the window (Game.byHand) is never kept.
+    var keepable: Bool { game.byHand == nil && (blocker == nil || state == .noRecipe) }
 
     /// Whether the row can be selected: one that is not blocked, and one
     /// waiting for a recipe, which Remove Selected may still clear of the
@@ -662,11 +667,15 @@ enum Catalog {
     /// tested too. Those are a table of their own, "testing", which an app older than
     /// the field never reads, so a fix nobody has validated reaches only someone who
     /// turned them on in Settings.
+    /// The fixes installed only from the window are a table of their own too, "byHand", so that
+    /// an app that would let the agent keep them never lists them.
     static func games(in dir: URL, testing: Bool = AutoSettings.load().testingFixes) -> [Game] {
-        struct Table: Decodable { let games: [Game]; let testing: [Game]? }
+        struct Table: Decodable { let games: [Game]; let testing: [Game]?; let byHand: [Game]? }
         let data = (try? Data(contentsOf: dir.appendingPathComponent("games.json"))) ?? Data()
         guard let table = try? JSONDecoder().decode(Table.self, from: data) else { return [] }
-        guard testing, let more = table.testing, !more.isEmpty else { return table.games }
+        let byHand = (table.byHand ?? []).filter { testing || $0.testing == nil }
+        let more = (testing ? table.testing ?? [] : []) + byHand
+        guard !more.isEmpty else { return table.games }
         return (table.games + more).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
@@ -765,28 +774,43 @@ enum Fixer {
     /// agent share, so the two never run an installer at once.
     /// The installer once for each prefix a fix that writes registry keys was
     /// given, stopping at the first that fails; once, for any other fix.
+    /// An installer that takes minutes says how far it is, when asked to (MGVF_PROGRESS=1), with
+    /// lines of "MGVF-PROGRESS <done> <total>". They go to `onProgress` as a fraction and never
+    /// to `onLine`: whoever passes none simply does not see them.
     static func run(_ game: Game, folder: URL, prefixes: [String], catalog: URL, _ extra: [String],
+                    onProgress: (@Sendable (Double) -> Void)? = nil,
                     onLine: @escaping @Sendable (String) -> Void) async -> Int32 {
         guard game.needsPrefix, !prefixes.isEmpty else {
-            return await run(game, folder: folder, prefix: nil, catalog: catalog, extra, onLine: onLine)
+            return await run(game, folder: folder, prefix: nil, catalog: catalog, extra, onProgress: onProgress, onLine: onLine)
         }
         for p in prefixes {
-            let code = await run(game, folder: folder, prefix: p, catalog: catalog, extra, onLine: onLine)
+            let code = await run(game, folder: folder, prefix: p, catalog: catalog, extra, onProgress: onProgress, onLine: onLine)
             if code != 0 { return code }
         }
         return 0
     }
 
+    /// "MGVF-PROGRESS <done> <total>" as a fraction from 0 to 1; nil for any other line.
+    static func progress(_ line: String) -> Double? {
+        let parts = line.split(separator: " ")
+        guard parts.count == 3, parts[0] == "MGVF-PROGRESS", let done = Double(parts[1]),
+              let total = Double(parts[2]), total > 0 else { return nil }
+        return min(1, max(0, done / total))
+    }
+
     static func run(_ game: Game, folder: URL, prefix: String?, catalog: URL, _ extra: [String],
+                    onProgress: (@Sendable (Double) -> Void)? = nil,
                     onLine: @escaping @Sendable (String) -> Void) async -> Int32 {
         let lock = InstallLock()
         defer { lock.release() }
         let script = catalog.appendingPathComponent(game.script).path
-        var env: [String: String] = ["MGVF_MODULES": Catalog.active(.modules).dir.path]
+        var env: [String: String] = ["MGVF_MODULES": Catalog.active(.modules).dir.path, "MGVF_PROGRESS": "1"]
         if game.needsPrefix, let prefix { env["MGVF_BOTTLE"] = prefix }
         // Where a fix that changes a game's app keeps its original.
         if game.inApp { env["MGVF_APP_BACKUP"] = Paths.appBackup.path }
-        return await runStreaming("/bin/bash", [script, folder.path] + extra, environment: env, onLine: onLine)
+        return await runStreaming("/bin/bash", [script, folder.path] + extra, environment: env) { line in
+            if let fraction = progress(line) { onProgress?(fraction) } else { onLine(line) }
+        }
     }
 }
 

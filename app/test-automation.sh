@@ -116,6 +116,8 @@ case "${2:-}" in
   --restore) rm -f "$dir/fixed.marker"; exit 0 ;;
 esac
 echo "installing into $dir"
+# As an installer that takes minutes says how far it is, when it is asked to.
+if [ "${MGVF_PROGRESS:-0}" = 1 ]; then echo "MGVF-PROGRESS 1 2"; fi
 if [ -f "$dir/FAIL" ]; then echo "cannot write $dir/fake.dll"; exit 1; fi
 echo 2 > "$dir/fixed.marker"
 SH
@@ -203,7 +205,10 @@ cat > "$RES/games.json" <<'JSON'
  "testing": [{"name": "Fake Trial", "exe": "FakeGame.exe", "carrierDir": "", "script": "install-fake.sh",
   "needsPrefix": false, "symptom": "test", "backend": "d3dmetal", "gptk": "", "gptkAlso": "",
   "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "", "why": "", "testing": "a friend",
-  "credits": ["A Friend | https://example.invalid/fix"]}]}
+  "credits": ["A Friend | https://example.invalid/fix"]}],
+ "byHand": [{"name": "Fake Hand", "exe": "FakeHand.exe", "carrierDir": "", "script": "install-fake.sh",
+  "needsPrefix": false, "symptom": "test", "backend": "d3dmetal", "gptk": "", "gptkAlso": "",
+  "codecShippedBy": "", "engineFreeOn": "", "notNeededFrom": "", "why": "", "byHand": "It works for minutes."}]}
 JSON
 /usr/bin/python3 - "$RES" <<'PY'
 import hashlib, json, pathlib, sys
@@ -230,11 +235,18 @@ steam 1 4
 games() { "$BIN" --games-report 2>&1; }
 check 'has "$(games)" "Fake Game | runs on DXMT, its videos need CrossOver Preview 27, which ships their codec"' "a fix's requirements are said beside the game, and nothing is asked"
 check '! has "$(games)" "Fake Trial"' "a fix being tested is not listed while the testing switch is off"
+touch "$GAME/FakeHand.exe"
+check 'has "$(games)" "Fake Hand | runs on D3DMetal | installed from the window only"' "a fix installed from the window only is listed, and says so"
+rm -f "$GAME/FakeHand.exe"
 printf '{"testingFixes":true,"updates":false}' > "$SUPPORT/MacGameFix/automatic.json"
 check 'has "$(games)" "Fake Trial | runs on D3DMetal" && has "$(games)" "Fake Game |"' "with it on, the fix being tested is listed beside the others"
 rm -f "$SUPPORT/MacGameFix/automatic.json"
 
 echo "== the agent"
+printf '{"kept":[{"name":"Fake Hand","folder":"%s"}],"updates":false}' "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
+steam 1 4; rm -f "$GAME/fixed.marker"; touch "$GAME/FakeHand.exe"
+check '[ -z "$(agent)" ] && [ ! -f "$GAME/fixed.marker" ]' "a fix installed from the window only is never run by the agent, even marked Keep"
+rm -f "$GAME/FakeHand.exe"
 printf '{"kept":[{"name":"Fake Game","folder":"%s"}],"updates":false}' "$GAME" > "$SUPPORT/MacGameFix/automatic.json"
 steam 1 4
 check 'has "$(agent)" "ok Fake Game: The fix was missing" && [ -f "$GAME/fixed.marker" ]' "a marked fix that is missing is installed"
@@ -257,6 +269,7 @@ OUT="$(agent)"
 check 'has "$OUT" "FAILED Fake Game: The installer failed (status 1)."' "a failing installer is reported"
 REPORT="$(echo "$OUT" | sed -n 's/^report //p' | /usr/bin/python3 -c 'import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read()))')"
 check 'has "$REPORT" "issues/new" && has "$REPORT" "cannot write ~/Library"' "with a filled-in issue holding the installer output"
+check 'has "$REPORT" "installing into" && ! has "$REPORT" "MGVF-PROGRESS"' "and none of the lines the installer says its progress with"
 check '! has "$REPORT" "$MACGAMEFIX_HOME"' "and the home folder replaced by ~"
 check '[ "$(/usr/bin/python3 -c "import json,sys; print(len(json.load(open(sys.argv[1]))[\"events\"]))" "$SUPPORT/MacGameFix/agent-state.json")" = 5 ]' "the agent's events are kept for the window"
 OUT="$(menu)"
@@ -904,7 +917,7 @@ mkdir -p "$NEWGAME"; touch "$NEWGAME/FakeNew.exe"
 echo 2 > "$GAME/fixed.marker"; steam 7 4
 thirdagent() { MACGAMEFIX_CATALOG_SOURCE="$T/release3" MACGAMEFIX_CATALOG_PUBKEY="$PUB" "$BIN" --agent-once 2>&1; }
 learned() { /usr/bin/python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("gamesCatalog", 0), len(d.get("fixesKnown") or []))' "$SUPPORT/MacGameFix/agent-state.json"; }
-check '[ "$(learned)" = "4000000005 5" ]' "the agent has learned the fixes of the catalog in use, and said nothing of them"
+check '[ "$(learned)" = "4000000005 6" ]' "the agent has learned the fixes of the catalog in use, and said nothing of them"
 printf '{"kept":[],"updates":true,"askFirst":true}' > "$SUPPORT/MacGameFix/automatic.json"; due
 out="$(thirdagent)"
 check 'has "$out" "New fixes are ready (catalog 4000000007)" && ! has "$out" "A newer fix is ready" && ! has "$out" "now has a fix"' "asked first, the catalog that waits is not looked into: no game is named yet"
@@ -941,7 +954,7 @@ d = json.load(open(sys.argv[1])); d.pop("gamesCatalog", None); d.pop("fixesKnown
 PY
 echo 2 > "$GAME/fixed.marker"
 printf '{"kept":[],"updates":false}' > "$SUPPORT/MacGameFix/automatic.json"
-check '[ -z "$(thirdagent)" ] && [ "$(learned)" = "4000000007 6" ]' "the first look only learns: a fix that was already behind is not announced"
+check '[ -z "$(thirdagent)" ] && [ "$(learned)" = "4000000007 7" ]' "the first look only learns: a fix that was already behind is not announced"
 echo 3 > "$GAME/fixed.marker"; rm -rf "$NEWGAME"
 
 echo "== each game's compiled shaders, kept whole"
