@@ -1250,10 +1250,10 @@
           "symbol": null,
           "note": "The drawing program runs with the game's own runner and D3DMetal, in a prefix made for it and thrown away.",
           "language": "bash",
-          "startLine": 220,
-          "endLine": 232,
-          "commit": "111b4933de2f507dd642dfc99f6c6a2ae62c4ac5",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/111b4933de2f507dd642dfc99f6c6a2ae62c4ac5/fixes/install-ori-shaders.sh#L220-L232",
+          "startLine": 221,
+          "endLine": 233,
+          "commit": "18d16805024ece4a3fce790b800506603e2153ec",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/18d16805024ece4a3fce790b800506603e2153ec/fixes/install-ori-shaders.sh#L221-L233",
           "code": "wine_env() {\n  export CX_ROOT=\"$RUNNER\" CX_HOME=\"$HOME/Library/Application Support/CrossOver\" WINEPREFIX=\"$WORK/prefix\"\n  export WINELOADER=\"$LOADER\" WINESERVER=\"$SERVER\"\n  export WINEDLLPATH=\"$RUNNER/lib/wine/x86_64-windows:$RUNNER/lib/wine/x86_64-unix\"\n  export ROSETTA_ADVERTISE_AVX=1 CX_GRAPHICS_BACKEND=d3dmetal WINEMSYNC=1\n  export WINEDLLOVERRIDES=\"winedbg.exe=d;mscoree=d;mshtml=d\" WINEDEBUG=-all\n  export PATH=\"$RUNNER/bin:/usr/bin:/bin\"\n  local shared\n  for shared in \"$RUNNER/lib64/apple_gptk/external/libd3dshared.dylib\" \"$RUNNER/lib/apple_gptk/external/libd3dshared.dylib\"; do\n    [ -f \"$shared\" ] && { export CX_APPLEGPTK_LIBD3DSHARED_PATH=\"$shared\"; break; }\n  done\n  return 0\n}"
         },
         {
@@ -1261,10 +1261,10 @@
           "symbol": null,
           "note": "Metal's compiled functions go into the four numbered files of the bundle NotProton starts the game from: a process takes whichever is free.",
           "language": "bash",
-          "startLine": 368,
-          "endLine": 375,
-          "commit": "111b4933de2f507dd642dfc99f6c6a2ae62c4ac5",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/111b4933de2f507dd642dfc99f6c6a2ae62c4ac5/fixes/install-ori-shaders.sh#L368-L375",
+          "startLine": 369,
+          "endLine": 376,
+          "commit": "18d16805024ece4a3fce790b800506603e2153ec",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/18d16805024ece4a3fce790b800506603e2153ec/fixes/install-ori-shaders.sh#L369-L376",
           "code": "# A copy is an APFS clone: the four files take the space of one.\nfor n in \"\" 1 2 3; do\n  for ext in data list; do\n    cp -c \"$built_metal/functions.$ext\" \"$dest/functions$n.$ext.mgf-new\" 2>/dev/null \\\n      || cp \"$built_metal/functions.$ext\" \"$dest/functions$n.$ext.mgf-new\"\n    mv -f \"$dest/functions$n.$ext.mgf-new\" \"$dest/functions$n.$ext\"\n  done\ndone"
         }
       ],
