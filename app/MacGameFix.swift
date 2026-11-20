@@ -1494,7 +1494,8 @@ struct GamesView: View {
                                 .labelsHidden()
                                 .toggleStyle(.checkbox)
                                 .disabled((!hit.keepable && !model.isKept(hit)) || model.busy)
-                                .help("Keep it applied: put it back after a game update.")
+                                .help(hit.game.byHand.map { "Installed from here only. " + $0 }
+                                      ?? "Keep it applied: put it back after a game update.")
                         }
                     }
                     .width(44)
@@ -3062,6 +3063,7 @@ enum Entry {
             let (dir, _) = Catalog.active()
             for hit in Libraries.find(Catalog.games(in: dir), extra: []).hits {
                 var parts = [hit.game.name, hit.game.requirementNote ?? "no special requirement"]
+                if hit.game.byHand != nil { parts.append("installed from the window only") }
                 if hit.game.needsPrefix {
                     parts.append(hit.chosen.isEmpty ? "no prefix"
                                  : (hit.game.prefixDLLs ? "DLLs into the " : "keys into the ")

@@ -104,7 +104,7 @@ echo "==> choosing the games"
 import json, re, sys, pathlib
 root, out = pathlib.Path(sys.argv[1]), sys.argv[2]
 procs = json.loads((root / "process-features.json").read_text())["processes"]
-games, testing, left = [], [], []
+games, testing, by_hand_rows, left = [], [], [], []
 for script in sorted((root / "fixes").glob("install-*.sh")):
     text = script.read_text()
     scope = re.search(r"^# MGVF-SCOPE: (\S+)", text, re.M)
@@ -126,6 +126,10 @@ for script in sorted((root / "fixes").glob("install-*.sh")):
     # with the testing switch on reads. Its credits are "name | url" lines.
     in_testing = re.search(r"^# MGVF-TESTING:(.*)$", text, re.M)
     credits = [c.strip() for c in re.findall(r"^# MGVF-CREDIT: (.*)$", text, re.M)]
+    # A fix that is only ever installed from the window (MGVF-BY-HAND: <why>), never by
+    # the agent: one that works for minutes. It goes into games.json's "byHand" table,
+    # which an app that would let it be kept never reads.
+    by_hand = re.search(r"^# MGVF-BY-HAND: (.*)$", text, re.M)
     for m in re.finditer(r"^# MGVF-GAME: (.*?) \| (.*?) \|(.*)$", text, re.M):
         # An optional fourth field names the other executables the title runs as
         # (MK11.exe beside MK11_DX12.exe), so the app knows it is running either way.
@@ -144,7 +148,7 @@ for script in sorted((root / "fixes").glob("install-*.sh")):
             reason = "needs a winegstreamer carrying " + p["needs_engine"]
         if reason:
             left.append((name, reason)); continue
-        (testing if in_testing else games).append({
+        (by_hand_rows if by_hand else testing if in_testing else games).append({
             "name": name,
             "supportStatus": "WIP" if "# MGVF-STATUS: WIP" in text else "",
             "exe": exe,
@@ -175,17 +179,21 @@ for script in sorted((root / "fixes").glob("install-*.sh")):
             "credits": credits,
             **({"instructions": instructions_text} if instructions_text else {}),
             **({"testing": in_testing.group(1).strip()} if in_testing else {}),
+            **({"byHand": by_hand.group(1).strip()} if by_hand else {}),
         })
 games.sort(key=lambda g: g["name"].lower())
 testing.sort(key=lambda g: g["name"].lower())
-json.dump({"games": games, "testing": testing}, open(out, "w"), indent=2)
+by_hand_rows.sort(key=lambda g: g["name"].lower())
+json.dump({"games": games, "testing": testing, "byHand": by_hand_rows}, open(out, "w"), indent=2)
 for g in games:
     print(f"    in   {g['name']}")
 for g in testing:
     print(f"    test {g['name']}" + (f" (by {g['testing']})" if g["testing"] else ""))
+for g in by_hand_rows:
+    print(f"    hand {g['name']}" + (f" (being tested by {g['testing']})" if g.get("testing") else ""))
 for name, reason in left:
     print(f"    out  {name}: {reason}")
-if not games:
+if not games and not by_hand_rows:
     sys.exit("error: no game qualified; the rules above found nothing to carry")
 PY
 
@@ -194,7 +202,7 @@ PY
 # to use is carried without anybody remembering to add it here.
 SCRIPTS=()
 while IFS= read -r s; do SCRIPTS+=("$s"); done < <(
-  /usr/bin/python3 -c 'import json,sys; t=json.load(open(sys.argv[1])); print("\n".join(sorted({g["script"] for g in t["games"] + t["testing"]})))' "$STAGE/games.json")
+  /usr/bin/python3 -c 'import json,sys; t=json.load(open(sys.argv[1])); print("\n".join(sorted({g["script"] for g in t["games"] + t["testing"] + t.get("byHand", [])})))' "$STAGE/games.json")
 PAYLOAD=()
 for s in "${SCRIPTS[@]}"; do
   PAYLOAD+=("$s")

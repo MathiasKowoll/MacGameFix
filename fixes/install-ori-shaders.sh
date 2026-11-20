@@ -60,6 +60,7 @@
 # MGVF-GAME: Ori and the Will of the Wisps | oriwotw.exe |
 # MGVF-WHY: Compiles the game's shaders ahead of time, so it no longer hitches when something new comes on screen. NotProton only; takes 5 to 30 minutes.
 # MGVF-CREDIT: macprotips | https://github.com/macprotips/ori-shader-warmer
+# MGVF-BY-HAND: It compiles for 5 to 30 minutes with the Mac working hard, so it is never run in the background: install it again from here after an update to macOS, the runner or the game.
 
 set -euo pipefail
 

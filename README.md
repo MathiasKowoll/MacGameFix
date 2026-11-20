@@ -138,7 +138,11 @@ The measured result and remaining validation are in
 From version 1.4.0 the app can look after the fixes by itself. All of it is off
 until you turn it on, and the fixes stay in the games' own folders as before.
 
-- **Keep it applied.** Mark a game with *Keep it applied*, and turn on *Run in
+- **Keep it applied.** Ori and the Will of the Wisps' fix cannot be kept: it
+  compiles for minutes with the Mac working hard, so it runs only when you
+  press Install. Every other game can be.
+
+  Mark a game with *Keep it applied*, and turn on *Run in
   the background, from the menu bar*. That starts a small agent (a LaunchAgent,
   `io.github.macgamefix.agent`) that starts when you log in and looks at the
   marked games every two minutes. When Steam updates or verifies a game and its
@@ -664,7 +668,9 @@ Measured on 2026-11-18 on an M4 Max, from Metal's own record of the game:
 a frame more than 50 ms late; 6 compiled and 1,092 taken from the cache in 158
 seconds after, 21 seconds with a frame that late. Compiling took 272 seconds.
 The games row reads **Needs repair** once macOS, the runner or the game is
-not what the shaders were compiled with: install again. While it compiles, the
+not what the shaders were compiled with: install again. It cannot be marked
+Keep, so the agent never starts those minutes of compiling by itself while you
+may be about to play. While it compiles, the
 window shows a bar with the percentage, and a notification says when the game
 is ready (see [A fix that takes minutes](#a-fix-that-takes-minutes)).
 
@@ -846,6 +852,12 @@ with the percentage, instead of those lines in the log. An install that took
 30 seconds or more ends with a notification: the fix is installed and the game
 is ready, or it did not finish. Closing the window does not stop it: the app
 quits once the install is done. Ori and the Will of the Wisps' is the first.
+
+Such a fix is installed from the window only. Its installer says so with
+`# MGVF-BY-HAND: <why>`; `build-app.sh` puts it into `games.json`'s `byHand`
+table, which apps before this field never read, so no app that could keep it
+lists it. Its Keep box is off and cannot be checked, its tooltip gives the
+reason, and the agent skips it even if an older setting kept it.
 Without `MGVF_PROGRESS`, as from a terminal, the installer prints its progress
 in words.
 

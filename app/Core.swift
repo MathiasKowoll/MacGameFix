@@ -188,6 +188,10 @@ struct Game: Decodable, Identifiable, Hashable {
     /// Special instructions the user needs, as Markdown (the installer's MGVF-INSTRUCTIONS
     /// file); absent for most fixes and from catalogs older than the field.
     let instructions: String?
+    /// For a fix installed only from the window, never by the agent, why (the installer's
+    /// MGVF-BY-HAND line): one that works for minutes. Only in games.json's "byHand" table,
+    /// which apps older than the field never read.
+    var byHand: String? = nil
 
     var id: String { name }
 
@@ -365,7 +369,8 @@ struct Hit: Identifiable {
     /// Whether Keep can be turned on: not for a row that is blocked, but for
     /// one waiting for a recipe, which the agent installs once it comes. A
     /// kept row can always be turned off.
-    var keepable: Bool { blocker == nil || state == .noRecipe }
+    /// A fix installed only from the window (Game.byHand) is never kept.
+    var keepable: Bool { game.byHand == nil && (blocker == nil || state == .noRecipe) }
 
     /// Whether the row can be selected: one that is not blocked, and one
     /// waiting for a recipe, which Remove Selected may still clear of the
@@ -662,11 +667,15 @@ enum Catalog {
     /// tested too. Those are a table of their own, "testing", which an app older than
     /// the field never reads, so a fix nobody has validated reaches only someone who
     /// turned them on in Settings.
+    /// The fixes installed only from the window are a table of their own too, "byHand", so that
+    /// an app that would let the agent keep them never lists them.
     static func games(in dir: URL, testing: Bool = AutoSettings.load().testingFixes) -> [Game] {
-        struct Table: Decodable { let games: [Game]; let testing: [Game]? }
+        struct Table: Decodable { let games: [Game]; let testing: [Game]?; let byHand: [Game]? }
         let data = (try? Data(contentsOf: dir.appendingPathComponent("games.json"))) ?? Data()
         guard let table = try? JSONDecoder().decode(Table.self, from: data) else { return [] }
-        guard testing, let more = table.testing, !more.isEmpty else { return table.games }
+        let byHand = (table.byHand ?? []).filter { testing || $0.testing == nil }
+        let more = (testing ? table.testing ?? [] : []) + byHand
+        guard !more.isEmpty else { return table.games }
         return (table.games + more).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 

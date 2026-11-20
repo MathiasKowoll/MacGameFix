@@ -435,7 +435,7 @@ if [ -d "$bundle" ]; then
     python3 - "$HERE" "$bundle/games.json" <<'PY' || bundle_drift=$((bundle_drift + 1))
 import json, re, sys, pathlib
 table = json.load(open(sys.argv[2]))
-here, rows = pathlib.Path(sys.argv[1]), table["games"] + table.get("testing", [])
+here, rows = pathlib.Path(sys.argv[1]), table["games"] + table.get("testing", []) + table.get("byHand", [])
 bad, named = [], 0
 for row in rows:
     script = here / row["script"]

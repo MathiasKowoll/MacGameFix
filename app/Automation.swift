@@ -514,6 +514,8 @@ enum Agent {
                                   state: &state, now: now)
         for kept in settings.kept {
             guard let game = games.first(where: { $0.name == kept.name }) else { continue }
+            // Installed from the window only: it works for minutes (Game.byHand).
+            guard game.byHand == nil else { continue }
             let folder = URL(fileURLWithPath: kept.folder)
             guard game.isRooted(at: folder) else { continue }
             var memory = state.games[kept.key] ?? GameMemory()
