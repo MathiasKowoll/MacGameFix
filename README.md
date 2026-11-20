@@ -305,7 +305,13 @@ one that no other process holds, reads that one alone and adds to it. NotProton
 starts each game from an app of its own (`com.notproton.launcher.<app id>`), and
 Steam's launcher for the game runs from the same one, so two processes take a
 file each, and which of them the game gets changes from one start to the next.
-When it gets an empty one it compiles everything again.
+When it gets an empty one it compiles everything again. Metal makes a fifth file
+(`functions4.data`), and more, when more processes use the app at once: Phantom
+Blade Zero's had five on 2026-11-20, held by Wine's `explorer.exe`, Steam, the
+game's launcher, the game and its crash handler, and the game had an empty one
+while Steam held the full one. Every numbered file there is is copied over.
+The copy is made on the agent's next look, within two minutes of the game
+closing: a game started again sooner may still be handed an empty file.
 
 Measured on 2026-11-18 with Ori and the Blind Forest: Definitive Edition on a
 MacBook Pro M4 Max, under NotProton (CrossOver Preview's Wine, D3DMetal 4). The

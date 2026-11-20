@@ -286,7 +286,7 @@ Below the rows:
 **"Shaders"** (Improvements tab, after Fans)
 - Header: stacked-squares symbol, "Shaders", "A game compiles each shader the first time it draws with it, and should not have to do it twice.", and "On" or "Off".
 - Toggle **"Keep each game's compiled shaders whole"** (default on).
-  - Tooltip: "macOS keeps the shaders a game compiled in one of four files, and hands the game whichever is free at its next start: sometimes an empty one, and the game compiles them all again. With this on, once a game is closed its fullest file is copied over the other three, so every start finds them. The copies take no space of their own."
+  - Tooltip: "macOS keeps the shaders a game compiled in one of several files, and hands the game whichever is free at its next start: sometimes an empty one, and the game compiles them all again. With this on, once a game is closed its fullest file is copied over the others, so every start finds them. The copies take no space of their own."
 - With the toggle on, a line: "<n> game(s) with compiled shaders, <m> kept whole. A game is done once it is closed.", or "No game NotProton runs has compiled shaders yet." Turning the toggle on does the copies at once for every game that is closed; opening the tab only counts.
 - Footer: "For the games NotProton runs. Done from the menu bar while a game is closed; nothing is compiled, and nothing of CrossOver's own cache is touched."
 
