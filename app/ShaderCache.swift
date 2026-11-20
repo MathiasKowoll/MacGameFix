@@ -3,7 +3,9 @@
 // Metal keeps the functions it compiled for a process under the process's bundle
 // identifier, in <user cache>/<bundle id>/com.apple.metal/<GPU and macOS>/, in one of
 // four files: functions.data, functions1.data, functions2.data and functions3.data,
-// each with a .list beside it. A process takes one of them that no other process
+// each with a .list beside it, and more (functions4.data, ...) when more processes than
+// that use the bundle at once: Phantom Blade Zero's folder had five on 2026-11-20, taken by
+// Wine's explorer.exe, Steam, the game's launcher, the game and its crash handler. A process takes one of them that no other process
 // holds, keeps a lock on it for as long as it runs, reads that one alone and adds to
 // it. NotProton starts each game from a bundle of its own
 // (com.notproton.launcher.<app id>), and Steam's launcher for the game runs under the
@@ -22,8 +24,8 @@
 // In a game that compiles as it goes (Ori and the Will of the Wisps), the same draw of
 // the lot is the hitches of the first visit coming back in places already seen.
 //
-// So while no process holds any of a game's four files, the fullest one is copied over
-// the other three. A copy is an APFS clone: it takes no space of its own until a game
+// So while no process holds any of a game's files, the fullest one is copied over
+// the others. A copy is an APFS clone: it takes no space of its own until a game
 // writes to it. What only a smaller file held is lost and compiled again when the game
 // next draws it; from then on every start begins from the same full file, so it is
 // lost once.
@@ -41,6 +43,18 @@ import Foundation
 enum ShaderCache {
     static let names = ["functions", "functions1", "functions2", "functions3"]
 
+    /// The files of one folder: the four Metal makes first, and any further numbered one it made
+    /// there (functions4, functions5, ...), in order.
+    static func names(in dir: URL) -> [String] {
+        let more = ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []).compactMap { file -> Int? in
+            guard file.hasPrefix("functions"), file.hasSuffix(".data") else { return nil }
+            let digits = file.dropFirst("functions".count).dropLast(".data".count)
+            guard !digits.isEmpty, digits.allSatisfy(\.isNumber), let n = Int(digits), n >= names.count else { return nil }
+            return n
+        }
+        return names + Set(more).sorted().map { "functions\($0)" }
+    }
+
     /// The user's cache folder, where macOS keeps each bundle's Metal cache. MACGAMEFIX_CACHE_DIR
     /// stands in for it in the tests; and under MACGAMEFIX_HOME alone it is a folder of that home,
     /// so that nothing run in a throwaway home ever reaches the real games' caches.
@@ -53,7 +67,7 @@ enum ShaderCache {
         return URL(fileURLWithPath: n > 0 ? String(cString: buffer) : NSTemporaryDirectory())
     }
 
-    /// One game's folder of four files: the bundle it belongs to and where they are.
+    /// One game's folder of cache files: the bundle it belongs to and where they are.
     struct Folder {
         let bundle: String
         let dir: URL
@@ -91,17 +105,18 @@ enum ShaderCache {
         case failed(String)
     }
 
-    /// Makes one folder's four files the same as its fullest, unless they are already or one is held.
+    /// Makes one folder's files the same as its fullest, unless they are already or one is held.
     static func keep(_ folder: Folder) -> Outcome {
         let fm = FileManager.default
-        let data = names.map { folder.dir.appendingPathComponent($0 + ".data") }
-        let list = names.map { folder.dir.appendingPathComponent($0 + ".list") }
+        let files = Self.names(in: folder.dir)
+        let data = files.map { folder.dir.appendingPathComponent($0 + ".data") }
+        let list = files.map { folder.dir.appendingPathComponent($0 + ".list") }
         let sizes = data.map(size), lists = list.map(size)
         guard let most = sizes.max(), most > 0, let best = sizes.firstIndex(of: most), lists[best] >= 0 else { return .whole }
         // The same sizes all round, data and list: nothing was added to any of them since they were made the same.
         if sizes.allSatisfy({ $0 == most }) && lists.allSatisfy({ $0 == lists[best] }) { return .whole }
 
-        // Metal keeps a lock on the file a process took. All four free means nobody is using the folder,
+        // Metal keeps a lock on the file a process took. All of them free means nobody is using the folder,
         // and they stay locked here until the copies are in place.
         var held: [Int32] = []
         defer { for fd in held { flock(fd, LOCK_UN); close(fd) } }
@@ -113,7 +128,7 @@ enum ShaderCache {
         }
 
         var copied = 0
-        for i in names.indices where i != best {
+        for i in files.indices where i != best {
             if sizes[i] == most && lists[i] == lists[best] { continue }
             for (from, to) in [(data[best], data[i]), (list[best], list[i])] {
                 let tmp = to.appendingPathExtension("mgf-new")
@@ -148,14 +163,15 @@ enum ShaderCache {
         return lines
     }
 
-    /// For Improvements: how many games have a cache, and how many of those have their four files the same.
+    /// For Improvements: how many games have a cache, and how many of those have all their files the same.
     static func coverage() -> String {
         let all = folders()
         guard !all.isEmpty else { return "No game NotProton runs has compiled shaders yet." }
         let games = Set(all.map(\.bundle)).count
         let whole = all.filter { folder in
-            let sizes = names.map { size(folder.dir.appendingPathComponent($0 + ".data")) }
-            let lists = names.map { size(folder.dir.appendingPathComponent($0 + ".list")) }
+            let files = Self.names(in: folder.dir)
+            let sizes = files.map { size(folder.dir.appendingPathComponent($0 + ".data")) }
+            let lists = files.map { size(folder.dir.appendingPathComponent($0 + ".list")) }
             return Set(sizes).count == 1 && Set(lists).count == 1 && sizes[0] > 0
         }
         let done = Set(whole.map(\.bundle)).count

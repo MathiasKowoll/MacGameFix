@@ -969,13 +969,15 @@ fill() { /usr/bin/python3 -c 'import sys; open(sys.argv[1], "w").write(sys.argv[
 fill "$MC/functions.data" a 10; fill "$MC/functions.list" a 4
 fill "$MC/functions1.data" full 200; fill "$MC/functions1.list" full 20
 fill "$MC/functions2.data" b 100; fill "$MC/functions2.list" b 8
+# A fifth, as Metal makes when five processes use the bundle at once (Phantom Blade Zero's).
+fill "$MC/functions4.data" c 20; fill "$MC/functions4.list" c 2
 fill "$CXC/functions.data" one 50; fill "$CXC/functions.list" one 5
 fill "$CXC/functions1.data" other 500; fill "$CXC/functions1.list" other 9
 cp "$MC/functions1.data" "$T/full.data"; cp "$MC/functions1.list" "$T/full.list"
 shaders() { "$BIN" --shader-cache-keep 2>&1; }
-allfull() { for n in functions functions1 functions2 functions3; do cmp -s "$MC/$n.data" "$T/full.data" && cmp -s "$MC/$n.list" "$T/full.list" || return 1; done; }
+allfull() { for n in functions functions1 functions2 functions3 functions4; do cmp -s "$MC/$n.data" "$T/full.data" && cmp -s "$MC/$n.list" "$T/full.list" || return 1; done; }
 out="$(shaders)"
-check 'has "$out" "com.notproton.launcher.4242: the fullest shader cache copied over 3 others" && allfull' "the fullest of a game's four cache files is copied over the other three, lists and all"
+check 'has "$out" "com.notproton.launcher.4242: the fullest shader cache copied over 4 others" && allfull' "the fullest of a game's cache files is copied over the others, a fifth one too, lists and all"
 check 'has "$out" "1 game with compiled shaders, 1 kept whole"' "and the game counts as whole"
 check 'out="$(shaders)"; ! has "$out" "copied" && allfull' "four files that are the same are left alone"
 check '[ "$(cat "$CXC/functions.data")" != "$(cat "$CXC/functions1.data")" ] && [ ! -e "$CXC/functions2.data" ]' "CrossOver's own folder, which every bottle game shares, is not touched"
