@@ -36,6 +36,14 @@
       "symptom": "Windows light up in flat violet, cyan and yellow",
       "not_needed_from_gptk": "4.0b3"
     },
+    "CotW-Win64-Shipping.exe": {
+      "title": "FATAL FURY: City of the Wolves",
+      "backend": "d3dmetal",
+      "codec": "",
+      "gptk": "",
+      "env": {},
+      "symptom": "Startup video plays with sound, no picture"
+    },
     "Cyberpunk2077": {
       "title": "Cyberpunk 2077",
       "backend": "",

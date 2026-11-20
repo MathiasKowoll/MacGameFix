@@ -38,6 +38,7 @@
 # MGVF-GAME: Beast of Reincarnation | BeastOfReincarnation-Win64-Shipping.exe | Engine/Binaries/ThirdParty/Ogg/Win64
 # MGVF-GAME: Life is Strange: Reunion | Iris-Win64-Shipping.exe | Engine/Binaries/ThirdParty/Ogg/Win64
 # MGVF-GAME: Life is Strange: Double Exposure | Chronos-Win64-Shipping.exe | Engine/Binaries/ThirdParty/Ogg/Win64
+# MGVF-GAME: FATAL FURY: City of the Wolves | CotW-Win64-Shipping.exe | Engine/Binaries/ThirdParty/Ogg/Win64
 # MGVF-WHY: Unreal Engine 5 titles that crash on the first cutscene. The carrier sits under a compiler-named subfolder, which the script discovers rather than assumes.
 
 set -euo pipefail
