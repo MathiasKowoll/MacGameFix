@@ -784,6 +784,16 @@
           ],
           "commit": "3c6f6810e4b3dc2c7fda299be7870a059690285a",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/3c6f6810e4b3dc2c7fda299be7870a059690285a/engine/patches/wine-11.21/0035-user32-GetPointerDevice-stub.patch"
+        },
+        {
+          "name": "0036-ntdll-writecopy-shared-only-for-riot.patch",
+          "file": "engine/patches/wine-11.21/0036-ntdll-writecopy-shared-only-for-riot.patch",
+          "subject": "0032's shared copy-on-write views only in the Riot Client's and 2XKO's processes (Lion.exe, Lion-Win64-Shipping.exe, RiotClient*.exe, Riot Client.exe): every other program keeps its own writes to such a view, as on Windows. WINE_WRITECOPY_SHARED=1 or 0 turns it on or off",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "600cca1dd94ce31c26a765b715f96c3f4d751655",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/600cca1dd94ce31c26a765b715f96c3f4d751655/engine/patches/wine-11.21/0036-ntdll-writecopy-shared-only-for-riot.patch"
         }
       ]
     }
