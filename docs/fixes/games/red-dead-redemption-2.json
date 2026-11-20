@@ -1,0 +1,35 @@
+{
+  "title": "Red Dead Redemption 2",
+  "installer": "install-rdo-tcp.sh",
+  "scope": "prefix",
+  "executable": "RDR2.exe",
+  "carrierDirectory": "",
+  "alsoRuns": [],
+  "summary": "Red Dead Online never connects to its servers on a Mac: its TCP connections have to be made without TCP options. The Wine modules' ntdll does that for this game's prefix alone, with NotProton's own switch. NotProton with CrossOver Preview 41303 only.",
+  "page": null,
+  "installs": [
+    "bottles.sh"
+  ],
+  "builtFrom": [],
+  "license": "GPL-3.0-or-later",
+  "credits": [
+    {
+      "name": "NotProton's creator",
+      "url": "https://github.com/NotProtonNot/NotProton",
+      "note": "Found that Red Dead Online needs its TCP connections made without TCP options, and handed us the fix, which set macOS's TCP_NOOPT in wineserver; engine patch 0037 sets it from ntdll."
+    }
+  ],
+  "excerpts": [
+    {
+      "file": "install-rdo-tcp.sh",
+      "from": "^SWITCH=",
+      "to": "^carries_fix\\(\\)",
+      "note": "The switch is one empty file beside the prefix, NotProton's own; the runner's ntdll.so must carry engine patch 0037, which names that file."
+    }
+  ],
+  "symptom": "Red Dead Online never connects to its servers; the story mode plays.",
+  "cause": "Its TCP connections to Rockstar's servers have to be made without TCP options, which macOS sends by default (MSS, window scale, SACK, timestamps).",
+  "fix": "Engine patch 0037, in the Wine modules' ntdll.so (the Rosetta improvement, CrossOver Preview 41303), makes a process's TCP connections with macOS's TCP_NOOPT when NotProton's file notproton-tcp-noopt is beside its prefix, or when WINE_TCP_NOOPT=1 is in its environment. This fix writes that file for the game's prefix. Without window scaling a connection keeps at most 64 KB in flight, so it is only for this game. Played on 2026-11-20: Red Dead Online, which never connected on that Mac, reached its online world.",
+  "backend": "Any: the fix is in the network, not the graphics.",
+  "crossover": "CrossOver Preview 27 (27.0.0.41303), NotProton runner, 2026-11-20"
+}

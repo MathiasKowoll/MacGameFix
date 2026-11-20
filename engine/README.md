@@ -637,9 +637,12 @@ explained; the protection decrypting code on first use is the suspect.
 `TCP_NOOPT` when it is asked for: the SYN carries no MSS, window scale, SACK or timestamp
 option, and the connection uses none.
 
-- **Asked for with** `WINE_TCP_NOOPT=1` in the process's environment (a game's Steam launch
-  options: `WINE_TCP_NOOPT=1 %command%`), or with NotProton's own switch, the file
-  `notproton-tcp-noopt` beside the prefix (`compatdata/<app id>/notproton-tcp-noopt`).
+- **Asked for with** NotProton's own switch, the file `notproton-tcp-noopt` beside the prefix
+  (`compatdata/<app id>/notproton-tcp-noopt`), which Red Dead Redemption 2's fix
+  (`fixes/install-rdo-tcp.sh`) writes, or with `WINE_TCP_NOOPT=1` in the process's environment.
+  NotProton does not always hand a launch option's `WINE_*` variable to the game (a launch
+  through `open` keeps only `NOTPROTON_ENV_*`), so in its launch options that is
+  `NOTPROTON_ENV_WINE_TCP_NOOPT=1 %command%`.
   `WINE_TCP_NOOPT=0` turns it off even where the file is. Read once per process.
 - **Why:** Red Dead Online's connection to its servers needs it on a Mac. NotProton's creator
   (https://github.com/NotProtonNot/NotProton) found it and handed us a patch that sets it in

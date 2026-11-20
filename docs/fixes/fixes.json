@@ -1421,6 +1421,50 @@
       "notNeededFromGptk": null
     },
     {
+      "title": "Red Dead Redemption 2",
+      "installer": "install-rdo-tcp.sh",
+      "scope": "prefix",
+      "executable": "RDR2.exe",
+      "carrierDirectory": "",
+      "alsoRuns": [],
+      "summary": "Red Dead Online never connects to its servers on a Mac: its TCP connections have to be made without TCP options. The Wine modules' ntdll does that for this game's prefix alone, with NotProton's own switch. NotProton with CrossOver Preview 41303 only.",
+      "page": null,
+      "installs": [
+        "bottles.sh"
+      ],
+      "builtFrom": [],
+      "license": "GPL-3.0-or-later",
+      "credits": [
+        {
+          "name": "NotProton's creator",
+          "url": "https://github.com/NotProtonNot/NotProton",
+          "note": "Found that Red Dead Online needs its TCP connections made without TCP options, and handed us the fix, which set macOS's TCP_NOOPT in wineserver; engine patch 0037 sets it from ntdll."
+        }
+      ],
+      "excerpts": [
+        {
+          "file": "fixes/install-rdo-tcp.sh",
+          "symbol": null,
+          "note": "The switch is one empty file beside the prefix, NotProton's own; the runner's ntdll.so must carry engine patch 0037, which names that file.",
+          "language": "bash",
+          "startLine": 73,
+          "endLine": 81,
+          "commit": "24783c72a93d6d537a04cc7ce2a1c1dcfd21ecd0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/24783c72a93d6d537a04cc7ce2a1c1dcfd21ecd0/fixes/install-rdo-tcp.sh#L73-L81",
+          "code": "SWITCH=\"$(dirname \"$PFX\")/notproton-tcp-noopt\"\n# notproton-build's first line names the runner: 27.0.0.41303 or 27.0.0.41303-fex; MGVF_CX, when\n# the app passes it, is that runner's CrossOver folder.\nBUILD=\"\"; IFS= read -r BUILD < \"$(dirname \"$PFX\")/notproton-build\" || true\nRUNNER=\"${MGVF_CX:-$HOME/Library/Application Support/notproton/runners/crossover-$BUILD/CrossOver}\"\nRUNNER=\"${RUNNER%/}\"\nNTDLL=\"$RUNNER/lib/wine/x86_64-unix/ntdll.so\"\n# 0037 carries the switch's file name; CrossOver's own ntdll.so and ours before it do not.\ncarries_fix() { [ -f \"$NTDLL\" ] && LC_ALL=C /usr/bin/grep -qa 'notproton-tcp-noopt' \"$NTDLL\"; }"
+        }
+      ],
+      "symptom": "Red Dead Online never connects to its servers; the story mode plays.",
+      "cause": "Its TCP connections to Rockstar's servers have to be made without TCP options, which macOS sends by default (MSS, window scale, SACK, timestamps).",
+      "fix": "Engine patch 0037, in the Wine modules' ntdll.so (the Rosetta improvement, CrossOver Preview 41303), makes a process's TCP connections with macOS's TCP_NOOPT when NotProton's file notproton-tcp-noopt is beside its prefix, or when WINE_TCP_NOOPT=1 is in its environment. This fix writes that file for the game's prefix. Without window scaling a connection keeps at most 64 KB in flight, so it is only for this game. Played on 2026-11-20: Red Dead Online, which never connected on that Mac, reached its online world.",
+      "backend": "Any: the fix is in the network, not the graphics.",
+      "crossover": "CrossOver Preview 27 (27.0.0.41303), NotProton runner, 2026-11-20",
+      "pageUrl": null,
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
       "title": "RESIDENT EVIL 2",
       "installer": "install-re-vc1-fix.sh",
       "scope": "folder",

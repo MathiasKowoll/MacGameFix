@@ -221,6 +221,14 @@
       "env": {},
       "symptom": "Never opens a window under Rosetta (Denuvo)"
     },
+    "RDR2.exe": {
+      "title": "Red Dead Redemption 2",
+      "backend": "d3dmetal",
+      "codec": "",
+      "gptk": "",
+      "env": {},
+      "symptom": "Red Dead Online never connects to its servers"
+    },
     "re2.exe": {
       "title": "RESIDENT EVIL 2",
       "backend": "d3dmetal",

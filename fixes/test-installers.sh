@@ -180,6 +180,34 @@ last="$(ng3 --restore 2>/dev/null | tail -1)"
   && ! /usr/bin/grep -q "NINJA GAIDEN" "$pfx/user.reg" \
   && say ok "ng3 in a Steam Play prefix: restored, the overrides gone" || say FAIL "ng3 prefix: restore ($last, $(ng3st))"
 
+# Red Dead Online's fix is NotProton's notproton-tcp-noopt file beside the prefix, for a runner
+# whose ntdll.so carries engine patch 0037 (it names that file).
+rh="$W/rdohome"; rc="$W/rdo/compatdata/1174180"; rp="$rc/pfx"; rg="$W/rdo/game"
+rnt="$rh/Library/Application Support/notproton/runners/crossover-27.0.0.41303-fex/CrossOver/lib/wine/x86_64-unix"
+mkdir -p "$rp/drive_c" "$rg" "$rnt"; : > "$rp/system.reg"; : > "$rp/user.reg"; : > "$rg/RDR2.exe"
+printf '27.0.0.41303-fex\n' > "$rc/notproton-build"; printf 'an ntdll.so without 0037\n' > "$rnt/ntdll.so"
+rdo() { HOME="$rh" MGVF_BOTTLE="$rp" /bin/bash "$FIX/install-rdo-tcp.sh" "$rg" "$@"; }
+rdost() { rdo --status 2>/dev/null | /usr/bin/grep -E '^(installed|absent|half|norecipe)$' | tail -1; }
+[ "$(rdost)" = absent ] && say ok "rdo: absent before" || say FAIL "rdo: absent before ($(rdost))"
+! rdo > "$W/rdo1.log" 2>&1 && [ ! -e "$rc/notproton-tcp-noopt" ] && /usr/bin/grep -q 'does not have the fix' "$W/rdo1.log" \
+  && say ok "rdo: refused while the runner's ntdll.so lacks 0037, nothing written" || say FAIL "rdo: refused without 0037"
+printf 'ntdll.so ... %%s/../notproton-tcp-noopt ...\n' > "$rnt/ntdll.so"
+MGVF_STATUS_ONLY=1 rdo > /dev/null 2>&1; [ ! -e "$rc/notproton-tcp-noopt" ] \
+  && say ok "rdo: MGVF_STATUS_ONLY never installs" || say FAIL "rdo: MGVF_STATUS_ONLY wrote the switch"
+rdo > "$W/rdo2.log" 2>&1 && [ -f "$rc/notproton-tcp-noopt" ] && [ ! -s "$rc/notproton-tcp-noopt" ] && [ "$(rdost)" = installed ] \
+  && [ -z "$(ls -A "$rg" | /usr/bin/grep -v '^RDR2.exe$')" ] \
+  && say ok "rdo: installed, the empty switch beside the prefix and nothing in the game folder" || say FAIL "rdo: install ($(rdost), $(tail -1 "$W/rdo2.log"))"
+printf 'an ntdll.so without 0037\n' > "$rnt/ntdll.so"
+[ "$(rdost)" = half ] && say ok "rdo: half when the runner's ntdll.so loses 0037" || say FAIL "rdo: half ($(rdost))"
+rdo --restore > /dev/null 2>&1 && [ ! -e "$rc/notproton-tcp-noopt" ] && [ "$(rdost)" = absent ] \
+  && say ok "rdo: restore takes the switch away" || say FAIL "rdo: restore ($(rdost))"
+printf '27.0.0.41073-fex\n' > "$rc/notproton-build"
+[ "$(rdost)" = norecipe ] && ! rdo > /dev/null 2>&1 && [ ! -e "$rc/notproton-tcp-noopt" ] \
+  && say ok "rdo: another runner build is norecipe, and refused" || say FAIL "rdo: another build ($(rdost))"
+: > "$rp/cxbottle.conf"
+[ "$(rdost)" = norecipe ] && ! rdo > /dev/null 2>&1 \
+  && say ok "rdo: a CrossOver bottle is norecipe, and refused" || say FAIL "rdo: a bottle ($(rdost))"
+
 # Phantom Blade Zero's fix is registry values for PBZ.exe and the H.264 decoder
 # in system32: tried in a fake Steam Play prefix, as NINJA GAIDEN 3's.
 pfx="$W/pbzpfx"; psys="$pfx/drive_c/windows/system32"; mkdir -p "$psys"
