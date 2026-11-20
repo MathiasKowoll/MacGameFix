@@ -656,6 +656,7 @@ f6do --restore > /dev/null 2>&1
 f6n="$W/fh6-41303"; mkdir -p "$f6n/m"
 cp "$FIX/../engine/modules/27.0.0.41303/x86_64-windows/ntdll.dll" "$f6n/m/engine-27.0.0.41303-x86_64-windows-ntdll.dll"
 git -C "$FIX/.." show 6373a11:engine/modules/27.0.0.41303/x86_64-windows/ntdll.dll > "$f6n/old.dll" 2>/dev/null
+git -C "$FIX/.." show 5e74061:engine/modules/27.0.0.41303/x86_64-windows/ntdll.dll > "$f6n/0025.dll" 2>/dev/null
 printf 'not ours\n' > "$f6n/other.dll"
 f6n_run() {
   HERE="$f6n" MGVF_MODULES="$f6n/m" RUNNER="$1" /bin/bash -c '. "$0"; '"$2" "$FIX/fh6-runtime.sh"
@@ -665,10 +666,12 @@ if [ "$(shasum -a 256 "$f6n/old.dll" | cut -c1-8)" != 6664770a ]; then
 elif [ "$(f6n_run /x/runners/crossover-27.0.0.41303-fex/CrossOver fh6_chain_in_ntdll)" = 1 ] \
   && [ "$(f6n_run /x/runners/crossover-27.0.0.41073-fex/CrossOver fh6_chain_in_ntdll)" = 0 ] \
   && f6n_run /x/runners/crossover-27.0.0.41303-fex/CrossOver "fh6_pe_known '$f6n/old.dll'" \
+  && f6n_run /x/runners/crossover-27.0.0.41303-fex/CrossOver "fh6_pe_known '$f6n/0025.dll'" \
+  && ! f6n_run /x/runners/crossover-27.0.0.41303-fex/CrossOver "fh6_pe_ok '$f6n/0025.dll'" \
   && ! f6n_run /x/runners/crossover-27.0.0.41303-fex/CrossOver "fh6_pe_ok '$f6n/old.dll'" \
   && ! f6n_run /x/runners/crossover-27.0.0.41303-fex/CrossOver "fh6_pe_known '$f6n/other.dll'" \
   && ! f6n_run /x/runners/crossover-27.0.0.41073-fex/CrossOver "fh6_pe_known '$f6n/old.dll'"; then
-  say ok "fh6 on 41303: 0025's ntdll drops the chain variables, and the build before it is updated, not refused"
+  say ok "fh6 on 41303: the modules' ntdll drops the chain variables, and the builds before it are updated, not refused"
 else
   say FAIL "fh6 on 41303: chain-in-ntdll detection or the previous build's acceptance"
 fi

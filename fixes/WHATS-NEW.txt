@@ -4,3 +4,4 @@
 # notification. Rewrite them with every change to the fixes: what stays here is said
 # again with the next catalog. Lines that start with # are not carried.
 Ori and the Will of the Wisps: its shaders can be compiled ahead of time, so it no longer hitches when something new comes on screen. For NotProton; takes 5 to 30 minutes.
+Forza Horizon 6 no longer reads half on CrossOver Preview 41303 after the Wine modules that brought 2XKO: install it again in Games to finish the update.

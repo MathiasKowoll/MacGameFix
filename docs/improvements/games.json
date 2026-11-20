@@ -1,10 +1,10 @@
 {
   "about": "The games that run because of an improvement: one of the Wine modules MacGameFix installs into a CrossOver app or a NotProton runner, not a fix in the game's folder or prefix. A game is added after it was played, by us or by someone who reported it, never from what it should do. A report from someone else stays 'reported' until we play it, and a game we tried that does not run yet is 'in-progress'. A game that also needs a fix of its own names it in 'fix' (docs/fixes/games/<fix>.json).",
-  "updated": "2026-11-03",
+  "updated": "2026-11-19",
   "improvements": {
     "rosetta-copy-protection": {
       "name": "Copy protection under Rosetta",
-      "summary": "The Intel side's ntdll.so (engine patches 0017 to 0020): Rosetta's x86 CPU made to look more like a real one to copy protection such as Denuvo. The game's code is not touched.",
+      "summary": "The Intel side's ntdll.so (engine patches 0017 to 0020): Rosetta's x86 CPU made to look more like a real one to copy protection such as Denuvo. With CrossOver 41303 also ntdll.dll shaped as copy protection expects (0031) and NotProton's creator's kernelbase.dll, user32.dll and win32u.so (0032 to 0035) for 2XKO. The game's code is not touched.",
       "page": "engine/README.md#rosettas-cpu-for-copy-protection"
     },
     "dualsense": {
@@ -118,6 +118,36 @@
           "gptk": "4.0b3",
           "runner": "NotProton, Intel side",
           "notes": "Got past Denuvo and started with no launch option once 0020 was in the runner. With the modules before it, it died before its first frame unless NOTPROTON_ENV_WINE_ROSETTA_CPUID7_OR=01800000,00400000 was in its launch options."
+        }
+      ]
+    },
+    {
+      "name": "2XKO",
+      "steamAppId": null,
+      "improvement": "rosetta-copy-protection",
+      "fix": null,
+      "status": "played",
+      "description": "Riot's fighting game, free to play, without Vanguard since patch 1.3.3b. Plays through the Riot Client, signed in, from CrossOver Preview or as a non-Steam game in NotProton (Rosetta). It died a second after start: its protection reads system32\\ntdll.dll from disk and refused ours (0031); NotProton's creator's 0032-0035 do the rest. It stutters (gaps of 100-300 ms in runs): the protection decrypts and re-locks its code pages and Rosetta pays for each. Setup: docs/improvements/2xko.md.",
+      "tests": [
+        {
+          "date": "2026-11-19",
+          "status": "played",
+          "by": "MacGameFix",
+          "mac": "M4 Max",
+          "macos": "27.2.1",
+          "crossover": "Preview 27.0.0.41303",
+          "runner": "CrossOver bottle",
+          "notes": "Signed in with Apple through the Riot Client; title screen, menus, training mode. About 52 fps, a gap over 100 ms in 29% of seconds."
+        },
+        {
+          "date": "2026-11-19",
+          "status": "played",
+          "by": "MacGameFix",
+          "mac": "M4 Max",
+          "macos": "27.2.1",
+          "crossover": "Preview 27.0.0.41303",
+          "runner": "NotProton, Intel side",
+          "notes": "Non-Steam shortcut to RiotClientServices.exe. Same as in the bottle. The FEX side does not run it: the Riot Client's window never draws and the protection's exceptions break there."
         }
       ]
     }

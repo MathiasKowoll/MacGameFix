@@ -1,0 +1,179 @@
+From: NotProtonNot <332734261+NotProtonNot@users.noreply.github.com>
+Subject: A window surface flushed to another process's top-level window is drawn at the window's visible origin, for the Riot Client's Electron window. From NotProton's creator
+
+Patch by NotProton's creator (https://github.com/NotProtonNot/NotProton), handed to
+MacGameFix. Only the file name changed here; the diff is theirs as given.
+
+--- a/dlls/win32u/dce.c
++++ b/dlls/win32u/dce.c
+@@ -741,6 +741,7 @@
+     HANDLE      section;
+     HWND        parent;
+     BITMAPINFO  info;
++    BOOL        toplevel;
+ };
+ 
+ static struct shm_window_surface *get_shm_surface( struct window_surface *surface )
+@@ -768,7 +769,7 @@
+     params.info = surface->info;
+     params.bounds = *dirty;
+ 
+-    return send_message_timeout( surface->parent, WM_WINE_FLUSHSHMSURFACE, 0, (LPARAM)&params,
++    return send_message_timeout( surface->parent, WM_WINE_FLUSHSHMSURFACE, surface->toplevel, (LPARAM)&params,
+                                  SMTO_ABORTIFHUNG | SMTO_BLOCK, 500, FALSE );
+ }
+ 
+@@ -907,7 +908,7 @@
+     return &surface->header;
+ }
+ 
+-void process_surface_message( struct flush_shm_surface_params *params )
++void process_surface_message( struct flush_shm_surface_params *params, BOOL toplevel )
+ {
+     HANDLE mapping = LongToHandle( params->section );
+     HWND hwnd = LongToHandle( params->hwnd );
+@@ -927,6 +928,27 @@
+         return;
+     }
+     height = abs( params->info.bmiHeader.biHeight );
++
++    if (toplevel)
++    {
++        POINT origin = { 0, 0 };
++        WND *win = get_win_ptr( hwnd );
++        if (win && win != WND_DESKTOP && win != WND_OTHER_PROCESS)
++        {
++            origin.x = win->rects.visible.left - win->rects.window.left;
++            origin.y = win->rects.visible.top - win->rects.window.top;
++            release_win_ptr( win );
++        }
++        hdc = NtUserGetDCEx( hwnd, NULL, DCX_WINDOW | DCX_CACHE );
++        OffsetRect( &params->bounds, origin.x, origin.y );
++        NtGdiSetDIBitsToDeviceInternal( hdc, params->bounds.left, params->bounds.top,
++                                        params->bounds.right - params->bounds.left, params->bounds.bottom - params->bounds.top,
++                                        params->bounds.left - origin.x, height - params->bounds.bottom + origin.y, 0, height,
++                                        bits, &params->info, DIB_RGB_COLORS, 0, 0, FALSE, NULL);
++        NtUserReleaseDC( hwnd, hdc );
++        NtUnmapViewOfSection( GetCurrentProcess(), bits );
++        return;
++    }
+ 
+     hdc = NtUserGetDCEx( hwnd, NULL, DCX_CLIPSIBLINGS );
+     NtGdiSetDIBitsToDeviceInternal( hdc, params->bounds.left, params->bounds.top,
+@@ -935,6 +957,78 @@
+                                     bits, &params->info, DIB_RGB_COLORS, 0, 0, FALSE, NULL);
+     NtUserReleaseDC( hwnd, hdc );
+     NtUnmapViewOfSection( GetCurrentProcess(), bits );
++}
++
++struct foreign_surface
++{
++    struct list entry;
++    HWND hwnd;
++    struct window_surface *surface;
++};
++static struct list foreign_surfaces = LIST_INIT( foreign_surfaces );
++
++static void release_foreign_surface( struct foreign_surface *foreign )
++{
++    list_remove( &foreign->entry );
++    window_surface_release( foreign->surface );
++    free( foreign );
++}
++
++static struct window_surface *get_foreign_window_surface( HWND hwnd, const RECT *top_rect )
++{
++    struct foreign_surface *foreign, *next, *found = NULL;
++    struct window_surface *surface = NULL;
++    RECT rect = *top_rect;
++
++    if (IsRectEmpty( &rect )) return NULL;
++    OffsetRect( &rect, -rect.left, -rect.top );
++
++    user_lock();
++    LIST_FOR_EACH_ENTRY_SAFE( foreign, next, &foreign_surfaces, struct foreign_surface, entry )
++    {
++        if (foreign->hwnd == hwnd) found = foreign;
++        else if (!is_window( foreign->hwnd )) release_foreign_surface( foreign );
++    }
++    if (found && !EqualRect( &found->surface->rect, &rect ))
++    {
++        release_foreign_surface( found );
++        found = NULL;
++    }
++    if (!found && (surface = create_shm_surface( hwnd, hwnd, top_rect, NULL )))
++    {
++        get_shm_surface( surface )->toplevel = TRUE;
++        if ((found = malloc( sizeof(*found) )))
++        {
++            found->hwnd = hwnd;
++            found->surface = surface;
++            list_add_tail( &foreign_surfaces, &found->entry );
++        }
++        else window_surface_release( surface );
++    }
++    if (found) window_surface_add_ref( (surface = found->surface) );
++    else surface = NULL;
++    user_unlock();
++    return surface;
++}
++
++static void flush_foreign_window_surfaces(void)
++{
++    struct window_surface *surfaces[16];
++    struct foreign_surface *foreign;
++    UINT i, count = 0;
++
++    user_lock();
++    LIST_FOR_EACH_ENTRY( foreign, &foreign_surfaces, struct foreign_surface, entry )
++    {
++        if (count == ARRAY_SIZE(surfaces)) break;
++        window_surface_add_ref( (surfaces[count++] = foreign->surface) );
++    }
++    user_unlock();
++    for (i = 0; i < count; i++)
++    {
++        window_surface_flush( surfaces[i] );
++        window_surface_release( surfaces[i] );
++    }
+ }
+ 
+ /* CX HACK 23950 - END */
+@@ -1085,6 +1179,7 @@
+             if (surface) window_surface_add_ref( surface );
+             release_win_ptr( win );
+         }
++        else if (win == WND_OTHER_PROCESS) surface = get_foreign_window_surface( top_win, &top_rect );
+     }
+ 
+     if (!surface) SetRectEmpty( &top_rect );
+@@ -1461,6 +1556,7 @@
+     user_unlock();
+ 
+     release_opengl_drawables( &drawables );
++    if (ret && !list_empty( &foreign_surfaces )) flush_foreign_window_surfaces();
+     return ret;
+ }
+ 
+--- a/dlls/win32u/message.c
++++ b/dlls/win32u/message.c
+@@ -2291,7 +2291,7 @@
+         return NtUserTrackMouseEvent( &info );
+     }
+     case WM_WINE_FLUSHSHMSURFACE: /* CX HACK 23950 */
+-        process_surface_message( (struct flush_shm_surface_params *)lparam );
++        process_surface_message( (struct flush_shm_surface_params *)lparam, wparam );
+         return 1;
+     default:
+         if (msg >= WM_WINE_FIRST_DRIVER_MSG && msg <= WM_WINE_LAST_DRIVER_MSG)
+--- a/dlls/win32u/win32u_private.h
++++ b/dlls/win32u/win32u_private.h
+@@ -57,7 +57,7 @@
+                                      struct window_surface *new );
+ extern struct window_surface *create_shm_surface( HWND hwnd, HWND parent, const RECT *visible_rect,
+                                                   struct window_surface *old_surface );
+-extern void process_surface_message( struct flush_shm_surface_params *params );
++extern void process_surface_message( struct flush_shm_surface_params *params, BOOL toplevel );
+ 
+ extern void window_surface_lock( struct window_surface *surface );
+ extern void window_surface_unlock( struct window_surface *surface );
