@@ -587,10 +587,34 @@ these modules are built here.
 
 | Patch | Module | Change |
 |---|---|---|
-| `0032-ntdll-writecopy-pagefile-views-on-macos.patch` | `ntdll.so` (Intel side) | A copy-on-write view of a section backed by the page file is mapped writable and shared, not copy-on-write, outside Linux. Without it (and everything else in place) the game wrote nothing more after starting and exited after 66 s, short of the screen with which it starts; with it, it reached its sign-in screen in 30 s. It changes every game's mapping of such sections |
+| `0032-ntdll-writecopy-pagefile-views-on-macos.patch` | `ntdll.so` (Intel side) | A copy-on-write view of a section backed by the page file is mapped writable and shared, not copy-on-write, outside Linux. Without it (and everything else in place) the game wrote nothing more after starting and exited after 66 s, short of the screen with which it starts; with it, it reached its sign-in screen in 30 s. On its own it changes every program's mapping of such sections; `0036` keeps it to the Riot Client's and 2XKO's processes |
 | `0033-win32u-draw-into-other-process-top-level-windows.patch` | `win32u.so` | A shared-memory window surface flushed to a top-level window of another process is drawn at the window's visible origin. The Riot Client draws its window from another process (Electron). With CrossOver's own `win32u.so` the client's Wine process crashed in its main run loop (macOS reports for "Menu Helper", 2026-11-17 and 19); with this patch the client showed and worked. Which of the two the patch answers for was not isolated |
 | `0034-kernelbase-device-paths-from-GetMappedFileNameW.patch` | `kernelbase.dll` | `GetMappedFileNameW` answers with a device path, `\Device\HarddiskVolume1\...`, as Windows does, instead of `\??\C:\...`. Copy protection checks where its modules are mapped with it |
 | `0035-user32-GetPointerDevice-stub.patch` | `user32.dll` | `GetPointerDevice`, which the game imports, exists and fails with `ERROR_INVALID_PARAMETER` |
+| `0036-ntdll-writecopy-shared-only-for-riot.patch` (ours) | `ntdll.so` (Intel side) | `0032` only where its executable is `Lion.exe`, `Lion-Win64-Shipping.exe`, `RiotClient*.exe` or `Riot Client.exe`; `WINE_WRITECOPY_SHARED=1` or `0` turns it on or off for any process. See below |
+
+**Why `0032` is kept to Riot's processes.** On Windows, a copy-on-write view of a section keeps
+what its process writes to itself. Mapped shared, as `0032` does, every write goes back into the
+section and every other view of it sees it. Shipped as it came in modules catalog 1795122029,
+that applied to every program the Rosetta improvement reaches. A probe of ours
+(`CreateFileMapping` on the page file, one view `FILE_MAP_WRITE` and one `FILE_MAP_COPY`, a write
+through the copy-on-write view, read back through the other), run on 2026-11-19 in a copy of
+NotProton's 41303 runner:
+
+| ntdll.so | Executable | The copy-on-write view's write reaches the section | It sees a later write to the section |
+|---|---|---|---|
+| main before `0036` | `probe.exe` | yes | yes |
+| main before `0036` | `Lion-Win64-Shipping.exe` | yes | yes |
+| with `0036` | `probe.exe` | no, as Windows | no, as CrossOver's own |
+| with `0036` | `Lion-Win64-Shipping.exe`, `Lion.exe`, `RiotClientServices.exe`, `Riot Client.exe` | yes | yes |
+| with `0036` | `LionHeart.exe` | no | no |
+| with `0036`, `WINE_WRITECOPY_SHARED=1` | `probe.exe` | yes | yes |
+| with `0036`, `WINE_WRITECOPY_SHARED=0` | `Lion-Win64-Shipping.exe` | no | no |
+
+Neither behaviour is Windows' whole: Windows keeps the write private *and* shows the view the
+section's later writes on pages it has not written. macOS's private mappings do not give the
+second, which is what `0032` buys for 2XKO; every other program gets CrossOver's own behaviour
+back.
 
 `build.sh` builds `kernelbase.dll`, `user32.dll` and `win32u.so` when the series' `build.conf`
 says `PROTECTION_MODULES=yes`. `win32u.so` is built as CodeWeavers build theirs, with FreeType
