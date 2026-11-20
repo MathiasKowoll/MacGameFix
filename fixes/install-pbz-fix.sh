@@ -41,6 +41,17 @@
 # answer: NV12 offered, no D3D awareness, so Electra decodes into system memory.
 # It is the same file for CrossOver 26.3 and Preview 27.
 #
+# IN A NOTPROTON PREFIX it also turns on a pipeline cache. The game compiles about
+# 66,000 Metal pipelines as it loads, and Metal's own cache stops at about 1.11 GB a
+# file, so every start compiled some 40% of them again. NotProton loads
+# notproton-rosetta-pipeline-cache.dylib (pbz-pipeline-cache/ORIGIN.md) into the game
+# when NOTPROTON_ROSETTA_PIPELINE_CACHE=1 is in its launch options, and it keeps each
+# pipeline D3DMetal compiles in a cache of its own, up to 10 GB. So this copies the
+# library into NotProton's plugins folder with its descriptor, and puts that variable
+# in front of PBZ's Steam launch options, which needs Steam closed. Measured on
+# 2026-11-20 with the 41303 runner: the first start with it compiled 65,685 and wrote
+# 7.9 GB; the next one compiled 113. A CrossOver bottle has no way to load it.
+#
 # What else it needs, and this does not do: the Wine modules on (Wine Modules
 # tab), since CrossOver's own ntdll ignores the value; D3DMetal 4 (CrossOver
 # Preview 27 carries it; 26.3 carries 3.0); the Intel side, not FEX. Played on
@@ -53,8 +64,9 @@
 #
 # MGVF-SCOPE: prefix
 # MGVF-NEEDS: rosetta
+# MGVF-INSTRUCTIONS: pbz-instructions.md
 # MGVF-GAME: Phantom Blade Zero | PBZ.exe | platform/steam
-# MGVF-WHY: Never opens a window under Rosetta: its Denuvo checks the CPU for instructions Rosetta does not have. The Wine modules' ntdll shows them to this executable alone, it loads Microsoft's Visual C++ runtime first, and an H.264 decoder that offers NV12 brings back the black menu video.
+# MGVF-WHY: Never opens a window under Rosetta: its Denuvo checks the CPU for instructions Rosetta does not have. The Wine modules' ntdll shows them to this executable alone, it loads Microsoft's Visual C++ runtime first, and an H.264 decoder that offers NV12 brings back the black menu video. In NotProton it also turns on a pipeline cache, so the shaders Metal's own cache has no room for are not compiled again at every start.
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -106,6 +118,24 @@ COUNT=10  # the CPUID value, one override per runtime DLL, and the decoder's
 # Named literally: build-app.sh ships the files an installer names beside itself.
 DECODER="$HERE/msmpeg2vdec-sw.dll"
 SYS="${BOTTLE:-$PFX}/drive_c/windows/system32"
+
+# The pipeline cache, for a prefix NotProton keeps (it writes notproton-build beside
+# pfx) while NotProton's support folder is there: Remove Everything takes that folder
+# away, and this does not make it again.
+NP_SUPPORT="$HOME/Library/Application Support/notproton"
+PLUGINS="$NP_SUPPORT/plugins"
+CACHE_LIB="$HERE/notproton-rosetta-pipeline-cache.dylib"
+OPTIONS="$HERE/steam-launch-options.pl"
+CACHE_ID=NOTPROTON_ROSETTA_PIPELINE_CACHE
+CACHE_CONF="$PLUGINS/rosetta-pipeline-cache.conf"
+CACHE_LIVE="$PLUGINS/notproton-rosetta-pipeline-cache.dylib"
+APPID=4115450
+JOURNAL="$PFX/.mgf-pbz-launch-options.json"
+# The same code built before MacGameFix signed it: the experiment's own build and the
+# copy its install script signed ad hoc. Either is replaced by the signed one.
+CACHE_EARLIER="389defc20850ff9fdc43cfc87b804f15c5243ef738202de559717bdd3229f1d6 0d19abb364a827508b695300bcb85ceafadcf916f210a4a9b9c662366c48b9a2"
+NOTPROTON=0
+if [ -n "$PFX" ] && [ -f "$(dirname "$PFX")/notproton-build" ] && [ -d "$NP_SUPPORT" ]; then NOTPROTON=1; fi
 
 # bottles.sh answers from user.reg without starting wine, and edits a prefix's.
 [ -f "$HERE/bottles.sh" ] && . "$HERE/bottles.sh"
@@ -212,11 +242,71 @@ present() {
   echo "$n"
 }
 
+cache_sha() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1; }
+# Our library, or the same code from before it was signed.
+cache_lib_ours() {
+  [ -f "$CACHE_LIVE" ] || return 1
+  cmp -s "$CACHE_LIVE" "$CACHE_LIB" && return 0
+  case " $CACHE_EARLIER " in *" $(cache_sha "$CACHE_LIVE") "*) return 0 ;; esac
+  return 1
+}
+# A descriptor for the plugin's id, ours or one the user wrote, and a library for it.
+cache_plugin_ok() { [ -f "$CACHE_CONF" ] && /usr/bin/grep -qx "\[$CACHE_ID\]" "$CACHE_CONF" && cache_lib_ours; }
+cache_options() { /usr/bin/perl "$OPTIONS" "$1" "$APPID" "$JOURNAL" "$CACHE_ID=1"; }
+cache_on() { cache_plugin_ok && cache_options status >/dev/null 2>&1; }
+# The plugin can serve other games too: only PBZ's switch says the fix is partly here.
+cache_any() { cache_options status >/dev/null 2>&1; }
+
+cache_install() {
+  mkdir -p "$PLUGINS"
+  # The library is renamed into place, so a game still running keeps the one it loaded.
+  if ! cmp -s "$CACHE_LIVE" "$CACHE_LIB"; then
+    if [ -f "$CACHE_LIVE" ] && ! cache_lib_ours; then
+      echo "error: $CACHE_LIVE is a different library; it was not touched." >&2
+      return 1
+    fi
+    cp -p "$CACHE_LIB" "$CACHE_LIVE.mgf-new" && mv -f "$CACHE_LIVE.mgf-new" "$CACHE_LIVE"
+  fi
+  # One the user wrote stays: NotProton refuses a second descriptor for the same id.
+  if ! /usr/bin/grep -lqx "\[$CACHE_ID\]" "$PLUGINS"/*.conf 2>/dev/null; then
+    cat > "$CACHE_CONF.mgf-new" <<CONF
+[$CACHE_ID]
+label = Rosetta pipeline cache
+description = Keeps the GPU code of the pipelines D3DMetal compiles in a Rosetta game, beyond Metal's 1.1 GB cache
+section = dev
+on = 1
+inject = 1
+requires = Library/Application Support/notproton/plugins/notproton-rosetta-pipeline-cache.dylib
+CONF
+    mv -f "$CACHE_CONF.mgf-new" "$CACHE_CONF"
+  fi
+  cache_options install >/dev/null
+  echo "  pipeline cache: plugin in NotProton's plugins folder, $CACHE_ID=1 in PBZ's launch options"
+}
+
+# Our launch option out; the plugin too once no game's launch options name it.
+cache_restore() {
+  [ -f "$JOURNAL" ] && { cache_options restore >/dev/null || return 1; }
+  local f
+  for f in "$HOME/Library/Application Support/Steam/userdata"/*/config/localconfig.vdf; do
+    [ -f "$f" ] && /usr/bin/grep -q "$CACHE_ID=1" "$f" && return 0
+  done
+  if [ -f "$CACHE_CONF" ] && [ "$(/usr/bin/grep -c . "$CACHE_CONF")" -le 8 ] \
+     && /usr/bin/grep -qx "requires = Library/Application Support/notproton/plugins/notproton-rosetta-pipeline-cache.dylib" "$CACHE_CONF"; then
+    rm -f "$CACHE_CONF"
+  fi
+  # The library stays while any descriptor still names the id.
+  /usr/bin/grep -lqx "\[$CACHE_ID\]" "$PLUGINS"/*.conf 2>/dev/null || ! cache_lib_ours || rm -f "$CACHE_LIVE"
+  return 0
+}
+
 status() {
   local n
   n="$(present)"
-  if [ "$n" -eq "$COUNT" ] && decoder_placed; then echo installed
-  elif [ "$n" -gt 0 ] || decoder_placed; then echo half
+  if [ "$n" -eq "$COUNT" ] && decoder_placed && { [ "$NOTPROTON" = 0 ] || cache_on; }; then echo installed
+  elif [ "$n" -gt 0 ] || decoder_placed || { [ "$NOTPROTON" = 1 ] && cache_any; }; then
+    [ "$n" -eq "$COUNT" ] && decoder_placed && echo "Why: the pipeline cache is not on in NotProton" >&2
+    echo half
   else echo absent; fi
 }
 
@@ -225,6 +315,8 @@ case "$ACTION" in
   --restore)
       gone=1
       if [ -n "$PFX" ]; then prefix_stopped "$PFX" || exit 1; fi
+      if [ "$NOTPROTON" = 1 ] && [ -f "$JOURNAL" ]; then cache_options preflight >/dev/null || exit 1; fi
+      [ "$NOTPROTON" = 0 ] || cache_restore || gone=0
       decoder_out
       if [ -n "$PFX" ]; then
         while IFS='|' read -r key name data; do
@@ -253,6 +345,11 @@ esac
 
 [ -f "$DECODER" ] || { echo "error: msmpeg2vdec-sw.dll is not beside this script" >&2; exit 1; }
 if [ -n "$PFX" ]; then prefix_stopped "$PFX" || exit 1; fi
+if [ "$NOTPROTON" = 1 ]; then
+  [ -f "$CACHE_LIB" ] && [ -f "$OPTIONS" ] || { echo "error: the pipeline cache's files are not beside this script" >&2; exit 1; }
+  # Steam closed, the game in its settings and no wrapper in its options, before anything changes.
+  cache_options preflight >/dev/null || exit 1
+fi
 [ -d "$SYS" ] || { echo "error: no system32 here yet -- run the game once first" >&2; exit 1; }
 # Only CrossOver's own file is kept aside: ours, from an earlier install, is not
 # an original to put back.
@@ -272,6 +369,7 @@ if [ -n "$PFX" ]; then
     fi
   done < <(values)
   echo "  $COUNT values written for $EXE only, into the prefix's user.reg"
+  [ "$NOTPROTON" = 0 ] || cache_install || exit 1
 else
   cx="$(find_crossover)" || { echo "error: no CrossOver found in /Applications" >&2; exit 1; }
   reachable "$BOTTLE" "$cx" || { echo "error: this bottle cannot run reg.exe, so nothing was written." >&2; exit 1; }
