@@ -1227,6 +1227,8 @@ how, is in the game's page under `legacy/wiki/`.
   (engine patches `0032` to `0035`: writecopy page-file views, drawing into
   another process's top-level window, device paths from GetMappedFileNameW and
   a GetPointerDevice stub), and handed them to us (#117, #119).
+  They also found what Red Dead Online needs to connect on a Mac (TCP connections
+  without TCP options) and handed us that fix too (engine patch `0037`, #129).
 - **The Cyberpunk 2077 patch** comes from a community script published
   anonymously; its author is not known. MacGameFix writes one of its five
   words.

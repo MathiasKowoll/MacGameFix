@@ -3,4 +3,4 @@
 # catalog.json as "notes"; the app shows them with the update and the agent in its
 # notification. Rewrite them with every change to the fixes: what stays here is said
 # again with the next catalog. Lines that start with # are not carried.
-Phantom Blade Zero in NotProton keeps its shaders between starts: the fix now turns on a pipeline cache, so after the first start the game no longer compiles them again for minutes. Close Steam before installing it; the cache takes about 8 GB.
+Red Dead Redemption 2: Red Dead Online connects to its servers. Install the fix from Games once the Rosetta improvement is up to date; NotProton with CrossOver Preview 41303.
