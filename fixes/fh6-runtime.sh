@@ -20,15 +20,17 @@ BASELINE_UNIX=""
 [ "$FH6_BUILD" = 27.0.0.41073 ] && BASELINE_UNIX=dd6ef76ff8d51da5e2d246bdb7432a6c0b110668d742b1937e82ffcbb05d3ea0
 fh6_pe_ok() { [ -f "$1" ] && [ -n "$BASELINE_PE" ] && [ "$(fh6sha "$1")" = "$BASELINE_PE" ]; }
 # ntdll.dll builds MacGameFix shipped before for 41303, which an update may replace like its own:
-# 6664770a is 0023 + 0024, before 0025 put the chain's switches in the DLL.
-FH6_PREVIOUS_PE="6664770a4c9fa70e0dbfbd28f0bb5af37754f84f708045b30c9b9fd4754f479b"
+# 6664770a is 0023 + 0024, before 0025 put the chain's switches in the DLL; 0e5f9579 is 0025, before
+# 0031 took the diagnostics' 40 MB out of the file for 2XKO (#117).
+FH6_PREVIOUS_PE="6664770a4c9fa70e0dbfbd28f0bb5af37754f84f708045b30c9b9fd4754f479b 0e5f9579d9a84396b1c5761a1b7bb9d6f46bb010a768f88316a34ed06a696b48"
 fh6_pe_known() {
   fh6_pe_ok "$1" && return 0
   [ "$FH6_BUILD" = 27.0.0.41303 ] && [ -f "$1" ] && case " $FH6_PREVIOUS_PE " in *" $(fh6sha "$1") "*) return 0 ;; esac
   return 1
 }
-# The ntdll.dll builds with 0025, which need no chain variables in the launch options.
-FH6_CHAIN_IN_NTDLL="0e5f9579d9a84396b1c5761a1b7bb9d6f46bb010a768f88316a34ed06a696b48"
+# The ntdll.dll builds with 0025, which need no chain variables in the launch options: 0025's own
+# and the one with 0031 to 0035 (#117), which keeps the chain as it was.
+FH6_CHAIN_IN_NTDLL="0e5f9579d9a84396b1c5761a1b7bb9d6f46bb010a768f88316a34ed06a696b48 fe379ae00dade5fcc76863aadcf32b940e43f4b770d534814ff722b4f0ccfdc1"
 fh6_chain_in_ntdll() { case " $FH6_CHAIN_IN_NTDLL " in *" $BASELINE_PE "*) echo 1 ;; *) echo 0 ;; esac; }
 fh6_unix_ok() {
   [ -f "$1" ] && { { [ -n "$BASELINE_UNIX" ] && [ "$(fh6sha "$1")" = "$BASELINE_UNIX" ]; } || { [ -f "$NT_UNIX" ] && cmp -s "$1" "$NT_UNIX"; }; }
