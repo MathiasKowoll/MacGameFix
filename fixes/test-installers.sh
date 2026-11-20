@@ -610,6 +610,17 @@ f6do --install > "$f6/other.log" 2>&1 && [ "$(f6st)" = installed ] \
   && say ok "fh6 on a fake prefix: another prefix advapi32 gets no sign-in fix" \
   || say FAIL "fh6: other advapi32 ($(f6st), $(tail -2 "$f6/other.log" | tr '\n' ' '))"
 f6do --restore > /dev/null 2>&1
+# A kept "original" that is the fix's own DLL, beside the same DLL in place (seen on a real
+# FH6 folder, where the game ships no d3d12.dll): installed, the copy dropped; restored, no
+# d3d12.dll is left. The fixture's own d3d12.dll goes back afterwards.
+cp "$FIX/d3d12-fh6.dll" "$f6game/d3d12.dll"; cp "$FIX/d3d12-fh6.dll" "$f6game/d3d12.dll.mgf-original"
+f6do --install > "$f6/keptproxy.log" 2>&1 && [ "$(f6st)" = installed ] \
+  && cmp -s "$f6game/d3d12.dll" "$FIX/d3d12-fh6.dll" && [ ! -e "$f6game/d3d12.dll.mgf-original" ] \
+  && /usr/bin/grep -q "was this fix's own DLL, not an original" "$f6/keptproxy.log" \
+  && f6do --restore > /dev/null 2>&1 && [ "$(f6st)" = absent ] && [ ! -e "$f6game/d3d12.dll" ] \
+  && say ok "fh6 on a fake prefix: a kept copy of its own DLL is no original: dropped at install, nothing left at restore" \
+  || say FAIL "fh6: kept copy of its own DLL ($(f6st), $(tail -2 "$f6/keptproxy.log" | tr '\n' ' '))"
+cp "$f6/orig-d3d12" "$f6game/d3d12.dll"
 
 # The priority plugin: an earlier MacGameFix build is replaced by the one beside the installer,
 # a user's own is kept. The fixture's "earlier build" is a fake whose hash stands for 28315251.
