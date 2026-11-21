@@ -1,0 +1,41 @@
+{
+  "title": "FATAL FURY: City of the Wolves",
+  "installer": "install-runtime-fix.sh",
+  "scope": "folder",
+  "executable": "CotW-Win64-Shipping.exe",
+  "carrierDirectory": "Engine/Binaries/ThirdParty/Ogg/Win64",
+  "alsoRuns": [],
+  "summary": "Unreal Engine 5 titles that crash on the first cutscene. The carrier sits under a compiler-named subfolder, which the script discovers rather than assumes.",
+  "page": null,
+  "installs": [
+    "libogg_64.dll",
+    "pe.pl"
+  ],
+  "builtFrom": [
+    "ue5-media-fix.c"
+  ],
+  "license": "GPL-3.0-or-later",
+  "credits": [
+    {
+      "name": "NotProtonNot",
+      "url": "https://github.com/NotProtonNot",
+      "note": "NotProton's creator found that the game needs the Unreal fix with all three halves on, and handed us the change that adds it."
+    }
+  ],
+  "excerpts": [
+    {
+      "file": "ue5-media-fix.c",
+      "symbol": "my_GetOutputAvailableType",
+      "note": "Electra asks the H.264 decoder for the types it can output; CrossOver's offers no NV12, so the fix puts NV12 back in the list."
+    },
+    {
+      "file": "ue5-media-fix.c",
+      "symbol": "force_electra_software",
+      "note": "Sets Electra.Win.H264UseOldOutputPath, found by its own name rather than by an address, so Electra takes its CPU buffer path and never the D3D one."
+    }
+  ],
+  "symptom": "The startup video plays with sound and no picture, and the game closes by itself.",
+  "fix": "All three halves of the Unreal fix: Electra's VPx threshold raised, the adapter-node walk guarded, and Electra's H.264 back on NV12 and its CPU buffer path.",
+  "backend": "D3DMetal, through NotProton.",
+  "cause": "Electra plays the game's H.264 video through a Media Foundation decoder that offers no NV12 under Wine, so the picture never reaches the screen."
+}

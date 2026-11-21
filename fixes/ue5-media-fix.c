@@ -2456,6 +2456,7 @@ static const struct policy3 wanted[] =
     { "Iris-Win64-Shipping.exe",                 FALSE, TRUE,  FALSE },
     { "Chronos-Win64-Shipping.exe",              FALSE, TRUE,  FALSE },
     { "BeastOfReincarnation-Win64-Shipping.exe", FALSE, FALSE, TRUE  },
+    { "CotW-Win64-Shipping.exe",                 TRUE,  TRUE,  TRUE  },
 };
 
 static DWORD WINAPI worker(LPVOID unused)
