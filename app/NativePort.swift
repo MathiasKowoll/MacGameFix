@@ -5,8 +5,9 @@
 // here is a static recompilation of that program to arm64 (the BMAA-Recomp sources, with
 // Recomp-Framework and DecompRecomp beside them): the game's own executable is read where
 // Steam keeps it, translated to C and compiled, all on this Mac. MacGameFix carries none of
-// it and nothing of the game: it finds the game and the sources, runs the sources' own
-// build.sh, shows how far it is, and starts what it built.
+// it and nothing of the game: it finds the game, downloads the sources from GitHub (or uses
+// a folder the user chose), runs the sources' own build.sh, shows how far it is, and starts
+// what it built.
 //
 // The sources say where they are in steps: a line "== 3/5 translating ..." for each, and a
 // line "!! ..." for what stopped them (a missing tool, with the command that installs it).
@@ -55,6 +56,7 @@ final class NativePort: ObservableObject {
             .first { fm.fileExists(atPath: $0.appendingPathComponent("Contents/MacOS/" + Self.gameFolder).path) }
         var candidates: [URL] = []
         if let saved = UserDefaults.standard.string(forKey: Self.sourcesKey) { candidates.append(URL(fileURLWithPath: saved)) }
+        candidates.append(Self.downloads.appendingPathComponent("BMAA-Recomp"))
         candidates.append(Paths.home.appendingPathComponent("Development/BMAA-Recomp"))
         candidates.append(Paths.home.appendingPathComponent("BMAA-Recomp"))
         sources = candidates.first { Self.isSources($0) }
@@ -79,6 +81,51 @@ final class NativePort: ObservableObject {
         UserDefaults.standard.set(url.path, forKey: Self.sourcesKey)
         failure = ""
         look()
+    }
+
+    /// Where Get Sources puts them: the port and the two projects it is built with, side by side.
+    static var downloads: URL { Paths.home.appendingPathComponent("Library/Application Support/MacGameFix/NativePorts") }
+    static let repositories: [(folder: String, url: String, branch: String?)] = [
+        ("BMAA-Recomp", "https://github.com/MathiasKowoll/BMAA-Recomp.git", nil),
+        ("Recomp-Framework", "https://github.com/MathiasKowoll/Recomp-Framework.git", "mac32-ports"),
+        ("DecompRecomp", "https://github.com/MathiasKowoll/DecompRecomp.git", nil),
+    ]
+
+    /// Clones the three repositories, or brings the ones already there up to date. Sources the
+    /// user chose or keeps elsewhere are left alone: this only ever writes under `downloads`.
+    func getSources() {
+        guard !building else { return }
+        building = true
+        failure = ""
+        progress = 0
+        Task {
+            try? FileManager.default.createDirectory(at: Self.downloads, withIntermediateDirectories: true)
+            var ok = true
+            for (i, repo) in Self.repositories.enumerated() where ok {
+                step = "Getting " + repo.folder
+                progress = Double(i) / Double(Self.repositories.count)
+                let dest = Self.downloads.appendingPathComponent(repo.folder)
+                var args: [String]
+                if FileManager.default.fileExists(atPath: dest.appendingPathComponent(".git").path) {
+                    args = ["-C", dest.path, "pull", "--ff-only", "--quiet"]
+                } else {
+                    args = ["clone", "--quiet", "--depth", "1"]
+                    if let branch = repo.branch { args += ["--branch", branch] }
+                    args += [repo.url, dest.path]
+                }
+                let status = await runStreaming("/usr/bin/git", args,
+                                                environment: ["PATH": Self.toolPath, "GIT_TERMINAL_PROMPT": "0"]) { _ in }
+                if status != 0 {
+                    ok = false
+                    failure = repo.folder + " could not be downloaded from " + repo.url + " (git status \(status))."
+                }
+            }
+            building = false
+            progress = nil
+            step = ""
+            if ok { UserDefaults.standard.set(Self.downloads.appendingPathComponent("BMAA-Recomp").path, forKey: Self.sourcesKey) }
+            look()
+        }
     }
 
     /// The tools the build looks for are Homebrew's (pkg-config, FFmpeg) and Apple's.
@@ -167,6 +214,9 @@ struct NativePortSection: View {
                     Text(port.sources?.path ?? "Not found")
                         .foregroundStyle(port.sources == nil ? .secondary : .primary)
                         .lineLimit(1).truncationMode(.middle)
+                    Button(port.sources == nil ? "Get Sources" : "Update") { port.getSources() }
+                        .controlSize(.small).disabled(port.building)
+                        .help("Downloads the port's sources from GitHub, or brings the downloaded ones up to date, in MacGameFix's own folder in Application Support.")
                     Button("Choose…") { port.chooseSources() }.controlSize(.small).disabled(port.building)
                 }
             }
