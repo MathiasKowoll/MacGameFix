@@ -446,7 +446,10 @@ enum Libraries {
         var out: [URL] = []
         var seen = Set<String>()
         for root in roots {
-            for b in (try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+            // The default root is often a symlink to the folder CrossOver's
+            // BottleDir points at on another disk; FileManager lists a symlink
+            // as "Not a directory", so list what it points to.
+            for b in (try? fm.contentsOfDirectory(at: root.resolvingSymlinksInPath(), includingPropertiesForKeys: nil)) ?? []
             where fm.fileExists(atPath: b.appendingPathComponent("drive_c").path) {
                 if seen.insert(b.standardizedFileURL.path).inserted { out.append(b) }
             }
