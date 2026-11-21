@@ -3,4 +3,4 @@
 # catalog.json as "notes"; the app shows them with the update and the agent in its
 # notification. Rewrite them with every change to the fixes: what stays here is said
 # again with the next catalog. Lines that start with # are not carried.
-Red Dead Redemption 2: Red Dead Online connects to its servers. Install the fix from Games once the Rosetta improvement is up to date; NotProton with CrossOver Preview 41303.
+FATAL FURY: City of the Wolves: the startup video shows its picture and the game no longer closes. Install the fix from Games; it plays at 60 fps at 1920x1080 in full screen on an M4 Max.

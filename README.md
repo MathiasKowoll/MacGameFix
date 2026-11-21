@@ -376,6 +376,7 @@ open Steam there (engine/README.md, "The options").
 | CONTROL Resonant | Lit rooms behind windows drawn in flat colours | D3DMetal |
 | Cyberpunk 2077 | The MetalFX denoiser it ships is left off | The macOS version 2.5.0, an M3 or later |
 | Devil May Cry 5 | Crashes when a skill preview plays | D3DMetal |
+| FATAL FURY: City of the Wolves | Startup video plays with sound, no picture, and the game closes | D3DMetal, NotProton |
 | DYNASTY WARRIORS: ORIGINS | Cutscenes with sound and no picture | D3DMetal, CrossOver Preview 27 |
 | Forza Horizon 5 | Never leaves the loading screen after Xbox sign-in | D3DMetal 4, a prefix |
 | Forza Horizon 6 | Sign-in, online, open world and races played at 60 fps; needs the launch options in its instructions | D3DMetal 4, Preview 41073 Rosetta improvement, a prefix |
@@ -1122,7 +1123,7 @@ how, is in the game's page under `legacy/wiki/`.
 
 | Installer | Games | What goes in the game folder | Built from | Findings |
 | --- | --- | --- | --- | --- |
-| `install-runtime-fix.sh` | Beast of Reincarnation, Life is Strange: Double Exposure, Life is Strange: Reunion, Mortal Shell 2 | `libogg_64.dll` under `Engine/Binaries/ThirdParty/Ogg/Win64` | `ue5-media-fix.c` | [Beast](legacy/wiki/Beast-of-Reincarnation.md), [Double Exposure](legacy/wiki/Life-is-Strange-Double-Exposure.md), [Reunion](legacy/wiki/Life-is-Strange-Reunion.md), [Mortal Shell 2](legacy/wiki/Mortal-Shell-2.md) |
+| `install-runtime-fix.sh` | Beast of Reincarnation, FATAL FURY: City of the Wolves, Life is Strange: Double Exposure, Life is Strange: Reunion, Mortal Shell 2 | `libogg_64.dll` under `Engine/Binaries/ThirdParty/Ogg/Win64` | `ue5-media-fix.c` | [Beast](legacy/wiki/Beast-of-Reincarnation.md), [Double Exposure](legacy/wiki/Life-is-Strange-Double-Exposure.md), [Reunion](legacy/wiki/Life-is-Strange-Reunion.md), [Mortal Shell 2](legacy/wiki/Mortal-Shell-2.md) |
 | `install-ctl-fix.sh` | CONTROL Resonant | `PxFoundation_x64.dll` (from `PxFoundation_x64-ctl.dll`) | `ctl-window-fix.c` | [CONTROL Resonant](legacy/wiki/Control-Resonant.md) |
 | `install-cp2077-denoiser.sh` | Cyberpunk 2077 | Nothing beside the game: four bytes of `Cyberpunk2077.app/Contents/MacOS/Cyberpunk2077`, at the offset its build's row in `cp2077-denoiser.recipes` names, and the app signed again ad hoc; the original kept in MacGameFix's `app-backup` folder | Not built: a recipe for each game build, and none of CD PROJEKT's code ships | [Its section](#cyberpunk-2077-changes-four-bytes-of-its-app) |
 | `install-re-vc1-fix.sh` | Devil May Cry 5, RESIDENT EVIL 2, RESIDENT EVIL 3 | `amd_ags_x64.dll` (from `amd_ags_x64-dmc5.dll`, or `amd_ags_x64-re2.dll` for both RE titles), and the reader | `mf-reader-fallback.c` | [RE Engine VC-1](legacy/wiki/RE-Engine-VC1.md) |
@@ -1229,6 +1230,8 @@ how, is in the game's page under `legacy/wiki/`.
   a GetPointerDevice stub), and handed them to us (#117, #119).
   They also found what Red Dead Online needs to connect on a Mac (TCP connections
   without TCP options) and handed us that fix too (engine patch `0037`, #129).
+  They found that FATAL FURY: City of the Wolves needs the Unreal fix with all
+  three halves on, and handed us the change that adds it.
 - **The Cyberpunk 2077 patch** comes from a community script published
   anonymously; its author is not known. MacGameFix writes one of its five
   words.
