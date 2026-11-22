@@ -1717,6 +1717,8 @@ struct EngineView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
+            NativePortSection(extra: model.extraFolders)
+
             Section {
                 Toggle("Also into runners for new CrossOver builds", isOn: Binding(
                     get: { model.settings.modulesNewBuilds },
