@@ -34,12 +34,6 @@ final class NativePort: ObservableObject {
     @Published var failure = ""
     @Published var built = false
 
-    /// What the game is started with from Steam's own PLAY button, as the game's launch option.
-    var steamLaunchOption: String? {
-        guard let sources else { return nil }
-        return "\"" + sources.appendingPathComponent("steam-play.sh").path + "\" %command%"
-    }
-
     /// The sources in use are the ones Get Sources downloaded.
     var usesDownloads: Bool { sources?.path.hasPrefix(Self.downloads.path) ?? false }
 
@@ -192,12 +186,6 @@ final class NativePort: ObservableObject {
         proc.standardError = FileHandle.nullDevice
         do { try proc.run() } catch { failure = "The game could not be started: \(error.localizedDescription)" }
     }
-
-    func copySteamLaunchOption() {
-        guard let option = steamLaunchOption else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(option, forType: .string)
-    }
 }
 
 /// The port's section in Improvements: where the game and the sources are, the build, and Play.
@@ -239,8 +227,12 @@ struct NativePortSection: View {
             }
             HStack {
                 if port.built {
-                    Button("Copy Steam Launch Option") { port.copySteamLaunchOption() }
-                        .help("Paste it in Steam, in the game's Properties › General › Launch Options: Steam's own Play button then starts the port.")
+                    // The build leaves a launcher in the place of the game's program, so Steam
+                    // needs nothing set. A launch option left from another runner breaks it:
+                    // Steam for Mac runs its first word as the program (OS Error 260).
+                    Text("Steam's Play starts it too. Keep the game's Launch Options in Steam empty.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .help("The build puts a small launcher where the game's program was and keeps the original beside it. Verify Integrity in Steam puts the original back: build again after it.")
                 }
                 Spacer()
                 Button(port.built ? "Build Again" : "Build") { port.build() }
