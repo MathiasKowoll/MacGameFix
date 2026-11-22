@@ -40,6 +40,9 @@ final class NativePort: ObservableObject {
         return "\"" + sources.appendingPathComponent("steam-play.sh").path + "\" %command%"
     }
 
+    /// The sources in use are the ones Get Sources downloaded.
+    var usesDownloads: Bool { sources?.path.hasPrefix(Self.downloads.path) ?? false }
+
     var state: String {
         if building { return "Building" }
         if game == nil { return "Game not found" }
@@ -56,9 +59,9 @@ final class NativePort: ObservableObject {
             .first { fm.fileExists(atPath: $0.appendingPathComponent("Contents/MacOS/" + Self.gameFolder).path) }
         var candidates: [URL] = []
         if let saved = UserDefaults.standard.string(forKey: Self.sourcesKey) { candidates.append(URL(fileURLWithPath: saved)) }
-        candidates.append(Self.downloads.appendingPathComponent("BMAA-Recomp"))
         candidates.append(Paths.home.appendingPathComponent("Development/BMAA-Recomp"))
         candidates.append(Paths.home.appendingPathComponent("BMAA-Recomp"))
+        candidates.append(Self.downloads.appendingPathComponent("BMAA-Recomp"))
         sources = candidates.first { Self.isSources($0) }
         built = sources.map { fm.isExecutableFile(atPath: $0.appendingPathComponent("build/dr-bmaa").path) } ?? false
     }
@@ -214,9 +217,12 @@ struct NativePortSection: View {
                     Text(port.sources?.path ?? "Not found")
                         .foregroundStyle(port.sources == nil ? .secondary : .primary)
                         .lineLimit(1).truncationMode(.middle)
-                    Button(port.sources == nil ? "Get Sources" : "Update") { port.getSources() }
-                        .controlSize(.small).disabled(port.building)
-                        .help("Downloads the port's sources from GitHub, or brings the downloaded ones up to date, in MacGameFix's own folder in Application Support.")
+                    // Sources the user keeps elsewhere are theirs to update: the button is for the downloaded ones.
+                    if port.sources == nil || port.usesDownloads {
+                        Button(port.sources == nil ? "Get Sources" : "Update") { port.getSources() }
+                            .controlSize(.small).disabled(port.building)
+                            .help("Downloads the port's sources from GitHub, or brings the downloaded ones up to date, in MacGameFix's own folder in Application Support.")
+                    }
                     Button("Choose…") { port.chooseSources() }.controlSize(.small).disabled(port.building)
                 }
             }
