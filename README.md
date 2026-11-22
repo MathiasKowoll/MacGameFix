@@ -105,6 +105,20 @@ and *Goes into* says "Its app". See
 
 `MacGameFix --games-report` prints the same in a terminal.
 
+`MacGameFix --games-report-json` is its machine-readable companion. It uses the
+same game discovery and writes one JSON object with `schemaVersion` (currently
+`1`), `appVersion`, and a `games` array. Each entry has `name`, `executable`,
+`requirement`, `manualInstall`, `needsPrefix`, and `prefixCount` (the number of
+chosen prefixes). An empty library is `"games": []`. Game and prefix paths,
+account details, and raw logs are not included. This is a discovery report;
+it does not check whether a fix is installed or whether gameplay works.
+The app advertises this interface with the integer Info.plist key
+`MacGameFixGamesReportSchemaVersion = 1`, so clients need not probe an unknown
+command-line flag on older versions.
+
+`app/test-games-report-json.sh` checks the serialization; add `--integration`
+after building the app to check empty and populated libraries in a throwaway home.
+
 Forza Horizon 5's fix is made from source in this repository. It puts the
 D3D12 proxy in the game folder, makes `apd12.dll` from the runner's own
 D3DMetal DLL, adds that private alias to the runner and prefix, and applies the

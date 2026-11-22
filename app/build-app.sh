@@ -221,7 +221,7 @@ rm -rf "$APP"
 mkdir -p "$MACOS" "$RES" "$CACHE"
 
 echo "==> compiling"
-swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/ShaderCache.swift" "$HERE/Fans.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Probe.swift" "$HERE/Automation.swift" "$HERE/AppUpdate.swift" "$HERE/MenuBar.swift" "$HERE/Instructions.swift" "$HERE/NativePort.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
+swiftc "$HERE/GamesReport.swift" "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/ShaderCache.swift" "$HERE/Fans.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Probe.swift" "$HERE/Automation.swift" "$HERE/AppUpdate.swift" "$HERE/MenuBar.swift" "$HERE/Instructions.swift" "$HERE/NativePort.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
   -o "$MACOS/MacGameFix" \
   -framework SwiftUI -framework AppKit -framework IOKit -framework UserNotifications -framework GameController \
   -framework AVFoundation -framework CoreAudio -framework AudioToolbox \
@@ -257,6 +257,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIdentifier</key><string>io.github.macgamefix</string>
   <key>CFBundleVersion</key><string>$VERSION</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>MacGameFixGamesReportSchemaVersion</key><integer>1</integer>
   <key>CFBundleExecutable</key><string>MacGameFix</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>

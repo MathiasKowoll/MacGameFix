@@ -2918,7 +2918,7 @@ struct MacGameFixApp: App {
 
 /// One binary, several ways to run: the window; --agent, which the LaunchAgent
 /// starts and which lives in the menu bar; and, for the tests and the release,
-/// --agent-once, --menu-report, --games-report, --engine-report,
+/// --agent-once, --menu-report, --games-report, --games-report-json, --engine-report,
 /// --engine-install, --engine-remove, --update-from, --app-update-check, --app-update,
 /// --updates-report,
 /// --make-catalog, --new-signing-key, and the reports' --probe-report, --fix-report,
@@ -3058,6 +3058,25 @@ enum Entry {
                       + store.effective(appid, presets: presets).lines.joined(separator: " ") + " | seen \(seen)")
             }
             exit(0)
+        }
+        if args.contains("--games-report-json") {
+            // Same discovery as the text report. A versioned schema avoids parsing
+            // display strings, and deliberately leaves out game and prefix paths.
+            let (dir, _) = Catalog.active()
+            let games = Libraries.find(Catalog.games(in: dir), extra: []).hits.map { hit in
+                GamesReport.Game(name: hit.game.name, executable: hit.game.exe,
+                    requirement: hit.game.requirementNote ?? "no special requirement",
+                    manualInstall: hit.game.byHand != nil, needsPrefix: hit.game.needsPrefix,
+                    prefixCount: hit.chosen.count)
+            }.sorted { ($0.name, $0.executable) < ($1.name, $1.executable) }
+            do {
+                FileHandle.standardOutput.write(try GamesReport(appVersion: Catalog.appVersion, games: games).encoded())
+                FileHandle.standardOutput.write(Data("\n".utf8))
+                exit(0)
+            } catch {
+                FileHandle.standardError.write(Data("Could not encode the games report.\n".utf8))
+                exit(1)
+            }
         }
         if args.contains("--games-report") {
             // Every supported game found, what its fix requires, and for a fix
