@@ -493,6 +493,8 @@ enum Agent {
         if settings.gameMode { GameMode.keep().forEach { print($0) } }
         // A game that was closed since the last look: its four cache files are made the same.
         if settings.shaderCache { ShaderCache.keepAll().forEach { print($0) } }
+        // NotProton's "Processors the game sees" row, made for this Mac (ProcessorsRow.swift).
+        if let line = ProcessorsRow.keep() { print(line) }
         // What the Wine modules saw each game do, kept before a restart empties /tmp.
         if PadStore.exists {
             // Which game each exe is, for the modules in a CrossOver bottle.

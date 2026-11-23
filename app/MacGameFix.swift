@@ -558,6 +558,8 @@ final class Model: ObservableObject {
         let extra = extraFolders
         let games = self.games
         Task {
+            // NotProton's processors row, for this Mac; quick, and only written when it differs.
+            await Task.detached { ProcessorsRow.keep() }.value
             let (libs, found) = await Task.detached { Libraries.find(games, extra: extra) }.value
             libraries = libs
             hits = found
@@ -1767,12 +1769,13 @@ struct EngineView: View {
                     }
                     .help("Add it to the game's launch options in Steam, before %command%.")
                 }
-                LabeledContent("8 processors, for a game") {
+                LabeledContent("Fewer processors, for a game") {
                     Text(verbatim: "NOTPROTON_ENV_WINENCPU=8").font(.system(.body, design: .monospaced)).textSelection(.enabled)
                 }
-                .help("The game sees 8 processors instead of all of them, so its engine starts fewer worker threads "
-                      + "and the Mac runs cooler. Add it to the game's launch options in Steam, before %command%. "
-                      + "It needs no helper.")
+                .help("Every game sees all of this Mac's \(ProcessInfo.processInfo.processorCount) processors. One that "
+                      + "runs hot can be shown fewer, so its engine starts fewer worker threads and the Mac runs cooler: "
+                      + "pick a count in NotProton's \"Processors the game sees\" for that game, which only offers counts "
+                      + "this Mac has, or add this to its launch options in Steam, before %command%. It needs no helper.")
                 if model.fansState != .absent && !model.fansLine.isEmpty {
                     Text(model.fansLine).font(.caption).foregroundStyle(.secondary)
                 }
@@ -1784,7 +1787,7 @@ struct EngineView: View {
                                   summary: "macOS raises the fans about a minute late; by then it has cut the processor to less than half its speed. With the fans already turning, it does not.",
                                   count: model.fansState == .absent ? "Off" : "On")
             } footer: {
-                Text("Write them in a game's launch options in Steam, before %command%, for example MGF_FANS=max NOTPROTON_ENV_WINENCPU=8 %command%. For the games NotProton runs. Apple silicon only.")
+                Text("Write them in a game's launch options in Steam, before %command%, for example MGF_FANS=max NOTPROTON_ENV_WINENCPU=8 %command%. Without a count a game sees every processor. For the games NotProton runs. Apple silicon only.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
@@ -3204,6 +3207,11 @@ enum Entry {
                 if let error = Fans.change(install: args[i] == "--fans-install") { print(error); exit(1) }
             }
             print(Fans.state().rawValue)
+            exit(0)
+        }
+        if args.contains("--cpu-row-keep") {
+            // NotProton's "Processors the game sees" row (ProcessorsRow.swift), as the agent keeps it.
+            print(ProcessorsRow.keep() ?? "processors row: nothing to do")
             exit(0)
         }
         if args.contains("--shader-cache-keep") || args.contains("--shader-cache-report") {

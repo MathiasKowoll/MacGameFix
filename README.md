@@ -294,6 +294,13 @@ which needs no helper). In one line:
 `MGF_FANS=max NOTPROTON_ENV_WINENCPU=8 D3DM_MAX_FPS=60 %command%`.
 **Improvements › Fans** shows the two variables to copy.
 
+Every game sees all of the Mac's processors unless it is given a count.
+MacGameFix keeps a row, **Processors the game sees**, in NotProton's plugins
+folder (`mgf-ncpu.conf`), written for the Mac it runs on: All by default, and
+only counts below the Mac's own (with its performance cores named), so a game
+is never shown processors that are not there. Picking a count for one game in
+its NotProton options sets `NOTPROTON_ENV_WINENCPU` for that game alone.
+
 ## Each game's compiled shaders, kept whole
 
 A game compiles each shader the first time it draws with it, and Metal keeps the

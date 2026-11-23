@@ -1108,6 +1108,35 @@ check '[ -s "$PREC" ]' "once the game has quit and its wineserver has gone, it r
 unset MACGAMEFIX_WINE_SERVER_ROOT
 rm -f "$PSTEAM/config/config.vdf"; rmdir "$PSTEAM/config" 2>/dev/null || true
 rm -rf "$PSTEAM/compatibilitytools.d" "$PRUN/crossover-26.3.0.39832" "$PRUN/crossover-27.0.0.41303-fex"
+echo "== NotProton's processors row, made for this Mac"
+NPP="$SUPPORT/notproton/plugins"; NPR="$NPP/mgf-ncpu.conf"; CT="$MACGAMEFIX_HOME/Library/Application Support/Steam/compatibilitytools.d"
+rm -f "$NPR"
+check '[ "$(MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep)" = "processors row: written for 16 processors" ]' "the row is written where NotProton is"
+R=$(cat "$NPR")
+check 'has "$R" "[NOTPROTON_ENV_WINENCPU]" && has "$R" "type = choice" && has "$R" "default = 0" && has "$R" "choice = 0 = All (16)"' "every game sees All by default, and picking All clears a game's option"
+check 'has "$R" "choice = 12 = 12 (performance cores)" && has "$R" "choice = 14" && ! /usr/bin/grep -Eq "^choice = (1[6-9]|[2-9][0-9])" "$NPR"' "it offers only counts below this Mac's, and names the performance cores"
+check '! has "$R" "group = "' "without a NotProton that knows groups, no group line (an older one refuses the row)"
+check '[ "$(MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep)" = "processors row: nothing to do" ]' "a row already right is left as it is"
+mkdir -p "$CT/notproton-a" "$CT/notproton-b"
+printf '      split("label description section on off type choice default apps patch variants group improves needed_for", f, " ")\n' > "$CT/notproton-a/run"
+printf '      split("label description section on off type choice default apps patch variants", f, " ")\n' > "$CT/notproton-b/run"
+MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep >/dev/null
+check '! has "$(cat "$NPR")" "group = "' "one NotProton in Steam that does not know groups keeps the group out"
+rm -rf "$CT/notproton-b"
+MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep >/dev/null
+check 'has "$(cat "$NPR")" "group = MacGameFix · Performance"' "with every NotProton knowing groups, the row goes in MacGameFix · Performance"
+MACGAMEFIX_CPUS=10,4 "$BIN" --cpu-row-keep >/dev/null
+check 'has "$(cat "$NPR")" "choice = 0 = All (10)" && has "$(cat "$NPR")" "choice = 4 = 4 (performance cores)" && has "$(cat "$NPR")" "choice = 8" && ! /usr/bin/grep -Eq "^choice = (1[0-9])" "$NPR"' "a Mac with 10 is offered All, 4, 6 and 8"
+MACGAMEFIX_CPUS=32,24 "$BIN" --cpu-row-keep >/dev/null
+check '[ "$(/usr/bin/grep -c "^choice = " "$NPR")" -le 16 ] && has "$(cat "$NPR")" "choice = 24 = 24 (performance cores)" && ! has "$(cat "$NPR")" "choice = 32"' "a Mac with 32 stays within NotProton's 16 values"
+cp "$NPR" "$T/ncpu-before"
+printf '[NOTPROTON_ENV_WINENCPU]\nlabel = Theirs\ntype = choice\nchoice = 4\n' > "$NPP/someone-else.conf"
+check 'has "$(MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep)" "another plugin file has NOTPROTON_ENV_WINENCPU" && cmp -s "$NPR" "$T/ncpu-before"' "an id another file declares is left alone (NotProton would show neither)"
+rm -f "$NPP/someone-else.conf" "$NPR"
+for i in $(seq 1 32); do printf '[NOTPROTON_FULL_%s]\nlabel = Row %s\n' "$i" "$i"; done > "$NPP/full.conf"
+check 'has "$(MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep)" "32 rows are taken" && [ ! -e "$NPR" ]' "with NotProton's 32 rows taken, it adds none"
+rm -f "$NPP/full.conf"
+rm -rf "$CT"
 
 echo "== Game Mode for CrossOver's games"
 GM="$MACGAMEFIX_HOME/Applications/CrossOver GM.app"
