@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 # Put variables into one Steam game's launch options and take them out again, losslessly.
 #
-#   steam-launch-options.pl status|preflight|install|restore APPID JOURNAL KEY=VALUE...
+#   steam-launch-options.pl status|preflight|install|restore APPID JOURNAL [--wrapper PATH] [KEY=VALUE...]
 #
 # status     exit 0 and "installed" when every KEY=VALUE is in the game's launch options in
 #            every Steam account that has the game; else "absent", exit 1. Reads only.
@@ -11,17 +11,25 @@
 # restore    a KEY that still has our value is taken out, or gets back the value it had;
 #            one the user changed since is theirs and stays. JOURNAL is removed.
 #
-# Only leading VAR=value words before %command% are looked at: options with a wrapper are
-# refused, and everything else in them is kept byte for byte, as is the rest of the file.
+# --wrapper PATH is a program of ours that Steam is to run with the game's command: it goes
+# in as "PATH" right before %command%, counts for status, and restore takes it out where
+# install put it. PATH is absolute and has no quote, backslash, dollar or backquote.
+#
+# Only leading VAR=value words before %command% are looked at: options with any other
+# program are refused, and everything else in them is kept byte for byte, as is the rest of
+# the file.
 # Steam rewrites localconfig.vdf when it quits, so nothing is written while it runs.
 # The same VDF reader as fh6-launch-options.pl, for any app id.
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 # SPDX-License-Identifier: GPL-3.0-or-later
 use strict; use warnings; use JSON::PP; use File::Copy qw(copy); use Text::ParseWords qw(shellwords);
-my ($mode,$app,$journal,@pairs)=@ARGV;
-die "usage: steam-launch-options.pl status|preflight|install|restore APPID JOURNAL KEY=VALUE...\n"
-  unless defined $journal && $mode =~ /^(status|preflight|install|restore)$/ && $app =~ /^\d+$/ && @pairs;
+my ($mode,$app,$journal,@rest)=@ARGV;
+my $usage="usage: steam-launch-options.pl status|preflight|install|restore APPID JOURNAL [--wrapper PATH] [KEY=VALUE...]\n";
+my $wrapper;my @pairs;
+while(@rest){my $a=shift @rest;if($a eq '--wrapper'){$wrapper=shift @rest;die $usage unless defined $wrapper;}else{push @pairs,$a;}}
+die $usage unless defined $journal && $mode =~ /^(status|preflight|install|restore)$/ && $app =~ /^\d+$/ && (@pairs || defined $wrapper);
+die "not a wrapper path this can write: $wrapper\n" if defined $wrapper && $wrapper !~ m{^/[^"\\\$`\n]+$};
 my %want;
 for my $p(@pairs){die "not KEY=VALUE: $p\n" unless $p =~ /^([A-Za-z_][A-Za-z0-9_]*)=([^\s"'\\]*)$/;$want{$1}=$2;}
 my $steam="$ENV{HOME}/Library/Application Support/Steam";
@@ -45,21 +53,28 @@ sub locate {
  die "Ambiguous or malformed Steam config\n" if @stack || defined $pending || @matches>1 || substr($text,pos($text)//0) =~ /\S/;
  return $matches[0] if @matches;return defined($insert)?[$insert,$insert,'']:undef;
 }
-# The leading VAR=value words: [start, end, key, value] each. Dies on a wrapper or no %command%.
+# What stands before %command%: vars, the leading VAR=value words as [start, end, key, value];
+# wrapper, [start, end] of our wrapper when it is the word right before %command%; command,
+# where %command% starts. Dies on any other program or no %command%.
 sub words {
- my($s)=@_;my @out;pos($s)=0;
+ my($s)=@_;my @out;my $wr;pos($s)=0;my $program="The launch options start with a program, not variables; set them by hand.\n";
  while($s =~ /\G\s*((?:[^\s"'\\]|"(?:\\.|[^"\\])*"|'[^']*'|\\.)+)/gc){
   my($a,$b,$t)=($-[1],$+[1],$1);my @w=shellwords($t);die "Unsupported launch option quoting\n" unless @w==1;
-  return \@out if $w[0] eq '%command%';
-  die "The launch options start with a program, not variables; set the variables by hand.\n" unless $w[0] =~ /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s;
+  return {vars=>\@out,wrapper=>$wr,command=>$a} if $w[0] eq '%command%';
+  die $program if defined $wr;
+  if(defined $wrapper && $w[0] eq $wrapper){$wr=[$a,$b];next;}
+  die $program unless $w[0] =~ /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s;
   push @out,[$a,$b,$1,$2];
  }
  die "The launch options have no %command%\n";
 }
-# The options with %$set given (KEY=>VALUE) and %$drop taken out (KEY=>VALUE they must still have).
+# The options with %$set given (KEY=>VALUE) and %$drop taken out (KEY=>VALUE they must still have);
+# $wrap 'add' puts our wrapper before %command%, 'remove' takes it out.
 sub edit {
- my($old,$set,$drop)=@_;my $s=$old;$s='%command%' unless $s =~ /\S/;
- my @w=@{words($s)};my %seen;my @edits;
+ my($old,$set,$drop,$wrap)=@_;my $s=$old;$s='%command%' unless $s =~ /\S/;
+ my $p=words($s);my @w=@{$p->{vars}};my %seen;my @edits;
+ if(defined $wrap && $wrap eq 'add' && !$p->{wrapper}){push @edits,[$p->{command},$p->{command},'"'.$wrapper.'" '];}
+ if(defined $wrap && $wrap eq 'remove' && $p->{wrapper}){my($a,$b)=@{$p->{wrapper}};pos($s)=$b;my $e=$b;$e=$+[0] if $s =~ /\G\s+/gc;push @edits,[$a,$e,''];}
  for my $t(@w){my($a,$b,$k,$v)=@$t;
   if(exists $set->{$k}){push @edits,[$a,$b,"$k=$set->{$k}"] if $v ne $set->{$k};$seen{$k}=1;}
   elsif(exists $drop->{$k} && $v eq $drop->{$k}){pos($s)=$b;my $e=$b;$e=$+[0] if $s =~ /\G\s+/gc;push @edits,[$a,$e,''];}
@@ -68,7 +83,7 @@ sub edit {
  my @add=map { "$_=$set->{$_}" } grep { !$seen{$_} } sort keys %$set;
  return (@add?join(' ',@add).' ':'').$s;
 }
-sub current { my($old)=@_;my %h;my $s=$old =~ /\S/?$old:'%command%';$h{$_->[2]}//=$_->[3] for @{words($s)};return \%h; }
+sub current { my($old)=@_;my %h;my $s=$old =~ /\S/?$old:'%command%';my $p=words($s);$h{$_->[2]}//=$_->[3] for @{$p->{vars}};return (\%h,$p->{wrapper}?1:0); }
 my @files;
 if(opendir(my $users,"$steam/userdata")){
  @files=sort map { "$steam/userdata/$_/config/localconfig.vdf" } grep { /^\d+$/ && -f "$steam/userdata/$_/config/localconfig.vdf" } readdir($users);
@@ -78,21 +93,23 @@ my $saved=-f $journal?decode_json(readfile($journal)):{};
 my @changes;my $found=0;my $missing=0;
 for my $f(@files){
  my $text=readfile($f);my $loc=locate($text);next unless $loc;++$found;my $old=$loc->[2];my $new;
- my $have=current($old);
- if($mode eq 'status'){ for my $k(keys %want){ $missing++ unless defined $have->{$k} && $have->{$k} eq $want{$k}; } next; }
+ my($have,$wrapped)=current($old);
+ if($mode eq 'status'){ for my $k(keys %want){ $missing++ unless defined $have->{$k} && $have->{$k} eq $want{$k}; } $missing++ if defined $wrapper && !$wrapped; next; }
  if($mode eq 'restore'){
-  next unless exists $saved->{$f} && exists $saved->{$f}{vars};my %set;my %drop;
-  for my $k(keys %{$saved->{$f}{vars}}){
+  next unless exists $saved->{$f};my %set;my %drop;
+  for my $k(keys %{$saved->{$f}{vars}||{}}){
    my $ours=$saved->{$f}{vars}{$k}{ours};my $was=$saved->{$f}{vars}{$k}{was};
    next unless defined $have->{$k} && $have->{$k} eq $ours;
    if(defined $was){$set{$k}=$was;}else{$drop{$k}=$ours;}
   }
   # Keys restored to an earlier value keep their place; the others go.
-  $new=edit($old,\%set,\%drop);$new='' if $saved->{$f}{empty} && $new eq '%command%';
+  $new=edit($old,\%set,\%drop,(defined $wrapper && exists $saved->{$f}{wrapper})?'remove':undef);
+  $new='' if $saved->{$f}{empty} && $new eq '%command%';
  } else {
-  $new=edit($old,\%want,{});
+  $new=edit($old,\%want,{},defined $wrapper?'add':undef);
   if($mode eq 'install'){
    $saved->{$f}{empty}=JSON::PP::true if !exists $saved->{$f} && $old !~ /\S/;
+   $saved->{$f}{wrapper}={ours=>$wrapper} if defined $wrapper && !$wrapped && !(exists $saved->{$f} && exists $saved->{$f}{wrapper});
    for my $k(keys %want){
     next if (exists $saved->{$f} && exists $saved->{$f}{vars} && exists $saved->{$f}{vars}{$k}) || (defined $have->{$k} && $have->{$k} eq $want{$k});
     $saved->{$f}{vars}{$k}={ours=>$want{$k},was=>$have->{$k}};
