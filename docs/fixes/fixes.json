@@ -284,10 +284,10 @@
           "symbol": null,
           "note": "Swofty Launcher comes from Swofty's own index, which names the Windows release with its SHA-256; a file on another host, or one that does not match, is refused before anything is unpacked.",
           "language": "bash",
-          "startLine": 238,
-          "endLine": 288,
-          "commit": "0bbdc581ab65612744ce8c481da5305735bda871",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/0bbdc581ab65612744ce8c481da5305735bda871/fixes/install-f125-swofty.sh#L238-L288",
+          "startLine": 259,
+          "endLine": 309,
+          "commit": "072b7c0a7916da90a4d4aa3a5fe770c91209849b",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/072b7c0a7916da90a4d4aa3a5fe770c91209849b/fixes/install-f125-swofty.sh#L259-L309",
           "code": "fetch_launcher_into() {  # <work folder>\n  local work=\"$1\" zip name=\"\" url=\"\" sha=\"\" got top\n  zip=\"${MGVF_SWOFTY_ZIP:-}\"\n  if [ -n \"$zip\" ]; then\n    [ -f \"$zip\" ] || { echo \"error: MGVF_SWOFTY_ZIP names no file: $zip\" >&2; return 1; }\n    echo \"  using $zip\"\n  else\n    echo \"  asking $INDEX_URL for the current release\"\n    curl -fsSL --retry 2 --max-time 60 -o \"$work/latest.json\" \"$INDEX_URL\" || {\n      echo \"error: could not reach Swofty's release index; check the connection and install again\" >&2\n      return 1\n    }\n    # name, url and sha256 of the one Windows asset; an index that does not have exactly that is refused.\n    read -r name url sha < <(/usr/bin/perl -MJSON::PP -e '\n      local $/; my $d = eval { decode_json(<STDIN>) } or exit 1;\n      my @a = grep { ($_->{name} // \"\") =~ /^swofty-launcher-v[0-9][0-9.]*-windows-x86_64\\.zip$/ } @{ $d->{assets} || [] };\n      exit 1 unless @a == 1;\n      my ($n, $u, $s) = @{ $a[0] }{qw(name url sha256)};\n      exit 1 unless ($u // \"\") =~ m{^https://(cdn\\.swofty\\.net|github\\.com/Swofty-Developments/SwoftyLauncher)/[A-Za-z0-9._/-]+$}\n                 && ($s // \"\") =~ /^[0-9a-f]{64}$/;\n      print \"$n $u $s\\n\";\n    ' < \"$work/latest.json\") || true\n    [ -n \"$sha\" ] || { echo \"error: Swofty's release index does not name a Windows release this understands; nothing was changed\" >&2; return 1; }\n    echo \"  fetching $name (about 90 MB) from ${url%/\"$name\"}\"\n    zip=\"$work/$name\"\n    curl -fsSL --retry 2 -o \"$zip\" \"$url\" || {\n      echo \"error: could not download $name; check the connection and install again\" >&2\n      return 1\n    }\n    got=\"$(shasum -a 256 \"$zip\" | cut -d' ' -f1)\"\n    [ \"$got\" = \"$sha\" ] || {\n      echo \"error: the download is not the file the index names (sha256 $got); nothing was changed\" >&2\n      return 1\n    }\n  fi\n  mkdir \"$work/out\"\n  ditto -x -k \"$zip\" \"$work/out\" || { echo \"error: could not unpack $(basename \"$zip\")\" >&2; return 1; }\n  # The release unpacks to one folder, or straight to bin/ and loader/.\n  top=\"$(find \"$work/out\" -maxdepth 3 -type f -path '*/bin/swofty.exe' | head -1)\"\n  [ -z \"$top\" ] || top=\"$(dirname \"$(dirname \"$top\")\")\"\n  [ -n \"$top\" ] && [ -s \"$top/bin/swofty.exe\" ] && [ -d \"$top/loader\" ] || {\n    echo \"error: $(basename \"$zip\") does not hold bin/swofty.exe and loader/ where expected; nothing was changed\" >&2\n    return 1\n  }\n  mkdir -p \"$STORE\"\n  rm -rf \"$LAUNCHER.new\"\n  mv \"$top\" \"$LAUNCHER.new\"\n  rm -rf \"$LAUNCHER\"\n  mv \"$LAUNCHER.new\" \"$LAUNCHER\"\n  echo \"  kept in $LAUNCHER\"\n}"
         },
         {
@@ -295,10 +295,10 @@
           "symbol": null,
           "note": "Swofty reads ActiveUser to see that Steam is signed in. NotProton's Steam stub does not write it, so the account comes from Steam's own loginusers.vdf.",
           "language": "bash",
-          "startLine": 155,
-          "endLine": 166,
-          "commit": "0bbdc581ab65612744ce8c481da5305735bda871",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/0bbdc581ab65612744ce8c481da5305735bda871/fixes/install-f125-swofty.sh#L155-L166",
+          "startLine": 176,
+          "endLine": 187,
+          "commit": "072b7c0a7916da90a4d4aa3a5fe770c91209849b",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/072b7c0a7916da90a4d4aa3a5fe770c91209849b/fixes/install-f125-swofty.sh#L176-L187",
           "code": "steam_account() {\n  [ -f \"$STEAM_LOGIN\" ] || return 1\n  /usr/bin/perl -e '\n    use strict; use warnings; local $/; my $s = <STDIN>; my (@ids, $recent);\n    while ($s =~ /\"(7656\\d{13})\"\\s*\\{([^{}]*)\\}/g) {\n      push @ids, $1; $recent = $1 if $2 =~ /\"MostRecent\"\\s+\"1\"/i;\n    }\n    $recent //= $ids[0] if @ids == 1;\n    exit 1 unless defined $recent;\n    print $recent - 76561197960265728, \"\\n\";\n  ' < \"$STEAM_LOGIN\"\n}"
         },
         {
