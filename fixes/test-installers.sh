@@ -350,6 +350,13 @@ f1 > "$W/f125.rows.log" 2>&1 && [ "$(f1st)" = installed ] \
   && /usr/bin/grep -qF "\"NOTPROTON_MGF_F125_SWOFTY_3059520=1 MGF_FANS=max \\\"$fstore/f125-swofty-play.sh\\\" %command%\"" "$fvdf" \
   && say ok "f1 25 in NotProton: over an install from before the rows, the switch goes in and the script stays once" || say FAIL "f1 25: rows over an earlier install ($(f1st)): $(tail -2 "$W/f125.rows.log")"
 f1 --restore > /dev/null 2>&1; [ "$(cat "$fvdf")" = "$fvdf0" ] && [ "$(f1st)" = absent ] || say FAIL "f1 25: restore after the rows ($(f1st))"
+# Where NotProton knows groups, the rows carry one of the game's own; where it does not, none, as it would refuse the row.
+MGVF_NOTPROTON_GROUPS=1 f1 > /dev/null 2>&1
+[ "$(/usr/bin/grep -c '^group = MacGameFix · F1 25$' "$fplug/mgf-3059520.conf")" = 2 ] && [ "$(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1)" = installed ] \
+  && say ok "f1 25 in NotProton: with a NotProton that knows groups, both rows are in the game's own group" || say FAIL "f1 25: grouped rows ($(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1))"
+f1 > /dev/null 2>&1; ! /usr/bin/grep -q '^group' "$fplug/mgf-3059520.conf" && [ "$(f1st)" = installed ] \
+  && say ok "f1 25 in NotProton: with one that does not, the rows carry no group" || say FAIL "f1 25: ungrouped rows ($(f1st))"
+f1 --restore > /dev/null 2>&1
 # What the user had before stays theirs: an override, an ActiveUser and a loginusers.vdf of their own.
 MGVF_BOTTLE="$fpfx" /bin/bash -c '. "$0/bottles.sh"; user_reg_edit "$1" set "Software\\Wine\\AppDefaults\\F1_25.exe\\DllOverrides" version native,builtin; user_reg_edit "$1" setdword "Software\\Valve\\Steam\\ActiveProcess" ActiveUser 7' "$FIX" "$fpfx"
 mkdir -p "$(dirname "$flogin")"; echo mine > "$flogin"

@@ -32,7 +32,7 @@ Swofty changes the game folder while the game runs and puts it back when the gam
 
 # The rows in NotProton
 
-The fix adds two rows to the game's Compatibility page in NotProton, for this game only:
+The fix adds two rows to the game's Compatibility page in NotProton, for this game only, in a group of their own, **MacGameFix · F1 25**:
 
 | Row | What it does |
 |---|---|

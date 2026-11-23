@@ -139,7 +139,28 @@ right_runner() {
   return 1
 }
 
-np_plugins_setup "$APPID" "$PFX" "$HERE/np-plugin-f125-swofty.conf"
+# The rows get a group of their own on the game's Compatibility page, "MacGameFix · F1 25",
+# where NotProton knows groups: a NotProton that does not refuses a row that names one, so the
+# tool's own reader is asked (its run script checks the field by name). MGVF_NOTPROTON_GROUPS=0
+# or 1 answers for a test. The rows with the group are written to a file of this run's own, the
+# same every time, since the status compares the descriptor with what the template gives.
+ROWS="$HERE/np-plugin-f125-swofty.conf"
+ROWS_GROUP="MacGameFix · F1 25"
+np_knows_groups() {
+  case "${MGVF_NOTPROTON_GROUPS:-}" in 0) return 1 ;; 1) return 0 ;; esac
+  local run
+  for run in "$STEAM"/compatibilitytools.d/notproton-*/run; do
+    [ -f "$run" ] && LC_ALL=C /usr/bin/grep -qF 'names[i] == "group"' "$run" && return 0
+  done
+  return 1
+}
+if np_knows_groups; then
+  ROWS_TMP="$(mktemp -d "${TMPDIR:-/tmp}/mgf-f125-rows.XXXXXX")"
+  trap 'rm -rf "$ROWS_TMP"' EXIT
+  /usr/bin/awk -v group="$ROWS_GROUP" '{ print } /^label[[:space:]]*=/ { print "group = " group }' "$ROWS" > "$ROWS_TMP/np-plugin-f125-swofty.conf"
+  ROWS="$ROWS_TMP/np-plugin-f125-swofty.conf"
+fi
+np_plugins_setup "$APPID" "$PFX" "$ROWS"
 JOURNAL="$PFX/.mgf-f125-launch-options.json"
 STATE="$PFX/.mgf-f125-swofty"          # what this script added, one word a line
 BRIDGE="$PFX/drive_c/Program Files (x86)/Steam"
