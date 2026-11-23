@@ -298,7 +298,8 @@ printf '27.0.0.41303-fex\nCrossOver 2026 11 11-ARM64 - Rosetta\n' > "$fc/compatd
 printf 'ntdll with WINE_LOW_ALLOCATIONS_FIRST in it\n' > "$fc/runner/lib/wine/x86_64-unix/ntdll.so"
 echo launcher > "$fc/rel/swofty-launcher-v9.9.9-windows-x86_64/bin/swofty.exe"; echo core > "$fc/rel/swofty-launcher-v9.9.9-windows-x86_64/loader/version.dll"
 (cd "$fc/rel" && ditto -c -k --keepParent swofty-launcher-v9.9.9-windows-x86_64 "$fc/sw.zip")
-for n in install-f125-swofty.sh bottles.sh f125-swofty-play.sh f125-swofty-run.cmd steam-launch-options.pl; do cp "$FIX/$n" "$fc/fixes/$n"; done
+for n in install-f125-swofty.sh bottles.sh f125-swofty-play.sh f125-swofty-run.cmd steam-launch-options.pl notproton-plugins.sh np-plugin-f125-swofty.conf; do cp "$FIX/$n" "$fc/fixes/$n"; done
+mkdir -p "$fhome/Library/Application Support/notproton"; fplug="$fhome/Library/Application Support/notproton/plugins"
 sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$fc/fixes/steam-launch-options.pl"
 fsteam="$fhome/Library/Application Support/Steam"; fvdf="$fsteam/userdata/1/config/localconfig.vdf"; mkdir -p "$(dirname "$fvdf")" "$fsteam/config"
 fvdf_with() { printf '"UserLocalConfigStore" { "Software" { "Valve" { "Steam" { "apps" { "3059520" { "LaunchOptions" "%s" } } } } } }\n' "$1" > "$fvdf"; }
@@ -307,7 +308,7 @@ mkdir -p "$fsteam/depotcache" "$fsteam/logs"; echo list > "$fsteam/depotcache/30
 printf '"AppState"\n{\n\t"appid"\t\t"3059520"\n\t"InstalledDepots"\n\t{\n\t\t"3059521"\n\t\t{\n\t\t\t"manifest"\t\t"44"\n\t\t\t"size"\t\t"1"\n\t\t}\n\t\t"3059522"\n\t\t{\n\t\t\t"manifest"\t\t"55"\n\t\t}\n\t}\n\t"UserConfig"\n\t{\n\t}\n}\n' > "$fc/appmanifest_3059520.acf"
 fbridge="$fpfx/drive_c/Program Files (x86)/Steam"
 printf '"users"\n{\n\t"76561198037788801"\n\t{\n\t\t"AccountName"\t\t"someone"\n\t\t"MostRecent"\t\t"1"\n\t}\n}\n' > "$fsteam/config/loginusers.vdf"
-f1() { HOME="$fhome" MGVF_BOTTLE="$fpfx" MGVF_CX="$fc/runner" MGVF_SWOFTY_STORE="$fstore" MGVF_SWOFTY_ZIP="$fc/sw.zip" /bin/bash "$fc/fixes/install-f125-swofty.sh" "$fc/game" "$@"; }
+f1() { HOME="$fhome" MGVF_BOTTLE="$fpfx" MGVF_CX="$fc/runner" MGVF_SWOFTY_STORE="$fstore" MGVF_SWOFTY_ZIP="$fc/sw.zip" MGVF_NOTPROTON_VERSION=1.2.7 MGVF_STEAM_RUNNING=0 /bin/bash "$fc/fixes/install-f125-swofty.sh" "$fc/game" "$@"; }
 f1st() { f1 --status 2>/dev/null | tail -1; }
 flogin="$fpfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf"
 [ "$(f1st)" = absent ] && say ok "f1 25 in NotProton: absent before" || say FAIL "f1 25: absent before ($(f1st))"
@@ -317,8 +318,10 @@ f1 > "$W/f125.install.log" 2>&1 || say FAIL "f1 25: install failed: $(tail -2 "$
   && /usr/bin/grep -qx '"version"="native,builtin"' "$fpfx/user.reg" && /usr/bin/grep -qx '"ActiveUser"=dword:049ee881' "$fpfx/user.reg" \
   && [ -L "$flogin" ] && /usr/bin/grep -q someone "$flogin" \
   && [ "$(cat "$fbridge/depotcache/3059521_44.manifest")" = list ] && [ ! -e "$fbridge/depotcache/3059522_55.manifest" ] && [ "$(cat "$fbridge/logs/content_log.txt")" = log ] \
-  && /usr/bin/grep -qF "\"MGF_FANS=max \\\"$fstore/f125-swofty-play.sh\\\" %command%\"" "$fvdf" \
-  && say ok "f1 25 in NotProton: the launcher, the play script, the two values, the links to Steam's files and the launch option" || say FAIL "f1 25: installed ($(f1st)): $(tail -3 "$W/f125.install.log")"
+  && /usr/bin/grep -qF "\"NOTPROTON_MGF_F125_SWOFTY_3059520=1 MGF_FANS=max \\\"$fstore/f125-swofty-play.sh\\\" %command%\"" "$fvdf" \
+  && /usr/bin/grep -qx '\[NOTPROTON_MGF_F125_SWOFTY_3059520\]' "$fplug/mgf-3059520.conf" && /usr/bin/grep -qx '\[NOTPROTON_MGF_F125_OPENS_3059520\]' "$fplug/mgf-3059520.conf" \
+  && [ "$(/usr/bin/grep -c '^apps = 3059520$' "$fplug/mgf-3059520.conf")" = 2 ] \
+  && say ok "f1 25 in NotProton: the launcher, the play script, the two values, the links, two rows for this game and the switch and the script in the launch options" || say FAIL "f1 25: installed ($(f1st)): $(tail -3 "$W/f125.install.log")"
 echo stock > "$fc/runner/lib/wine/x86_64-unix/ntdll.so"
 fout="$(f1 --status 2>&1)"   # read whole: a reader that leaves early would end the status with a broken pipe
 [ "$(f1st)" = half ] && case "$fout" in *'update the Rosetta improvement'*) true ;; *) false ;; esac \
@@ -335,8 +338,18 @@ rm -f "$fbridge/depotcache/3059521_44.manifest"
   && say ok "f1 25 in NotProton: a link to Steam's list taken out is half, and installing again repairs it" || say FAIL "f1 25: half and repair ($(f1st))"
 last="$(f1 --restore 2>/dev/null | tail -1)"
 [ "$last" = restored ] && [ "$(f1st)" = absent ] && [ "$(cat "$fvdf")" = "$fvdf0" ] && [ "$(cat "$fpfx/user.reg")" = "$(printf "$freg0")" ] \
-  && [ ! -e "$flogin" ] && [ ! -L "$flogin" ] && [ ! -L "$fbridge/depotcache/3059521_44.manifest" ] && [ ! -L "$fbridge/logs/content_log.txt" ] && [ ! -e "$fstore/f125-swofty-play.sh" ] && [ -f "$fstore/launcher/bin/swofty.exe" ] && [ ! -e "$fpfx/.mgf-f125-swofty" ] \
+  && [ ! -e "$fplug/mgf-3059520.conf" ] && [ ! -e "$flogin" ] && [ ! -L "$flogin" ] && [ ! -L "$fbridge/depotcache/3059521_44.manifest" ] && [ ! -L "$fbridge/logs/content_log.txt" ] && [ ! -e "$fstore/f125-swofty-play.sh" ] && [ -f "$fstore/launcher/bin/swofty.exe" ] && [ ! -e "$fpfx/.mgf-f125-swofty" ] \
   && say ok "f1 25 in NotProton: restored, the launch options and the registry as they were, the launcher kept" || say FAIL "f1 25: restore ($last, $(f1st))"
+# The player's switches are theirs: a row turned off stays off through another install, and the fix still reads installed.
+f1 > /dev/null 2>&1; sed -i '' 's/NOTPROTON_MGF_F125_SWOFTY_3059520=1 //' "$fvdf"
+[ "$(f1st)" = installed ] && f1 > /dev/null 2>&1 && ! /usr/bin/grep -q 'NOTPROTON_MGF_F125_SWOFTY' "$fvdf" && /usr/bin/grep -qF "f125-swofty-play.sh" "$fvdf" \
+  && say ok "f1 25 in NotProton: a row the player switched off is not a broken fix, and installing again leaves it off" || say FAIL "f1 25: the player's switch ($(f1st))"
+# An install from before the rows: the script already in the options, the rows never switched. The switch still goes in.
+rm -f "$fc/compatdata/3059520/.mgf-notproton-plugins-switched" "$fc/compatdata/3059520/.mgf-notproton-plugins.json" "$fplug/mgf-3059520.conf"
+f1 > "$W/f125.rows.log" 2>&1 && [ "$(f1st)" = installed ] \
+  && /usr/bin/grep -qF "\"NOTPROTON_MGF_F125_SWOFTY_3059520=1 MGF_FANS=max \\\"$fstore/f125-swofty-play.sh\\\" %command%\"" "$fvdf" \
+  && say ok "f1 25 in NotProton: over an install from before the rows, the switch goes in and the script stays once" || say FAIL "f1 25: rows over an earlier install ($(f1st)): $(tail -2 "$W/f125.rows.log")"
+f1 --restore > /dev/null 2>&1; [ "$(cat "$fvdf")" = "$fvdf0" ] && [ "$(f1st)" = absent ] || say FAIL "f1 25: restore after the rows ($(f1st))"
 # What the user had before stays theirs: an override, an ActiveUser and a loginusers.vdf of their own.
 MGVF_BOTTLE="$fpfx" /bin/bash -c '. "$0/bottles.sh"; user_reg_edit "$1" set "Software\\Wine\\AppDefaults\\F1_25.exe\\DllOverrides" version native,builtin; user_reg_edit "$1" setdword "Software\\Valve\\Steam\\ActiveProcess" ActiveUser 7' "$FIX" "$fpfx"
 mkdir -p "$(dirname "$flogin")"; echo mine > "$flogin"
@@ -345,14 +358,14 @@ f1 --restore > /dev/null 2>&1
 /usr/bin/grep -qx '"version"="native,builtin"' "$fpfx/user.reg" && /usr/bin/grep -qx '"ActiveUser"=dword:00000007' "$fpfx/user.reg" && [ "$(cat "$flogin")" = mine ] && [ "$(cat "$fvdf")" = "$fvdf0" ] \
   && [ "$(f1st)" = absent ] \
   && say ok "f1 25 in NotProton: values and a loginusers.vdf that were there before stay after a restore, which reads absent" || say FAIL "f1 25: the user's own values ($(f1st))"
-printf "$freg0" > "$fpfx/user.reg"; rm -rf "$flogin" "$fstore" "$fbridge/depotcache" "$fbridge/logs"
+printf "$freg0" > "$fpfx/user.reg"; rm -rf "$flogin" "$fstore" "$fbridge/depotcache" "$fbridge/logs" "$fplug"
 # Refused before anything is written: a runner without the patch, options with another program, Steam not signed in.
 echo stock > "$fc/runner/lib/wine/x86_64-unix/ntdll.so"
 ! f1 > "$W/f125.refuse.log" 2>&1 && /usr/bin/grep -q 'Rosetta improvement' "$W/f125.refuse.log" && [ ! -e "$fstore" ] && [ "$(cat "$fvdf")" = "$fvdf0" ] && ! /usr/bin/grep -q native "$fpfx/user.reg" \
   && say ok "f1 25 in NotProton: a runner without the memory patch stops the install before anything changes" || say FAIL "f1 25: stock ntdll not refused"
 printf 'ntdll with WINE_LOW_ALLOCATIONS_FIRST in it\n' > "$fc/runner/lib/wine/x86_64-unix/ntdll.so"
 fvdf_with 'gamemoderun %command%'
-! f1 > /dev/null 2>&1 && [ ! -e "$fstore/launcher" ] && ! /usr/bin/grep -q native "$fpfx/user.reg" && [ ! -e "$flogin" ] \
+! f1 > /dev/null 2>&1 && [ ! -e "$fstore/launcher" ] && ! /usr/bin/grep -q native "$fpfx/user.reg" && [ ! -e "$flogin" ] && [ ! -e "$fplug/mgf-3059520.conf" ] \
   && say ok "f1 25 in NotProton: launch options with another program stop the install before anything changes" || say FAIL "f1 25: wrapper not refused up front"
 fvdf_with 'MGF_FANS=max %command%'; mv "$fsteam/config/loginusers.vdf" "$fsteam/config/loginusers.vdf.away"
 ! f1 > "$W/f125.refuse.log" 2>&1 && /usr/bin/grep -q 'signed in' "$W/f125.refuse.log" && [ ! -e "$fstore/launcher" ] \
@@ -360,7 +373,7 @@ fvdf_with 'MGF_FANS=max %command%'; mv "$fsteam/config/loginusers.vdf" "$fsteam/
 mv "$fsteam/config/loginusers.vdf.away" "$fsteam/config/loginusers.vdf"
 # An index that names a file on another host is not followed.
 printf '{"assets":[{"name":"swofty-launcher-v9.9.9-windows-x86_64.zip","url":"https://example.com/x.zip","sha256":"%064d"}]}\n' 0 > "$fc/latest.json"
-! HOME="$fhome" MGVF_BOTTLE="$fpfx" MGVF_CX="$fc/runner" MGVF_SWOFTY_STORE="$fstore" MGVF_SWOFTY_INDEX="file://$fc/latest.json" /bin/bash "$fc/fixes/install-f125-swofty.sh" "$fc/game" > "$W/f125.index.log" 2>&1 \
+! HOME="$fhome" MGVF_BOTTLE="$fpfx" MGVF_CX="$fc/runner" MGVF_SWOFTY_STORE="$fstore" MGVF_NOTPROTON_VERSION=1.2.7 MGVF_STEAM_RUNNING=0 MGVF_SWOFTY_INDEX="file://$fc/latest.json" /bin/bash "$fc/fixes/install-f125-swofty.sh" "$fc/game" > "$W/f125.index.log" 2>&1 \
   && /usr/bin/grep -q 'does not name a Windows release' "$W/f125.index.log" && [ ! -e "$fstore/launcher" ] && ! /usr/bin/grep -q native "$fpfx/user.reg" \
   && say ok "f1 25 in NotProton: a release index that points at another host is refused" || say FAIL "f1 25: foreign index followed: $(tail -2 "$W/f125.index.log")"
 # The FEX side and a CrossOver bottle have no recipe.

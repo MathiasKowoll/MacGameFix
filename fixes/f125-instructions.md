@@ -22,6 +22,19 @@ The game runs offline and without EA AntiCheat: no multiplayer, no online servic
 
 Swofty changes the game folder while the game runs and puts it back when the game exits. Quit the game from its menu and wait a moment before you start it again.
 
+# The rows in NotProton
+
+The fix adds two rows to the game's Compatibility page in NotProton, for this game only:
+
+| Row | What it does |
+|---|---|
+| **Start through Swofty Launcher** | On: Play starts the game through Swofty. Off: Play starts the game's own launcher, which does not open on a Mac. The first install switches it on. |
+| **Play opens** | **The game**, with Swofty's active profile, or **Swofty Launcher's window**. |
+
+Choose **Swofty Launcher's window** to turn addons on or off, install mods, edit the game database or change the profile. Its own Play starts the game from there. Set the row back to **The game** to go straight into the game again.
+
+The window needs the Wine modules with the fonts and window fixes for CrossOver Preview 41303 (engine patches 0039 and 0040). Without them it closes as it opens, and `f125-swofty-window.log` beside the play script says "failed to resolve font" or "initializing Direct Manipulation". Touchpad pinch and inertia do not work in it; the wheel and two-finger scrolling do.
+
 # Profiles
 
 Play uses Swofty's active profile. Swofty has two to begin with:
@@ -45,14 +58,15 @@ Leave ray tracing off: with it on the game closed when a session started (2026-1
 
 # If something goes wrong
 
-Swofty's output for the last start is in `~/Library/Application Support/MacGameFix/swofty/f125-swofty-play.log`.
+Swofty's output for the last start is in `~/Library/Application Support/MacGameFix/swofty/f125-swofty-play.log`, and the window's in `f125-swofty-window.log` beside it.
 
 | What you see | What to do |
 |---|---|
 | The game closes about half a minute in, at the main menu | The runner lost the Rosetta improvement. Install it again in **Improvements**. |
 | "Steam isn't running" or "not signed in" in the log | Install the fix again, with Steam closed. |
+| Play opens the game's own launcher, which closes | The row **Start through Swofty Launcher** is off. Switch it on in the game's Compatibility page. |
 | The fix reads partial after a NotProton or prefix update | Install it again, with Steam closed. |
 
 # Removing it
 
-Remove gives the launch options and the prefix back as they were. Swofty Launcher stays in `~/Library/Application Support/MacGameFix/swofty`, and its data and saves stay in the prefix.
+Remove gives the launch options and the prefix back as they were and takes the two rows out of NotProton. Swofty Launcher stays in `~/Library/Application Support/MacGameFix/swofty`, and its data and saves stay in the prefix.

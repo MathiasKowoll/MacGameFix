@@ -15,6 +15,11 @@ set "STEAM_COMPAT_TOOL_PATHS="
 set "swofty=%~dp0launcher\bin\swofty.exe"
 set "data=%LOCALAPPDATA%\Swofty"
 
+rem "Play opens: Swofty Launcher's window". The launcher does its own first-start steps, and
+rem its Play starts the game as the lines below do. It needs engine patches 0039 and 0040
+rem (dwrite and directmanipulation) in the runner to find its fonts and open its window.
+if /i "%F125_OPENS%"=="window" goto window
+
 rem Offline play is Swofty's own: its terms are the player's to read and accept, so the first
 rem start shows them in this window and waits for the answer. Then Swofty downloads its
 rem extension. Neither is done again once done.
@@ -49,4 +54,8 @@ set "args=run --apply --no-start-store"
 if not "%F125_PROFILE%"=="" set "args=%args% --profile %F125_PROFILE%"
 echo Swofty is building the profile and starting F1 25. Its output goes to f125-swofty-play.log.
 "%swofty%" %args% -- "%F125_STEAM_COMMAND%" > "%~dp0f125-swofty-play.log" 2>&1
+exit /b %errorlevel%
+
+:window
+"%~dp0launcher\bin\swofty-launcher.exe" > "%~dp0f125-swofty-window.log" 2>&1
 exit /b %errorlevel%

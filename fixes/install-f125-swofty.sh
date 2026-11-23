@@ -47,6 +47,11 @@
 #     three; which of the last two Swofty cannot do without is not known.
 #   - In Steam's launch options for the game: the play script before %command%
 #     (steam-launch-options.pl; Steam must be closed).
+#   - In NotProton's plugins folder: two rows for this game alone (notproton-plugins.sh,
+#     np-plugin-f125-swofty.conf), shown on its Compatibility page: "Start through Swofty
+#     Launcher", switched on by the first install, and "Play opens", the game or Swofty
+#     Launcher's window. A NotProton row cannot change the program Steam starts, so the rows
+#     load nothing: they are the switches the play script reads.
 # .mgf-f125-swofty in the prefix lists which of these this script added, and --restore
 # removes those. The launcher, its data in the prefix and its saves stay.
 #
@@ -75,6 +80,7 @@ usage() { sed -n '3,7p' "$0" >&2; exit 1; }
 [ $# -ge 1 ] || usage
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/bottles.sh"
+. "$HERE/notproton-plugins.sh"
 
 GAME="${1%/}"
 MODE="${2:---install}"
@@ -127,6 +133,7 @@ right_runner() {
   return 1
 }
 
+np_plugins_setup "$APPID" "$PFX" "$HERE/np-plugin-f125-swofty.conf"
 JOURNAL="$PFX/.mgf-f125-launch-options.json"
 STATE="$PFX/.mgf-f125-swofty"          # what this script added, one word a line
 BRIDGE="$PFX/drive_c/Program Files (x86)/Steam"
@@ -278,7 +285,7 @@ case "$MODE" in
 --status)
   right_runner || norecipe "the game runs on NotProton's runner for CrossOver $BUILD${SIDE:+ ($SIDE)}; this needs CrossOver Preview 41303's, on Rosetta"
   echo "looking at $PFX, $STORE and Steam's launch options"
-  have=0; of=7; why=""
+  have=0; of=8; why=""
   miss() { why="${why:+$why; }$1"; }
   launcher_ok && have=$((have+1)) || miss "Swofty Launcher is not in $LAUNCHER"
   scripts_ok && have=$((have+1)) || { scripts_any && old_scripts=1; miss "the play script is not in place"; }
@@ -289,9 +296,12 @@ case "$MODE" in
   login_ok && have=$((have+1)) || miss "the prefix's Steam folder has no loginusers.vdf"
   lists_ok && have=$((have+1)) || miss "the prefix's Steam folder does not reach Steam's lists of the game's files"
   wrapped=0; options status >/dev/null 2>&1 && { have=$((have+1)); wrapped=1; } || miss "Steam's launch options do not start the play script"
-  # Absent is judged by what is only ever this script's: the play script, the launch option and
-  # its own list. The launcher stays after a restore, and a value the user had is not ours.
-  if [ "$wrapped" = 0 ] && ! scripts_any && [ ! -f "$STATE" ]; then echo absent
+  # The rows' files only: a row the player switched off is not a broken fix.
+  rows="$(np_plugins_status 2>/dev/null | tail -1)"
+  [ "$rows" = installed ] && have=$((have+1)) || miss "the game's rows are not in NotProton's plugins folder"
+  # Absent is judged by what is only ever this script's: the play script, the launch option, the
+  # rows and its own list. The launcher stays after a restore, and a value the user had is not ours.
+  if [ "$wrapped" = 0 ] && ! scripts_any && [ ! -f "$STATE" ] && [ "$rows" = absent ]; then echo absent
   elif [ "$have" -eq "$of" ] && carries_fix; then echo installed
   elif [ "$have" -eq "$of" ]; then
     echo "Why: everything is in place, but the runner's ntdll.so does not keep the game's memory low: update the Rosetta improvement, or the game closes half a minute in" >&2
@@ -312,6 +322,8 @@ case "$MODE" in
   if added activeuser; then user_reg_edit "$PFX" delete "$ACTIVE_KEY" ActiveUser || { echo "error: could not take ActiveUser out of $PFX/user.reg" >&2; exit 1; }; fi
   if added loginusers && [ -L "$LOGIN" ]; then rm -f "$LOGIN"; fi
   unlink_lists
+  # After the play script is out of the launch options: the rows' switches are plain variables.
+  np_plugins_restore || exit 1
   rm -f "$STORE/f125-swofty-play.sh" "$STORE/f125-swofty-run.cmd" "$STATE"
   echo "restored -- Steam's Play starts F1 25's own launcher again"
   echo "  Swofty Launcher stays in $LAUNCHER, and its data and saves in the prefix; remove them by hand if you want them gone"
@@ -322,11 +334,21 @@ esac
 right_runner || refuse "the game runs on NotProton's runner for CrossOver $BUILD${SIDE:+ ($SIDE)}; this needs CrossOver Preview 41303's, on Rosetta."
 carries_fix || refuse "the runner's ntdll.so ($NTDLL) does not keep the game's memory low: put in or update the Rosetta improvement for CrossOver Preview 41303 first."
 ACCOUNT="$(steam_account)" || refuse "cannot tell which account Steam is signed in with ($STEAM_LOGIN): open Steam, sign in, quit it, and install again."
+np_plugins_ready || refuse "NotProton's support folder ($NP_SUPPORT) is not there: open NotProton once, then install again."
 stopped || exit 1
 # Everything that can refuse does so before anything is written.
-if ! scripts_ok || ! options status >/dev/null 2>&1; then
-  mkdir -p "$STORE"
-  options preflight >/dev/null || exit 1
+mkdir -p "$STORE"
+# The rows' switch goes into the launch options the first time, by an editor that takes a
+# program there for someone else's. An install from before the rows left the play script
+# there: it comes out for the moment and goes back in below.
+lifted=0
+if [ ! -f "$NP_SWITCHED" ] && [ -f "$JOURNAL" ] && options status >/dev/null 2>&1; then
+  options restore >/dev/null || exit 1
+  lifted=1
+fi
+if ! np_plugins_preflight || ! options preflight >/dev/null; then
+  [ "$lifted" = 0 ] || options install >/dev/null || true
+  exit 1
 fi
 
 echo "[1/4] Swofty Launcher"
@@ -356,9 +378,11 @@ if ! login_ok; then
 fi
 link_lists
 
-echo "[4/4] Steam's launch options"
+echo "[4/4] NotProton's rows and Steam's launch options"
+np_plugins_install || exit 1
 options install >/dev/null || exit 1
 
 echo "installed"
 echo "  Steam's Play now starts F1 25 through Swofty Launcher, with Swofty's active profile."
+echo "  On the game's Compatibility page in NotProton, \"Play opens\" chooses Swofty Launcher's window instead."
 echo "  The first Play shows Swofty's offline play terms in a console window and waits for your answer."
