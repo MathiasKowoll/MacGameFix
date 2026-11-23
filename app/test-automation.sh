@@ -1125,6 +1125,10 @@ check '! has "$(cat "$NPR")" "group = "' "one NotProton in Steam that does not k
 rm -rf "$CT/notproton-b"
 MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep >/dev/null
 check 'has "$(cat "$NPR")" "group = MacGameFix · Performance"' "with every NotProton knowing groups, the row goes in MacGameFix · Performance"
+mkdir -p "$CT/notproton-gone"; : > "$CT/notproton-gone/run.backup"
+MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep >/dev/null
+check 'has "$(cat "$NPR")" "group = MacGameFix · Performance"' "a notproton folder with no run script (a tool NotProton emptied) has no say"
+rm -rf "$CT/notproton-gone"
 MACGAMEFIX_CPUS=10,4 "$BIN" --cpu-row-keep >/dev/null
 check 'has "$(cat "$NPR")" "choice = 0 = All (10)" && has "$(cat "$NPR")" "choice = 4 = 4 (performance cores)" && has "$(cat "$NPR")" "choice = 8" && ! /usr/bin/grep -Eq "^choice = (1[0-9])" "$NPR"' "a Mac with 10 is offered All, 4, 6 and 8"
 MACGAMEFIX_CPUS=32,24 "$BIN" --cpu-row-keep >/dev/null

@@ -78,8 +78,11 @@ enum ProcessorsRow {
     static func notProtonKnowsGroups() -> Bool {
         let tools = Paths.home.appendingPathComponent("Library/Application Support/Steam/compatibilitytools.d")
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: tools.path) else { return false }
+        // A folder with no run script is no tool Steam can run (one NotProton emptied, with
+        // other files left in it), so it has no say.
         let runs = names.filter { $0.lowercased().hasPrefix("notproton") }
             .map { tools.appendingPathComponent($0).appendingPathComponent("run") }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
         guard !runs.isEmpty else { return false }
         return runs.allSatisfy { run in
             guard let script = try? String(contentsOf: run, encoding: .utf8),
