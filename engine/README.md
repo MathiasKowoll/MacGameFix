@@ -670,6 +670,64 @@ runner, both sides (a Winsock `connect()` to a listener on 127.0.0.1, which read
 
 The FEX side gives the same rows.
 
+## Allocations with no address stay low
+
+`0038` (wine-11.21, the Intel side's `ntdll.so`) keeps an allocation that names no
+address below the area Wine reserves near the top of the address space.
+
+- **What changed in Wine:** Wine 11.21 reserves `0x10000`-`0x200000000` and
+  `0x7ff000000000`-`0x7ff600000000` in a 64-bit process and searches its reserved areas
+  bottom-up (`map_view`, `map_reserved_area` in `dlls/ntdll/unix/virtual.c`). A program
+  that fills the low area, 8 GB less its own image, then gets addresses from
+  `0x7ff000000000` up. Wine 11.0 (CrossOver 26.3) reserved about 1.6 GB low and asked
+  macOS after that, which gives low addresses, as Windows does for such an allocation.
+- **Who it broke:** F1 25, a 6.5 GB image (`0x140000000`-`0x158…`). On CrossOver Preview
+  41303 and on NotProton's runner for it, 2026-11-23, started by Swofty Launcher: 11
+  sessions of 11 ended 42 to 62 s after the game started; with the mod loader attached,
+  at `F1_25.exe+0x416a797`, reading through `r15 = 0x000080000c656760`, a pointer to a
+  low object with bit 47 set. The loader's log had the game's objects at `0x7ff0…`,
+  `0x7ff1…` and `0x7ff2…`; on CrossOver 26.3, where the game ran, at `0x28e…`, `0x3dd…`
+  and `0x4…`.
+- **With `0038`:** an allocation with no address, no upper limit and no `MEM_TOP_DOWN`
+  takes the reserved areas below the high one, then what the host gives, and the high
+  area only when the host has nothing. The game's objects are at `0x4…`, `0x5…` and
+  `0x6…`, and it plays, modded and not, from CrossOver Preview and from NotProton.
+- **`WINE_LOW_ALLOCATIONS_FIRST=0`** gives the old order back. Read once per process.
+
+Not done: the run with the switch at `0` on the same build, a game that never fills the
+low area, and the FEX side, whose `ntdll.so` does not carry it (`NTDLL_ARM64`).
+
+## A GPUI program's fonts and window
+
+`0039` and `0040` (wine-11.21, `dwrite.dll` and `directmanipulation.dll`, both sides) let
+a program built on GPUI open its window. Swofty Launcher is one, as the Zed editor is.
+
+- **`0039`, DirectWrite:** `IDWriteFontSet::GetMatchingFonts(family, weight, stretch,
+  style)` was a stub that returned `E_NOTIMPL`. GPUI looks its fonts up there, found
+  none and stopped: "failed to resolve font '.SystemUIFont' or any of the fallbacks:
+  .ZedMono, .ZedSans, Helvetica, Segoe UI, …, Arial". It now returns the set's fonts of
+  that family, the closest to the weight, stretch and style asked for first, in the
+  order a family's own `GetMatchingFonts` gives. The family is matched on the Win32
+  family name, the one family name a set's entry can be asked for in that file, so a
+  family whose faces carry Win32 names of their own gives only the faces under the name
+  asked for.
+- **`0040`, Direct Manipulation:** with fonts, GPUI stopped at "failed to open window:
+  initializing Direct Manipulation: Not implemented (0x80004001)". Nothing in Wine hands
+  a touch or a precision touchpad's pointer to Direct Manipulation, so no manipulation
+  ever starts; the calls that set a viewport up now succeed all the same. A viewport
+  keeps its rectangle, its status and one event handler, which is never called; the
+  manager's `Activate` and `Deactivate`, the update manager's `Update` and the viewport's
+  `SetContact` and `Stop` do nothing. Touchpad pinch and inertia do not happen; the wheel
+  does.
+- **Still the program's to ask for:** `GPUI_DISABLE_DIRECT_COMPOSITION=1`. Wine's
+  DirectComposition gives a window nothing to draw to, and GPUI has that switch for it.
+
+Played on 2026-11-23 on NotProton's 41303 runner (Rosetta) with Swofty Launcher's
+official 1.10.35 release and no third-party DLL: with CodeWeavers' two modules its log
+ends at the font error; with `0039`, at Direct Manipulation; with both, at "window
+drawn" and "window opened", and its Play started F1 25. Not done: the FEX side, and a
+program that uses neither.
+
 ## Measured
 
 Measured on 2026-10-18 on CrossOver Preview 27.0.0.41069, in a NotProton runner,

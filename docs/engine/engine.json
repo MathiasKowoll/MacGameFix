@@ -804,6 +804,36 @@
           ],
           "commit": "ffd991717cdbbacafe2c4c5b6ab207b8d71cf585",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/ffd991717cdbbacafe2c4c5b6ab207b8d71cf585/engine/patches/wine-11.21/0037-ntdll-tcp-noopt-on-request.patch"
+        },
+        {
+          "name": "0038-ntdll-low-allocations-first.patch",
+          "file": "engine/patches/wine-11.21/0038-ntdll-low-allocations-first.patch",
+          "subject": "An allocation with no address stays below the area Wine 11.21 reserves at 0x7ff000000000 while there is room elsewhere, as Wine 11.0 and Windows give it: F1 25, a 6.5 GB image, filled the low reserved area, got its objects at 0x7ff0.. and crashed on a pointer with bit 47 set; WINE_LOW_ALLOCATIONS_FIRST=0 gives the old order back; the Intel side, ntdll.so",
+          "modules": [
+            "ntdll"
+          ],
+          "commit": "aa64c0274d9b8c6b70f3791ebdcdeb7fe953f9e6",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/aa64c0274d9b8c6b70f3791ebdcdeb7fe953f9e6/engine/patches/wine-11.21/0038-ntdll-low-allocations-first.patch"
+        },
+        {
+          "name": "0039-dwrite-fontset-matching-fonts-by-family.patch",
+          "file": "engine/patches/wine-11.21/0039-dwrite-fontset-matching-fonts-by-family.patch",
+          "subject": "IDWriteFontSet::GetMatchingFonts by family, weight, stretch and style, which was a stub: it returns the family's fonts, the closest first, so a program built on GPUI (Swofty Launcher) finds its fonts instead of stopping with \"failed to resolve font\"; both sides, dwrite.dll",
+          "modules": [
+            "dwrite"
+          ],
+          "commit": "67141ff6a756f4b2bebde086a226d2954969f7e9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/67141ff6a756f4b2bebde086a226d2954969f7e9/engine/patches/wine-11.21/0039-dwrite-fontset-matching-fonts-by-family.patch"
+        },
+        {
+          "name": "0040-directmanipulation-viewport-set-up.patch",
+          "file": "engine/patches/wine-11.21/0040-directmanipulation-viewport-set-up.patch",
+          "subject": "A Direct Manipulation viewport can be set up (event handler, Enable, the manager's Activate, the update manager's Update) and never gets a contact, as nothing in Wine routes a pointer to it, so a program that needs the set-up to succeed opens its window; both sides, directmanipulation.dll",
+          "modules": [
+            "directmanipulation"
+          ],
+          "commit": "67141ff6a756f4b2bebde086a226d2954969f7e9",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/67141ff6a756f4b2bebde086a226d2954969f7e9/engine/patches/wine-11.21/0040-directmanipulation-viewport-set-up.patch"
         }
       ]
     }

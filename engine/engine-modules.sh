@@ -11,7 +11,9 @@
 #   rosetta   Rosetta's CPU for copy protection: ntdll.so, which also carries the
 #             timer thread's fix (0021), on the FEX side too where a build has one; and
 #             where a build carries them, kernelbase.dll, user32.dll and win32u.so, which
-#             2XKO's copy protection and the Riot Client need (wine-11.21's 0033-0035)
+#             2XKO's copy protection and the Riot Client need (wine-11.21's 0033-0035),
+#             and dwrite.dll and directmanipulation.dll, with which a program built on
+#             GPUI finds its fonts and opens its window (0039 and 0040)
 # Without --part every improvement the build carries is meant, as before there were two.
 # An improvement is in when the list in the backup folder names one of its modules. One
 # that was never installed, or was taken out with --part, is absent whatever the other is.
@@ -49,7 +51,7 @@ for arg in "$@"; do
 done
 ROOT="${ROOT%/}"
 # Which improvement a module belongs to.
-part_of() { case "${1##*/}" in ntdll.so|ntdll.dll|kernelbase.dll|user32.dll|win32u.so) echo rosetta ;; *) echo controls ;; esac; }
+part_of() { case "${1##*/}" in ntdll.so|ntdll.dll|kernelbase.dll|user32.dll|win32u.so|dwrite.dll|directmanipulation.dll) echo rosetta ;; *) echo controls ;; esac; }
 in_part() { [ "$PART" = all ] || [ "$(part_of "$1")" = "$PART" ]; }
 BACKUPS="${MGVF_ENGINE_BACKUP:-$HOME/Library/Application Support/MacGameFix/engine-backup}"
 LIB="$ROOT/lib/wine"
@@ -97,9 +99,11 @@ for side in x86_64 aarch64; do
     # then setupapi.dll and xaudio2_9.dll, and ntdll.so (Rosetta's CPU fidelity on the
     # Intel side, the timer fix on both) with, on 41073's Intel side, its ntdll.dll,
     # came later; a build may not carry them.
-    # kernelbase.dll, user32.dll and win32u.so (2XKO) came with 41303's 0033-0035.
+    # kernelbase.dll, user32.dll and win32u.so (2XKO) came with 41303's 0033-0035, and
+    # dwrite.dll and directmanipulation.dll (a GPUI program's fonts and window) with 0039-0040.
     for f in $side-unix/winebus.so $side-unix/ntdll.so $side-windows/ntdll.dll $side-windows/hidclass.sys $side-windows/setupapi.dll $side-windows/xaudio2_9.dll $XINPUT_DLLS \
-             $side-windows/kernelbase.dll $side-windows/user32.dll $side-unix/win32u.so; do
+             $side-windows/kernelbase.dll $side-windows/user32.dll $side-unix/win32u.so \
+             $side-windows/dwrite.dll $side-windows/directmanipulation.dll; do
       case "$f" in */*) ;; *) f="$side-windows/$f" ;; esac
       [ -f "$(src "$f")" ] && FILES="$FILES $f"
     done
@@ -241,6 +245,8 @@ install)
            x86_64-windows/xaudio2_9.dll aarch64-windows/xaudio2_9.dll \
            x86_64-windows/kernelbase.dll aarch64-windows/kernelbase.dll x86_64-windows/user32.dll \
            aarch64-windows/user32.dll x86_64-unix/win32u.so aarch64-unix/win32u.so \
+           x86_64-windows/dwrite.dll aarch64-windows/dwrite.dll \
+           x86_64-windows/directmanipulation.dll aarch64-windows/directmanipulation.dll \
            $(for x in $XINPUT_DLLS; do printf 'x86_64-windows/%s aarch64-windows/%s ' "$x" "$x"; done); do
     in_part "$f" || continue
     if [ -f "$SAVE/$f.absent" ]; then

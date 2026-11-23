@@ -118,5 +118,22 @@ E --restore --part=rosetta >/dev/null
 check 'cw x86_64-unix/ntdll.so && cw aarch64-unix/ntdll.so && [ "$(st --part=rosetta)" = absent ]' "and taking it out puts CrossOver's ntdll.so back on both"
 E >/dev/null; E --restore >/dev/null
 check 'cw aarch64-unix/ntdll.so && cw aarch64-windows/winebus.sys && ! [ -d "$MGVF_ENGINE_BACKUP/crossover-$B-fex" ]' "a plain restore takes the FEX side's out too"
+
+# dwrite.dll and directmanipulation.dll (a GPUI program's fonts and window) belong to Rosetta's
+# improvement, on both sides: in with it, out with it, and no business of the controls.
+W="x86_64-windows/dwrite.dll x86_64-windows/directmanipulation.dll aarch64-windows/dwrite.dll aarch64-windows/directmanipulation.dll"
+for f in $W; do
+  printf 'ours %s wine-11.17-1\n' "$f" >"$CAT/engine-$B-$(printf '%s' "$f" | tr / -)"
+  printf "CodeWeavers' %s wine-11.17-1\n" "$f" >"$R/lib/wine/$f"
+done
+E --part=controls >/dev/null
+check 'cw x86_64-windows/dwrite.dll && cw aarch64-windows/directmanipulation.dll && ours x86_64-windows/winebus.sys' "the controls leave dwrite.dll and directmanipulation.dll alone"
+E --part=rosetta >/dev/null
+check 'ours x86_64-windows/dwrite.dll && ours x86_64-windows/directmanipulation.dll && ours aarch64-windows/dwrite.dll && ours aarch64-windows/directmanipulation.dll && ours x86_64-unix/ntdll.so' "Rosetta's improvement installs them on both sides, with ntdll.so"
+check '[ "$(st)" = installed ]' "and with both improvements in, everything reads installed"
+E --restore --part=rosetta >/dev/null
+check 'cw x86_64-windows/dwrite.dll && cw aarch64-windows/directmanipulation.dll && ours x86_64-windows/winebus.sys && [ "$(st --part=rosetta)" = absent ]' "taking Rosetta's out puts CrossOver's two back and leaves the controls"
+E --restore >/dev/null
+check '! [ -d "$MGVF_ENGINE_BACKUP/crossover-$B-fex" ]' "and a plain restore leaves nothing behind"
 echo "==> $fails failed"
 exit $((fails > 0))
