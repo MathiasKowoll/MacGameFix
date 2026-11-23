@@ -1,0 +1,90 @@
+From: MacGameFix
+Subject: Allocations with no address stay below the area reserved near the top
+
+Wine 11.21 reserves 0x10000-0x200000000 and 0x7ff000000000-0x7ff600000000 in a 64-bit
+process and searches its reserved areas bottom-up for an allocation with no address. A
+program that fills the low area (8 GB, less its own image) then gets addresses from
+0x7ff000000000 up, where Wine 11.0 (CrossOver 26.3) asked macOS, which gave low ones.
+Windows gives such an allocation a low address too.
+
+F1 25 (a 6.5 GB image, started by Swofty Launcher's offline play) on CrossOver Preview
+41303, 2026-11-23: its objects were at 0x7ff0.., 0x7ff1.. and 0x7ff2.. (0x28e.., 0x3dd..
+and 0x4.. on CrossOver 26.3, where it runs), and it crashed four times out of four at
+F1_25.exe+0x416a797 some 30 s after start, reading through r15 = 0x000080000c656760: a
+pointer to a low object with bit 47 set.
+
+With this, an allocation with no address, no upper limit and no MEM_TOP_DOWN takes the
+reserved areas below the high one, then what the host gives, and the high area only when
+the host has nothing. WINE_LOW_ALLOCATIONS_FIRST=0 gives the old order back.
+
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -187,6 +187,7 @@
+ #endif
+ 
+ static void *host_addr_space_limit;  /* top of the host virtual address space */
++static void *high_reserve_start;     /* start of the area reserved near the top of a 64-bit address space */
+ 
+ static struct file_view *arm64ec_view;
+ 
+@@ -1956,11 +1957,24 @@
+         void *start = address_space_start;
+         void *end = min( user_space_limit, host_addr_space_limit );
+         size_t host_size = ROUND_SIZE( 0, size, host_page_mask );
++        void *reserved_end;
+ 
+         if (limit_low && (void *)limit_low > start) start = (void *)limit_low;
+         if (limit_high && (void *)limit_high < end) end = (char *)limit_high + 1;
++        reserved_end = end;
+ 
+-        if ((ptr = map_reserved_area( start, end, host_size, top_down, unix_prot, align_mask )))
++        /* An allocation with no address, no upper limit and no MEM_TOP_DOWN stays below the area
++         * reserved near the top of the address space while there is room anywhere else. Windows
++         * gives such an allocation a low address; the reserved areas are searched bottom-up, so
++         * once a program had filled the low one (8 GB, less its own image) it got addresses from
++         * 0x7ff000000000 up. F1 25, a 6.5 GB image, crashed on them some 30 s after start: a
++         * pointer to a low object came back with bit 47 set. WINE_LOW_ALLOCATIONS_FIRST=0 gives
++         * the old order back. */
++        if (!top_down && !limit_high && high_reserve_start && (char *)end > (char *)high_reserve_start &&
++            (char *)start < (char *)high_reserve_start)
++            reserved_end = high_reserve_start;
++
++        if ((ptr = map_reserved_area( start, reserved_end, host_size, top_down, unix_prot, align_mask )))
+         {
+             TRACE( "got mem in reserved area %p-%p\n", ptr, (char *)ptr + size );
+         }
+@@ -1973,8 +1987,16 @@
+         else
+         {
+             if ((ptr = map_anon_area( host_size, unix_prot, align_mask )) == MAP_FAILED)
+-                return (errno == ENOMEM) ? STATUS_NO_MEMORY : STATUS_INVALID_PARAMETER;
+-            TRACE( "got mem with anon mmap %p-%p\n", ptr, (char *)ptr + size );
++            {
++                int err = errno;
++
++                /* nowhere else: the area near the top, as before */
++                if (reserved_end == end ||
++                    !(ptr = map_reserved_area( reserved_end, end, host_size, top_down, unix_prot, align_mask )))
++                    return (err == ENOMEM) ? STATUS_NO_MEMORY : STATUS_INVALID_PARAMETER;
++                TRACE( "got mem in the high reserved area %p-%p\n", ptr, (char *)ptr + size );
++            }
++            else TRACE( "got mem with anon mmap %p-%p\n", ptr, (char *)ptr + size );
+         }
+     }
+     status = create_view( view_ret, ptr, size, vprot );
+@@ -3721,6 +3743,7 @@
+     {
+         void *start = (void *)0x7ff000000000;
+         void *end = (void *)0x7ff600000000;
++        const char *env = getenv( "WINE_LOW_ALLOCATIONS_FIRST" );
+ 
+         if (start > host_addr_space_limit)
+         {
+@@ -3728,6 +3751,7 @@
+             start = (char *)end - limit_4g;
+         }
+         reserve_area( start, end );
++        if (!(env && env[0] == '0' && !env[1])) high_reserve_start = start;
+         return;
+     }
+ 
