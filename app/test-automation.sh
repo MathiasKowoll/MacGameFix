@@ -1029,6 +1029,86 @@ check '[ "$("$FH" --asked "$NL" "$FG/a.exe")" = no ]' "its last launch decides"
 check '[ ! -e "$FR/Library/PrivilegedHelperTools/io.github.macgamefix.fans" ] && [ ! -e "$FR/Library/LaunchDaemons/io.github.macgamefix.fans.plist" ] && [ ! -e "$SUPPORT/notproton/plugins/mgf-fans.conf" ] && [ "$("$BIN" --fans-state)" = absent ]' "removing takes the helper, its LaunchDaemon and the row away"
 unset MACGAMEFIX_FANS_PREFIX
 
+echo "== A program run in a game's NotProton prefix"
+PL="$T/prefixlib/steamapps"; PAPP=4242; PROOT="$PL/compatdata/$PAPP"; PPFX="$PROOT/pfx"
+mkdir -p "$PPFX/drive_c/windows/system32" "$PL/common/ModGame/Mods"
+# A PE ntdll.dll of the machine given (8664 x86_64, aa64 arm64): MZ, e_lfanew = 0x40, PE\0\0 and the machine.
+mkpe() { { printf 'MZ'; head -c 58 /dev/zero; printf '\x40\x00\x00\x00PE\x00\x00'; printf "\\x${1#??}\\x${1%??}"; } > "$2"; }
+mkpe 8664 "$PPFX/drive_c/windows/system32/ntdll.dll"
+PSTEAM="$MACGAMEFIX_HOME/Library/Application Support/Steam"
+mkdir -p "$PSTEAM/config"
+PRUN="$SUPPORT/notproton/runners"
+PREC="$T/prefix-ran.txt"
+# A runner whose loader only writes down what it was given, for each flavour.
+mkrunner() {
+  local cx="$PRUN/crossover-$1/CrossOver"
+  mkdir -p "$cx/bin" "$cx/lib/wine/x86_64-unix" "$cx/lib/wine/aarch64-unix/wine.app/Contents/MacOS"
+  for l in "$cx/lib/wine/x86_64-unix/wine" "$cx/lib/wine/aarch64-unix/wine.app/Contents/MacOS/wine"; do
+    printf '#!/bin/sh\nprintf "%%s\\n" "loader=$0" "pwd=$(pwd -P)" "args=$*" "WINEPREFIX=$WINEPREFIX" "WINESERVER=$WINESERVER" "WINEMSYNC=$WINEMSYNC" "CX_ROOT=$CX_ROOT" > "%s"\n' "$PREC" > "$l"
+    chmod +x "$l"
+  done
+  printf '#!/bin/sh\n' > "$cx/bin/wineserver"; printf '#!/bin/sh\n' > "$cx/bin/wineserver-arm64"
+  chmod +x "$cx/bin/wineserver" "$cx/bin/wineserver-arm64"
+}
+mkrunner 26.3.0.39832; mkrunner 27.0.0.41303-fex
+mktool() { mkdir -p "$PSTEAM/compatibilitytools.d/$1"; printf '%s\n' "$2" > "$PSTEAM/compatibilitytools.d/$1/build"; printf '%s\n' "$3" > "$PSTEAM/compatibilitytools.d/$1/flavor"; }
+mktool notproton-26.3 26.3.0.39832 rosetta; mktool notproton-fex-41303 27.0.0.41303-fex fex
+mkmap() { printf '"InstallConfigStore"\n{\n\t"Software"\n\t{\n\t\t"Valve"\n\t\t{\n\t\t\t"Steam"\n\t\t\t{\n\t\t\t\t"CompatToolMapping"\n\t\t\t\t{\n%s\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n}\n' "$1" > "$PSTEAM/config/config.vdf"; }
+maprow() { printf '\t\t\t\t\t"%s"\n\t\t\t\t\t{\n\t\t\t\t\t\t"name"\t\t"%s"\n\t\t\t\t\t\t"config"\t\t""\n\t\t\t\t\t\t"priority"\t\t"250"\n\t\t\t\t\t}\n' "$1" "$2"; }
+PEXE="$PL/common/ModGame/Mods/Mod Setup.exe"; printf 'MZ' > "$PEXE"
+waitrec() { for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do [ -s "$PREC" ] && return 0; sleep 0.25; done; return 1; }
+
+mkmap "$(maprow 0 notproton-26.3; maprow $PAPP notproton-fex-41303)"
+check 'has "$("$BIN" --prefix-target "$PPFX")" "27.0.0.41303-fex | fex | $PRUN/crossover-27.0.0.41303-fex/CrossOver/lib/wine/aarch64-unix/wine.app/Contents/MacOS/wine | $PRUN/crossover-27.0.0.41303-fex/CrossOver/bin/wineserver-arm64 | notproton-fex-41303"' "the game's own Steam tool names the runner and the flavour: FEX's loader and wineserver"
+mkmap "$(maprow 0 notproton-26.3)"
+check 'has "$("$BIN" --prefix-target "$PPFX")" "26.3.0.39832 | rosetta | $PRUN/crossover-26.3.0.39832/CrossOver/lib/wine/x86_64-unix/wine | $PRUN/crossover-26.3.0.39832/CrossOver/bin/wineserver | notproton-26.3"' "a game with no tool of its own gets Steam's default one, with Rosetta's loader"
+mkmap ""
+check 'has "$("$BIN" --prefix-target "$PPFX")" "refused | MacGameFix cannot tell which NotProton runner"' "with no tool and no record of the prefix's build, it refuses"
+printf '27.0.0.41303-fex\nCrossOver 2026 - Rosetta\n' > "$PROOT/notproton-build"
+check 'has "$("$BIN" --prefix-target "$PPFX")" "27.0.0.41303-fex | rosetta | $PRUN/crossover-27.0.0.41303-fex/CrossOver/lib/wine/x86_64-unix/wine" && has "$("$BIN" --prefix-target "$PPFX")" "| record"' "else the build NotProton recorded in the prefix, in the flavour of the prefix's ntdll (x86_64: Rosetta)"
+mkpe aa64 "$PPFX/drive_c/windows/system32/ntdll.dll"
+check 'has "$("$BIN" --prefix-target "$PPFX")" "27.0.0.41303-fex | fex |"' "an arm64 ntdll is FEX's"
+mkpe 8664 "$PPFX/drive_c/windows/system32/ntdll.dll"
+printf '27.0.0.40000-fex\n' > "$PROOT/notproton-build"
+check 'has "$("$BIN" --prefix-target "$PPFX")" "refused | The game'"'"'s runner (CrossOver build 27.0.0.40000-fex) is not in NotProton'"'"'s runners"' "a runner NotProton no longer has is named, and nothing runs"
+
+mkmap "$(maprow $PAPP notproton-26.3)"
+printf '1\n' > "$PROOT/notproton-msync"
+rm -f "$PREC"
+OUT="$("$BIN" --prefix-run "$PPFX" "$PEXE" --remember "key-modgame" || true)"
+waitrec || true
+R="$(cat "$PREC" 2>/dev/null)"
+check 'has "$OUT" "Started Mod Setup.exe in the game'"'"'s prefix, with CrossOver 26.3.0.39832 (Rosetta)" && has "$R" "args=$PEXE" && has "$R" "pwd=$(cd "$PL/common/ModGame/Mods" && pwd -P)" && has "$R" "WINEPREFIX=$PPFX"' "the program starts with the game's loader, in its own folder and the game's prefix"
+check 'has "$R" "WINESERVER=$PRUN/crossover-26.3.0.39832/CrossOver/bin/wineserver" && has "$R" "WINEMSYNC=1" && has "$R" "CX_ROOT=$PRUN/crossover-26.3.0.39832/CrossOver"' "with NotProton's environment: its wineserver, CX_ROOT, and the prefix's msync choice"
+check '[ "$("$BIN" --prefix-last key-modgame)" = "$PEXE" ] && has "$(cat "$SUPPORT/MacGameFix/prefix-runs/$PAPP.log")" "$PEXE"' "the program is remembered for the game, and the run has a log of its own"
+PMSI="$PL/common/ModGame/Mods/pack.msi"; printf 'x' > "$PMSI"; rm -f "$PREC"
+"$BIN" --prefix-run "$PPFX" "$PMSI" >/dev/null || true; waitrec || true
+check 'has "$(cat "$PREC")" "args=msiexec /i $PMSI"' "an msi goes through msiexec /i, as NotProton runs it"
+PTXT="$PL/common/ModGame/Mods/readme.txt"; printf 'x' > "$PTXT"
+check 'has "$("$BIN" --prefix-run "$PPFX" "$PTXT")" "refused | readme.txt is not a Windows program"' "a file that is not a program is refused"
+
+# In use: NotProton's lock held, then a wineserver of this prefix with its socket folder open.
+rm -f "$PREC"
+/usr/bin/python3 -c 'import fcntl,sys,time; f=open(sys.argv[1],"w"); fcntl.flock(f,fcntl.LOCK_EX); open(sys.argv[2],"w").close(); time.sleep(30)' "$PROOT/.notproton-prefix.lock" "$T/locked" &
+LOCK_PID=$!
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do [ -e "$T/locked" ] && break; sleep 0.25; done
+check 'has "$("$BIN" --prefix-run "$PPFX" "$PEXE")" "refused | NotProton is setting the game'"'"'s prefix up" && [ ! -e "$PREC" ]' "while NotProton holds the prefix's lock, nothing starts"
+kill "$LOCK_PID" 2>/dev/null; wait "$LOCK_PID" 2>/dev/null || true
+export MACGAMEFIX_WINE_SERVER_ROOT="$T/wineservers"
+read -r PDEV PINO <<<"$(stat -f '%d %i' "$PPFX")"
+PSRV="$MACGAMEFIX_WINE_SERVER_ROOT/server-$(printf '%x' "$PDEV")-$(printf '%x' "$PINO")"
+mkdir -p "$PSRV"; : > "$PSRV/socket"
+sleep 30 < "$PSRV/socket" &
+SRV_PID=$!
+sleep 0.5
+check 'has "$("$BIN" --prefix-run "$PPFX" "$PEXE")" "refused | The game, or another program, is running in this prefix" && [ ! -e "$PREC" ]' "while anything runs in the prefix (its wineserver's folder is open), nothing starts"
+kill "$SRV_PID" 2>/dev/null; wait "$SRV_PID" 2>/dev/null || true
+"$BIN" --prefix-run "$PPFX" "$PEXE" >/dev/null || true; waitrec || true
+check '[ -s "$PREC" ]' "once the game has quit and its wineserver has gone, it runs"
+unset MACGAMEFIX_WINE_SERVER_ROOT
+rm -f "$PSTEAM/config/config.vdf"; rmdir "$PSTEAM/config" 2>/dev/null || true
+rm -rf "$PSTEAM/compatibilitytools.d" "$PRUN/crossover-26.3.0.39832" "$PRUN/crossover-27.0.0.41303-fex"
+
 echo "== Game Mode for CrossOver's games"
 GM="$MACGAMEFIX_HOME/Applications/CrossOver GM.app"
 GW="$GM/Contents/SharedSupport/CrossOver/lib/wine"

@@ -617,6 +617,55 @@ final class Model: ObservableObject {
         }
     }
 
+    /// The game's NotProton prefix (steamapps/compatdata/<appid>/pfx), when it has one.
+    func steamPlayPrefix(_ hit: Hit) -> URL? { hit.prefixes.first { $0.kind == .steamPlay }?.path }
+
+    /// The program last run in this game's prefix, when it is still there.
+    func lastPrefixProgram(_ hit: Hit) -> URL? {
+        PrefixRunner.lastProgram(gameKey(hit.folder, hit.game.name))
+            .flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
+    }
+
+    /// Runs a Windows program (a mod installer or manager) in the game's NotProton prefix with
+    /// the runner the game uses (PrefixRunner.swift): `program`, or one picked now, starting in
+    /// the game's folder. A program that starts is remembered for the game.
+    func runInPrefix(_ hit: Hit, program: URL? = nil) {
+        guard !busy else { return }
+        guard let pfx = steamPlayPrefix(hit) else {
+            status = "\(hit.game.name) has no NotProton prefix. Programs run in a prefix only for the games NotProton runs."
+            return
+        }
+        var chosen = program
+        if chosen == nil {
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = true
+            panel.canChooseDirectories = false
+            panel.allowsMultipleSelection = false
+            panel.allowedContentTypes = PrefixRunner.extensions.compactMap { UTType(filenameExtension: $0) }
+            panel.directoryURL = lastPrefixProgram(hit)?.deletingLastPathComponent() ?? hit.folder
+            panel.prompt = "Run"
+            panel.message = "Choose a Windows program (exe, msi, bat or cmd) to run in \(hit.game.name)'s prefix, with the runner the game uses."
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            chosen = url
+        }
+        guard let program = chosen else { return }
+        let key = gameKey(hit.folder, hit.game.name)
+        busy = true
+        Task {
+            let result = await Task.detached { PrefixRunner.run(program, in: pfx) }.value
+            switch result {
+            case .success(let line):
+                PrefixRunner.remember(program, for: key)
+                status = line
+                note("\(hit.game.name): \(line)")
+            case .failure(let failure):
+                status = "\(hit.game.name): \(failure.message)"
+                note(status)
+            }
+            busy = false
+        }
+    }
+
     /// Installs or removes the selected games' fixes, or those of `only`: the games the
     /// notice above the tabs names.
     func apply(install: Bool, only: [Hit]? = nil) {
@@ -1506,6 +1555,12 @@ struct GamesView: View {
                     .width(min: 110, ideal: 140)
                 }
                 .frame(minHeight: 260)
+                .contextMenu(forSelectionType: String.self) { ids in
+                    if ids.count == 1, let hit = model.hits.first(where: { ids.contains($0.id) }),
+                       model.steamPlayPrefix(hit) != nil {
+                        PrefixRunItems(hit: hit, model: model)
+                    }
+                }
             }
 
             // Under the table, not in the toolbar above: with these two its seven buttons come to about
@@ -1523,6 +1578,9 @@ struct GamesView: View {
                     .disabled(model.busy)
                     .help("For the next FH6 launch. Quit Steam first so its settings can be saved safely.")
                 }
+                if model.selected.count == 1, let hit = model.selected.first, model.steamPlayPrefix(hit) != nil {
+                    PrefixRunMenu(hit: hit, model: model, title: "Prefix")
+                }
                 Button("It Works…") { model.fixReport(.works) }
                     .disabled(model.busy || model.fixReportHit(.works) == nil)
                     .help("For one selected game whose fix is installed: saves its fix report and opens a new issue "
@@ -1536,6 +1594,38 @@ struct GamesView: View {
             }
         }
         .sheet(item: $instructionsFor) { InstructionsSheet(game: $0) }
+    }
+}
+
+/// Run a program in a game's NotProton prefix: one picked now, or the last one again.
+struct PrefixRunItems: View {
+    let hit: Hit
+    @ObservedObject var model: Model
+
+    var body: some View {
+        Button("Run a Program in This Game's Prefix…") { model.runInPrefix(hit) }
+            .disabled(model.busy)
+            .help("Runs a Windows program, such as a mod installer or a mod manager, inside this game's NotProton "
+                  + "prefix with the runner the game uses. Quit the game first.")
+        if let last = model.lastPrefixProgram(hit) {
+            Button("Run \(last.lastPathComponent) Again") { model.runInPrefix(hit, program: last) }
+                .disabled(model.busy)
+                .help(last.path)
+        }
+    }
+}
+
+/// The same, as a menu under the games' table for the one selected game.
+struct PrefixRunMenu: View {
+    let hit: Hit
+    @ObservedObject var model: Model
+    let title: String
+
+    var body: some View {
+        Menu(title) { PrefixRunItems(hit: hit, model: model) }
+            .fixedSize()
+            .disabled(model.busy)
+            .help("Run a Windows program, such as a mod installer or a mod manager, in \(hit.game.name)'s NotProton prefix.")
     }
 }
 
@@ -3080,6 +3170,32 @@ enum Entry {
             func list(_ s: String) -> [String] { s.split(separator: ";").map(String.init) }
             print(Model.blockedNames(before: list(args[i + 1]), checked: list(args[i + 2]), refused: list(args[i + 3]))
                 .joined(separator: ";"))
+            exit(0)
+        }
+        if let i = args.firstIndex(of: "--prefix-target"), i + 1 < args.count {
+            // Which runner a game's prefix gets (PrefixRunner.swift), for the tests.
+            switch PrefixRunner.target(for: URL(fileURLWithPath: args[i + 1])) {
+            case .success(let t):
+                print("\(t.build) | \(t.flavor.rawValue) | \(t.loader.path) | \(t.server.path) | \(t.tool ?? "record")")
+            case .failure(let f): print("refused | \(f.message)")
+            }
+            exit(0)
+        }
+        if let i = args.firstIndex(of: "--prefix-run"), i + 2 < args.count {
+            // A program run in a game's prefix as the Games tab runs it; with --remember <key>
+            // it is remembered as the menu remembers it. Waits for nothing it started.
+            switch PrefixRunner.run(URL(fileURLWithPath: args[i + 2]), in: URL(fileURLWithPath: args[i + 1])) {
+            case .success(let line):
+                if let k = args.firstIndex(of: "--remember"), k + 1 < args.count {
+                    PrefixRunner.remember(URL(fileURLWithPath: args[i + 2]), for: args[k + 1])
+                }
+                print(line)
+            case .failure(let f): print("refused | \(f.message)"); exit(1)
+            }
+            exit(0)
+        }
+        if let i = args.firstIndex(of: "--prefix-last"), i + 1 < args.count {
+            print(PrefixRunner.lastProgram(args[i + 1])?.path ?? "none")
             exit(0)
         }
         if let i = args.firstIndex(where: { $0.hasPrefix("--fans-") }) {
