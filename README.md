@@ -340,6 +340,26 @@ This does nothing for the first time a game draws something; that compilation
 still happens once. A game that compiles as it goes, such as Ori and the Will of
 the Wisps, gets the other half of it: places already seen stop hitching again.
 
+## A mod installer in a game's prefix
+
+A mod installer or a mod manager made for Windows has to run inside the game's
+prefix, with the same Wine the game runs on, to put its files where the game
+looks. In the Games tab, select a game NotProton runs and open **Prefix** under
+the table (or right-click its row): **Run a Program in This Game's Prefix…**
+picks an exe, msi, bat or cmd file, starting in the game's folder, and runs it
+with the game's own runner: the CrossOver build and FEX or Rosetta that the
+game's Steam Play tool names, as NotProton's Prefixes › Run Program… does.
+MacGameFix remembers the program for the game, so **Run <name> Again** starts
+it next time in one click.
+
+Quit the game first: nothing starts while the game, or anything else, runs in
+its prefix, or while NotProton is setting the prefix up. What the program
+printed is in `~/Library/Application Support/MacGameFix/prefix-runs/`. A mod
+manager that starts the game itself starts it outside Steam, so the game then
+runs without its launch options and NotProton's plugins; start the game from
+Steam instead. CrossOver bottles are not offered: there, CrossOver's own Run
+Command does this.
+
 ## Game Mode for CrossOver's games
 
 macOS turns Game Mode on for a game in front, in full screen, whose app says it
