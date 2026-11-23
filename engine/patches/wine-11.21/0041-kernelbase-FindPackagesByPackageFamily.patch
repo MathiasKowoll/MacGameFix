@@ -1,0 +1,68 @@
+From: MacGameFix
+Subject: kernelbase, kernel32: FindPackagesByPackageFamily, with no packages to find
+
+Wine has GetPackagesByPackageFamily, which says no package is installed, and left
+FindPackagesByPackageFamily out: kernelbase.spec had it as a commented stub and kernel32
+did not export it. A program that looks it up by name refuses to go on without it.
+
+EA SPORTS FC 27 (Steam, 1.0.142.20665) on NotProton's runner for CrossOver Preview 41303,
+2026-11-23: its activation log, ProgramData\Origin\Logs\FC27_16425884_OnlineActivation_Log.html,
+says "License signature is good." and then "Missing DLL: KERNEL32.dll Function:
+FindPackagesByPackageFamily", four starts of four, and the game ends at the dialog "There
+is a problem with your game's setup. Please reinstall your game."
+
+It answers as GetPackagesByPackageFamily does: no packages, ERROR_SUCCESS.
+
+--- a/dlls/kernelbase/version.c
++++ b/dlls/kernelbase/version.c
+@@ -1660,6 +1660,29 @@
+ }
+ 
+ /***********************************************************************
++ *         FindPackagesByPackageFamily   (kernelbase.@)
++ *
++ * No packages are installed here, as GetPackagesByPackageFamily says too. A program that
++ * looks the function up by name and does not find it can refuse to start: EA SPORTS FC 27's
++ * activation logs "Missing DLL: KERNEL32.dll Function: FindPackagesByPackageFamily" and the
++ * game ends with "There is a problem with your game's setup" (2026-11-23).
++ */
++LONG WINAPI DECLSPEC_HOTPATCH FindPackagesByPackageFamily(const WCHAR *family_name, UINT32 filters, UINT32 *count,
++                                                          WCHAR **full_names, UINT32 *buffer_len, WCHAR *buffer,
++                                                          UINT32 *properties)
++{
++    FIXME( "(%s %#x %p %p %p %p %p): stub\n", debugstr_w(family_name), filters, count, full_names,
++           buffer_len, buffer, properties );
++
++    if (!count || !buffer_len)
++        return ERROR_INVALID_PARAMETER;
++
++    *count = 0;
++    *buffer_len = 0;
++    return ERROR_SUCCESS;
++}
++
++/***********************************************************************
+  *         GetPackagePathByFullName   (kernelbase.@)
+  */
+ LONG WINAPI GetPackagePathByFullName(const WCHAR *name, UINT32 *len, WCHAR *path)
+--- a/dlls/kernelbase/kernelbase.spec
++++ b/dlls/kernelbase/kernelbase.spec
+@@ -380,7 +380,7 @@
+ @ stdcall FindNextFileW(long ptr)
+ @ stdcall FindNextStreamW(long ptr)
+ @ stdcall FindNextVolumeW(long ptr long)
+-# @ stub FindPackagesByPackageFamily
++@ stdcall FindPackagesByPackageFamily(wstr long ptr ptr ptr ptr ptr)
+ @ stdcall FindResourceExW(long wstr wstr long)
+ @ stdcall FindResourceW(long wstr wstr)
+ @ stdcall FindStringOrdinal(long wstr long wstr long long)
+--- a/dlls/kernel32/kernel32.spec
++++ b/dlls/kernel32/kernel32.spec
+@@ -514,6 +514,7 @@
+ @ stdcall -import FindNextVolumeW(long ptr long)
+ @ stdcall -import FindNLSString(long long wstr long wstr long ptr)
+ @ stdcall -import FindNLSStringEx(wstr long wstr long wstr long ptr ptr ptr long)
++@ stdcall FindPackagesByPackageFamily(wstr long ptr ptr ptr ptr ptr) kernelbase.FindPackagesByPackageFamily
+ @ stdcall FindResourceA(long str str)
+ @ stdcall FindResourceExA(long str str long)
+ @ stdcall -import FindResourceExW(long wstr wstr long)
