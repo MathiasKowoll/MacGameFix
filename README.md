@@ -283,8 +283,10 @@ removed. Apple silicon only.
 A game asks for the fans with `MGF_FANS=max` in its launch options in Steam,
 before `%command%`; this is for the games NotProton runs. The fans start within
 a few seconds of the game's launch. MacGameFix also puts a row, **Fans at full
-speed**, into NotProton's plugins folder; it shows only in a NotProton whose
-panel lists such rows, and the variable works without it.
+speed**, into NotProton's plugins folder (`mgf-fans.conf`); switched on for a
+game it writes `NOTPROTON_MGF_FANS=1` into that game's launch options, which the
+helper (version 2 or later) takes as it takes `MGF_FANS=max`. The row shows only
+in a NotProton whose panel lists such rows, and the variable works without it.
 
 The fans raise what the Mac can shed; they do not lower what a game draws. A
 game that drew about 96 W uncapped was cut all the same after 2 min 40 s. With

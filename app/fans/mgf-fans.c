@@ -16,9 +16,11 @@
 //   mgf-fans --remove     root: fans back to automatic, the daemon stopped, both files removed
 //   mgf-fans --asked <log> <exe>      the NotProton rule against a log file, for the tests
 //
-// A game asks by NotProton starting it with MGF_FANS=max in its launch options. macOS gives
-// nobody another process's environment, root included, so that is read from NotProton's log:
-// the last "[launch] handed to /bin/sh -c:" line naming the exe of the running `run` script.
+// A game asks by NotProton starting it with MGF_FANS=max in its launch options, or with
+// NOTPROTON_MGF_FANS=1, which is what NotProton's panel writes when its "Fans at full speed"
+// row is switched on (a panel row's id has to start with NOTPROTON_). macOS gives nobody
+// another process's environment, root included, so that is read from NotProton's log: the
+// last "[launch] handed to /bin/sh -c:" line naming the exe of the running `run` script.
 // The log is a file the user can write. All it can ask for is more cooling.
 //
 // It can only raise the fans. SMC keys: FNum, F<i>Md (0 automatic, 1 forced), F<i>Tg (target rpm),
@@ -129,7 +131,17 @@ static void set_auto(void) {
   unlink(MARK);
 }
 
-// The last launch line of NotProton's log that names exe: did it carry MGF_FANS=max?
+// word appears in line as a word of its own: after a space or at the start, and followed by
+// a space or the end.
+static int has_word(const char *line, const char *word) {
+  size_t n = strlen(word);
+  for (const char *m = strstr(line, word); m; m = strstr(m + 1, word))
+    if ((m == line || m[-1] == ' ') && (m[n] == ' ' || m[n] == 0)) return 1;
+  return 0;
+}
+
+// The last launch line of NotProton's log that names exe: did it carry MGF_FANS=max, or the
+// panel row's NOTPROTON_MGF_FANS=1?
 static int asked_in_log(const char *path, const char *exe) {
   static char tail[400000];
   FILE *f = fopen(path, "r");
@@ -141,8 +153,7 @@ static int asked_in_log(const char *path, const char *exe) {
   for (char *line = tail; line && *line; ) {
     char *nl = strchr(line, '\n'); if (nl) *nl = 0;
     if (strstr(line, "handed to /bin/sh -c:") && strstr(line, "waitforexitandrun") && strstr(line, exe)) {
-      char *m = strstr(line, "MGF_FANS=max");
-      asked = m && (m[12] == ' ' || m[12] == 0) && (m == line || m[-1] == ' ');
+      asked = has_word(line, "MGF_FANS=max") || has_word(line, "NOTPROTON_MGF_FANS=1");
     }
     line = nl ? nl + 1 : NULL;
   }
@@ -202,7 +213,7 @@ static void stop(int sig) { (void)sig; quit = 1; }
 // What the app compares to tell an installed helper from the one it carries. Two builds of the
 // same source are signed at different times and differ byte for byte, so the bytes cannot say;
 // raise this when the helper's code changes.
-#define VERSION 1
+#define VERSION 2
 #define LABEL "io.github.macgamefix.fans"
 static const char *PLIST =
   "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"

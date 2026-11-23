@@ -1010,7 +1010,7 @@ export MACGAMEFIX_FANS_PREFIX="$FR"
 check '[ -x "$FH" ] && [ "$("$BIN" --fans-state)" = absent ]' "the app carries the helper, and nothing is installed before"
 "$BIN" --fans-install >/dev/null 2>&1
 check 'cmp -s "$FR/Library/PrivilegedHelperTools/io.github.macgamefix.fans" "$FH" && plutil -lint "$FR/Library/LaunchDaemons/io.github.macgamefix.fans.plist" >/dev/null && [ "$("$BIN" --fans-state)" = installed ]' "installing puts the helper and its LaunchDaemon in place"
-check 'has "$(cat "$SUPPORT/notproton/plugins/mgf-fans.conf")" "[MGF_FANS]" && has "$(cat "$SUPPORT/notproton/plugins/mgf-fans.conf")" "on = max"' "and the row for NotProton's panel"
+check 'has "$(cat "$SUPPORT/notproton/plugins/mgf-fans.conf")" "[NOTPROTON_MGF_FANS]" && has "$(cat "$SUPPORT/notproton/plugins/mgf-fans.conf")" "on = 1" && ! has "$(cat "$SUPPORT/notproton/plugins/mgf-fans.conf")" "[MGF_FANS]"' "and the row for NotProton's panel, with an id NotProton takes (NOTPROTON_)"
 printf '#!/bin/sh\necho 0\n' > "$FR/Library/PrivilegedHelperTools/io.github.macgamefix.fans"
 check '[ "$("$BIN" --fans-state)" = outdated ]' "a helper of an older version reads as outdated"
 printf '#!/bin/sh\necho this needs root >&2; exit 1\n' > "$FR/Library/PrivilegedHelperTools/io.github.macgamefix.fans"
@@ -1025,6 +1025,13 @@ printf '2026-11-14 10:05:00 [notproton] info [launch] handed to /bin/sh -c: XMGF
 check '[ "$("$FH" --asked "$NL" "$FG/a.exe")" = yes ] && [ "$("$FH" --asked "$NL" "$FG/b.exe")" = no ] && [ "$("$FH" --asked "$NL" "$FG/c.exe")" = no ]' "a NotProton game asks with MGF_FANS=max in its launch options, as a word of its own"
 printf '2026-11-14 10:09:00 [notproton] info [launch] handed to /bin/sh -c: D3DM_MAX_FPS=60 %s/run waitforexitandrun %s\n' "'/tool'" "'$FG/a.exe'" >> "$NL"
 check '[ "$("$FH" --asked "$NL" "$FG/a.exe")" = no ]' "its last launch decides"
+printf '2026-11-23 10:00:00 [notproton] info [launch] handed to /bin/sh -c: NOTPROTON_MGF_FANS=1 %s/run waitforexitandrun %s\n' "'/tool'" "'$FG/d.exe'" >> "$NL"
+printf '2026-11-23 10:01:00 [notproton] info [launch] handed to /bin/sh -c: NOTPROTON_MGF_FANS=0 XNOTPROTON_MGF_FANS=1 %s/run waitforexitandrun %s\n' "'/tool'" "'$FG/e.exe'" >> "$NL"
+printf '2026-11-23 10:02:00 [notproton] info [launch] handed to /bin/sh -c: XMGF_FANS=max MGF_FANS=max %s/run waitforexitandrun %s\n' "'/tool'" "'$FG/f.exe'" >> "$NL"
+check '[ "$("$FH" --asked "$NL" "$FG/d.exe")" = yes ] && [ "$("$FH" --asked "$NL" "$FG/e.exe")" = no ] && [ "$("$FH" --asked "$NL" "$FG/f.exe")" = yes ]' "the panel row's NOTPROTON_MGF_FANS=1 asks too, as a word of its own, and a word anywhere on the line counts"
+check '[ "$("$FH" --version)" -ge 2 ]' "a helper that reads the panel row says version 2, so an installed older one is offered the update"
+printf '[MGF_FANS]\nlabel = Fans at full speed\non = max\n' > "$SUPPORT/notproton/plugins/mgf-fans.conf"
+check '[ "$("$BIN" --fans-row-keep)" = "fans row: written" ] && has "$(cat "$SUPPORT/notproton/plugins/mgf-fans.conf")" "[NOTPROTON_MGF_FANS]" && [ "$("$BIN" --fans-row-keep)" = "fans row: nothing to do" ]' "the row an earlier MacGameFix wrote is rewritten once while the helper is in place"
 "$BIN" --fans-remove >/dev/null 2>&1
 check '[ ! -e "$FR/Library/PrivilegedHelperTools/io.github.macgamefix.fans" ] && [ ! -e "$FR/Library/LaunchDaemons/io.github.macgamefix.fans.plist" ] && [ ! -e "$SUPPORT/notproton/plugins/mgf-fans.conf" ] && [ "$("$BIN" --fans-state)" = absent ]' "removing takes the helper, its LaunchDaemon and the row away"
 unset MACGAMEFIX_FANS_PREFIX

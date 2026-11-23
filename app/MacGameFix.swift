@@ -558,8 +558,9 @@ final class Model: ObservableObject {
         let extra = extraFolders
         let games = self.games
         Task {
-            // NotProton's rows for every game, for this Mac; quick, and only written when they differ.
-            _ = await Task.detached { NotProtonRow.keepAll() }.value
+            // NotProton's rows for every game, for this Mac, and the fans row; quick, and only
+            // written when they differ.
+            await Task.detached { _ = NotProtonRow.keepAll(); Fans.keepNotProtonRow() }.value
             let (libs, found) = await Task.detached { Libraries.find(games, extra: extra) }.value
             libraries = libs
             hits = found
@@ -1755,7 +1756,8 @@ struct EngineView: View {
                     .disabled(model.busy)
                     .help("Installs a small helper that turns both fans to their maximum when a game that asks for it "
                           + "starts, and hands them back to macOS when it closes. A game asks with MGF_FANS=max in its "
-                          + "Steam launch options. macOS asks for your password, because only an administrator can set "
+                          + "Steam launch options, or with \"Fans at full speed\" switched on in its NotProton options. "
+                          + "macOS asks for your password, because only an administrator can set "
                           + "the fans. It can only raise them.")
                 if model.fansState == .outdated {
                     LabeledContent("This MacGameFix carries a newer helper") {
@@ -3199,6 +3201,11 @@ enum Entry {
         }
         if let i = args.firstIndex(of: "--prefix-last"), i + 1 < args.count {
             print(PrefixRunner.lastProgram(args[i + 1])?.path ?? "none")
+            exit(0)
+        }
+        if args.contains("--fans-row-keep") {
+            // The fan row in NotProton's panel (Fans.swift), as the agent keeps it.
+            print(Fans.keepNotProtonRow() ?? "fans row: nothing to do")
             exit(0)
         }
         if let i = args.firstIndex(where: { $0.hasPrefix("--fans-") }) {

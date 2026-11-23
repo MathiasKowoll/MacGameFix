@@ -98,24 +98,40 @@ enum Fans {
     }
 
     /// The row "Fans at full speed" in NotProton's panel, for the games started through it.
-    /// Only where NotProton is; taken away with the helper.
-    static func stageNotProtonRow(_ on: Bool) {
+    /// Only where NotProton is; taken away with the helper. A panel row's id has to start with
+    /// NOTPROTON_ (NotProton refuses the old MGF_FANS one), so switched on it writes
+    /// NOTPROTON_MGF_FANS=1 into the game's launch options, which the helper reads from
+    /// NotProton's log as it reads MGF_FANS=max (helper version 2). Whether it wrote the row.
+    @discardableResult
+    static func stageNotProtonRow(_ on: Bool) -> Bool {
         let fm = FileManager.default
-        guard fm.fileExists(atPath: Engine.notproton.path) else { return }
-        guard on else { try? fm.removeItem(at: notProtonRow); return }
-        let row = """
-        [MGF_FANS]
-        label = Fans at full speed
-        description = Runs the Mac's fans at their maximum while this game runs, before the Mac gets hot enough for macOS to cut the processor's speed (MacGameFix)
-        section = dev
-        on = max
-        requires = /Library/PrivilegedHelperTools/\(label)
-
-        """
+        guard fm.fileExists(atPath: Engine.notproton.path) else { return false }
+        guard on else { try? fm.removeItem(at: notProtonRow); return false }
+        var lines = [
+            "[NOTPROTON_MGF_FANS]",
+            "label = Fans at full speed",
+        ]
+        // An older NotProton refuses a row with a field it does not know.
+        if NotProtonRow.knowsGroups() { lines.append("group = MacGameFix · Performance") }
+        lines += [
+            "description = Runs the Mac's fans at their maximum while this game runs, before the Mac gets hot enough for macOS to cut the processor's speed (MacGameFix)",
+            "section = dev",
+            "on = 1",
+            "requires = /Library/PrivilegedHelperTools/\(label)",
+        ]
+        let row = lines.joined(separator: "\n") + "\n"
         try? fm.createDirectory(at: notProtonRow.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if (try? String(contentsOf: notProtonRow, encoding: .utf8)) != row {
-            try? row.write(to: notProtonRow, atomically: true, encoding: .utf8)
-        }
+        guard (try? String(contentsOf: notProtonRow, encoding: .utf8)) != row else { return false }
+        return (try? row.write(to: notProtonRow, atomically: true, encoding: .utf8)) != nil
+    }
+
+    /// The row kept as this MacGameFix writes it while the helper is in place: an earlier
+    /// MacGameFix wrote one NotProton refuses, and a NotProton updated since may know groups.
+    /// What it did, or nil.
+    @discardableResult
+    static func keepNotProtonRow() -> String? {
+        guard state() != .absent, stageNotProtonRow(true) else { return nil }
+        return "fans row: written"
     }
 
     /// What the helper last said: "a game asks: full speed on", "no game asks: automatic".
