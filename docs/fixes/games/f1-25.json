@@ -5,7 +5,7 @@
   "executable": "F1_25.exe",
   "carrierDirectory": "",
   "alsoRuns": [],
-  "summary": "F1 25 only starts on a Mac through Swofty Launcher, and on NotProton it crashed half a minute in and Swofty could not find Steam. This downloads Swofty from its own site, prepares the game's prefix and makes Steam's Play start the game through it. Offline, without EA AntiCheat or multiplayer. NotProton with CrossOver Preview 41303 (Rosetta) only.",
+  "summary": "F1 25 only starts on a Mac through Swofty Launcher, and on NotProton it crashed half a minute in and Swofty could not find Steam. This downloads Swofty from its own site, prepares the game's prefix and makes Steam's Play start the game through it. Offline, without EA AntiCheat or multiplayer. NotProton with CrossOver Preview 41303 (Rosetta) only. AT YOUR OWN RISK: MacGameFix does not answer for failures in the game, its saves or its mods.",
   "page": null,
   "testing": "Mathias Kowoll",
   "installs": [

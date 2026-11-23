@@ -9,6 +9,12 @@
 # The prefix is MGVF_BOTTLE: the Steam Play prefix NotProton keeps for the game,
 #   .../steamapps/compatdata/3059520/pfx
 #
+# AT YOUR OWN RISK. MacGameFix takes no responsibility for failures in the game: this starts
+# it without EA AntiCheat, through a third-party mod launcher that changes the game's files
+# while it runs. MacGameFix made neither Swofty Launcher nor its offline play nor any mod, and
+# does not answer for a game that stops working or a save that is lost. The install says so
+# before it ends, and f125-instructions.md opens with it.
+#
 # NOTHING IN THE GAME FOLDER IS TOUCHED by this script. Swofty itself changes the game
 # folder while a session runs and puts it back when the game exits.
 #
@@ -68,7 +74,7 @@
 # MGVF-GAME: F1 25 | F1_25.exe |
 # MGVF-TESTING: Mathias Kowoll
 # MGVF-INSTRUCTIONS: f125-instructions.md
-# MGVF-WHY: F1 25 only starts on a Mac through Swofty Launcher, and on NotProton it crashed half a minute in and Swofty could not find Steam. This downloads Swofty from its own site, prepares the game's prefix and makes Steam's Play start the game through it. Offline, without EA AntiCheat or multiplayer. NotProton with CrossOver Preview 41303 (Rosetta) only.
+# MGVF-WHY: F1 25 only starts on a Mac through Swofty Launcher, and on NotProton it crashed half a minute in and Swofty could not find Steam. This downloads Swofty from its own site, prepares the game's prefix and makes Steam's Play start the game through it. Offline, without EA AntiCheat or multiplayer. NotProton with CrossOver Preview 41303 (Rosetta) only. AT YOUR OWN RISK: MacGameFix does not answer for failures in the game, its saves or its mods.
 # MGVF-CREDIT: Swofty Launcher, the mod launcher and offline play this starts | https://f1.swofty.net
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
@@ -383,6 +389,16 @@ np_plugins_install || exit 1
 options install >/dev/null || exit 1
 
 echo "installed"
+echo
+echo "  ****************************************************************************"
+echo "  *  WARNING: AT YOUR OWN RISK                                               *"
+echo "  *  MacGameFix takes no responsibility for failures in the game.            *"
+echo "  *  F1 25 now starts without EA AntiCheat, through Swofty Launcher, a       *"
+echo "  *  third-party mod launcher that changes the game's files while it runs.   *"
+echo "  *  A game that stops working, or a save or career that is lost, is not     *"
+echo "  *  MacGameFix's to answer for. Removing the fix gives Steam's Play back.   *"
+echo "  ****************************************************************************"
+echo
 echo "  Steam's Play now starts F1 25 through Swofty Launcher, with Swofty's active profile."
 echo "  On the game's Compatibility page in NotProton, \"Play opens\" chooses Swofty Launcher's window instead."
 echo "  The first Play shows Swofty's offline play terms in a console window and waits for your answer."

@@ -3,4 +3,4 @@
 # catalog.json as "notes"; the app shows them with the update and the agent in its
 # notification. Rewrite them with every change to the fixes: what stays here is said
 # again with the next catalog. Lines that start with # are not carried.
-F1 25, being tested: Steam's Play starts it through Swofty Launcher on NotProton (CrossOver Preview 41303, Rosetta), offline and without EA AntiCheat. Turn Testing on in Settings to see it; it needs the Rosetta improvement, and Steam closed while it installs.
+F1 25, being tested: Steam's Play starts it through Swofty Launcher on NotProton (CrossOver Preview 41303, Rosetta), offline and without EA AntiCheat. Turn Testing on in Settings to see it; it needs the Rosetta improvement, and Steam closed while it installs. At your own risk: MacGameFix does not answer for failures in the game.

@@ -1,3 +1,11 @@
+# WARNING: AT YOUR OWN RISK
+
+**MacGameFix takes no responsibility for failures in the game.**
+
+This starts F1 25 without EA AntiCheat, through Swofty Launcher, a third-party mod launcher that changes the game's files while it runs. MacGameFix did not make Swofty Launcher, its offline play or any mod, and does not maintain them. If the game stops starting, crashes, behaves wrongly, or a save or a career is lost or damaged, that is not something MacGameFix can answer for or promises to fix. What EA's and Steam's terms say about running the game this way is yours to read.
+
+It is a fix being tested, played on one Mac. If that is not acceptable to you, do not install it. Removing it gives Steam's Play back as it was.
+
 # Before you install
 
 - Start F1 25 once from Steam, so NotProton makes the game's prefix. The game's own launcher does not open on a Mac; close it and go on.
