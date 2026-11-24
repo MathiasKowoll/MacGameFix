@@ -53,11 +53,13 @@
 #     three; which of the last two Swofty cannot do without is not known.
 #   - In Steam's launch options for the game: the play script before %command%
 #     (steam-launch-options.pl; Steam must be closed).
-#   - In NotProton's plugins folder: two rows for this game alone (notproton-plugins.sh,
+#   - In NotProton's plugins folder: three rows for this game alone (notproton-plugins.sh,
 #     np-plugin-f125-swofty.conf), shown on its Compatibility page: "Start through Swofty
-#     Launcher", switched on by the first install, and "Play opens", the game or Swofty
-#     Launcher's window. A NotProton row cannot change the program Steam starts, so the rows
-#     load nothing: they are the switches the play script reads.
+#     Launcher", switched on by the first install; "Play opens", the game or Swofty
+#     Launcher's window; and "Profile", Swofty's active profile or vanilla. A NotProton row
+#     cannot change the program Steam starts, so the rows load nothing: they are the switches
+#     the play script reads. Whatever a player may set is a row: nothing is typed into the
+#     launch options by hand.
 # .mgf-f125-swofty in the prefix lists which of these this script added, and --restore
 # removes those. The launcher, its data in the prefix and its saves stay.
 #

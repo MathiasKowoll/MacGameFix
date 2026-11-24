@@ -32,12 +32,13 @@ Swofty changes the game folder while the game runs and puts it back when the gam
 
 # The rows in NotProton
 
-The fix adds two rows to the game's Compatibility page in NotProton, for this game only, in a group of their own, **MacGameFix · F1 25**:
+The fix adds three rows to the game's Compatibility page in NotProton, for this game only, in a group of their own, **MacGameFix · F1 25**:
 
 | Row | What it does |
 |---|---|
 | **Start through Swofty Launcher** | On: Play starts the game through Swofty. Off: Play starts the game's own launcher, which does not open on a Mac. The first install switches it on. |
-| **Play opens** | **The game**, with Swofty's active profile, or **Swofty Launcher's window**. |
+| **Play opens** | **The game**, or **Swofty Launcher's window**. |
+| **Profile** | Which of Swofty's profiles Play starts the game with: **Swofty's active profile** or **Vanilla, without mods**. |
 
 Choose **Swofty Launcher's window** to turn addons on or off, install mods, edit the game database or change the profile. Its own Play starts the game from there. Set the row back to **The game** to go straight into the game again.
 
@@ -52,13 +53,7 @@ Play uses Swofty's active profile. Swofty has two to begin with:
 | `default` | The one your addons and mods go into. |
 | `vanilla` | The game with no addons and no mod loader. |
 
-To play one start without mods, put `F1_PROFILE=vanilla` in front of the launch options, before the script MacGameFix wrote:
-
-```
-F1_PROFILE=vanilla "…/f125-swofty-play.sh" %command%
-```
-
-Take it out again to go back to the active profile. It is the quick way to tell whether a problem comes from a mod or from the game.
+To play without mods, set the row **Profile** to **Vanilla, without mods** on the game's Compatibility page in NotProton, and back to **Swofty's active profile** afterwards. It is the quick way to tell whether a problem comes from a mod or from the game. Which profile is the active one is chosen in Swofty Launcher's window.
 
 # Graphics
 
@@ -77,4 +72,4 @@ Swofty's output for the last start is in `~/Library/Application Support/MacGameF
 
 # Removing it
 
-Remove gives the launch options and the prefix back as they were and takes the two rows out of NotProton. Swofty Launcher stays in `~/Library/Application Support/MacGameFix/swofty`, and its data and saves stay in the prefix.
+Remove gives the launch options and the prefix back as they were and takes the three rows out of NotProton. Swofty Launcher stays in `~/Library/Application Support/MacGameFix/swofty`, and its data and saves stay in the prefix.

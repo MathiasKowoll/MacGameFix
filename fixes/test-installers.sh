@@ -320,8 +320,9 @@ f1 > "$W/f125.install.log" 2>&1 || say FAIL "f1 25: install failed: $(tail -2 "$
   && [ "$(cat "$fbridge/depotcache/3059521_44.manifest")" = list ] && [ ! -e "$fbridge/depotcache/3059522_55.manifest" ] && [ "$(cat "$fbridge/logs/content_log.txt")" = log ] \
   && /usr/bin/grep -qF "\"NOTPROTON_MGF_F125_SWOFTY_3059520=1 MGF_FANS=max \\\"$fstore/f125-swofty-play.sh\\\" %command%\"" "$fvdf" \
   && /usr/bin/grep -qx '\[NOTPROTON_MGF_F125_SWOFTY_3059520\]' "$fplug/mgf-3059520.conf" && /usr/bin/grep -qx '\[NOTPROTON_MGF_F125_OPENS_3059520\]' "$fplug/mgf-3059520.conf" \
-  && [ "$(/usr/bin/grep -c '^apps = 3059520$' "$fplug/mgf-3059520.conf")" = 2 ] \
-  && say ok "f1 25 in NotProton: the launcher, the play script, the two values, the links, two rows for this game and the switch and the script in the launch options" || say FAIL "f1 25: installed ($(f1st)): $(tail -3 "$W/f125.install.log")"
+  && /usr/bin/grep -qx '\[NOTPROTON_MGF_F125_PROFILE_3059520\]' "$fplug/mgf-3059520.conf" && [ "$(/usr/bin/grep -c '^apps = 3059520$' "$fplug/mgf-3059520.conf")" = 3 ] \
+  && [ "$(/usr/bin/grep -c '^description = .*Played on NotProton, CrossOver Preview 41303 on Rosetta (D3DMetal 4.0b3), 2026-11-23$' "$fplug/mgf-3059520.conf")" = 3 ] \
+  && say ok "f1 25 in NotProton: the launcher, the play script, the two values, the links, three rows for this game that each say where they were played, and the switch and the script in the launch options" || say FAIL "f1 25: installed ($(f1st)): $(tail -3 "$W/f125.install.log")"
 echo stock > "$fc/runner/lib/wine/x86_64-unix/ntdll.so"
 fout="$(f1 --status 2>&1)"   # read whole: a reader that leaves early would end the status with a broken pipe
 [ "$(f1st)" = half ] && case "$fout" in *'update the Rosetta improvement'*) true ;; *) false ;; esac \
@@ -352,7 +353,7 @@ f1 > "$W/f125.rows.log" 2>&1 && [ "$(f1st)" = installed ] \
 f1 --restore > /dev/null 2>&1; [ "$(cat "$fvdf")" = "$fvdf0" ] && [ "$(f1st)" = absent ] || say FAIL "f1 25: restore after the rows ($(f1st))"
 # Where NotProton knows groups, the rows carry one of the game's own; where it does not, none, as it would refuse the row.
 MGVF_NOTPROTON_GROUPS=1 f1 > /dev/null 2>&1
-[ "$(/usr/bin/grep -c '^group = MacGameFix · F1 25$' "$fplug/mgf-3059520.conf")" = 2 ] && [ "$(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1)" = installed ] \
+[ "$(/usr/bin/grep -c '^group = MacGameFix · F1 25$' "$fplug/mgf-3059520.conf")" = 3 ] && [ "$(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1)" = installed ] \
   && say ok "f1 25 in NotProton: with a NotProton that knows groups, both rows are in the game's own group" || say FAIL "f1 25: grouped rows ($(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1))"
 f1 > /dev/null 2>&1; ! /usr/bin/grep -q '^group' "$fplug/mgf-3059520.conf" && [ "$(f1st)" = installed ] \
   && say ok "f1 25 in NotProton: with one that does not, the rows carry no group" || say FAIL "f1 25: ungrouped rows ($(f1st))"
@@ -387,6 +388,18 @@ printf '{"assets":[{"name":"swofty-launcher-v9.9.9-windows-x86_64.zip","url":"ht
 printf '27.0.0.41303-fex\nCrossOver 2026 11 11-ARM64 - FEX\n' > "$fc/compatdata/3059520/notproton-build"
 [ "$(f1st)" = norecipe ] && say ok "f1 25 in NotProton: the FEX side has no recipe" || say FAIL "f1 25: FEX ($(f1st))"
 printf '27.0.0.41303-fex\nCrossOver 2026 11 11-ARM64 - Rosetta\n' > "$fc/compatdata/3059520/notproton-build"
+# The play script, with a tool that only says what it was given: the rows are variables in its
+# environment, and the profile row's choice reaches Swofty as its --profile.
+printf '#!/bin/sh\nprintf "%%s|" "$@"; printf "\\nprofile=%%s opens=%%s\\n" "${NOTPROTON_ENV_F125_PROFILE:-}" "${NOTPROTON_ENV_F125_OPENS:-}"\n' > "$fc/tool"; chmod +x "$fc/tool"
+mkdir -p "$fc/play/launcher/bin" "$fc/playpfx/pfx/dosdevices"; cp "$FIX/f125-swofty-play.sh" "$FIX/f125-swofty-run.cmd" "$fc/play/"; touch "$fc/play/launcher/bin/swofty.exe"
+fplay() { env -i HOME="$fhome" PATH=/usr/bin:/bin STEAM_COMPAT_APP_ID=3059520 STEAM_COMPAT_DATA_PATH="$fc/playpfx" "$@" "$fc/play/f125-swofty-play.sh" "$fc/tool" waitforexitandrun /lib/steamapps/common/F1/F1_25.exe; }
+fout="$(fplay)"; case "$fout" in "waitforexitandrun|/lib/steamapps/common/F1/F1_25.exe|"*) true ;; *) false ;; esac \
+  && say ok "f1 25's play script: with the row off, Steam's own command goes through" || say FAIL "f1 25 play: row off: $fout"
+fout="$(fplay NOTPROTON_MGF_F125_SWOFTY_3059520=1)"; case "$fout" in "waitforexitandrun|cmd.exe|/d|/c|call|"*"profile= opens=") true ;; *) false ;; esac \
+  && fout="$(fplay NOTPROTON_MGF_F125_SWOFTY_3059520=1 NOTPROTON_MGF_F125_PROFILE_3059520=active)" && case "$fout" in *"profile= opens=") true ;; *) false ;; esac \
+  && fout="$(fplay NOTPROTON_MGF_F125_SWOFTY_3059520=1 NOTPROTON_MGF_F125_PROFILE_3059520=vanilla NOTPROTON_MGF_F125_OPENS_3059520=window)" && case "$fout" in *"profile=vanilla opens=window") true ;; *) false ;; esac \
+  && fout="$(fplay NOTPROTON_MGF_F125_SWOFTY_3059520=1 'NOTPROTON_MGF_F125_PROFILE_3059520=a b&c')" && case "$fout" in *"profile= opens=") true ;; *) false ;; esac \
+  && say ok "f1 25's play script: the batch file takes the command's place; the Profile row's vanilla reaches Swofty, active and a name that is no profile's do not" || say FAIL "f1 25 play: rows: $fout"
 touch "$fpfx/cxbottle.conf"; [ "$(f1st)" = norecipe ] && say ok "f1 25: a CrossOver bottle has no recipe" || say FAIL "f1 25: bottle ($(f1st))"; rm -f "$fpfx/cxbottle.conf"
 
 # Need for Speed Unbound's fix changes the game's renderer DLL by recipe, keyed

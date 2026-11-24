@@ -16,10 +16,10 @@
 #                                             Steam's own command runs unchanged.
 #   NOTPROTON_MGF_F125_OPENS_<appid>=window   "Play opens": Swofty Launcher's window instead
 #                                             of the game. Anything else, or nothing: the game.
+#   NOTPROTON_MGF_F125_PROFILE_<appid>=vanilla  "Profile": Swofty's profile without addons for
+#                                             this start. "active", or nothing: the active one.
 #
-# F1_PROFILE=<name> before it in the launch options plays another Swofty profile for that run
-# (vanilla is the one without addons). Anything else Steam runs through the tool, such as its
-# install scripts, goes through unchanged.
+# Anything else Steam runs through the tool, such as its install scripts, goes through unchanged.
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -31,7 +31,7 @@ fi
 case "$game" in */EAAntiCheat.GameServiceLauncher.exe|*/F1_25.exe) ;; *) exec "$@" ;; esac
 app="${STEAM_COMPAT_APP_ID:-}"
 case "$app" in ""|*[!0-9]*) exec "$@" ;; esac
-eval "switch=\${NOTPROTON_MGF_F125_SWOFTY_$app:-}; opens=\${NOTPROTON_MGF_F125_OPENS_$app:-game}"
+eval "switch=\${NOTPROTON_MGF_F125_SWOFTY_$app:-}; opens=\${NOTPROTON_MGF_F125_OPENS_$app:-game}; profile=\${NOTPROTON_MGF_F125_PROFILE_$app:-active}"
 [ "$switch" = 1 ] || exec "$@"
 # A path as the prefix sees it: the Steam library on the drive NotProton gives it there (S: so
 # far, read from the prefix's dosdevices), anything else under Z:.
@@ -55,7 +55,8 @@ if [ "$opens" = window ]; then
   # The launcher's window draws to a plain window: Wine's DirectComposition gives it nothing.
   export NOTPROTON_ENV_F125_OPENS=window NOTPROTON_ENV_GPUI_DISABLE_DIRECT_COMPOSITION=1
 fi
-[ -z "${F1_PROFILE:-}" ] || export NOTPROTON_ENV_F125_PROFILE="$F1_PROFILE"
+# A profile's name goes to Swofty as it is; "active" is the row's word for none given.
+case "$profile" in ""|active|*[!A-Za-z0-9._-]*) ;; *) export NOTPROTON_ENV_F125_PROFILE="$profile" ;; esac
 # The two settings every session played so far had (CrossOver bottle and NotProton, 2026-11-23).
 export NOTPROTON_ENV_SWOFTY_ARM_SYNC="${SWOFTY_ARM_SYNC:-1}" NOTPROTON_ENV_SWOFTY_RTAS_GUARD="${SWOFTY_RTAS_GUARD:-0}"
 # NotProton's Steam stub starts a program by name or Windows path, not a .cmd by its unix path.
