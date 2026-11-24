@@ -341,7 +341,7 @@
       "backend": "D3DMetal. Ray tracing closed the game when it was turned on; it is left off.",
       "crossover": "CrossOver Preview 27 (27.0.0.41303), NotProton runner on Rosetta, 2026-11-23",
       "pageUrl": null,
-      "graphicsBackend": null,
+      "graphicsBackend": "d3dmetal",
       "gptk": null,
       "notNeededFromGptk": null
     },
