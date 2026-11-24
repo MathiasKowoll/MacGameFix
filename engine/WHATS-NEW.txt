@@ -3,4 +3,6 @@
 # "notes"; the app shows them with the update and the agent in its notification.
 # Rewrite them with every change to the modules: what stays here is said again with
 # the next catalog. Lines that start with # are not carried.
-CrossOver Preview 41303: Red Dead Online can connect to its servers with WINE_TCP_NOOPT=1 in the game's launch options (the fix of NotProton's creator). It is off unless asked for.
+CrossOver Preview 41303: F1 25 no longer closes half a minute after it starts. Wine gave the game memory at addresses it cannot use; it gets low ones again.
+CrossOver Preview 41303: Swofty Launcher's window opens, and so can other programs built the same way: Wine can now look their fonts up and lets them set up touchpad gestures, which still do nothing.
+CrossOver Preview 41303: EA SPORTS FC 27 starts instead of stopping at "There is a problem with your game's setup. Please reinstall your game." Wine lacked a Windows function the game asks for; it has it now, and it answers that no Windows package is installed.
