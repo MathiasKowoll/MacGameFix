@@ -1108,6 +1108,57 @@ check '[ -s "$PREC" ]' "once the game has quit and its wineserver has gone, it r
 unset MACGAMEFIX_WINE_SERVER_ROOT
 rm -f "$PSTEAM/config/config.vdf"; rmdir "$PSTEAM/config" 2>/dev/null || true
 rm -rf "$PSTEAM/compatibilitytools.d" "$PRUN/crossover-26.3.0.39832" "$PRUN/crossover-27.0.0.41303-fex"
+echo "== NotProton's processors row, made for this Mac"
+NPP="$SUPPORT/notproton/plugins"; NPR="$NPP/mgf-ncpu.conf"; CT="$MACGAMEFIX_HOME/Library/Application Support/Steam/compatibilitytools.d"
+rm -f "$NPR"
+check '[ "$(MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep)" = "processors row: written for 16 processors" ]' "the row is written where NotProton is"
+R=$(cat "$NPR")
+check 'has "$R" "[NOTPROTON_ENV_WINENCPU]" && has "$R" "type = choice" && has "$R" "default = 0" && has "$R" "choice = 0 = All (16)"' "every game sees All by default, and picking All clears a game's option"
+check 'has "$R" "choice = 12 = 12 (performance cores)" && has "$R" "choice = 14" && ! /usr/bin/grep -Eq "^choice = (1[6-9]|[2-9][0-9])" "$NPR"' "it offers only counts below this Mac's, and names the performance cores"
+check '! has "$R" "group = "' "without a NotProton that knows groups, no group line (an older one refuses the row)"
+check '[ "$(MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep)" = "processors row: nothing to do" ]' "a row already right is left as it is"
+mkdir -p "$CT/notproton-a" "$CT/notproton-b"
+printf '      split("label description section on off type choice default apps patch variants group improves needed_for", f, " ")\n' > "$CT/notproton-a/run"
+printf '      split("label description section on off type choice default apps patch variants", f, " ")\n' > "$CT/notproton-b/run"
+MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep >/dev/null
+check '! has "$(cat "$NPR")" "group = "' "one NotProton in Steam that does not know groups keeps the group out"
+rm -rf "$CT/notproton-b"
+MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep >/dev/null
+check 'has "$(cat "$NPR")" "group = MacGameFix · Performance"' "with every NotProton knowing groups, the row goes in MacGameFix · Performance"
+mkdir -p "$CT/notproton-gone"; : > "$CT/notproton-gone/run.backup"
+MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep >/dev/null
+check 'has "$(cat "$NPR")" "group = MacGameFix · Performance"' "a notproton folder with no run script (a tool NotProton emptied) has no say"
+rm -rf "$CT/notproton-gone"
+MACGAMEFIX_CPUS=10,4 "$BIN" --cpu-row-keep >/dev/null
+check 'has "$(cat "$NPR")" "choice = 0 = All (10)" && has "$(cat "$NPR")" "choice = 4 = 4 (performance cores)" && has "$(cat "$NPR")" "choice = 8" && ! /usr/bin/grep -Eq "^choice = (1[0-9])" "$NPR"' "a Mac with 10 is offered All, 4, 6 and 8"
+MACGAMEFIX_CPUS=32,24 "$BIN" --cpu-row-keep >/dev/null
+check '[ "$(/usr/bin/grep -c "^choice = " "$NPR")" -le 16 ] && has "$(cat "$NPR")" "choice = 24 = 24 (performance cores)" && ! has "$(cat "$NPR")" "choice = 32"' "a Mac with 32 stays within NotProton's 16 values"
+cp "$NPR" "$T/ncpu-before"
+printf '[NOTPROTON_ENV_WINENCPU]\nlabel = Theirs\ntype = choice\nchoice = 4\n' > "$NPP/someone-else.conf"
+check 'has "$(MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep)" "another plugin file has NOTPROTON_ENV_WINENCPU" && cmp -s "$NPR" "$T/ncpu-before"' "an id another file declares is left alone (NotProton would show neither)"
+rm -f "$NPP/someone-else.conf" "$NPR"
+for i in $(seq 1 32); do printf '[NOTPROTON_FULL_%s]\nlabel = Row %s\n' "$i" "$i"; done > "$NPP/full.conf"
+check 'has "$(MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep)" "32 rows are taken" && [ ! -e "$NPR" ]' "with NotProton's 32 rows taken, it adds none"
+rm -f "$NPP/full.conf"
+echo "== NotProton's frame rate cap and ray tracing rows"
+NPF="$NPP/mgf-fps.conf"; NPD="$NPP/mgf-dxr.conf"
+rm -f "$NPF" "$NPD"
+OUT=$(MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep)
+check 'has "$OUT" "frame rate cap row: written for a 120 Hz display" && has "$OUT" "ray tracing row: written"' "the agent's rows for every game are written beside the processors row"
+F=$(cat "$NPF")
+check 'has "$F" "[NOTPROTON_ENV_D3DM_MAX_FPS]" && has "$F" "default = 0" && has "$F" "choice = 0 = No limit (120 Hz)" && has "$F" "group = MacGameFix · Performance"' "every game is unlimited by default, and picking No limit clears a game's cap"
+check 'has "$F" "choice = 70 = 60 fps" && has "$F" "choice = 100 = 80 fps" && has "$F" "choice = 54 = 48 fps" && has "$F" "choice = 44 = 40 fps" && has "$F" "choice = 32 = 30 fps"' "each rate writes the cap halfway to the next faster step: 60 fps writes 70, as measured"
+check '! has "$F" "120 fps" && ! has "$F" "34 fps" && ! has "$F" "27 fps"' "no rate the display's fastest, and no step that is not a whole rate"
+check 'has "$F" "tools = notproton-fex*" && has "$F" "tools = notproton-preview*" && ! has "$F" "notproton-2"' "only for the Preview tools, which run D3DMetal 4 (D3DMetal 3 has no cap)"
+MACGAMEFIX_DISPLAY=60,0 "$BIN" --rows-keep >/dev/null
+check 'has "$(cat "$NPF")" "choice = 0 = No limit (60 Hz)" && has "$(cat "$NPF")" "choice = 45 = 30 fps" && [ "$(/usr/bin/grep -c "^choice = " "$NPF")" = 2 ]' "a 60 Hz display with fixed steps is offered No limit and 30"
+check 'has "$(MACGAMEFIX_DISPLAY=0,0 "$BIN" --rows-keep)" "frame rate cap row: this Mac'"'"'s display could not be read"' "with no display read, the cap row is not touched"
+D=$(cat "$NPD")
+check 'has "$D" "[NOTPROTON_MGF_DXR_OFF]" && has "$D" "on = 1" && has "$D" "env = D3DM_SUPPORT_DXR=0" && has "$D" "group = MacGameFix · D3DMetal"' "the ray tracing row, switched on, gives the game D3DM_SUPPORT_DXR=0"
+MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep >/dev/null
+check '[ "$(MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep)" = "rows: nothing to do" ]' "rows already right are left as they are"
+rm -f "$NPF" "$NPD" "$NPR"
+rm -rf "$CT"
 
 echo "== Game Mode for CrossOver's games"
 GM="$MACGAMEFIX_HOME/Applications/CrossOver GM.app"

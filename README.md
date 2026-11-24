@@ -288,11 +288,33 @@ panel lists such rows, and the variable works without it.
 
 The fans raise what the Mac can shed; they do not lower what a game draws. A
 game that drew about 96 W uncapped was cut all the same after 2 min 40 s. With
-it, cap the frame rate (`D3DM_MAX_FPS=60`), turn the game's upscaler to a
-performance mode, and show the game 8 processors (`NOTPROTON_ENV_WINENCPU=8`,
-which needs no helper). In one line:
-`MGF_FANS=max NOTPROTON_ENV_WINENCPU=8 D3DM_MAX_FPS=60 %command%`.
+it, cap the frame rate (NotProton's **Frame rate cap** row, below), turn the
+game's upscaler to a performance mode, and show the game 8 processors
+(**Processors the game sees**, which needs no helper).
 **Improvements › Fans** shows the two variables to copy.
+
+Every game sees all of the Mac's processors unless it is given a count.
+MacGameFix keeps a row, **Processors the game sees**, in NotProton's plugins
+folder (`mgf-ncpu.conf`), written for the Mac it runs on: All by default, and
+only counts below the Mac's own (with its performance cores named), so a game
+is never shown processors that are not there. Picking a count for one game in
+its NotProton options sets `NOTPROTON_ENV_WINENCPU` for that game alone.
+
+Two more rows MacGameFix keeps for every game, each off until it is picked for
+one:
+
+- **Frame rate cap** (`mgf-fps.conf`, the Preview tools only: `D3DM_MAX_FPS`
+  exists in D3DMetal 4 alone). D3DMetal 4 presents each frame no sooner than
+  1/cap after the one before, and a Mac's display shows frames only at its own
+  steps (240/n on a 120 Hz MacBook Pro: 120, 80, 60, 48, 40...). A cap of
+  exactly 60 then ends at 48 fps: any cap from 48 to 60 held 48, and 70 held
+  60.00 (measured on 2026-09-26 with the Metal HUD). So the row is made from
+  the Mac's display, offers the rates it can hold, and each writes the cap
+  halfway to the next faster step: **60 fps** writes 70. Only 60 was measured;
+  the other rates follow the same rule.
+- **Ray tracing off** (`mgf-dxr.conf`): `D3DM_SUPPORT_DXR=0`, so D3DMetal says
+  it has no ray tracing. For a game that closes as a level loads where D3DMetal
+  offers ray tracing it cannot do, as Phantom Blade Zero does with DLSS on.
 
 ## Each game's compiled shaders, kept whole
 

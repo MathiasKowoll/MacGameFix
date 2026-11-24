@@ -221,7 +221,7 @@ rm -rf "$APP"
 mkdir -p "$MACOS" "$RES" "$CACHE"
 
 echo "==> compiling"
-swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/ShaderCache.swift" "$HERE/Fans.swift" "$HERE/PrefixRunner.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Probe.swift" "$HERE/Automation.swift" "$HERE/AppUpdate.swift" "$HERE/MenuBar.swift" "$HERE/Instructions.swift" "$HERE/NativePort.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
+swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/ShaderCache.swift" "$HERE/Fans.swift" "$HERE/PrefixRunner.swift" "$HERE/ProcessorsRow.swift" "$HERE/GeneralRows.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Probe.swift" "$HERE/Automation.swift" "$HERE/AppUpdate.swift" "$HERE/MenuBar.swift" "$HERE/Instructions.swift" "$HERE/NativePort.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
   -o "$MACOS/MacGameFix" \
   -framework SwiftUI -framework AppKit -framework IOKit -framework UserNotifications -framework GameController \
   -framework AVFoundation -framework CoreAudio -framework AudioToolbox \
