@@ -54,7 +54,7 @@ enum EnginePart: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .controls: return "Haptics, adaptive triggers, Bluetooth as a cable, and XInput's vibration."
-        case .rosetta: return "CPU compatibility under Rosetta, plus corrected timers and guarded exception acceleration for FH6 on Preview 41073."
+        case .rosetta: return "CPU compatibility under Rosetta for copy-protected games, and the Wine fixes particular games need: FH6, F1 25, FC 27, Red Dead Online, 2XKO."
         }
     }
 
@@ -66,11 +66,17 @@ enum EnginePart: String, CaseIterable, Identifiable {
                 + "Games find the pad's haptic output, set its trigger effects and rumble it as on Windows; "
                 + "Game Feel sets the options per game."
         case .rosetta:
-            return "Paired ntdll.so and ntdll.dll on Preview 41073's Intel side; ntdll.so on older supported builds. It runs a cpuid Rosetta skips after self-modifying code, "
-                + "emulates CLWB, RDPID and hardware breakpoints, and reports faults as Windows does. "
-                + "On Preview 41073 it also keeps the threadpool's timer thread from waking in a loop, on both sides, and on the FEX side "
-                + "it stores async I/O status wherever a game puts it. "
-                + "FH6 exception acceleration remains opt-in and game-build guarded; its fix applies the options. Other builds retain their existing CPU fixes."
+            return "It replaces ntdll: the Intel side's ntdll.so on CrossOver 26.3, ntdll.so and ntdll.dll on Preview 41073 and 41303. "
+                + "On Preview 41303 it also replaces kernelbase, kernel32, user32, win32u, dwrite and directmanipulation, on both sides. "
+                + "Every game run from a CrossOver or runner it is on gets all of it. "
+                + "On for every game: under Rosetta, the CPUID bits copy protection looks for (WINE_ROSETTA_CPUID7_OR=0 turns them off), "
+                + "CLWB, RDPID and hardware breakpoints, faults reported as Windows does, and a cpuid Rosetta skips after self-modifying code. "
+                + "On Preview 41073 and 41303 also: the threadpool's timer thread no longer wakes in a loop, and on the FEX side async I/O "
+                + "status is stored wherever a game puts it. On Preview 41303 also: IPv4 options on dual-stack sockets, system calls a "
+                + "suspend interrupts, allocations kept below the area reserved near the top (WINE_LOW_ALLOCATIONS_FIRST=0 turns it off), "
+                + "and the functions the EA app, the Swofty launcher, 2XKO and the Riot Client call. "
+                + "Only when asked: D3DMetal ahead in the DLL path (CX_GRAPHICS_BACKEND=d3dmetal), TCP connections without options "
+                + "for Red Dead Online, and FH6's exception chain, which turns on only in FH6's checked build."
         }
     }
 
@@ -86,7 +92,7 @@ enum EnginePart: String, CaseIterable, Identifiable {
     var footer: String {
         switch self {
         case .controls: return "Game Feel sets its options per game. Quit a CrossOver's games before changing it."
-        case .rosetta: return "The CPU changes are for the Intel side only. The CPUID bits a game asks for come with that game's fix."
+        case .rosetta: return "Every game in a CrossOver or runner it is on gets all of it, not only the games that need it. The CPU changes are for the Intel side only."
         }
     }
 
