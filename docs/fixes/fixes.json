@@ -311,10 +311,10 @@
           "symbol": null,
           "note": "Live Editor is the player's to provide: from MacGameFix's window the install asks for its folder with macOS's folder chooser, every time, which is also how a new version goes in.",
           "language": "bash",
-          "startLine": 189,
-          "endLine": 195,
-          "commit": "062ab9036efcafd2cf371c8fb5a2c34b77d262c0",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/062ab9036efcafd2cf371c8fb5a2c34b77d262c0/fixes/install-fc27-live-editor.sh#L189-L195",
+          "startLine": 191,
+          "endLine": 197,
+          "commit": "ad0cc3521dd09c13b38c8b3d63b4ccd2c35657bb",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/ad0cc3521dd09c13b38c8b3d63b4ccd2c35657bb/fixes/install-fc27-live-editor.sh#L191-L197",
           "code": "ask_folder() {\n  local prompt=\"Choose your FC 27 Live Editor folder: the one that holds Launcher.exe and FCLiveEditor.DLL.\"\n  editor_ok && prompt=\"$prompt Cancel keeps the Live Editor already in use.\"\n  if [ -n \"${MGVF_CHOOSER:-}\" ]; then \"$MGVF_CHOOSER\" \"$prompt\" 2>/dev/null || true; return 0; fi\n  /usr/bin/osascript -e 'on run argv' -e 'try' -e 'return POSIX path of (choose folder with prompt (item 1 of argv))' \\\n    -e 'on error' -e 'return \"\"' -e 'end try' -e 'end run' \"$prompt\" 2>/dev/null || true\n}"
         },
         {
@@ -322,10 +322,10 @@
           "symbol": null,
           "note": "Live Editor's launcher injects 100 ms after the game appears, and at that the game hung at \"Injecting\" in 2 starts of 10. Its own setting is raised to 1000 ms; a longer one the player set is kept.",
           "language": "bash",
-          "startLine": 53,
-          "endLine": 56,
-          "commit": "062ab9036efcafd2cf371c8fb5a2c34b77d262c0",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/062ab9036efcafd2cf371c8fb5a2c34b77d262c0/fixes/fc27-le-play.sh#L53-L56",
+          "startLine": 54,
+          "endLine": 57,
+          "commit": "ad0cc3521dd09c13b38c8b3d63b4ccd2c35657bb",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/ad0cc3521dd09c13b38c8b3d63b4ccd2c35657bb/fixes/fc27-le-play.sh#L54-L57",
           "code": "config=\"${STEAM_COMPAT_DATA_PATH:-}/pfx/drive_c/FC 27 Live Editor/le_config.json\"\nif [ -f \"$config\" ] && [ \"$opens\" != window ]; then\n  /usr/bin/perl -0pi -e 's/(\"dll_inject_delay\"\\s*:\\s*)(\\d+)/$1 . ($2 < 1000 ? 1000 : $2)/e; s/(\"auto_inject\"\\s*:\\s*)false/${1}true/' \"$config\"\nfi"
         },
         {
@@ -342,7 +342,7 @@
       ],
       "symptom": "Steam's Play shows EA AntiCheat's launcher for some seconds and no game starts. With FC 27 Live Editor's launcher open the game starts, first with \"There is a problem with your game's setup. Please reinstall your game\", and once past that it closes right after the EA SPORTS logo, without a message.",
       "cause": "Three things. The game imports FindPackagesByPackageFamily from kernel32, which Wine 11.21 does not have. EA AntiCheat's launcher ends after 10 s with 0xE111000B under Wine; Live Editor's launcher puts a stand-in in its place, and with the stand-in alone the game ends 9 s in, so the game runs here only with Live Editor's DLL in it. And Live Editor draws its window by hooking Direct3D methods inline: D3DMetal's are 16-byte stubs, 66 90 / FF 25 00 00 00 00 / pointer, a jump through the pointer right behind it. The hook copies the first two instructions elsewhere, where the jump reads the copy's own next instruction as its target: an execute fault at 0x3C25FF (the bytes FF 25 3C 00 00 00 00 00) on the first ExecuteCommandLists after the hooks went in.",
-      "fix": "Engine patch 0041, in the Wine modules' kernelbase.dll and kernel32.dll (the Rosetta improvement, CrossOver Preview 41303), adds the function; this fix checks the runner has it. The install asks for the player's Live Editor folder and copies it, puts a script before %command% in Steam's launch options that opens Live Editor's launcher, starts Steam's own command and stays until the game is gone, and has NotProton load mgf-d3dmetal-hookable.dylib into the game, which rewrites each D3DMetal stub in place to mov rax, method; jmp rax (1302 of them in FC 27's first 9 s). Two rows on the game's Compatibility page in NotProton switch it and choose what Play opens. Played on 2026-11-23 with the steps done by hand: the game to its main menu with Live Editor's window on F9, 4 min 35 s, closed by the player. The editors themselves, a match and a long session were not played.",
+      "fix": "Engine patch 0041, in the Wine modules' kernelbase.dll and kernel32.dll (the Rosetta improvement, CrossOver Preview 41303), adds the function; this fix checks the runner has it. The install asks for the player's Live Editor folder and copies it, puts a script before %command% in Steam's launch options that opens Live Editor's launcher, starts Steam's own command and stays until the game is gone, and has NotProton load mgf-d3dmetal-hookable.dylib into the game, which rewrites each D3DMetal stub in place to mov rax, method; jmp rax (1302 of them in FC 27's first 9 s). Three rows on the game's Compatibility page in NotProton switch it, choose what Play opens, and turn Wine's exception notes on for a report; nothing a player may set is typed into the launch options by hand. Played on 2026-11-23 with the steps done by hand: the game to its main menu with Live Editor's window on F9, 4 min 35 s, closed by the player. The editors themselves, a match and a long session were not played.",
       "backend": "D3DMetal 4.",
       "crossover": "CrossOver Preview 27 (27.0.0.41303), NotProton runner on Rosetta, 2026-11-23",
       "pageUrl": null,
