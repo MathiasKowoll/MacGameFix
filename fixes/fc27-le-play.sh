@@ -12,7 +12,7 @@
 # starts FC27.exe, and its DLL goes into the game. This puts the batch file that does it in
 # the place of Steam's command; fc27-le-run.cmd says what it does and why.
 #
-# Two rows on the game's Compatibility page in NotProton decide what happens. NotProton keeps
+# Three rows on the game's Compatibility page in NotProton decide what happens. NotProton keeps
 # a row's value as a variable in the launch options, in front of this script, so the script
 # finds it in its environment (the app id is part of the name):
 #   NOTPROTON_MGF_FC27_LE_<appid>=1          "Start with Live Editor". Without it, Steam's own
@@ -20,11 +20,12 @@
 #                                            load mgf-d3dmetal-hookable.dylib into the game.
 #   NOTPROTON_MGF_FC27_OPENS_<appid>=window  "Play opens": Live Editor's launcher window alone.
 #                                            Anything else, or nothing: the game.
-#
-# FC27_TRACE=1 before it in the launch options has Wine write every exception the game raises,
-# with times, to NotProton's Wine log for the game (launchers/<appid>/notproton-wine.log): what
-# a report of a game that closes needs. A Wine process gets its parent's unix environment, so
-# it reaches FC27.exe through the EA app.
+#   NOTPROTON_MGF_FC27_TRACE_<appid>=on      "Exception notes for a report": Wine writes every
+#                                            exception the game raises, with times, to
+#                                            NotProton's Wine log for the game
+#                                            (launchers/<appid>/notproton-wine.log). A Wine
+#                                            process gets its parent's unix environment, so it
+#                                            reaches FC27.exe through the EA app.
 #
 # Anything else Steam runs through the tool goes through unchanged.
 #
@@ -38,7 +39,7 @@ fi
 case "$target" in steam2ea://launchgame/*) ;; *) exec "$@" ;; esac
 app="${STEAM_COMPAT_APP_ID:-}"
 case "$app" in ""|*[!0-9]*) exec "$@" ;; esac
-eval "switch=\${NOTPROTON_MGF_FC27_LE_$app:-}; opens=\${NOTPROTON_MGF_FC27_OPENS_$app:-game}"
+eval "switch=\${NOTPROTON_MGF_FC27_LE_$app:-}; opens=\${NOTPROTON_MGF_FC27_OPENS_$app:-game}; trace=\${NOTPROTON_MGF_FC27_TRACE_$app:-off}"
 [ "$switch" = 1 ] || exec "$@"
 
 # Live Editor's launcher keeps its settings in the prefix, in C:\FC 27 Live Editor\le_config.json,
@@ -63,6 +64,6 @@ export NOTPROTON_ENV_FC27_STEAM_COMMAND="$target"
 [ "$opens" != window ] || export NOTPROTON_ENV_FC27_OPENS=window
 # The library's notes, for this start alone.
 : > "$here/fc27-le-hooks.log" 2>/dev/null && export NOTPROTON_ENV_MGF_D3DM_HOOKABLE_LOG="$here/fc27-le-hooks.log"
-[ "${FC27_TRACE:-}" != 1 ] || export WINEDEBUG="err+all,fixme-all,+seh,+timestamp,+pid"
+[ "$trace" != on ] || export WINEDEBUG="err+all,fixme-all,+seh,+timestamp,+pid"
 # NotProton's Steam stub starts a program by name or Windows path, not a .cmd by its unix path.
 exec "$tool" "$verb" cmd.exe /d /c call "$(windows "$here/fc27-le-run.cmd")"

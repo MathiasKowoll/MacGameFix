@@ -55,10 +55,12 @@
 #   - fc27-le-play.sh and fc27-le-run.cmd beside it.
 #   - In Steam's launch options for the game: the play script before %command%
 #     (steam-launch-options.pl; Steam must be closed).
-#   - In NotProton's plugins folder: mgf-d3dmetal-hookable.dylib and two rows for this game
+#   - In NotProton's plugins folder: mgf-d3dmetal-hookable.dylib and three rows for this game
 #     alone (notproton-plugins.sh, np-plugin-fc27-live-editor.conf), shown on its Compatibility
 #     page: "Start with Live Editor", switched on by the first install, which is also what has
-#     NotProton load the library, and "Play opens", the game or Live Editor's launcher window.
+#     NotProton load the library; "Play opens", the game or Live Editor's launcher window; and
+#     "Exception notes for a report". Whatever a player may set is a row: nothing is typed into
+#     the launch options by hand.
 # Nothing is written into the prefix. Live Editor's launcher keeps its own settings there
 # (C:\FC 27 Live Editor), and the play script raises one of them, the injection delay.
 #

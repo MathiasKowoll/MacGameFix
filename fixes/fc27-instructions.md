@@ -33,12 +33,13 @@ While a session starts, Live Editor's launcher replaces one file in the game fol
 
 # The rows in NotProton
 
-The fix adds two rows to the game's Compatibility page in NotProton, for this game only, in a group of their own, **MacGameFix · FC 27**:
+The fix adds three rows to the game's Compatibility page in NotProton, for this game only, in a group of their own, **MacGameFix · FC 27**:
 
 | Row | What it does |
 |---|---|
 | **Start with Live Editor** | On: Play starts the game with Live Editor, and NotProton loads the library that lets its window work on a Mac. Off: Play starts the game's own launcher, which starts nothing. The first install switches it on. |
 | **Play opens** | **The game**, or **Live Editor's launcher window** alone. |
+| **Exception notes for a report** | Off to play. On for one start, when you report a game that closes. |
 
 Choose **Live Editor's launcher window** to look at the launcher's settings before a session. Its own "Run Game" button starts nothing here; close the window, set the row back to **The game** and press Play.
 
@@ -67,8 +68,8 @@ The play script's notes for the last start are in `~/Library/Application Support
 | Play starts nothing | The row **Start with Live Editor** is off. Switch it on in the game's Compatibility page. |
 | The fix reads partial after a NotProton or prefix update | Install it again, with Steam closed. |
 
-For a report of a game that closes, put `FC27_TRACE=1` in front of the launch options for one start, before the script MacGameFix wrote, and send NotProton's Wine log for the game with the three logs above.
+For a report of a game that closes, set the row **Exception notes for a report** to **On** for one start, and send NotProton's Wine log for the game with the three logs above. Set it back to **Off** afterwards: the log grows fast.
 
 # Removing it
 
-Remove gives the launch options back as they were and takes the two rows and the library out of NotProton. Your Live Editor folder stays in `~/Library/Application Support/MacGameFix/fc27-live-editor`, and its settings in the prefix (`C:\FC 27 Live Editor`).
+Remove gives the launch options back as they were and takes the three rows and the library out of NotProton. Your Live Editor folder stays in `~/Library/Application Support/MacGameFix/fc27-live-editor`, and its settings in the prefix (`C:\FC 27 Live Editor`).

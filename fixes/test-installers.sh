@@ -439,10 +439,12 @@ ewin > "$W/fc27.install.log" 2>&1 || say FAIL "fc 27: install failed: $(tail -2 
   && cmp -s "$estore/fc27-le-play.sh" "$FIX/fc27-le-play.sh" && [ -x "$estore/fc27-le-play.sh" ] && cmp -s "$estore/fc27-le-run.cmd" "$FIX/fc27-le-run.cmd" \
   && /usr/bin/grep -qF "\"NOTPROTON_MGF_FC27_LE_4080220=1 MGF_FANS=max \\\"$estore/fc27-le-play.sh\\\" %command%\"" "$evdf" \
   && /usr/bin/grep -qx '\[NOTPROTON_MGF_FC27_LE_4080220\]' "$eplug/mgf-4080220.conf" && /usr/bin/grep -qx '\[NOTPROTON_MGF_FC27_OPENS_4080220\]' "$eplug/mgf-4080220.conf" \
-  && /usr/bin/grep -qx 'inject = 1' "$eplug/mgf-4080220.conf" && [ "$(/usr/bin/grep -c '^apps = 4080220$' "$eplug/mgf-4080220.conf")" = 2 ] \
+  && /usr/bin/grep -qx '\[NOTPROTON_MGF_FC27_TRACE_4080220\]' "$eplug/mgf-4080220.conf" && ! /usr/bin/grep -q 'NOTPROTON_MGF_FC27_TRACE' "$evdf" \
+  && [ "$(/usr/bin/grep -c '^description = .*Played on NotProton, CrossOver Preview 41303 on Rosetta (D3DMetal 4.0b3), 2026-11-23$' "$eplug/mgf-4080220.conf")" = 3 ] \
+  && /usr/bin/grep -qx 'inject = 1' "$eplug/mgf-4080220.conf" && [ "$(/usr/bin/grep -c '^apps = 4080220$' "$eplug/mgf-4080220.conf")" = 3 ] \
   && cmp -s "$eplug/mgf-d3dmetal-hookable.dylib" "$FIX/mgf-d3dmetal-hookable.dylib" && [ ! -e "$ec/game/EAAntiCheat.GameServiceLauncher.exe" ] \
   && case "$(cat "$W/fc27.install.log")" in *'AT YOUR OWN RISK'*'Offline only'*) true ;; *) false ;; esac \
-  && say ok "fc 27 in NotProton: the folder the player chose (the one around Live Editor's) copied without its logs, the play script, two rows and the library for this game, the switch and the script in the launch options, nothing in the game folder, and the warning" || say FAIL "fc 27: installed ($(e1st)): $(tail -3 "$W/fc27.install.log")"
+  && say ok "fc 27 in NotProton: the folder the player chose (the one around Live Editor's) copied without its logs, the play script, three rows that each say where they were played and the library for this game, the switch alone and the script in the launch options, nothing in the game folder, and the warning" || say FAIL "fc 27: installed ($(e1st)): $(tail -3 "$W/fc27.install.log")"
 echo stock > "$ec/runner/lib/wine/x86_64-windows/kernel32.dll"
 eout="$(e1 --status 2>&1)"
 [ "$(e1st)" = half ] && case "$eout" in *'update the Rosetta improvement'*) true ;; *) false ;; esac \
@@ -481,15 +483,15 @@ case "$eout" in "waitforexitandrun|cmd.exe|/d|/c|call|Z:$(printf '%s' "$estore/f
   && say ok "fc 27's play script: with the row on, the batch file takes the command's place, and the launcher's delay is raised and its injection switched on" || say FAIL "fc 27 play: row on: $eout / $(tr -d '\n' < "$ecfg")"
 sed -i '' 's/"dll_inject_delay": 1000/"dll_inject_delay": 2500/' "$ecfg"; eplay NOTPROTON_MGF_FC27_LE_4080220=1 > /dev/null
 /usr/bin/grep -q '"dll_inject_delay": 2500,' "$ecfg" && say ok "fc 27's play script: a longer delay the player set is kept" || say FAIL "fc 27 play: lowered a delay"
-ecfg_new; eout="$(eplay NOTPROTON_MGF_FC27_LE_4080220=1 NOTPROTON_MGF_FC27_OPENS_4080220=window FC27_TRACE=1)"
+ecfg_new; eout="$(eplay NOTPROTON_MGF_FC27_LE_4080220=1 NOTPROTON_MGF_FC27_OPENS_4080220=window NOTPROTON_MGF_FC27_TRACE_4080220=on)"
 case "$eout" in *"opens=window trace=err+all,fixme-all,+seh,+timestamp,+pid log="*) true ;; *) false ;; esac && /usr/bin/grep -q '"auto_inject": false,' "$ecfg" && /usr/bin/grep -q '"dll_inject_delay": 100,' "$ecfg" \
-  && say ok "fc 27's play script: the launcher's window is asked for with the settings as they are, and FC27_TRACE=1 turns Wine's exception notes on" || say FAIL "fc 27 play: window: $eout"
+  && say ok "fc 27's play script: the launcher's window is asked for with the settings as they are, and the notes row turns Wine's exception notes on" || say FAIL "fc 27 play: window: $eout"
 eout="$(env -i HOME="$ehome" PATH=/usr/bin:/bin STEAM_COMPAT_APP_ID=4080220 NOTPROTON_MGF_FC27_LE_4080220=1 "$estore/fc27-le-play.sh" "$ec/tool" waitforexitandrun /some/installer.exe)"
 case "$eout" in "waitforexitandrun|/some/installer.exe|"*) true ;; *) false ;; esac && say ok "fc 27's play script: anything else Steam runs through the tool goes through unchanged" || say FAIL "fc 27 play: other: $eout"
 # Groups, where NotProton knows them: both rows carry the game's own, and the library still goes in.
 e1 --restore > /dev/null 2>&1
 MGVF_NOTPROTON_GROUPS=1 e1 > /dev/null 2>&1
-[ "$(MGVF_NOTPROTON_GROUPS=1 e1st)" = installed ] && [ "$(/usr/bin/grep -c '^group = MacGameFix · FC 27$' "$eplug/mgf-4080220.conf")" = 2 ] && cmp -s "$eplug/mgf-d3dmetal-hookable.dylib" "$FIX/mgf-d3dmetal-hookable.dylib" \
+[ "$(MGVF_NOTPROTON_GROUPS=1 e1st)" = installed ] && [ "$(/usr/bin/grep -c '^group = MacGameFix · FC 27$' "$eplug/mgf-4080220.conf")" = 3 ] && cmp -s "$eplug/mgf-d3dmetal-hookable.dylib" "$FIX/mgf-d3dmetal-hookable.dylib" \
   && say ok "fc 27 in NotProton: where NotProton knows groups the rows carry the game's own, and the library is found all the same" || say FAIL "fc 27: groups ($(MGVF_NOTPROTON_GROUPS=1 e1st))"
 # Removing: the options and NotProton as they were, the player's Live Editor kept, and the game's
 # own EA AntiCheat launcher back where a cut-short session left the stand-in.
