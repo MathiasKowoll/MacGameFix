@@ -316,6 +316,31 @@ one:
   it has no ray tracing. For a game that closes as a level loads where D3DMetal
   offers ray tracing it cannot do, as Phantom Blade Zero does with DLSS on.
 
+MacGameFix also carries four of its fixes as NotProton plugins, which
+NotProton's creator ported and NotProton has not released yet
+(`app/notproton-plugins/ORIGIN.md`). They go into NotProton's plugins folder
+under NotProton's own file names, each off until it is switched on for a game:
+
+- **Unreal video fix** (`40-unreal-video.conf`): patches `winegstreamer.dll`
+  in memory to offer the NV12 output Unreal's video player asks for, where its
+  videos stay black. Not for every game: Town to City crashes on a menu video
+  with it.
+- **D3DMetal freeze fix** (`50-d3dmetal-freeze.conf`, `d3dmetal-freeze.dylib`):
+  D3DMetal 3.0 and 4.0b2 froze on a video memory question about a second GPU
+  node (Town to City, Life is Strange, FATAL FURY).
+- **D3DMetal video crash fix** (`55-d3dmetal-notifier.conf`,
+  `d3dmetal-notifier.dylib`): the `ID3DDestructionNotifier` older D3DMetal
+  lacked, where some games crashed playing a video.
+- **Red Dead Online fix** (`60-red-dead-online.conf`, `tcp-noopt.dylib`), on
+  Red Dead Redemption 2 and Red Dead Online's pages only: `TCP_NOOPT` on the
+  game's sockets.
+
+The three libraries need NotProton's plugin host, which NotProton's own Update
+installs, and the Unreal row a NotProton that reads `patch`. Where one cannot
+work its row is taken out again. A row another plugin file already declares is
+left alone, with its library, so a NotProton that ships the same plugins keeps
+its own.
+
 ## Each game's compiled shaders, kept whole
 
 A game compiles each shader the first time it draws with it, and Metal keeps the
@@ -1274,6 +1299,8 @@ how, is in the game's page under `legacy/wiki/`.
   without TCP options) and handed us that fix too (engine patch `0037`, #129).
   They found that FATAL FURY: City of the Wolves needs the Unreal fix with all
   three halves on, and handed us the change that adds it.
+  They ported four of MacGameFix's fixes to NotProton plugins, which MacGameFix
+  carries as they wrote them (`app/notproton-plugins/`).
 - **The Cyberpunk 2077 patch** comes from a community script published
   anonymously; its author is not known. MacGameFix writes one of its five
   words.
