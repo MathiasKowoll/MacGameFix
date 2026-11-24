@@ -67,6 +67,37 @@ with tempfile.TemporaryDirectory() as td:
     cfg.write_text(vdf('A=1 %command%').replace('"' + APP + '"', '"1"'))
     run('install', ok=False); run('status', ok=False)
     run('install', 'BAD', ok=False)
+
+    # A wrapper of ours goes right before %command%, with or without variables, and comes out again.
+    W = '/w/Application Support/play.sh'
+    journal.unlink(missing_ok=True)
+    original = vdf('MGF_FANS=max %command% --arg "keep me"'); cfg.write_text(original)
+    run('status', '--wrapper', W, ok=False)
+    run('install', '--wrapper', W); wrapped = cfg.read_text(); run('status', '--wrapper', W)
+    assert 'MGF_FANS=max \\"' + W + '\\" %command% --arg \\"keep me\\"' in opts(), opts()
+    run('install', '--wrapper', W); assert cfg.read_text() == wrapped
+    run('install', '--wrapper', W, 'A=1'); assert 'A=1 MGF_FANS=max \\"' + W + '\\" %command%' in opts(), opts()
+    run('status', '--wrapper', W, 'A=1'); run('status', '--wrapper', W, 'A=2', ok=False)
+    run('status', 'A=1', ok=False)  # a caller that does not name the wrapper sees a program it does not know
+    run('restore', '--wrapper', W, 'A=1'); assert cfg.read_text() == original and not journal.exists()
+    cfg.write_text(vdf('')); run('install', '--wrapper', W)
+    assert '"LaunchOptions" "\\"' + W + '\\" %command%"' in opts(), opts()
+    run('restore', '--wrapper', W); assert '"LaunchOptions" ""' in opts(), opts()
+    # Taken out by the user since: nothing to do. Put there by the user before: it stays.
+    cfg.write_text(vdf('X=1 %command%')); before = cfg.read_text(); run('install', '--wrapper', W)
+    cfg.write_text(before); run('restore', '--wrapper', W); assert cfg.read_text() == before
+    cfg.write_text(vdf('"' + W + '" %command%')); before = cfg.read_text()
+    run('install', '--wrapper', W); assert cfg.read_text() == before and not journal.exists()
+    run('restore', '--wrapper', W); assert cfg.read_text() == before
+    # Refused: another program, ours anywhere but right before %command%, and a path this cannot write.
+    for bad in ('gamemoderun %command%', '"' + W + '" gamemoderun %command%', 'gamemoderun "' + W + '" %command%'):
+        cfg.write_text(vdf(bad)); before = cfg.read_text()
+        run('install', '--wrapper', W, ok=False); assert cfg.read_text() == before
+    cfg.write_text(vdf('A=1 %command%'))
+    for bad in ('relative/play.sh', '/w/pl"ay.sh', '/w/$HOME/play.sh', '/w/pl`ay.sh'):
+        run('install', '--wrapper', bad, ok=False)
+    run('install', '--wrapper', ok=False)
     print('PASS: status reads only; Steam refusal only when writing; quoting kept; other apps untouched; '
           'idempotent; exact restore; earlier value given back; user values kept; empty and absent field; '
-          'wrapper and unknown game refused')
+          'wrapper and unknown game refused; our wrapper goes in before %command% and comes out, with '
+          'variables or alone; another program, a misplaced wrapper and an unwritable path refused')

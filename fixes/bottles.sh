@@ -319,7 +319,8 @@ is_plain_prefix() {  # is_plain_prefix <dir>
   [ -f "$1/user.reg" ] && [ -f "$1/system.reg" ] && [ ! -f "$1/cxbottle.conf" ]
 }
 
-# Sets or deletes one string value under HKEY_CURRENT_USER in user.reg.
+# Sets or deletes one string value under HKEY_CURRENT_USER in user.reg; setdword sets a
+# DWORD from a decimal number instead (wine writes it as dword:%08x).
 #
 # Only to be called while bottle_server_alive says 1: a live server would write
 # its own copy over this one when it next saves. The key and value are given the
@@ -330,7 +331,7 @@ is_plain_prefix() {  # is_plain_prefix <dir>
 #
 # 0 done (including "already so"), 1 the file could not be written, 2 a name
 # this does not encode.
-user_reg_edit() {  # user_reg_edit <prefix dir> set|delete <key under HKCU> <value name> [data]
+user_reg_edit() {  # user_reg_edit <prefix dir> set|setdword|delete <key under HKCU> <value name> [data]
   local reg="$1/user.reg" tmp
   [ -f "$reg" ] && [ -w "$reg" ] || return 1
   tmp="$(mktemp "$1/.user.reg.XXXXXX")" || return 1
@@ -345,6 +346,11 @@ user_reg_edit() {  # user_reg_edit <prefix dir> set|delete <key under HKCU> <val
       my $head = lc "[$k]";
       my $val  = lc "\"$n\"=";
       my $line = "\"$n\"=\"$d\"\n";
+      if ($mode eq "setdword") {
+        exit 2 unless $data =~ /^[0-9]{1,10}$/ && $data <= 0xffffffff;
+        $line = sprintf "\"%s\"=dword:%08x\n", $n, $data;
+        $mode = "set";
+      }
       my @l = <STDIN>;
       my ($start, $end);
       for my $i (0 .. $#l) {

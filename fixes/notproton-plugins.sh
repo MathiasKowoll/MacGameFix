@@ -1,0 +1,231 @@
+# NotProton plugins for one game, sourced by that game's installer.
+#
+#   . "$HERE/notproton-plugins.sh"
+#   np_plugins_setup <appid> <prefix> <template>...
+#   np_plugins_ready      true when NotProton keeps this prefix and its support folder is there
+#   np_plugins_preflight  what an install would refuse, before anything changes
+#   np_plugins_install    the game's descriptor, the libraries, and the first time every row on
+#   np_plugins_status     installed, half or absent: the files only
+#   np_plugins_restore    our switches out, the descriptor gone, and a library no descriptor names
+#
+# Each template is a plugin record beside the installer (np-plugin-<name>.conf) with an id
+# that starts NOTPROTON_MGF_, which NotProton requires of every plugin (conf.c, conf_id_ok).
+# Lines that start "# library = " name the files the record needs from beside the installer;
+# they are copied into NotProton's plugins folder, which is where the record's "requires"
+# points. "# earlier = <sha256>..." names builds of a library from before it was ours to
+# ship, which are replaced like our own.
+#
+# ONE DESCRIPTOR PER GAME. Every record goes into plugins/mgf-<appid>.conf with the app id
+# added to its id (NotProton refuses one id in two files) and, from NotProton 1.2.7, an
+# "apps = <appid>" line, so the row shows on that game's page only. Removing one game's fix
+# removes that file and nothing of another game's; a library goes once no descriptor in the
+# folder names it. NotProton's own Delete does the same from its side.
+#
+# A ROW IS ON ONLY WHILE THE GAME'S LAUNCH OPTIONS CARRY <id>=<on>: NotProton has no other
+# switch. The first install puts every toggle row's variable in, with steam-launch-options.pl
+# (Steam closed, and a journal so a restore gives back what was there); after that the
+# switches are the player's, in the game's Compatibility page, and installing again never
+# turns one back on. With Steam open the files go in and the rows stay off, and it says so.
+# The status ignores the switches for the same reason: a row the player turned off is not a
+# broken fix for the agent to repair.
+#
+# Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+NP_APPID=""
+NP_PFX=""
+NP_TEMPLATES=()
+NP_SUPPORT="$HOME/Library/Application Support/notproton"
+NP_PLUGINS="$NP_SUPPORT/plugins"
+NP_REQUIRES_BASE="Library/Application Support/notproton/plugins"
+# NotProton reads at most this many records from the folder (NP_CONF_RECORDS_MAX).
+NP_RECORDS_MAX=32
+
+np_plugins_setup() {
+  NP_APPID="$1"; NP_PFX="${2%/}"; shift 2
+  NP_TEMPLATES=("$@")
+  NP_CONF="$NP_PLUGINS/mgf-$NP_APPID.conf"
+  # Beside pfx, in compatdata/<appid>, where NotProton writes notproton-build.
+  NP_GAME_DIR="$(dirname "$NP_PFX")"
+  NP_JOURNAL="$NP_GAME_DIR/.mgf-notproton-plugins.json"
+  NP_SWITCHED="$NP_GAME_DIR/.mgf-notproton-plugins-switched"
+  NP_OPTIONS="$(dirname "${BASH_SOURCE[0]}")/steam-launch-options.pl"
+}
+
+np_plugins_ready() {
+  [ -n "$NP_PFX" ] && [ -f "$NP_GAME_DIR/notproton-build" ] && [ -d "$NP_SUPPORT" ]
+}
+
+# NotProton's version, from its app, or MGVF_NOTPROTON_VERSION for a test.
+np_version() {
+  if [ -n "${MGVF_NOTPROTON_VERSION:-}" ]; then printf '%s' "$MGVF_NOTPROTON_VERSION"; return; fi
+  local a
+  for a in "/Applications/NotProton.app" "$HOME/Applications/NotProton.app"; do
+    [ -f "$a/Contents/Info.plist" ] || continue
+    /usr/bin/defaults read "$a/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null && return
+  done
+}
+
+# 1.2.7 brought "apps"; an older NotProton refuses a record that carries it.
+np_knows_apps() {
+  local v a b c
+  v="$(np_version)"; [ -n "$v" ] || return 1
+  IFS=. read -r a b c _ <<< "${v%%-*}"
+  a="${a//[^0-9]/}"; b="${b//[^0-9]/}"; c="${c//[^0-9]/}"
+  [ "${a:-0}" -gt 1 ] && return 0
+  [ "${a:-0}" -eq 1 ] && [ "${b:-0}" -gt 2 ] && return 0
+  [ "${a:-0}" -eq 1 ] && [ "${b:-0}" -eq 2 ] && [ "${c:-0}" -ge 7 ]
+}
+
+np_sha() { /usr/bin/shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1; }
+
+# The values of "# <name> = " lines in a template.
+np_meta() { /usr/bin/sed -n "s/^# $2 = //p" "$1"; }
+
+# The records of every template, as they go into the game's descriptor.
+np_expected() {
+  local t apps=0
+  np_knows_apps && apps=1
+  printf '# MacGameFix writes this file for app %s and removes it with the fix; edits do not last.\n' "$NP_APPID"
+  for t in "${NP_TEMPLATES[@]}"; do
+    /usr/bin/awk -v app="$NP_APPID" -v apps="$apps" '
+      /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+      /^\[/ { if (open && apps) print "apps = " app
+              sub(/\]$/, "_" app "]"); print; open = 1; next }
+      /^depends[[:space:]]*=/ { sub(/[[:space:]]*$/, ""); print $0 "_" app; next }
+      { print }
+      END { if (open && apps) print "apps = " app }' "$t"
+  done
+}
+
+# Each record's id and the value that switches it on: toggles only (no "type").
+np_switches() {
+  np_expected | /usr/bin/awk '
+    /^\[/ { if (id != "" && !typed) print id "=" (on == "" ? "1" : on)
+            id = substr($0, 2, length($0) - 2); on = ""; typed = 0; next }
+    /^on[[:space:]]*=/ { on = $0; sub(/^on[[:space:]]*=[[:space:]]*/, "", on) }
+    /^type[[:space:]]*=/ { typed = 1 }
+    END { if (id != "" && !typed) print id "=" (on == "" ? "1" : on) }'
+}
+
+np_ids() { np_switches_all | cut -d= -f1; }
+np_switches_all() { np_expected | /usr/bin/sed -n 's/^\[\(.*\)\]$/\1=/p'; }
+
+# The libraries every template names, as "<template dir>/<file>".
+np_libraries() {
+  local t l
+  for t in "${NP_TEMPLATES[@]}"; do
+    while IFS= read -r l; do [ -n "$l" ] && printf '%s/%s\n' "$(dirname "$t")" "$l"; done < <(np_meta "$t" library)
+  done
+}
+
+# A library in the folder is ours: the one we ship, or an earlier build a template names.
+np_lib_ours() {
+  local src="$1" live="$NP_PLUGINS/$(basename "$1")" t
+  [ -f "$live" ] || return 1
+  cmp -s "$live" "$src" && return 0
+  for t in "${NP_TEMPLATES[@]}"; do
+    case " $(np_meta "$t" earlier | tr '\n' ' ') " in *" $(np_sha "$live") "*) return 0 ;; esac
+  done
+  return 1
+}
+
+# Records in the folder that are not in our descriptor.
+np_other_records() {
+  local f
+  for f in "$NP_PLUGINS"/*.conf; do
+    [ -f "$f" ] && [ "$f" != "$NP_CONF" ] || continue
+    /usr/bin/grep -h '^[[:space:]]*\[' "$f" | /usr/bin/sed 's/^[[:space:]]*\[\(.*\)\][[:space:]]*$/\1/'
+  done
+}
+
+np_options() { /usr/bin/perl "$NP_OPTIONS" "$1" "$NP_APPID" "$NP_JOURNAL" "${@:2}"; }
+
+np_plugins_preflight() {
+  local id taken mine
+  [ -f "$NP_OPTIONS" ] || { echo "error: steam-launch-options.pl is not beside the installer" >&2; return 1; }
+  while IFS= read -r l; do
+    [ -f "$l" ] || { echo "error: $(basename "$l") is not beside the installer" >&2; return 1; }
+    if [ -f "$NP_PLUGINS/$(basename "$l")" ] && ! np_lib_ours "$l"; then
+      echo "error: $NP_PLUGINS/$(basename "$l") is a different library; nothing was changed." >&2; return 1
+    fi
+  done < <(np_libraries)
+  taken="$(np_other_records)"
+  for id in $(np_ids); do
+    if printf '%s\n' "$taken" | /usr/bin/grep -qx "$id"; then
+      echo "error: another plugin file already has $id; nothing was changed." >&2; return 1
+    fi
+  done
+  mine="$(np_ids | /usr/bin/grep -c .)"
+  if [ $(( $(printf '%s\n' "$taken" | /usr/bin/grep -c .) + mine )) -gt "$NP_RECORDS_MAX" ]; then
+    echo "error: NotProton reads at most $NP_RECORDS_MAX plugin rows, and with this game's there would be more." >&2
+    echo "       Remove a plugin you do not use in NotProton's Plugins page; nothing was changed." >&2
+    return 1
+  fi
+  # Whether the first install can switch the rows on: options it cannot edit stop the install,
+  # Steam open only leaves the rows off. NP_SWITCH is on, steam or none.
+  NP_SWITCH=none
+  if [ ! -f "$NP_SWITCHED" ] && [ -n "$(np_switches)" ]; then
+    local why
+    if why="$(np_options preflight $(np_switches) 2>&1 >/dev/null)"; then NP_SWITCH=on
+    elif np_steam_running; then NP_SWITCH=steam
+    else printf '%s\n' "$why" >&2; return 1; fi
+  fi
+}
+
+# MGVF_STEAM_RUNNING=0 or 1 answers for a test, which must not see the Steam of the Mac it runs on.
+np_steam_running() {
+  case "${MGVF_STEAM_RUNNING:-}" in 0) return 1 ;; 1) return 0 ;; esac
+  /bin/ps -axo comm= | /usr/bin/grep -qE '(/Steam\.app/Contents/MacOS/steam|/steam_osx)$'
+}
+
+np_plugins_install() {
+  local l live
+  [ -n "${NP_SWITCH:-}" ] || np_plugins_preflight || return 1
+  /bin/mkdir -p "$NP_PLUGINS"
+  # Renamed into place, so a game still running keeps the library it loaded.
+  while IFS= read -r l; do
+    live="$NP_PLUGINS/$(basename "$l")"
+    cmp -s "$l" "$live" && continue
+    cp -p "$l" "$live.mgf-new" && mv -f "$live.mgf-new" "$live"
+  done < <(np_libraries)
+  np_expected > "$NP_CONF.mgf-new" && mv -f "$NP_CONF.mgf-new" "$NP_CONF"
+  echo "  NotProton: $(np_ids | /usr/bin/grep -c .) row(s) in plugins/mgf-$NP_APPID.conf$(np_knows_apps && echo ", shown on this game's page only")"
+  case "$NP_SWITCH" in
+  on)
+    np_options install $(np_switches) >/dev/null || return 1
+    np_switches > "$NP_SWITCHED"
+    echo "  NotProton: switched on in the game's launch options: $(np_switches | tr '\n' ' ')" ;;
+  steam)
+    echo "  NotProton: Steam is open, so the rows are off. Switch them on in the game's Compatibility page,"
+    echo "             or quit Steam and install again to have them switched on." ;;
+  *)
+    [ ! -f "$NP_SWITCHED" ] || echo "  NotProton: the rows' switches are as you left them in the game's Compatibility page" ;;
+  esac
+}
+
+np_plugins_status() {
+  local l
+  if [ ! -f "$NP_CONF" ]; then
+    [ -f "$NP_SWITCHED" ] && { echo half; return; }
+    echo absent; return
+  fi
+  [ "$(cat "$NP_CONF")" = "$(np_expected)" ] || { echo "Why: plugins/mgf-$NP_APPID.conf is not what this fix writes" >&2; echo half; return; }
+  while IFS= read -r l; do
+    cmp -s "$l" "$NP_PLUGINS/$(basename "$l")" || { echo "Why: $(basename "$l") in NotProton's plugins folder is missing or another build" >&2; echo half; return; }
+  done < <(np_libraries)
+  echo installed
+}
+
+# Is a library named by any descriptor still in the folder.
+np_lib_named() { /usr/bin/grep -lqF "/$(basename "$1")" "$NP_PLUGINS"/*.conf 2>/dev/null; }
+
+np_plugins_restore() {
+  local l
+  if [ -f "$NP_JOURNAL" ]; then np_options restore $(np_switches) >/dev/null || return 1; fi
+  /bin/rm -f "$NP_CONF" "$NP_SWITCHED"
+  while IFS= read -r l; do
+    np_lib_named "$l" || ! np_lib_ours "$l" || /bin/rm -f "$NP_PLUGINS/$(basename "$l")"
+  done < <(np_libraries)
+  return 0
+}

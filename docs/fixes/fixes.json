@@ -252,6 +252,100 @@
       "notNeededFromGptk": null
     },
     {
+      "title": "F1 25",
+      "installer": "install-f125-swofty.sh",
+      "scope": "prefix",
+      "executable": "F1_25.exe",
+      "carrierDirectory": "",
+      "alsoRuns": [],
+      "summary": "F1 25 only starts on a Mac through Swofty Launcher, and on NotProton it crashed half a minute in and Swofty could not find Steam. This downloads Swofty from its own site, prepares the game's prefix and makes Steam's Play start the game through it. Offline, without EA AntiCheat or multiplayer. NotProton with CrossOver Preview 41303 (Rosetta) only. AT YOUR OWN RISK: MacGameFix does not answer for failures in the game, its saves or its mods.",
+      "page": null,
+      "testing": "Mathias Kowoll",
+      "installs": [
+        "bottles.sh",
+        "f125-swofty-play.sh",
+        "f125-swofty-run.cmd",
+        "notproton-plugins.sh",
+        "np-plugin-f125-swofty.conf",
+        "steam-launch-options.pl"
+      ],
+      "builtFrom": [],
+      "license": "GPL-3.0-or-later",
+      "credits": [
+        {
+          "name": "Swofty Launcher",
+          "url": "https://f1.swofty.net",
+          "note": "The mod launcher and the offline play that start the game. It is downloaded from Swofty's own release index when the fix is installed and is not part of MacGameFix."
+        }
+      ],
+      "excerpts": [
+        {
+          "file": "fixes/install-f125-swofty.sh",
+          "symbol": null,
+          "note": "Swofty Launcher comes from Swofty's own index, which names the Windows release with its SHA-256; a file on another host, or one that does not match, is refused before anything is unpacked.",
+          "language": "bash",
+          "startLine": 261,
+          "endLine": 311,
+          "commit": "be322debb2248002290a225d3bf78e7a697da3bf",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/be322debb2248002290a225d3bf78e7a697da3bf/fixes/install-f125-swofty.sh#L261-L311",
+          "code": "fetch_launcher_into() {  # <work folder>\n  local work=\"$1\" zip name=\"\" url=\"\" sha=\"\" got top\n  zip=\"${MGVF_SWOFTY_ZIP:-}\"\n  if [ -n \"$zip\" ]; then\n    [ -f \"$zip\" ] || { echo \"error: MGVF_SWOFTY_ZIP names no file: $zip\" >&2; return 1; }\n    echo \"  using $zip\"\n  else\n    echo \"  asking $INDEX_URL for the current release\"\n    curl -fsSL --retry 2 --max-time 60 -o \"$work/latest.json\" \"$INDEX_URL\" || {\n      echo \"error: could not reach Swofty's release index; check the connection and install again\" >&2\n      return 1\n    }\n    # name, url and sha256 of the one Windows asset; an index that does not have exactly that is refused.\n    read -r name url sha < <(/usr/bin/perl -MJSON::PP -e '\n      local $/; my $d = eval { decode_json(<STDIN>) } or exit 1;\n      my @a = grep { ($_->{name} // \"\") =~ /^swofty-launcher-v[0-9][0-9.]*-windows-x86_64\\.zip$/ } @{ $d->{assets} || [] };\n      exit 1 unless @a == 1;\n      my ($n, $u, $s) = @{ $a[0] }{qw(name url sha256)};\n      exit 1 unless ($u // \"\") =~ m{^https://(cdn\\.swofty\\.net|github\\.com/Swofty-Developments/SwoftyLauncher)/[A-Za-z0-9._/-]+$}\n                 && ($s // \"\") =~ /^[0-9a-f]{64}$/;\n      print \"$n $u $s\\n\";\n    ' < \"$work/latest.json\") || true\n    [ -n \"$sha\" ] || { echo \"error: Swofty's release index does not name a Windows release this understands; nothing was changed\" >&2; return 1; }\n    echo \"  fetching $name (about 90 MB) from ${url%/\"$name\"}\"\n    zip=\"$work/$name\"\n    curl -fsSL --retry 2 -o \"$zip\" \"$url\" || {\n      echo \"error: could not download $name; check the connection and install again\" >&2\n      return 1\n    }\n    got=\"$(shasum -a 256 \"$zip\" | cut -d' ' -f1)\"\n    [ \"$got\" = \"$sha\" ] || {\n      echo \"error: the download is not the file the index names (sha256 $got); nothing was changed\" >&2\n      return 1\n    }\n  fi\n  mkdir \"$work/out\"\n  ditto -x -k \"$zip\" \"$work/out\" || { echo \"error: could not unpack $(basename \"$zip\")\" >&2; return 1; }\n  # The release unpacks to one folder, or straight to bin/ and loader/.\n  top=\"$(find \"$work/out\" -maxdepth 3 -type f -path '*/bin/swofty.exe' | head -1)\"\n  [ -z \"$top\" ] || top=\"$(dirname \"$(dirname \"$top\")\")\"\n  [ -n \"$top\" ] && [ -s \"$top/bin/swofty.exe\" ] && [ -d \"$top/loader\" ] || {\n    echo \"error: $(basename \"$zip\") does not hold bin/swofty.exe and loader/ where expected; nothing was changed\" >&2\n    return 1\n  }\n  mkdir -p \"$STORE\"\n  rm -rf \"$LAUNCHER.new\"\n  mv \"$top\" \"$LAUNCHER.new\"\n  rm -rf \"$LAUNCHER\"\n  mv \"$LAUNCHER.new\" \"$LAUNCHER\"\n  echo \"  kept in $LAUNCHER\"\n}"
+        },
+        {
+          "file": "fixes/install-f125-swofty.sh",
+          "symbol": null,
+          "note": "Swofty reads ActiveUser to see that Steam is signed in. NotProton's Steam stub does not write it, so the account comes from Steam's own loginusers.vdf.",
+          "language": "bash",
+          "startLine": 178,
+          "endLine": 189,
+          "commit": "be322debb2248002290a225d3bf78e7a697da3bf",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/be322debb2248002290a225d3bf78e7a697da3bf/fixes/install-f125-swofty.sh#L178-L189",
+          "code": "steam_account() {\n  [ -f \"$STEAM_LOGIN\" ] || return 1\n  /usr/bin/perl -e '\n    use strict; use warnings; local $/; my $s = <STDIN>; my (@ids, $recent);\n    while ($s =~ /\"(7656\\d{13})\"\\s*\\{([^{}]*)\\}/g) {\n      push @ids, $1; $recent = $1 if $2 =~ /\"MostRecent\"\\s+\"1\"/i;\n    }\n    $recent //= $ids[0] if @ids == 1;\n    exit 1 unless defined $recent;\n    print $recent - 76561197960265728, \"\\n\";\n  ' < \"$STEAM_LOGIN\"\n}"
+        },
+        {
+          "file": "fixes/f125-swofty-play.sh",
+          "symbol": null,
+          "note": "NotProton keeps a row's value as a variable in the launch options, in front of the script, so the script finds the three rows in its own environment.",
+          "language": "bash",
+          "startLine": 32,
+          "endLine": 35,
+          "commit": "be322debb2248002290a225d3bf78e7a697da3bf",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/be322debb2248002290a225d3bf78e7a697da3bf/fixes/f125-swofty-play.sh#L32-L35",
+          "code": "app=\"${STEAM_COMPAT_APP_ID:-}\"\ncase \"$app\" in \"\"|*[!0-9]*) exec \"$@\" ;; esac\neval \"switch=\\${NOTPROTON_MGF_F125_SWOFTY_$app:-}; opens=\\${NOTPROTON_MGF_F125_OPENS_$app:-game}; profile=\\${NOTPROTON_MGF_F125_PROFILE_$app:-active}\"\n[ \"$switch\" = 1 ] || exec \"$@\""
+        },
+        {
+          "file": "fixes/f125-swofty-play.sh",
+          "symbol": null,
+          "note": "Steam's Play hands NotProton EA AntiCheat's launcher; this hands it Swofty's command line instead, in the same prefix.",
+          "language": "bash",
+          "startLine": 49,
+          "endLine": 63,
+          "commit": "be322debb2248002290a225d3bf78e7a697da3bf",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/be322debb2248002290a225d3bf78e7a697da3bf/fixes/f125-swofty-play.sh#L49-L63",
+          "code": "# What f125-swofty-run.cmd reads. NOTPROTON_ENV_<NAME> is how NotProton hands a variable to the\n# game however it starts it; a plain variable does not survive every route.\n# Steam's own command for the game goes to Swofty after \"--\", as Steam on Windows hands it to a\n# launch option.\nexport NOTPROTON_ENV_F125_STEAM_COMMAND=\"$(windows \"$game\")\"\nif [ \"$opens\" = window ]; then\n  # The launcher's window draws to a plain window: Wine's DirectComposition gives it nothing.\n  export NOTPROTON_ENV_F125_OPENS=window NOTPROTON_ENV_GPUI_DISABLE_DIRECT_COMPOSITION=1\nfi\n# A profile's name goes to Swofty as it is; \"active\" is the row's word for none given.\ncase \"$profile\" in \"\"|active|*[!A-Za-z0-9._-]*) ;; *) export NOTPROTON_ENV_F125_PROFILE=\"$profile\" ;; esac\n# The two settings every session played so far had (CrossOver bottle and NotProton, 2026-11-23).\nexport NOTPROTON_ENV_SWOFTY_ARM_SYNC=\"${SWOFTY_ARM_SYNC:-1}\" NOTPROTON_ENV_SWOFTY_RTAS_GUARD=\"${SWOFTY_RTAS_GUARD:-0}\"\n# NotProton's Steam stub starts a program by name or Windows path, not a .cmd by its unix path.\nexec \"$tool\" \"$verb\" cmd.exe /d /c call \"$(windows \"$here/f125-swofty-run.cmd\")\""
+        },
+        {
+          "file": "fixes/f125-swofty-run.cmd",
+          "symbol": null,
+          "note": "With Proton's variable set, Swofty starts the game through a proton script NotProton's tool does not have. Cleared, Swofty starts it itself. The first start asks the player for Swofty's offline play terms and does its one-time setup.",
+          "language": "text",
+          "startLine": 14,
+          "endLine": 57,
+          "commit": "0183d085e7d8380e3de070f01efc6179b2e84dbf",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/0183d085e7d8380e3de070f01efc6179b2e84dbf/fixes/f125-swofty-run.cmd#L14-L57",
+          "code": "set \"STEAM_COMPAT_TOOL_PATHS=\"\nset \"swofty=%~dp0launcher\\bin\\swofty.exe\"\nset \"data=%LOCALAPPDATA%\\Swofty\"\n\nrem \"Play opens: Swofty Launcher's window\". The launcher does its own first-start steps, and\nrem its Play starts the game as the lines below do. It needs engine patches 0039 and 0040\nrem (dwrite and directmanipulation) in the runner to find its fonts and open its window.\nif /i \"%F125_OPENS%\"==\"window\" goto window\n\nrem Offline play is Swofty's own: its terms are the player's to read and accept, so the first\nrem start shows them in this window and waits for the answer. Then Swofty downloads its\nrem extension. Neither is done again once done.\nif not exist \"%data%\\state\\offline_consent.json\" (\n  echo Swofty asks you to read and accept its offline play terms before the first start.\n  \"%swofty%\" offline accept\n  if errorlevel 1 exit /b 1\n)\nif not exist \"%data%\\extensions\\offline-play\\f1op_hook.dll\" (\n  echo Swofty is downloading its offline play extension.\n  \"%swofty%\" offline fetch\n  if errorlevel 1 exit /b 1\n)\n\nrem Swofty's one-time setup before modded play: it puts the game folder back and starts its\nrem record of the original game files. Swofty checks every game file against Steam's own list\nrem at each start, so it asks for no verification in Steam.\n\"%swofty%\" setup status | findstr /c:\"setup: done\" > nul\nif errorlevel 1 (\n  echo Swofty's one-time setup: it records the game's original files before the first modded start.\n  echo If you ever put mods in the game folder by hand, close this window, verify the game files\n  echo in Steam, and press Play again. Otherwise:\n  pause\n  \"%swofty%\" setup reset\n  if errorlevel 1 exit /b 1\n  \"%swofty%\" setup done\n  if errorlevel 1 exit /b 1\n)\n\nrem An empty variable still counts as defined in Wine's cmd, so the value is compared.\nset \"args=run --apply --no-start-store\"\nif not \"%F125_PROFILE%\"==\"\" set \"args=%args% --profile %F125_PROFILE%\"\necho Swofty is building the profile and starting F1 25. Its output goes to f125-swofty-play.log.\n\"%swofty%\" %args% -- \"%F125_STEAM_COMMAND%\" > \"%~dp0f125-swofty-play.log\" 2>&1\nexit /b %errorlevel%"
+        }
+      ],
+      "symptom": "Steam's Play opens EA AntiCheat's launcher, which does not run on a Mac. Through Swofty Launcher on NotProton the game closed about half a minute after it started, at the main menu, and Swofty reported that Steam was not running.",
+      "cause": "Three things. Wine 11.21 searches its reserved address areas bottom-up, and a 6.5 GB image fills the low one, so the game's objects landed at 0x7ff000000000 and up, and a pointer to a low object came back with bit 47 set (crash at F1_25.exe+0x416a797, four times of four). Swofty takes NotProton's STEAM_COMPAT_TOOL_PATHS for Proton's folder and starts the game with a proton script NotProton's tool does not have. And NotProton's Steam stub writes the running Steam's process but not ActiveUser, and its Steam folder has no loginusers.vdf, which is where Swofty looks for a signed-in Steam.",
+      "fix": "Engine patch 0038, in the Wine modules' ntdll.so (the Rosetta improvement, CrossOver Preview 41303), keeps allocations with no address below the high reserved area. This fix checks the runner has it, downloads Swofty Launcher from Swofty's index, writes the version override and ActiveUser into the prefix, links Steam's loginusers.vdf, depot manifests and content log into the prefix's Steam folder, and puts a script before %command% in Steam's launch options that starts Swofty's command line in place of EA AntiCheat's launcher, with STEAM_COMPAT_TOOL_PATHS cleared. Three rows on the game's Compatibility page in NotProton switch it, choose what Play opens, the game or Swofty Launcher's window, and which of Swofty's profiles a start plays; a NotProton row cannot change the program Steam starts, so the rows are the switches the script reads, and nothing a player may set is typed into the launch options by hand. Played on 2026-11-23 from a clean prefix: the modded profile reached the menu and a race, the game's objects at 0x4.., 0x5.. and 0x6...",
+      "backend": "D3DMetal. Ray tracing closed the game when it was turned on; it is left off.",
+      "crossover": "CrossOver Preview 27 (27.0.0.41303), NotProton runner on Rosetta, 2026-11-23",
+      "pageUrl": null,
+      "graphicsBackend": "d3dmetal",
+      "gptk": null,
+      "notNeededFromGptk": null
+    },
+    {
       "title": "FATAL FURY: City of the Wolves",
       "installer": "install-runtime-fix.sh",
       "scope": "folder",

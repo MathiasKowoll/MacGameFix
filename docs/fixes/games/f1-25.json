@@ -1,0 +1,65 @@
+{
+  "title": "F1 25",
+  "installer": "install-f125-swofty.sh",
+  "scope": "prefix",
+  "executable": "F1_25.exe",
+  "carrierDirectory": "",
+  "alsoRuns": [],
+  "summary": "F1 25 only starts on a Mac through Swofty Launcher, and on NotProton it crashed half a minute in and Swofty could not find Steam. This downloads Swofty from its own site, prepares the game's prefix and makes Steam's Play start the game through it. Offline, without EA AntiCheat or multiplayer. NotProton with CrossOver Preview 41303 (Rosetta) only. AT YOUR OWN RISK: MacGameFix does not answer for failures in the game, its saves or its mods.",
+  "page": null,
+  "testing": "Mathias Kowoll",
+  "installs": [
+    "bottles.sh",
+    "f125-swofty-play.sh",
+    "f125-swofty-run.cmd",
+    "notproton-plugins.sh",
+    "np-plugin-f125-swofty.conf",
+    "steam-launch-options.pl"
+  ],
+  "builtFrom": [],
+  "license": "GPL-3.0-or-later",
+  "credits": [
+    {
+      "name": "Swofty Launcher",
+      "url": "https://f1.swofty.net",
+      "note": "The mod launcher and the offline play that start the game. It is downloaded from Swofty's own release index when the fix is installed and is not part of MacGameFix."
+    }
+  ],
+  "excerpts": [
+    {
+      "file": "install-f125-swofty.sh",
+      "from": "^fetch_launcher_into\\(\\)",
+      "to": "^\\}",
+      "note": "Swofty Launcher comes from Swofty's own index, which names the Windows release with its SHA-256; a file on another host, or one that does not match, is refused before anything is unpacked."
+    },
+    {
+      "file": "install-f125-swofty.sh",
+      "from": "^steam_account\\(\\)",
+      "to": "^\\}",
+      "note": "Swofty reads ActiveUser to see that Steam is signed in. NotProton's Steam stub does not write it, so the account comes from Steam's own loginusers.vdf."
+    },
+    {
+      "file": "f125-swofty-play.sh",
+      "from": "^app=\"\\$\\{STEAM_COMPAT_APP_ID",
+      "to": "^\\[ \"\\$switch\" = 1 \\]",
+      "note": "NotProton keeps a row's value as a variable in the launch options, in front of the script, so the script finds the three rows in its own environment."
+    },
+    {
+      "file": "f125-swofty-play.sh",
+      "from": "^# What f125-swofty-run.cmd reads",
+      "to": "^exec ",
+      "note": "Steam's Play hands NotProton EA AntiCheat's launcher; this hands it Swofty's command line instead, in the same prefix."
+    },
+    {
+      "file": "f125-swofty-run.cmd",
+      "from": "^set \"STEAM_COMPAT_TOOL_PATHS=\"",
+      "to": "^exit /b %errorlevel%",
+      "note": "With Proton's variable set, Swofty starts the game through a proton script NotProton's tool does not have. Cleared, Swofty starts it itself. The first start asks the player for Swofty's offline play terms and does its one-time setup."
+    }
+  ],
+  "symptom": "Steam's Play opens EA AntiCheat's launcher, which does not run on a Mac. Through Swofty Launcher on NotProton the game closed about half a minute after it started, at the main menu, and Swofty reported that Steam was not running.",
+  "cause": "Three things. Wine 11.21 searches its reserved address areas bottom-up, and a 6.5 GB image fills the low one, so the game's objects landed at 0x7ff000000000 and up, and a pointer to a low object came back with bit 47 set (crash at F1_25.exe+0x416a797, four times of four). Swofty takes NotProton's STEAM_COMPAT_TOOL_PATHS for Proton's folder and starts the game with a proton script NotProton's tool does not have. And NotProton's Steam stub writes the running Steam's process but not ActiveUser, and its Steam folder has no loginusers.vdf, which is where Swofty looks for a signed-in Steam.",
+  "fix": "Engine patch 0038, in the Wine modules' ntdll.so (the Rosetta improvement, CrossOver Preview 41303), keeps allocations with no address below the high reserved area. This fix checks the runner has it, downloads Swofty Launcher from Swofty's index, writes the version override and ActiveUser into the prefix, links Steam's loginusers.vdf, depot manifests and content log into the prefix's Steam folder, and puts a script before %command% in Steam's launch options that starts Swofty's command line in place of EA AntiCheat's launcher, with STEAM_COMPAT_TOOL_PATHS cleared. Three rows on the game's Compatibility page in NotProton switch it, choose what Play opens, the game or Swofty Launcher's window, and which of Swofty's profiles a start plays; a NotProton row cannot change the program Steam starts, so the rows are the switches the script reads, and nothing a player may set is typed into the launch options by hand. Played on 2026-11-23 from a clean prefix: the modded profile reached the menu and a race, the game's objects at 0x4.., 0x5.. and 0x6...",
+  "backend": "D3DMetal. Ray tracing closed the game when it was turned on; it is left off.",
+  "crossover": "CrossOver Preview 27 (27.0.0.41303), NotProton runner on Rosetta, 2026-11-23"
+}

@@ -69,6 +69,14 @@
       "symptom": "Cutscene runs with sound, picture black",
       "codec_shipped_by": "CrossOver Preview 27"
     },
+    "F1_25.exe": {
+      "title": "F1 25",
+      "backend": "d3dmetal",
+      "codec": "",
+      "gptk": "",
+      "env": {},
+      "symptom": "Starts only through Swofty Launcher, and closed half a minute in on NotProton"
+    },
     "ForzaHorizon5.exe": {
       "title": "Forza Horizon 5",
       "backend": "d3dmetal",
