@@ -743,6 +743,9 @@ f6n="$W/fh6-41303"; mkdir -p "$f6n/m"
 cp "$FIX/../engine/modules/27.0.0.41303/x86_64-windows/ntdll.dll" "$f6n/m/engine-27.0.0.41303-x86_64-windows-ntdll.dll"
 git -C "$FIX/.." show 6373a11:engine/modules/27.0.0.41303/x86_64-windows/ntdll.dll > "$f6n/old.dll" 2>/dev/null
 git -C "$FIX/.." show 5e74061:engine/modules/27.0.0.41303/x86_64-windows/ntdll.dll > "$f6n/0025.dll" 2>/dev/null
+# The modules built again (0038 to 0041) are other files with the same ntdll.dll source: the one
+# shipped before them (fe379ae0, #117) is replaced like the others, and the chain still reads as in the DLL.
+git -C "$FIX/.." show 545bc09:engine/modules/27.0.0.41303/x86_64-windows/ntdll.dll > "$f6n/2xko.dll" 2>/dev/null
 printf 'not ours\n' > "$f6n/other.dll"
 f6n_run() {
   HERE="$f6n" MGVF_MODULES="$f6n/m" RUNNER="$1" /bin/bash -c '. "$0"; '"$2" "$FIX/fh6-runtime.sh"
@@ -753,6 +756,8 @@ elif [ "$(f6n_run /x/runners/crossover-27.0.0.41303-fex/CrossOver fh6_chain_in_n
   && [ "$(f6n_run /x/runners/crossover-27.0.0.41073-fex/CrossOver fh6_chain_in_ntdll)" = 0 ] \
   && f6n_run /x/runners/crossover-27.0.0.41303-fex/CrossOver "fh6_pe_known '$f6n/old.dll'" \
   && f6n_run /x/runners/crossover-27.0.0.41303-fex/CrossOver "fh6_pe_known '$f6n/0025.dll'" \
+  && { [ "$(shasum -a 256 "$f6n/2xko.dll" | cut -c1-8)" != fe379ae0 ] || cmp -s "$f6n/2xko.dll" "$f6n/m/engine-27.0.0.41303-x86_64-windows-ntdll.dll" \
+       || f6n_run /x/runners/crossover-27.0.0.41303-fex/CrossOver "fh6_pe_known '$f6n/2xko.dll'"; } \
   && ! f6n_run /x/runners/crossover-27.0.0.41303-fex/CrossOver "fh6_pe_ok '$f6n/0025.dll'" \
   && ! f6n_run /x/runners/crossover-27.0.0.41303-fex/CrossOver "fh6_pe_ok '$f6n/old.dll'" \
   && ! f6n_run /x/runners/crossover-27.0.0.41303-fex/CrossOver "fh6_pe_known '$f6n/other.dll'" \
