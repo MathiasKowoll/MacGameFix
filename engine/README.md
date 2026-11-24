@@ -617,7 +617,8 @@ second, which is what `0032` buys for 2XKO; every other program gets CrossOver's
 back.
 
 `build.sh` builds `kernelbase.dll`, `user32.dll` and `win32u.so` when the series' `build.conf`
-says `PROTECTION_MODULES=yes`. `win32u.so` is built as CodeWeavers build theirs, with FreeType
+says `PROTECTION_MODULES=yes`, and `kernel32.dll` with `kernelbase.dll` since `0041` (see
+"EA SPORTS FC 27: FindPackagesByPackageFamily"). `win32u.so` is built as CodeWeavers build theirs, with FreeType
 and MoltenVK, in a build directory of its own (`build-<id>-<arch>-win32u`) configured with them;
 the libraries for its link tests come from a CrossOver of the build (`CROSSOVER_LIB`, a
 NotProton runner's by default). `engine-modules.sh` puts all three in the Rosetta improvement
@@ -727,6 +728,38 @@ official 1.10.35 release and no third-party DLL: with CodeWeavers' two modules i
 ends at the font error; with `0039`, at Direct Manipulation; with both, at "window
 drawn" and "window opened", and its Play started F1 25. Not done: the FEX side, and a
 program that uses neither.
+
+## EA SPORTS FC 27: FindPackagesByPackageFamily
+
+`0041` (wine-11.21, `kernelbase.dll` and `kernel32.dll`, both sides) adds
+`FindPackagesByPackageFamily`, which Wine 11.21 does not have.
+
+- **What it is:** the Windows function that lists the installed packages of a package
+  family: it takes the family's name and a filter, and fills a count, the packages' full
+  names and their properties. Wine has `GetPackagesByPackageFamily`, which says no package
+  is installed; `kernelbase.spec` had this one as a commented stub, and `kernel32.spec`
+  did not name it.
+- **Who it stopped:** EA SPORTS FC 27 (Steam, 1.0.142.20665) on NotProton's runner for
+  CrossOver Preview 41303, 2026-11-23. Its activation log,
+  `ProgramData\Origin\Logs\FC27_16425884_OnlineActivation_Log.html`, says "License
+  signature is good." and then "Missing DLL: KERNEL32.dll Function:
+  FindPackagesByPackageFamily", four starts of four, and the game ends at the dialog
+  "There is a problem with your game's setup. Please reinstall your game."
+- **With `0041`:** `kernelbase.dll` has the function and `kernel32.dll` exports it as a
+  forward to `kernelbase.dll`'s. It reports no packages: count 0, buffer length 0,
+  `ERROR_SUCCESS`, as `GetPackagesByPackageFamily` does; `ERROR_INVALID_PARAMETER` when
+  the count or the buffer length is a null pointer.
+- **`kernel32.dll` is a module since then**, as the game asks `KERNEL32.dll` for the
+  function. `build.sh` builds it wherever it builds `kernelbase.dll`
+  (`PROTECTION_MODULES=yes`), and `engine-modules.sh` installs and restores it with
+  Rosetta's improvement, beside `kernelbase.dll`. An install made before the modules had
+  it reads as outdated; installing again keeps CrossOver's own `kernel32.dll` in the
+  backup folder and puts ours in its place.
+
+Played on 2026-11-23 on NotProton's 41303 runner (Rosetta) with ad hoc builds of the two
+modules from this tree, put in by hand: the game started. Not done: these signed files
+themselves, the FEX side, and a program that gets packages back from the function on
+Windows.
 
 ## Measured
 

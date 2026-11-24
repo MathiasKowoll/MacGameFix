@@ -146,7 +146,11 @@ echo "==> building $ARCH (log: $BUILD/make.log)"
 XINPUT="xinput1_1 xinput1_2 xinput1_3 xinput1_4 xinput9_1_0 xinputuap"
 # A series whose build.conf says PROTECTION_MODULES=yes also ships kernelbase.dll, user32.dll
 # and win32u.so (wine-11.21's 0033-0035, for 2XKO's copy protection and the Riot Client).
-PROTECTION_PE=""; [ -z "$suffix" ] && [ "${PROTECTION_MODULES:-}" = yes ] && PROTECTION_PE="dlls/kernelbase/all dlls/user32/all"
+# kernel32.dll goes with kernelbase.dll, under the same switch: what kernel32 exports of a
+# function kernelbase has is a forward to it by name, so a function a patch adds to
+# kernelbase reaches a program that asks KERNEL32.dll for it only with both (0041's
+# FindPackagesByPackageFamily, which EA SPORTS FC 27's activation looks up there).
+PROTECTION_PE=""; [ -z "$suffix" ] && [ "${PROTECTION_MODULES:-}" = yes ] && PROTECTION_PE="dlls/kernelbase/all dlls/kernel32/all dlls/user32/all"
 # One that says WINDOW_MODULES=yes also ships dwrite.dll and directmanipulation.dll
 # (wine-11.21's 0039 and 0040, for a program built on GPUI: its fonts and its window).
 WINDOW_PE=""; [ -z "$suffix" ] && [ "${WINDOW_MODULES:-}" = yes ] && WINDOW_PE="dlls/dwrite/all dlls/directmanipulation/all"
@@ -242,7 +246,7 @@ fi
 rm -rf "${OUT:?}/$PE" "${OUT:?}/$UNIX" && mkdir -p "$OUT/$PE" "$OUT/$UNIX"
 for f in dlls/winebus.sys/$PE/winebus.sys dlls/mmdevapi/$PE/mmdevapi.dll dlls/hidclass.sys/$PE/hidclass.sys dlls/setupapi/$PE/setupapi.dll dlls/xaudio2_9/$PE/xaudio2_9.dll \
          $(for x in $XINPUT; do printf 'dlls/%s/%s/%s.dll ' "$x" "$PE" "$x"; done) $NTDLL_DLL_PE \
-         ${PROTECTION_PE:+dlls/kernelbase/$PE/kernelbase.dll dlls/user32/$PE/user32.dll} \
+         ${PROTECTION_PE:+dlls/kernelbase/$PE/kernelbase.dll dlls/kernel32/$PE/kernel32.dll dlls/user32/$PE/user32.dll} \
          ${WINDOW_PE:+dlls/dwrite/$PE/dwrite.dll dlls/directmanipulation/$PE/directmanipulation.dll}; do
   llvm-strip -o "$OUT/$PE/$(basename "$f")" "$BUILD/$f"
 done
