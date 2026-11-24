@@ -188,7 +188,7 @@ final class NativePort: ObservableObject {
     }
 }
 
-/// The port's section in Improvements: where the game and the sources are, the build, and Play.
+/// The port's section in the Native tab: where the game and the sources are, the build, and Play.
 struct NativePortSection: View {
     @ObservedObject var port = NativePort.batman
     let extra: [URL]
@@ -251,5 +251,23 @@ struct NativePortSection: View {
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .onAppear { if !port.building { port.look(extra: extra) } }
+    }
+}
+
+/// Native: the games MacGameFix builds for this Mac from the owner's own copy, one section each.
+/// They need no CrossOver, which is why they are not in Improvements.
+struct NativeBuildsView: View {
+    @ObservedObject var model: Model
+
+    var body: some View {
+        Form {
+            Section {
+                Text("Games built for Apple silicon on this Mac, from the copy you own. They run without CrossOver. "
+                     + "MacGameFix carries nothing of any game: it gets the port's sources, builds, and starts what it built.")
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            NativePortSection(extra: model.extraFolders)
+        }
+        .formStyle(.grouped)
     }
 }
