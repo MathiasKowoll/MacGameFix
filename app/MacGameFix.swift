@@ -65,6 +65,10 @@ final class Model: ObservableObject {
     @Published var fansState = Fans.state()
     @Published var fansLine = Fans.lastLine()
     @Published var fansError = ""
+    /// The NotProton plugins MacGameFix carries (NotProtonPlugins.swift): how each stands, nil
+    /// when there is no NotProton, and what the last "Put in Place" did.
+    @Published var plugins: [(label: String, state: NotProtonPlugins.State)]? = nil
+    @Published var pluginsLine = ""
     @Published var agentOn = LaunchAgent.enabled
     @Published var events: [AgentEvent] = []
     @Published var updateLine = ""
@@ -266,6 +270,21 @@ final class Model: ObservableObject {
     func refreshFans() {
         fansState = Fans.state()
         fansLine = Fans.lastLine()
+    }
+
+    func refreshPlugins() {
+        Task { plugins = await Task.detached { NotProtonPlugins.states() }.value }
+    }
+
+    /// What the agent's next pass would do, done now.
+    func putPluginsInPlace() {
+        busy = true
+        Task {
+            let said = await Task.detached { NotProtonPlugins.keep() }.value
+            pluginsLine = said.isEmpty ? "Nothing to do." : said.joined(separator: "\n")
+            plugins = await Task.detached { NotProtonPlugins.states() }.value
+            busy = false
+        }
     }
 
     /// Each game's compiled shaders kept whole, or left as macOS writes them. On, the games that are
@@ -561,6 +580,7 @@ final class Model: ObservableObject {
             // NotProton's rows for every game, for this Mac, and the fans row; quick, and only
             // written when they differ.
             await Task.detached { _ = NotProtonRow.keepAll(); Fans.keepNotProtonRow() }.value
+            plugins = await Task.detached { NotProtonPlugins.states() }.value
             let (libs, found) = await Task.detached { Libraries.find(games, extra: extra) }.value
             libraries = libs
             hits = found
@@ -1812,6 +1832,8 @@ struct EngineView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
+            NotProtonPluginsSection(model: model)
+
             NativePortSection(extra: model.extraFolders)
 
             Section {
@@ -1842,6 +1864,7 @@ struct EngineView: View {
         .onAppear {
             if model.engineRows.isEmpty { model.scanEngine() }
             model.refreshFans()
+            model.refreshPlugins()
             // With the option on the window does it too, for whoever keeps the menu bar item off.
             model.refreshShaders(keep: model.settings.shaderCache)
         }
@@ -1849,6 +1872,51 @@ struct EngineView: View {
 }
 
 /// An improvement's title, what it does in a line, and where it is on.
+/// The NotProton plugins MacGameFix carries: whether each is in NotProton's plugins folder, and
+/// why one is not offered. The agent keeps them; the button does its next pass now.
+struct NotProtonPluginsSection: View {
+    @ObservedObject var model: Model
+
+    var body: some View {
+        Section {
+            if let plugins = model.plugins {
+                ForEach(plugins, id: \.label) { plugin in
+                    LabeledContent(plugin.label) {
+                        switch plugin.state {
+                        case .inPlace: Text("In place")
+                        case .behind: Text("Not in place yet").foregroundStyle(.orange)
+                        case .unworkable(let why): Text("Not offered: \(why)").foregroundStyle(.secondary)
+                        case .foreign: Text("Another plugin file has it").foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                HStack {
+                    Spacer()
+                    Button("Put in Place") { model.putPluginsInPlace() }
+                        .disabled(model.busy || !plugins.contains { $0.state == .behind })
+                        .help("Does now what the menu bar item does on its own: writes the rows and libraries "
+                              + "that are missing or older than this MacGameFix's.")
+                }
+                if !model.pluginsLine.isEmpty {
+                    Text(model.pluginsLine).font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                Text("NotProton is not installed in Steam.").foregroundStyle(.secondary)
+            }
+        } header: {
+            ImprovementHeader(symbol: "puzzlepiece.extension", title: "NotProton plugins",
+                              summary: "Four of MacGameFix's fixes as NotProton plugins, ported by NotProton's creator.",
+                              count: model.plugins.map { "\($0.filter { $0.state == .inPlace }.count) of \($0.count)" } ?? "Off")
+        } footer: {
+            Text("Each one is off until you turn it on for a game, in NotProton's options for that game, under "
+                 + "MacGameFix · Video, MacGameFix · D3DMetal or MacGameFix · Per game. The D3DMetal and Red Dead "
+                 + "Online ones need NotProton's plugin host, which NotProton's Update installs.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
 struct ImprovementHeader: View {
     let symbol: String
     let title: String
@@ -3220,6 +3288,11 @@ enum Entry {
             // NotProton's rows for every game (GeneralRows.swift), as the agent keeps them.
             let lines = NotProtonRow.keepAll()
             print(lines.isEmpty ? "rows: nothing to do" : lines.joined(separator: "\n"))
+            exit(0)
+        }
+        if args.contains("--plugins-report") {
+            // How each NotProton plugin MacGameFix carries stands (NotProtonPlugins.swift); nothing written.
+            print(NotProtonPlugins.report())
             exit(0)
         }
         if args.contains("--cpu-row-keep") {

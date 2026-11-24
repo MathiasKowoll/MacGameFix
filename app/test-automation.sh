@@ -1187,6 +1187,8 @@ printf '      split("label description description_on section on off depends req
 check '[ -f "$NPLIB/d3dmetal-freeze.dylib" ] && [ -f "$NPLIB/d3dmetal-notifier.dylib" ] && [ -f "$NPLIB/tcp-noopt.dylib" ] && has "$(lipo -archs "$NPLIB/tcp-noopt.dylib")" arm64 && has "$(lipo -archs "$NPLIB/tcp-noopt.dylib")" x86_64' "the app carries the three libraries, for both architectures"
 OUT=$("$BIN" --rows-keep)
 check 'has "$OUT" "Unreal video row: written" && [ -f "$NPU" ] && [ ! -e "$NPZ" ] && [ ! -e "$NPN" ] && [ ! -e "$NPT" ] && [ ! -e "$NPP/tcp-noopt.dylib" ]' "without NotProton's plugin host, only the Unreal row: a library would load and do nothing"
+OUT=$("$BIN" --plugins-report)
+check 'has "$OUT" "Unreal video fix: in place" && has "$OUT" "D3DMetal freeze fix: not offered, NotProton'"'"'s plugin host is not installed"' "the window says which plugins are in place and why one is not offered"
 U=$(cat "$NPU")
 check 'has "$U" "[NOTPROTON_UNREAL_VIDEO]" && has "$U" "group = MacGameFix · Video" && has "$U" "on = 1" && [ "$(/usr/bin/grep -c "^patch = winegstreamer.dll: " "$NPU")" = 2 ] && has "$U" "(MacGameFix)"' "the Unreal row is NotProton's own, with its two patches, in MacGameFix · Video"
 : > "$NPHOST"
@@ -1196,11 +1198,14 @@ check 'cmp -s "$NPLIB/d3dmetal-freeze.dylib" "$NPP/d3dmetal-freeze.dylib" && cmp
 check 'has "$(cat "$NPZ")" "requires = Library/Application Support/notproton/plugins/d3dmetal-freeze.dylib" && has "$(cat "$NPZ")" "inject = 1" && has "$(cat "$NPZ")" "group = MacGameFix · D3DMetal"' "a library's row injects it and requires it where it was put"
 T6=$(cat "$NPT")
 check 'has "$T6" "[NOTPROTON_TCP_NOOPT]" && has "$T6" "apps = 1174180" && has "$T6" "apps = 1404210" && has "$T6" "group = MacGameFix · Per game"' "the Red Dead Online row shows for Red Dead Redemption 2 and Red Dead Online only"
+check '[ "$("$BIN" --plugins-report | /usr/bin/grep -c ": in place$")" = 4 ]' "with the plugin host, the window shows all four in place"
 check '[ "$("$BIN" --rows-keep)" = "rows: nothing to do" ]' "plugins already right are left as they are"
 printf 'an older build' > "$NPP/tcp-noopt.dylib"
+check 'has "$("$BIN" --plugins-report)" "Red Dead Online fix: not in place yet"' "a library that differs shows as not in place yet"
 check '[ "$("$BIN" --rows-keep)" = "Red Dead Online library: put in place" ] && cmp -s "$NPLIB/tcp-noopt.dylib" "$NPP/tcp-noopt.dylib" && [ ! -e "$NPP/.tcp-noopt.dylib.mgf-new" ]' "a library that differs is replaced, through a rename, and nothing is left beside it"
 rm -f "$NPN"; printf 'theirs' > "$NPP/d3dmetal-notifier.dylib"
 printf '[NOTPROTON_D3DMETAL_NOTIFIER]\nlabel = Theirs\non = 1\n' > "$NPP/someone-else.conf"
+check 'has "$("$BIN" --plugins-report)" "D3DMetal video crash fix: another plugin file has it"' "an id another file declares shows as theirs"
 check 'has "$("$BIN" --rows-keep)" "another plugin file has NOTPROTON_D3DMETAL_NOTIFIER, left alone" && [ ! -e "$NPN" ] && [ "$(cat "$NPP/d3dmetal-notifier.dylib")" = theirs ]' "an id another file declares is left alone, and so is its library"
 rm -f "$NPP/someone-else.conf" "$NPP/d3dmetal-notifier.dylib"
 "$BIN" --rows-keep >/dev/null

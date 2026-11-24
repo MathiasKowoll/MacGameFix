@@ -350,6 +350,11 @@ work its row is taken out again. A row another plugin file already declares is
 left alone, with its library, so a NotProton that ships the same plugins keeps
 its own.
 
+There is nothing to install by hand: the menu bar item puts them in place, and
+so does the window each time it looks for games. The Improvements tab shows
+whether each one is in place, or why it is not offered, and its **Put in Place**
+button does now what the menu bar item would do on its next pass.
+
 ## Each game's compiled shaders, kept whole
 
 A game compiles each shader the first time it draws with it, and Metal keeps the

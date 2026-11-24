@@ -93,6 +93,49 @@ enum NotProtonPlugins {
         return nil
     }
 
+    /// How a plugin stands on this Mac, for the window; nothing is written.
+    enum State: Sendable, Equatable {
+        case inPlace
+        /// Missing or not the one this MacGameFix carries: the next pass puts it in place.
+        case behind
+        case unworkable(String)
+        case foreign
+    }
+
+    static func state(_ p: Plugin) -> State {
+        if let why = unworkable(p) { return .unworkable(why) }
+        if NotProtonRow.headers(besides: p.file).contains("[\(p.id)]") { return .foreign }
+        let fm = FileManager.default
+        let row = try? String(contentsOf: NotProtonRow.folder.appendingPathComponent(p.file), encoding: .utf8)
+        guard row == text(p, grouped: NotProtonRow.knowsGroups()) else { return .behind }
+        if let library = p.library {
+            guard let source = bundled?.appendingPathComponent(library),
+                  let carried = fm.contents(atPath: source.path),
+                  fm.contents(atPath: NotProtonRow.folder.appendingPathComponent(library).path) == carried
+            else { return .behind }
+        }
+        return .inPlace
+    }
+
+    /// Each plugin's label and state; nil when there is no NotProton in Steam.
+    static func states() -> [(label: String, state: State)]? {
+        guard FileManager.default.fileExists(atPath: Engine.notproton.path) else { return nil }
+        return all.map { ($0.label, state($0)) }
+    }
+
+    /// One line per plugin, for --plugins-report and the tests.
+    static func report() -> String {
+        guard let states = states() else { return "plugins: no NotProton" }
+        return states.map { label, state in
+            switch state {
+            case .inPlace: return "\(label): in place"
+            case .behind: return "\(label): not in place yet"
+            case .unworkable(let why): return "\(label): not offered, \(why)"
+            case .foreign: return "\(label): another plugin file has it"
+            }
+        }.joined(separator: "\n")
+    }
+
     /// Every plugin put in place, brought up to date, or taken out where it cannot work. What
     /// was done; nothing when all was already right or there is no NotProton.
     static func keep() -> [String] {
