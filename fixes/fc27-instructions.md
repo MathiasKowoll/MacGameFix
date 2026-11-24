@@ -19,6 +19,8 @@ It is a fix being tested, played on one Mac. If that is not acceptable to you, d
 
 Press Play in Steam. The first time, a console window says that Live Editor's launcher opens for a moment and closes again: it has to write its settings once. When the window says so, press a key and **press Play again**.
 
+A version of Live Editor that is out for its patrons first asks you to **sign in to Patreon** once: at the first Play with it, your browser opens for the sign-in and that start ends without the game. Finish signing in; the console window waits for it and then says so. Press Play again. Live Editor keeps the sign-in in the game's prefix, and a version that is public does not ask.
+
 From then on Play does all of it: Live Editor's launcher opens, the EA app checks your licence, the game starts and the launcher closes itself. In the game, **F9** (fn + F9 on a Mac keyboard) shows and hides Live Editor's window.
 
 Do not close Live Editor's launcher window yourself while the game is starting, and do not switch to another app until the game is at its "press any key" screen.
@@ -64,6 +66,7 @@ The play script's notes for the last start are in `~/Library/Application Support
 |---|---|
 | "There is a problem with your game's setup. Please reinstall your game." | The runner lost the Rosetta improvement. Install it again in **Improvements**. |
 | The launcher stays at "Injecting" with "Starting EA Javelin Anticheat…" for more than half a minute | Stop the game from Steam and press Play again. |
+| The browser opens for a Patreon sign-in and no game starts | Expected at the first Play with a Live Editor version that is out for its patrons first. Sign in, wait for the console window to say it was saved, and press Play again. |
 | The game closes right after the EA SPORTS logo | The row **Start with Live Editor** lost its library, or Live Editor is not the version for this game. Install the fix again; check Live Editor's version. |
 | Play starts nothing | The row **Start with Live Editor** is off. Switch it on in the game's Compatibility page. |
 | The fix reads partial after a NotProton or prefix update | Install it again, with Steam closed. |
