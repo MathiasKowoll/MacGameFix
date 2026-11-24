@@ -4,3 +4,4 @@
 # notification. Rewrite them with every change to the fixes: what stays here is said
 # again with the next catalog. Lines that start with # are not carried.
 F1 25, being tested: Steam's Play starts it through Swofty Launcher on NotProton (CrossOver Preview 41303, Rosetta), offline and without EA AntiCheat. Turn Testing on in Settings to see it; it needs the Rosetta improvement, and Steam closed while it installs. At your own risk: MacGameFix does not answer for failures in the game.
+EA SPORTS FC 27, being tested: Steam's Play starts it with FC 27 Live Editor on NotProton (CrossOver Preview 41303, Rosetta), offline and without EA AntiCheat. You download Live Editor yourself; the install asks for its folder and copies it, and MacGameFix does not include it. Turn Testing on in Settings to see it; it needs the Rosetta improvement, and Steam closed while it installs. At your own risk: MacGameFix does not answer for failures in the game.
