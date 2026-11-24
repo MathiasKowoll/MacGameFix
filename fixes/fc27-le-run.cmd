@@ -15,6 +15,12 @@ rem   3. Stay until FC27.exe is gone. The EA app's launcher ends right after the
 rem      started, and NotProton closes the prefix, the game with it, when the program it
 rem      started ends. That program is this batch file.
 rem
+rem A Live Editor version that is out for its patrons first asks for a Patreon sign-in the
+rem first time, and it asks at the moment the game appears, in the place of injecting (seen
+rem with v27.2.1 on 2026-11-24): the browser opens, the game ends some 8 s in for want of the
+rem DLL, and a launcher closed then loses the sign-in. So after such a start the launcher is
+rem left open until it has saved the sign-in, and the game is for the next Play.
+rem
 rem cmd reads a batch file a line at a time from the file: do not edit this one while a start
 rem is running, the run goes on in the middle of a line of the new text.
 rem
@@ -93,6 +99,39 @@ if not errorlevel 1 goto wait
 echo FC27.exe is gone at %time% >> "%log%"
 
 :restore
+rem Did the launcher ask for a sign-in in this start? Its log says so, and says when it saved it.
+for %%f in ("%le%\Logs\live_editor_launcher_*.log") do copy /y "%%f" "%le%\Logs\old\ready-check.txt" > nul 2>&1
+find "need to login" "%le%\Logs\old\ready-check.txt" > nul 2>&1
+if errorlevel 1 goto close
+echo Live Editor's launcher asked for a sign-in at %time% >> "%log%"
+echo This version of Live Editor asks you to sign in to Patreon: it is out for its patrons first.
+echo Finish signing in in the browser. This window waits for it, five minutes at most.
+set /a tries=0
+:signin
+for %%f in ("%le%\Logs\live_editor_launcher_*.log") do copy /y "%%f" "%le%\Logs\old\ready-check.txt" > nul 2>&1
+find "Auth Save Done" "%le%\Logs\old\ready-check.txt" > nul 2>&1
+if not errorlevel 1 goto signedin
+set /a tries=tries+1
+if %tries% geq 100 goto nosignin
+ping -n 4 127.0.0.1 > nul
+goto signin
+:signedin
+echo the sign-in was saved at %time% >> "%log%"
+echo.
+echo Signed in. Press Play again: the game starts with Live Editor from now on.
+goto closeasked
+:nosignin
+echo no sign-in was saved in five minutes >> "%log%"
+echo.
+echo No sign-in was saved. Press Play again to be asked once more.
+:closeasked
+taskkill /im Launcher.exe >> "%log%" 2>&1
+ping -n 4 127.0.0.1 > nul
+echo end %time% >> "%log%"
+pause
+exit /b 0
+
+:close
 rem The launcher closes itself once it has injected. If it is still there, closing it is what
 rem makes it put the game's own EA AntiCheat launcher back.
 taskkill /im Launcher.exe >> "%log%" 2>&1

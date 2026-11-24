@@ -333,10 +333,10 @@
           "symbol": null,
           "note": "Live Editor's launcher has to be waiting before the game starts; then Steam's own command, and the batch file stays until FC27.exe is gone, since NotProton closes the prefix when the program it started ends.",
           "language": "text",
-          "startLine": 46,
-          "endLine": 93,
-          "commit": "17b51dad34f17585063b9c16583399b835aa16ee",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/17b51dad34f17585063b9c16583399b835aa16ee/fixes/fc27-le-run.cmd#L46-L93",
+          "startLine": 52,
+          "endLine": 99,
+          "commit": "58124c285e89a716a9b03cdf87a688c102f1c104",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/58124c285e89a716a9b03cdf87a688c102f1c104/fixes/fc27-le-run.cmd#L52-L99",
           "code": "echo opening Live Editor's launcher at %time% >> \"%log%\"\nstart \"\" /d \"%le%\" \"%le%\\Launcher.exe\"\nset /a tries=0\n:ready\nset \"ok=0\"\nfor %%f in (\"%le%\\Logs\\live_editor_launcher_*.log\") do copy /y \"%%f\" \"%le%\\Logs\\old\\ready-check.txt\" > nul 2>&1\nfind \"STATUS_WAITING_FOR_GAME\" \"%le%\\Logs\\old\\ready-check.txt\" > nul 2>&1 && set \"ok=1\"\nif \"%ok%\"==\"1\" goto isready\nset /a tries=tries+1\nif %tries% geq 75 goto notready\nping -n 3 127.0.0.1 > nul\ngoto ready\n:notready\necho Live Editor's launcher was not waiting for the game after 150 s: the game is not started >> \"%log%\"\necho Live Editor's launcher did not get ready. Look at its window and at its Logs folder.\ntaskkill /im Launcher.exe >> \"%log%\" 2>&1\nexit /b 1\n:isready\necho Live Editor's launcher is waiting for the game at %time% (after %tries% checks) >> \"%log%\"\n\nrem Steam's own command. Started without waiting: the stub does not return while the EA app's\nrem background service lives, which is long after the game has closed. /b keeps the game's\nrem Wine output in NotProton's log for the game. The link has an ampersand, so it is only\nrem ever written inside quotes.\necho starting \"%FC27_STEAM_COMMAND%\" at %time% >> \"%log%\"\nstart \"\" /b \"C:\\Program Files (x86)\\Steam\\steam.exe\" \"%FC27_STEAM_COMMAND%\"\n\nrem The EA app checks the licence and syncs saves before it starts the game: FC27.exe gets\nrem four minutes to show up.\nset /a tries=0\n:appear\ntasklist | find /i \"FC27.exe\" > nul\nif not errorlevel 1 goto running\nset /a tries=tries+1\nif %tries% geq 80 goto never\nping -n 4 127.0.0.1 > nul\ngoto appear\n:never\necho FC27.exe never started (4 minutes) at %time% >> \"%log%\"\ngoto restore\n:running\necho FC27.exe is running at %time% >> \"%log%\"\n\n:wait\nping -n 4 127.0.0.1 > nul\ntasklist | find /i \"FC27.exe\" > nul\nif not errorlevel 1 goto wait\necho FC27.exe is gone at %time% >> \"%log%\""
         }
       ],
