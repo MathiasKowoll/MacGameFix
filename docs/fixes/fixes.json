@@ -291,8 +291,8 @@
           "language": "c",
           "startLine": 103,
           "endLine": 118,
-          "commit": "062ab9036efcafd2cf371c8fb5a2c34b77d262c0",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/062ab9036efcafd2cf371c8fb5a2c34b77d262c0/fixes/d3dmetal-hookable/mgf-d3dmetal-hookable.c#L103-L118",
+          "commit": "17b51dad34f17585063b9c16583399b835aa16ee",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/17b51dad34f17585063b9c16583399b835aa16ee/fixes/d3dmetal-hookable/mgf-d3dmetal-hookable.c#L103-L118",
           "code": "static int rewrite(uint64_t at, uint64_t method) {\n  uint8_t code[16] = { 0x48, 0xB8, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xE0, 0xCC, 0xCC, 0xCC, 0xCC };\n  memcpy(code + 2, &method, 8);\n  long page = sysconf(_SC_PAGESIZE);\n  void *start = (void *)(uintptr_t)(at & ~(uint64_t)(page - 1));\n  // Through mprotect and an ordinary store, never mach_vm_write: Rosetta has to see both, or it\n  // goes on running its translation of the old stub. What the kernel says of the page cannot\n  // be given back afterwards: Rosetta keeps a page it has translated read-only on its side to\n  // catch such stores, so a stub in use reads \"not writable\" there whatever Wine asked for.\n  // A page D3DMetal fills with code as it goes is readable, writable and executable to the\n  // program already; asking for that again changes nothing for it.\n  if (mprotect(start, page, PROT_READ | PROT_WRITE | PROT_EXEC)) return 0;\n  if (memcmp((void *)(uintptr_t)at, OLD, 8) || memcmp((void *)(uintptr_t)(at + 8), &method, 8)) return 0;\n  _mm_storeu_si128((__m128i *)(uintptr_t)at, _mm_loadu_si128((const __m128i *)code));\n  return 1;\n}"
         },
         {
@@ -302,8 +302,8 @@
           "language": "c",
           "startLine": 120,
           "endLine": 155,
-          "commit": "062ab9036efcafd2cf371c8fb5a2c34b77d262c0",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/062ab9036efcafd2cf371c8fb5a2c34b77d262c0/fixes/d3dmetal-hookable/mgf-d3dmetal-hookable.c#L120-L155",
+          "commit": "17b51dad34f17585063b9c16583399b835aa16ee",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/17b51dad34f17585063b9c16583399b835aa16ee/fixes/d3dmetal-hookable/mgf-d3dmetal-hookable.c#L120-L155",
           "code": "static unsigned scan(double *seconds, unsigned long *bytes) {\n  static uint8_t buf[1 << 20];\n  struct timespec a, b; clock_gettime(CLOCK_MONOTONIC, &a);\n  unsigned found = 0; *bytes = 0;\n  mach_vm_address_t addr = LOW;\n  while (addr < HIGH) {\n    mach_vm_size_t size = 0; vm_region_basic_info_data_64_t info; mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;\n    mach_port_t object = MACH_PORT_NULL;\n    if (mach_vm_region(mach_task_self(), &addr, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &count, &object) != KERN_SUCCESS) break;\n    if (object != MACH_PORT_NULL) mach_port_deallocate(mach_task_self(), object);\n    if (addr >= HIGH) break;\n    // The stubs are in a DLL's .data. Once one has run, the kernel shows its page as readable and\n    // executable only (Rosetta's doing, see rewrite), so that is looked at too; constants are not.\n    if ((info.protection & VM_PROT_READ) && (info.protection & (VM_PROT_WRITE | VM_PROT_EXECUTE))) {\n      for (mach_vm_size_t off = 0; off < size; off += sizeof buf) {\n        mach_vm_size_t want = size - off < sizeof buf ? size - off : sizeof buf, got = 0;\n        if (mach_vm_read_overwrite(mach_task_self(), addr + off, want, (mach_vm_address_t)(uintptr_t)buf, &got) != KERN_SUCCESS) continue;\n        *bytes += got;\n        for (mach_vm_size_t i = 0; i + 16 <= got; i += 16) {\n          if (buf[i] != 0x66 || memcmp(buf + i, OLD, 8)) continue;\n          uint64_t method; memcpy(&method, buf + i + 8, 8);\n          const char *symbol;\n          if (!in_d3dmetal(method, &symbol)) continue;\n          if (!rewrite(addr + off + i, method)) continue;\n          found++; total++;\n          if (strstr(symbol, \"SwapChain4_Present\") || strstr(symbol, \"ExecuteCommandLists\") || strstr(symbol, \"ResizeBuffers\"))\n            say(\"stub at 0x%llx -> %s (0x%llx)\", (unsigned long long)(addr + off + i), symbol, (unsigned long long)method);\n        }\n      }\n    }\n    addr += size;\n  }\n  clock_gettime(CLOCK_MONOTONIC, &b);\n  *seconds = (b.tv_sec - a.tv_sec) + (b.tv_nsec - a.tv_nsec) / 1e9;\n  return found;\n}"
         },
         {
@@ -313,8 +313,8 @@
           "language": "bash",
           "startLine": 191,
           "endLine": 197,
-          "commit": "ad0cc3521dd09c13b38c8b3d63b4ccd2c35657bb",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/ad0cc3521dd09c13b38c8b3d63b4ccd2c35657bb/fixes/install-fc27-live-editor.sh#L191-L197",
+          "commit": "064db6f558963eb0550856b1f70eb31807d6bcce",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/064db6f558963eb0550856b1f70eb31807d6bcce/fixes/install-fc27-live-editor.sh#L191-L197",
           "code": "ask_folder() {\n  local prompt=\"Choose your FC 27 Live Editor folder: the one that holds Launcher.exe and FCLiveEditor.DLL.\"\n  editor_ok && prompt=\"$prompt Cancel keeps the Live Editor already in use.\"\n  if [ -n \"${MGVF_CHOOSER:-}\" ]; then \"$MGVF_CHOOSER\" \"$prompt\" 2>/dev/null || true; return 0; fi\n  /usr/bin/osascript -e 'on run argv' -e 'try' -e 'return POSIX path of (choose folder with prompt (item 1 of argv))' \\\n    -e 'on error' -e 'return \"\"' -e 'end try' -e 'end run' \"$prompt\" 2>/dev/null || true\n}"
         },
         {
@@ -324,8 +324,8 @@
           "language": "bash",
           "startLine": 54,
           "endLine": 57,
-          "commit": "ad0cc3521dd09c13b38c8b3d63b4ccd2c35657bb",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/ad0cc3521dd09c13b38c8b3d63b4ccd2c35657bb/fixes/fc27-le-play.sh#L54-L57",
+          "commit": "064db6f558963eb0550856b1f70eb31807d6bcce",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/064db6f558963eb0550856b1f70eb31807d6bcce/fixes/fc27-le-play.sh#L54-L57",
           "code": "config=\"${STEAM_COMPAT_DATA_PATH:-}/pfx/drive_c/FC 27 Live Editor/le_config.json\"\nif [ -f \"$config\" ] && [ \"$opens\" != window ]; then\n  /usr/bin/perl -0pi -e 's/(\"dll_inject_delay\"\\s*:\\s*)(\\d+)/$1 . ($2 < 1000 ? 1000 : $2)/e; s/(\"auto_inject\"\\s*:\\s*)false/${1}true/' \"$config\"\nfi"
         },
         {
@@ -335,8 +335,8 @@
           "language": "text",
           "startLine": 46,
           "endLine": 93,
-          "commit": "062ab9036efcafd2cf371c8fb5a2c34b77d262c0",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/062ab9036efcafd2cf371c8fb5a2c34b77d262c0/fixes/fc27-le-run.cmd#L46-L93",
+          "commit": "17b51dad34f17585063b9c16583399b835aa16ee",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/17b51dad34f17585063b9c16583399b835aa16ee/fixes/fc27-le-run.cmd#L46-L93",
           "code": "echo opening Live Editor's launcher at %time% >> \"%log%\"\nstart \"\" /d \"%le%\" \"%le%\\Launcher.exe\"\nset /a tries=0\n:ready\nset \"ok=0\"\nfor %%f in (\"%le%\\Logs\\live_editor_launcher_*.log\") do copy /y \"%%f\" \"%le%\\Logs\\old\\ready-check.txt\" > nul 2>&1\nfind \"STATUS_WAITING_FOR_GAME\" \"%le%\\Logs\\old\\ready-check.txt\" > nul 2>&1 && set \"ok=1\"\nif \"%ok%\"==\"1\" goto isready\nset /a tries=tries+1\nif %tries% geq 75 goto notready\nping -n 3 127.0.0.1 > nul\ngoto ready\n:notready\necho Live Editor's launcher was not waiting for the game after 150 s: the game is not started >> \"%log%\"\necho Live Editor's launcher did not get ready. Look at its window and at its Logs folder.\ntaskkill /im Launcher.exe >> \"%log%\" 2>&1\nexit /b 1\n:isready\necho Live Editor's launcher is waiting for the game at %time% (after %tries% checks) >> \"%log%\"\n\nrem Steam's own command. Started without waiting: the stub does not return while the EA app's\nrem background service lives, which is long after the game has closed. /b keeps the game's\nrem Wine output in NotProton's log for the game. The link has an ampersand, so it is only\nrem ever written inside quotes.\necho starting \"%FC27_STEAM_COMMAND%\" at %time% >> \"%log%\"\nstart \"\" /b \"C:\\Program Files (x86)\\Steam\\steam.exe\" \"%FC27_STEAM_COMMAND%\"\n\nrem The EA app checks the licence and syncs saves before it starts the game: FC27.exe gets\nrem four minutes to show up.\nset /a tries=0\n:appear\ntasklist | find /i \"FC27.exe\" > nul\nif not errorlevel 1 goto running\nset /a tries=tries+1\nif %tries% geq 80 goto never\nping -n 4 127.0.0.1 > nul\ngoto appear\n:never\necho FC27.exe never started (4 minutes) at %time% >> \"%log%\"\ngoto restore\n:running\necho FC27.exe is running at %time% >> \"%log%\"\n\n:wait\nping -n 4 127.0.0.1 > nul\ntasklist | find /i \"FC27.exe\" > nul\nif not errorlevel 1 goto wait\necho FC27.exe is gone at %time% >> \"%log%\""
         }
       ],
@@ -346,7 +346,7 @@
       "backend": "D3DMetal 4.",
       "crossover": "CrossOver Preview 27 (27.0.0.41303), NotProton runner on Rosetta, 2026-11-23",
       "pageUrl": null,
-      "graphicsBackend": null,
+      "graphicsBackend": "d3dmetal",
       "gptk": null,
       "notNeededFromGptk": null
     },
