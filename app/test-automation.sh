@@ -1030,6 +1030,17 @@ printf '2026-11-23 10:01:00 [notproton] info [launch] handed to /bin/sh -c: NOTP
 printf '2026-11-23 10:02:00 [notproton] info [launch] handed to /bin/sh -c: XMGF_FANS=max MGF_FANS=max %s/run waitforexitandrun %s\n' "'/tool'" "'$FG/f.exe'" >> "$NL"
 check '[ "$("$FH" --asked "$NL" "$FG/d.exe")" = yes ] && [ "$("$FH" --asked "$NL" "$FG/e.exe")" = no ] && [ "$("$FH" --asked "$NL" "$FG/f.exe")" = yes ]' "the panel row's NOTPROTON_MGF_FANS=1 asks too, as a word of its own, and a word anywhere on the line counts"
 check '[ "$("$FH" --version)" -ge 2 ]' "a helper that reads the panel row says version 2, so an installed older one is offered the update"
+# A launch option with a script of its own before %command%: Steam's command names the game, the
+# script has the tool run cmd.exe, and the helper sees only the latter. The line is found by its time.
+printf '2026-11-23 20:41:01 [notproton] info [launch] handed to /bin/sh -c: "/w/play.sh" %s/run waitforexitandrun %s\n' "'/tool'" "'steam2ea://launchgame/1?a=b&c=d'" >> "$NL"
+printf '2026-11-23 20:56:05 [notproton] info [launch] handed to /bin/sh -c: NOTPROTON_MGF_FANS=1 "/w/play.sh" %s/run waitforexitandrun %s\n' "'/tool'" "'$FG/g.exe'" >> "$NL"
+check '[ "$("$FH" --asked "$NL" cmd.exe)" = no ] && [ "$("$FH" --asked "$NL" cmd.exe "2026-11-23 20:56:05")" = yes ] && [ "$("$FH" --asked "$NL" cmd.exe "2026-11-23 20:56:07")" = yes ]' "a game started through a launch option's own script asks too: its line is the one written when the script started"
+check '[ "$("$FH" --asked "$NL" cmd.exe "2026-11-23 20:41:01")" = no ] && [ "$("$FH" --asked "$NL" cmd.exe "2026-11-23 20:41:30")" = no ]' "and one started that way without the variable does not, whatever a later launch asks"
+printf '2026-11-23 21:10:00 [notproton] info [launch] handed to /bin/sh -c: MGF_FANS=max NOTE=cmd.exe %s/run waitforexitandrun %s\n' "'/tool'" "'$FG/h.exe'" >> "$NL"
+printf '2026-11-23 21:20:00 [notproton] info [launch] handed to /bin/sh -c: "/w/play.sh" %s/run waitforexitandrun %s\n' "'/tool'" "'$FG/i.exe'" >> "$NL"
+check '[ "$("$FH" --asked "$NL" cmd.exe)" = yes ] && [ "$("$FH" --asked "$NL" cmd.exe "2026-11-23 21:20:01")" = no ]' "the line of its own time decides over an earlier one that happens to name the program"
+check '[ "$("$FH" --asked "$NL" "$FG/d.exe" "2026-11-23 23:00:00")" = yes ] && [ "$("$FH" --asked "$NL" "$FG/e.exe" "2026-11-23 23:00:00")" = no ]' "with no line near the start, the last line naming the program decides, as before"
+check '! "$FH" --asked "$NL" cmd.exe "yesterday" >/dev/null 2>&1 && [ "$("$FH" --version)" -ge 3 ]' "a start that is no time is refused, and this helper says version 3"
 printf '[MGF_FANS]\nlabel = Fans at full speed\non = max\n' > "$SUPPORT/notproton/plugins/mgf-fans.conf"
 check '[ "$("$BIN" --fans-row-keep)" = "fans row: written" ] && has "$(cat "$SUPPORT/notproton/plugins/mgf-fans.conf")" "[NOTPROTON_MGF_FANS]" && [ "$("$BIN" --fans-row-keep)" = "fans row: nothing to do" ]' "the row an earlier MacGameFix wrote is rewritten once while the helper is in place"
 "$BIN" --fans-remove >/dev/null 2>&1

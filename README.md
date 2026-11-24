@@ -288,6 +288,13 @@ game it writes `NOTPROTON_MGF_FANS=1` into that game's launch options, which the
 helper (version 2 or later) takes as it takes `MGF_FANS=max`. The row shows only
 in a NotProton whose panel lists such rows, and the variable works without it.
 
+Either works for any game NotProton starts, also when the launch options put a
+script of their own before `%command%` and that script starts something else in
+the game's place, as a mod launcher's does. That takes the helper at version 3:
+an earlier one looked for the program being run in the line NotProton logged,
+found another name there, and left the fans alone. **Improvements › Fans**
+offers the update when the installed helper is older.
+
 The fans raise what the Mac can shed; they do not lower what a game draws. A
 game that drew about 96 W uncapped was cut all the same after 2 min 40 s. With
 it, cap the frame rate (NotProton's **Frame rate cap** row, below), turn the
