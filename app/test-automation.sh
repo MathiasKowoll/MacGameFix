@@ -1140,6 +1140,24 @@ rm -f "$NPP/someone-else.conf" "$NPR"
 for i in $(seq 1 32); do printf '[NOTPROTON_FULL_%s]\nlabel = Row %s\n' "$i" "$i"; done > "$NPP/full.conf"
 check 'has "$(MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep)" "32 rows are taken" && [ ! -e "$NPR" ]' "with NotProton's 32 rows taken, it adds none"
 rm -f "$NPP/full.conf"
+echo "== NotProton's frame rate cap and ray tracing rows"
+NPF="$NPP/mgf-fps.conf"; NPD="$NPP/mgf-dxr.conf"
+rm -f "$NPF" "$NPD"
+OUT=$(MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep)
+check 'has "$OUT" "frame rate cap row: written for a 120 Hz display" && has "$OUT" "ray tracing row: written"' "the agent's rows for every game are written beside the processors row"
+F=$(cat "$NPF")
+check 'has "$F" "[NOTPROTON_ENV_D3DM_MAX_FPS]" && has "$F" "default = 0" && has "$F" "choice = 0 = No limit (120 Hz)" && has "$F" "group = MacGameFix · Performance"' "every game is unlimited by default, and picking No limit clears a game's cap"
+check 'has "$F" "choice = 70 = 60 fps" && has "$F" "choice = 100 = 80 fps" && has "$F" "choice = 54 = 48 fps" && has "$F" "choice = 44 = 40 fps" && has "$F" "choice = 32 = 30 fps"' "each rate writes the cap halfway to the next faster step: 60 fps writes 70, as measured"
+check '! has "$F" "120 fps" && ! has "$F" "34 fps" && ! has "$F" "27 fps"' "no rate the display's fastest, and no step that is not a whole rate"
+check 'has "$F" "tools = notproton-fex*" && has "$F" "tools = notproton-preview*" && ! has "$F" "notproton-2"' "only for the Preview tools, which run D3DMetal 4 (D3DMetal 3 has no cap)"
+MACGAMEFIX_DISPLAY=60,0 "$BIN" --rows-keep >/dev/null
+check 'has "$(cat "$NPF")" "choice = 0 = No limit (60 Hz)" && has "$(cat "$NPF")" "choice = 45 = 30 fps" && [ "$(/usr/bin/grep -c "^choice = " "$NPF")" = 2 ]' "a 60 Hz display with fixed steps is offered No limit and 30"
+check 'has "$(MACGAMEFIX_DISPLAY=0,0 "$BIN" --rows-keep)" "frame rate cap row: this Mac'"'"'s display could not be read"' "with no display read, the cap row is not touched"
+D=$(cat "$NPD")
+check 'has "$D" "[NOTPROTON_MGF_DXR_OFF]" && has "$D" "on = 1" && has "$D" "env = D3DM_SUPPORT_DXR=0" && has "$D" "group = MacGameFix · D3DMetal"' "the ray tracing row, switched on, gives the game D3DM_SUPPORT_DXR=0"
+MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep >/dev/null
+check '[ "$(MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep)" = "rows: nothing to do" ]' "rows already right are left as they are"
+rm -f "$NPF" "$NPD" "$NPR"
 rm -rf "$CT"
 
 echo "== Game Mode for CrossOver's games"

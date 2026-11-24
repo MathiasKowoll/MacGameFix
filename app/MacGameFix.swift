@@ -558,8 +558,8 @@ final class Model: ObservableObject {
         let extra = extraFolders
         let games = self.games
         Task {
-            // NotProton's processors row, for this Mac; quick, and only written when it differs.
-            await Task.detached { ProcessorsRow.keep() }.value
+            // NotProton's rows for every game, for this Mac; quick, and only written when they differ.
+            _ = await Task.detached { NotProtonRow.keepAll() }.value
             let (libs, found) = await Task.detached { Libraries.find(games, extra: extra) }.value
             libraries = libs
             hits = found
@@ -3207,6 +3207,12 @@ enum Entry {
                 if let error = Fans.change(install: args[i] == "--fans-install") { print(error); exit(1) }
             }
             print(Fans.state().rawValue)
+            exit(0)
+        }
+        if args.contains("--rows-keep") {
+            // NotProton's rows for every game (GeneralRows.swift), as the agent keeps them.
+            let lines = NotProtonRow.keepAll()
+            print(lines.isEmpty ? "rows: nothing to do" : lines.joined(separator: "\n"))
             exit(0)
         }
         if args.contains("--cpu-row-keep") {

@@ -20,9 +20,7 @@ import Foundation
 enum ProcessorsRow {
     static let id = "NOTPROTON_ENV_WINENCPU"
     static var file: URL { Engine.notproton.appendingPathComponent("plugins/mgf-ncpu.conf") }
-    /// NotProton keeps 32 rows in all and offers 16 values in a choice row.
-    static let maxRows = 32
-    static let maxChoices = 16
+    static let maxChoices = NotProtonRow.maxChoices
 
     /// This Mac's processors, and how many of them are performance cores.
     /// MACGAMEFIX_CPUS="<all>,<performance>" stands in for the Mac in the tests.
@@ -73,51 +71,14 @@ enum ProcessorsRow {
         return lines.joined(separator: "\n") + "\n"
     }
 
-    /// Whether the NotProton Steam runs knows the group field: its run script lists the
-    /// fields it reads.
-    static func notProtonKnowsGroups() -> Bool {
-        let tools = Paths.home.appendingPathComponent("Library/Application Support/Steam/compatibilitytools.d")
-        guard let names = try? FileManager.default.contentsOfDirectory(atPath: tools.path) else { return false }
-        // A folder with no run script is no tool Steam can run (one NotProton emptied, with
-        // other files left in it), so it has no say.
-        let runs = names.filter { $0.lowercased().hasPrefix("notproton") }
-            .map { tools.appendingPathComponent($0).appendingPathComponent("run") }
-            .filter { FileManager.default.fileExists(atPath: $0.path) }
-        guard !runs.isEmpty else { return false }
-        return runs.allSatisfy { run in
-            guard let script = try? String(contentsOf: run, encoding: .utf8),
-                  let line = script.split(separator: "\n").first(where: { $0.contains("split(\"label description") })
-            else { return false }
-            return line.split(whereSeparator: { $0 == " " || $0 == "\"" }).contains("group")
-        }
-    }
-
-    /// The row put in place, or brought up to date, where NotProton is. What it did, or why
-    /// it did nothing; nil when the row was already right or there is no NotProton.
+    /// The row put in place, or brought up to date, where NotProton is (NotProtonRow.keep).
     @discardableResult
     static func keep() -> String? {
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: Engine.notproton.path) else { return nil }
-        let folder = file.deletingLastPathComponent()
-        let others = ((try? fm.contentsOfDirectory(atPath: folder.path)) ?? [])
-            .filter { $0.hasSuffix(".conf") && $0 != file.lastPathComponent }
-            .compactMap { try? String(contentsOf: folder.appendingPathComponent($0), encoding: .utf8) }
-        let headers = others.flatMap { $0.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) } }
-            .filter { $0.hasPrefix("[") && $0.hasSuffix("]") }
-        // NotProton refuses an id that two files declare: neither row would show.
-        if headers.contains("[\(id)]") { return "processors row: another plugin file has \(id), left alone" }
-        let mine = try? String(contentsOf: file, encoding: .utf8)
-        if mine == nil && headers.count >= maxRows { return "processors row: NotProton's \(maxRows) rows are taken" }
         let (all, performance) = counts()
-        guard all > 0 else { return "processors row: this Mac's processors could not be read" }
-        let row = text(all: all, performance: performance, grouped: notProtonKnowsGroups())
-        guard mine != row else { return nil }
-        do {
-            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
-            try row.write(to: file, atomically: true, encoding: .utf8)
-        } catch {
-            return "processors row: \(error.localizedDescription)"
+        return NotProtonRow.keep(name: "processors", id: id, file: file.lastPathComponent,
+                                 written: "written for \(all) processors") { grouped in
+            guard all > 0 else { return .failure(.init(text: "this Mac's processors could not be read")) }
+            return .success(text(all: all, performance: performance, grouped: grouped))
         }
-        return "processors row: written for \(all) processors"
     }
 }
