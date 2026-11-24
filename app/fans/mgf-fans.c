@@ -14,11 +14,21 @@
 //   mgf-fans --install    root: copies this program to /Library/PrivilegedHelperTools, writes its
 //                         LaunchDaemon and starts it (again, when it was there already)
 //   mgf-fans --remove     root: fans back to automatic, the daemon stopped, both files removed
-//   mgf-fans --asked <log> <exe>      the NotProton rule against a log file, for the tests
+//   mgf-fans --asked <log> <exe> [<started>]   the NotProton rule against a log file, for the
+//                         tests; <started> is the launch's start, "YYYY-MM-DD HH:MM:SS"
 //
-// A game asks by NotProton starting it with MGF_FANS=max in its launch options. macOS gives
-// nobody another process's environment, root included, so that is read from NotProton's log:
-// the last "[launch] handed to /bin/sh -c:" line naming the exe of the running `run` script.
+// A game asks by NotProton starting it with MGF_FANS=max in its launch options, or with
+// NOTPROTON_MGF_FANS=1, which is what NotProton's panel writes when its "Fans at full speed"
+// row is switched on (a panel row's id has to start with NOTPROTON_). macOS gives nobody
+// another process's environment, root included, so that is read from NotProton's log: the
+// "[launch] handed to /bin/sh -c:" line of the running `run` script. That is the last one
+// written when the script started, by the two clocks: NotProton stamps the line in the second
+// Steam starts the command (measured 2026-11-23, same second). The program the script runs
+// does not say which line is its own: a launch option that puts a script of its own before
+// %command% has the tool run something else (cmd.exe for a batch file, in the F1 25 fix),
+// which the line, written with Steam's own command, never names. Only when no line has a
+// time near the script's start does the last line naming that program decide, as it did
+// before version 3.
 // The log is a file the user can write. All it can ask for is more cooling.
 //
 // It can only raise the fans. SMC keys: FNum, F<i>Md (0 automatic, 1 forced), F<i>Tg (target rpm),
@@ -129,24 +139,54 @@ static void set_auto(void) {
   unlink(MARK);
 }
 
-// The last launch line of NotProton's log that names exe: did it carry MGF_FANS=max?
-static int asked_in_log(const char *path, const char *exe) {
+// word appears in line as a word of its own: after a space or at the start, and followed by
+// a space or the end.
+static int has_word(const char *line, const char *word) {
+  size_t n = strlen(word);
+  for (const char *m = strstr(line, word); m; m = strstr(m + 1, word))
+    if ((m == line || m[-1] == ' ') && (m[n] == ' ' || m[n] == 0)) return 1;
+  return 0;
+}
+
+// A log line's own time, "YYYY-MM-DD HH:MM:SS" at its start, read as local time as NotProton
+// wrote it. 0 when the line has none.
+static time_t line_time(const char *line) {
+  struct tm tm; memset(&tm, 0, sizeof tm);
+  if (!strptime(line, "%Y-%m-%d %H:%M:%S", &tm)) return 0;
+  tm.tm_isdst = -1;
+  time_t t = mktime(&tm);
+  return t == (time_t)-1 ? 0 : t;
+}
+
+// How far a launch line's time may be from the start of the script it started. After: the two
+// clocks are read a moment apart and the line has whole seconds. Before: a launch option's own
+// script may work for a while before it starts the tool, as a child of its own.
+#define LINE_AFTER 3
+#define LINE_BEFORE 120
+
+// The launch line of NotProton's log for a `run` script that started at `started` and runs exe:
+// did it carry MGF_FANS=max, or the panel row's NOTPROTON_MGF_FANS=1? The line is the last one
+// stamped near that start. With no start given (0), or no line near it, it is the last line
+// that names exe.
+static int asked_in_log(const char *path, const char *exe, time_t started) {
   static char tail[400000];
   FILE *f = fopen(path, "r");
   if (!f) return 0;
   fseek(f, 0, SEEK_END); long size = ftell(f), from = size > (long)sizeof tail - 1 ? size - ((long)sizeof tail - 1) : 0;
   fseek(f, from, SEEK_SET);
   size_t n = fread(tail, 1, sizeof tail - 1, f); fclose(f); tail[n] = 0;
-  int asked = 0;
+  int by_name = 0, by_time = 0, timed = 0;
   for (char *line = tail; line && *line; ) {
     char *nl = strchr(line, '\n'); if (nl) *nl = 0;
-    if (strstr(line, "handed to /bin/sh -c:") && strstr(line, "waitforexitandrun") && strstr(line, exe)) {
-      char *m = strstr(line, "MGF_FANS=max");
-      asked = m && (m[12] == ' ' || m[12] == 0) && (m == line || m[-1] == ' ');
+    if (strstr(line, "handed to /bin/sh -c:") && strstr(line, "waitforexitandrun")) {
+      int asks = has_word(line, "MGF_FANS=max") || has_word(line, "NOTPROTON_MGF_FANS=1");
+      time_t at = started ? line_time(line) : 0;
+      if (at && at <= started + LINE_AFTER && at >= started - LINE_BEFORE) { by_time = asks; timed = 1; }
+      if (strstr(line, exe)) by_name = asks;
     }
     line = nl ? nl + 1 : NULL;
   }
-  return asked;
+  return timed ? by_time : by_name;
 }
 
 static int argv0(pid_t pid, char *out, size_t size, char *buf, size_t bufsize, int *argc_out, char **args_out, char **end_out) {
@@ -190,7 +230,11 @@ static int wanted(void) {
     }
     if (!tool || !exe) continue;
     found = 1;
-    if (pids[i] != known) { known = pids[i]; known_asked = asked_in_log(log, exe); }
+    if (pids[i] != known) {
+      struct proc_bsdinfo full;
+      time_t started = proc_pidinfo(pids[i], PROC_PIDTBSDINFO, 0, &full, sizeof full) == sizeof full ? (time_t)full.pbi_start_tvsec : 0;
+      known = pids[i]; known_asked = asked_in_log(log, exe, started);
+    }
     if (known_asked) return 1;
   }
   if (!found) known = 0;
@@ -202,7 +246,7 @@ static void stop(int sig) { (void)sig; quit = 1; }
 // What the app compares to tell an installed helper from the one it carries. Two builds of the
 // same source are signed at different times and differ byte for byte, so the bytes cannot say;
 // raise this when the helper's code changes.
-#define VERSION 1
+#define VERSION 3
 #define LABEL "io.github.macgamefix.fans"
 static const char *PLIST =
   "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
@@ -259,7 +303,11 @@ static int install(const char *self, int remove_it) {
 int main(int argc, char **argv) {
   const char *mode = argc > 1 ? argv[1] : "";
   if (!strcmp(mode, "--version")) { printf("%d\n", VERSION); return 0; }
-  if (!strcmp(mode, "--asked") && argc == 4) { puts(asked_in_log(argv[2], argv[3]) ? "yes" : "no"); return 0; }
+  if (!strcmp(mode, "--asked") && (argc == 4 || argc == 5)) {
+    time_t started = argc == 5 ? line_time(argv[4]) : 0;
+    if (argc == 5 && !started) { fprintf(stderr, "not a time: %s\n", argv[4]); return 1; }
+    puts(asked_in_log(argv[2], argv[3], started) ? "yes" : "no"); return 0;
+  }
   if (!strcmp(mode, "--install") || !strcmp(mode, "--remove")) {
     if (geteuid() && !getenv("MGF_FANS_PREFIX")) { fprintf(stderr, "this needs root\n"); return 1; }
     char self[PROC_PIDPATHINFO_MAXSIZE];

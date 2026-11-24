@@ -493,8 +493,9 @@ enum Agent {
         if settings.gameMode { GameMode.keep().forEach { print($0) } }
         // A game that was closed since the last look: its four cache files are made the same.
         if settings.shaderCache { ShaderCache.keepAll().forEach { print($0) } }
-        // NotProton's rows for every game, made for this Mac (GeneralRows.swift).
+        // NotProton's rows for every game, made for this Mac (GeneralRows.swift), and the fans row.
         NotProtonRow.keepAll().forEach { print($0) }
+        if let line = Fans.keepNotProtonRow() { print(line) }
         // What the Wine modules saw each game do, kept before a restart empties /tmp.
         if PadStore.exists {
             // Which game each exe is, for the modules in a CrossOver bottle.
