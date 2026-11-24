@@ -5,6 +5,8 @@
 //   FrameCapRow    "Frame rate cap"              D3DM_MAX_FPS, in the rates this Mac's display holds
 //   RayTracingRow  "Ray tracing off"             D3DM_SUPPORT_DXR=0
 //
+// and the plugins NotProton's creator ported from MacGameFix's fixes (NotProtonPlugins.swift).
+//
 // Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -17,9 +19,12 @@ enum NotProtonRow {
     static let maxChoices = 16
     static var folder: URL { Engine.notproton.appendingPathComponent("plugins") }
 
-    /// Whether the NotProton Steam runs knows the group field: its run script lists the
-    /// fields it reads. An older one refuses a row with a field it does not know.
-    static func knowsGroups() -> Bool {
+    /// Whether the NotProton Steam runs knows the group field. An older one refuses a row with a
+    /// field it does not know.
+    static func knowsGroups() -> Bool { knows("group") }
+
+    /// Whether every NotProton Steam runs knows a field: its run script lists the fields it reads.
+    static func knows(_ field: String) -> Bool {
         let tools = Paths.home.appendingPathComponent("Library/Application Support/Steam/compatibilitytools.d")
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: tools.path) else { return false }
         // A folder with no run script is no tool Steam can run (one NotProton emptied, with
@@ -32,7 +37,7 @@ enum NotProtonRow {
             guard let script = try? String(contentsOf: run, encoding: .utf8),
                   let line = script.split(separator: "\n").first(where: { $0.contains("split(\"label description") })
             else { return false }
-            return line.split(whereSeparator: { $0 == " " || $0 == "\"" }).contains("group")
+            return line.split(whereSeparator: { $0 == " " || $0 == "\"" }).contains(Substring(field))
         }
     }
 
@@ -44,11 +49,7 @@ enum NotProtonRow {
         let fm = FileManager.default
         guard fm.fileExists(atPath: Engine.notproton.path) else { return nil }
         let path = folder.appendingPathComponent(file)
-        let others = ((try? fm.contentsOfDirectory(atPath: folder.path)) ?? [])
-            .filter { $0.hasSuffix(".conf") && $0 != file }
-            .compactMap { try? String(contentsOf: folder.appendingPathComponent($0), encoding: .utf8) }
-        let headers = others.flatMap { $0.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) } }
-            .filter { $0.hasPrefix("[") && $0.hasSuffix("]") }
+        let headers = headers(besides: file)
         // NotProton refuses an id that two files declare: neither row would show.
         if headers.contains("[\(id)]") { return "\(name) row: another plugin file has \(id), left alone" }
         let mine = try? String(contentsOf: path, encoding: .utf8)
@@ -68,11 +69,22 @@ enum NotProtonRow {
         return "\(name) row: \(written)"
     }
 
+    /// The ids the other plugin files in NotProton's folder declare, "[ID]" each.
+    static func headers(besides file: String) -> [String] {
+        let fm = FileManager.default
+        return ((try? fm.contentsOfDirectory(atPath: folder.path)) ?? [])
+            .filter { $0.hasSuffix(".conf") && $0 != file }
+            .compactMap { try? String(contentsOf: folder.appendingPathComponent($0), encoding: .utf8) }
+            .flatMap { $0.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) } }
+            .filter { $0.hasPrefix("[") && $0.hasSuffix("]") }
+    }
+
     struct Failure: Error { let text: String }
 
     /// Every row MacGameFix keeps, in the agent's pass and the window's scan.
     static func keepAll() -> [String] {
         [ProcessorsRow.keep(), FrameCapRow.keep(), RayTracingRow.keep()].compactMap { $0 }
+            + NotProtonPlugins.keep()
     }
 }
 

@@ -1159,6 +1159,43 @@ MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep >/dev/null
 check '[ "$(MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep)" = "rows: nothing to do" ]' "rows already right are left as they are"
 rm -f "$NPF" "$NPD" "$NPR"
 rm -rf "$CT"
+echo "== The NotProton plugins MacGameFix carries"
+NPU="$NPP/40-unreal-video.conf"; NPZ="$NPP/50-d3dmetal-freeze.conf"; NPN="$NPP/55-d3dmetal-notifier.conf"; NPT="$NPP/60-red-dead-online.conf"
+NPLIB="$HERE/MacGameFix.app/Contents/Resources/notproton-plugins"; NPHOST="$SUPPORT/notproton/plugin-host.dylib"
+export MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240
+rm -f "$NPU" "$NPZ" "$NPN" "$NPT" "$NPP"/d3dmetal-freeze.dylib "$NPP"/d3dmetal-notifier.dylib "$NPP"/tcp-noopt.dylib
+mkdir -p "$CT/notproton-a"
+printf '      split("label description description_on section on off depends requires inject env overrides stage tools type choice min max step default suffix hide_crossover apps patch variants group improves needed_for", f, " ")\n' > "$CT/notproton-a/run"
+check '[ -f "$NPLIB/d3dmetal-freeze.dylib" ] && [ -f "$NPLIB/d3dmetal-notifier.dylib" ] && [ -f "$NPLIB/tcp-noopt.dylib" ] && has "$(lipo -archs "$NPLIB/tcp-noopt.dylib")" arm64 && has "$(lipo -archs "$NPLIB/tcp-noopt.dylib")" x86_64' "the app carries the three libraries, for both architectures"
+OUT=$("$BIN" --rows-keep)
+check 'has "$OUT" "Unreal video row: written" && [ -f "$NPU" ] && [ ! -e "$NPZ" ] && [ ! -e "$NPN" ] && [ ! -e "$NPT" ] && [ ! -e "$NPP/tcp-noopt.dylib" ]' "without NotProton's plugin host, only the Unreal row: a library would load and do nothing"
+U=$(cat "$NPU")
+check 'has "$U" "[NOTPROTON_UNREAL_VIDEO]" && has "$U" "group = MacGameFix · Video" && has "$U" "on = 1" && [ "$(/usr/bin/grep -c "^patch = winegstreamer.dll: " "$NPU")" = 2 ] && has "$U" "(MacGameFix)"' "the Unreal row is NotProton's own, with its two patches, in MacGameFix · Video"
+: > "$NPHOST"
+OUT=$("$BIN" --rows-keep)
+check 'has "$OUT" "D3DMetal freeze library: put in place" && has "$OUT" "D3DMetal freeze row: written" && has "$OUT" "D3DMetal video crash row: written" && has "$OUT" "Red Dead Online row: written"' "with the plugin host, the three rows and their libraries go in"
+check 'cmp -s "$NPLIB/d3dmetal-freeze.dylib" "$NPP/d3dmetal-freeze.dylib" && cmp -s "$NPLIB/d3dmetal-notifier.dylib" "$NPP/d3dmetal-notifier.dylib" && cmp -s "$NPLIB/tcp-noopt.dylib" "$NPP/tcp-noopt.dylib" && [ -x "$NPP/tcp-noopt.dylib" ]' "each library is the one the app carries"
+check 'has "$(cat "$NPZ")" "requires = Library/Application Support/notproton/plugins/d3dmetal-freeze.dylib" && has "$(cat "$NPZ")" "inject = 1" && has "$(cat "$NPZ")" "group = MacGameFix · D3DMetal"' "a library's row injects it and requires it where it was put"
+T6=$(cat "$NPT")
+check 'has "$T6" "[NOTPROTON_TCP_NOOPT]" && has "$T6" "apps = 1174180" && has "$T6" "apps = 1404210" && has "$T6" "group = MacGameFix · Per game"' "the Red Dead Online row shows for Red Dead Redemption 2 and Red Dead Online only"
+check '[ "$("$BIN" --rows-keep)" = "rows: nothing to do" ]' "plugins already right are left as they are"
+printf 'an older build' > "$NPP/tcp-noopt.dylib"
+check '[ "$("$BIN" --rows-keep)" = "Red Dead Online library: put in place" ] && cmp -s "$NPLIB/tcp-noopt.dylib" "$NPP/tcp-noopt.dylib" && [ ! -e "$NPP/.tcp-noopt.dylib.mgf-new" ]' "a library that differs is replaced, through a rename, and nothing is left beside it"
+rm -f "$NPN"; printf 'theirs' > "$NPP/d3dmetal-notifier.dylib"
+printf '[NOTPROTON_D3DMETAL_NOTIFIER]\nlabel = Theirs\non = 1\n' > "$NPP/someone-else.conf"
+check 'has "$("$BIN" --rows-keep)" "another plugin file has NOTPROTON_D3DMETAL_NOTIFIER, left alone" && [ ! -e "$NPN" ] && [ "$(cat "$NPP/d3dmetal-notifier.dylib")" = theirs ]' "an id another file declares is left alone, and so is its library"
+rm -f "$NPP/someone-else.conf" "$NPP/d3dmetal-notifier.dylib"
+"$BIN" --rows-keep >/dev/null
+rm -f "$NPHOST"
+OUT=$("$BIN" --rows-keep)
+check 'has "$OUT" "D3DMetal freeze row: taken out, NotProton'"'"'s plugin host is not installed" && [ ! -e "$NPZ" ] && [ ! -e "$NPN" ] && [ ! -e "$NPT" ] && [ -f "$NPU" ]' "with the plugin host gone, the library rows come out and the Unreal row stays"
+printf '      split("label description section on off depends requires inject env type choice default apps", f, " ")\n' > "$CT/notproton-a/run"
+printf '[NOTPROTON_D3DMETAL_NODEGUARD]\nlabel = Written by hand\non = 1\n' > "$NPZ"
+OUT=$("$BIN" --rows-keep)
+check 'has "$OUT" "Unreal video row: taken out, the NotProton in Steam does not read patch" && [ ! -e "$NPU" ] && [ -f "$NPZ" ]' "a NotProton that does not read patch loses the Unreal row; a file MacGameFix did not write stays"
+rm -f "$NPZ" "$NPP"/*.dylib "$NPF" "$NPD" "$NPR"
+rm -rf "$CT"
+unset MACGAMEFIX_CPUS MACGAMEFIX_DISPLAY
 
 echo "== Game Mode for CrossOver's games"
 GM="$MACGAMEFIX_HOME/Applications/CrossOver GM.app"

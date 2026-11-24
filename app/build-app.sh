@@ -221,7 +221,7 @@ rm -rf "$APP"
 mkdir -p "$MACOS" "$RES" "$CACHE"
 
 echo "==> compiling"
-swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/ShaderCache.swift" "$HERE/Fans.swift" "$HERE/PrefixRunner.swift" "$HERE/ProcessorsRow.swift" "$HERE/GeneralRows.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Probe.swift" "$HERE/Automation.swift" "$HERE/AppUpdate.swift" "$HERE/MenuBar.swift" "$HERE/Instructions.swift" "$HERE/NativePort.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
+swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/ShaderCache.swift" "$HERE/Fans.swift" "$HERE/PrefixRunner.swift" "$HERE/ProcessorsRow.swift" "$HERE/GeneralRows.swift" "$HERE/NotProtonPlugins.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Probe.swift" "$HERE/Automation.swift" "$HERE/AppUpdate.swift" "$HERE/MenuBar.swift" "$HERE/Instructions.swift" "$HERE/NativePort.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
   -o "$MACOS/MacGameFix" \
   -framework SwiftUI -framework AppKit -framework IOKit -framework UserNotifications -framework GameController \
   -framework AVFoundation -framework CoreAudio -framework AudioToolbox \
@@ -238,6 +238,20 @@ if [ "$SIGN_ID" != - ]; then
   codesign --force --options runtime --timestamp --identifier io.github.macgamefix.fans \
     --sign "$SIGN_ID" "$RES/fans/io.github.macgamefix.fans"
 fi
+
+# The NotProton plugins MacGameFix carries (NotProtonPlugins.swift, notproton-plugins/ORIGIN.md),
+# built as NotProton's Makefile builds them: both architectures, so a game under Rosetta or FEX
+# loads them, and the same code. Signed here, before the app, like every Mach-O the app carries.
+echo "==> NotProton plugins"
+mkdir -p "$RES/notproton-plugins"
+for p in d3dmetal-freeze d3dmetal-notifier tcp-noopt; do
+  clang -arch arm64 -arch x86_64 -mmacosx-version-min=15.0 -Werror=unguarded-availability-new -std=c17 \
+    -dynamiclib -O2 -Wall -Wextra -install_name "@rpath/$p.dylib" \
+    -o "$RES/notproton-plugins/$p.dylib" "$HERE/notproton-plugins/plugins/$p.c"
+  if [ "$SIGN_ID" != - ]; then
+    codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$RES/notproton-plugins/$p.dylib"
+  fi
+done
 
 echo "==> Info.plist"
 if [ -n "$UPDATES_BASE" ] && [ -n "$UPDATES_SECRET" ]; then
