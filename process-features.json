@@ -77,6 +77,14 @@
       "env": {},
       "symptom": "Starts only through Swofty Launcher, and closed half a minute in on NotProton"
     },
+    "FC27.exe": {
+      "title": "EA SPORTS FC 27",
+      "backend": "d3dmetal",
+      "codec": "",
+      "gptk": "",
+      "env": {},
+      "symptom": "Steam's Play starts nothing; with FC 27 Live Editor it closed after the EA SPORTS logo"
+    },
     "ForzaHorizon5.exe": {
       "title": "Forza Horizon 5",
       "backend": "d3dmetal",
