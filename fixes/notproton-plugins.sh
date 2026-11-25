@@ -2,9 +2,10 @@
 #
 #   . "$HERE/notproton-plugins.sh"
 #   np_plugins_setup <appid> <prefix> <template>...
+#   NP_WRAPPER=<path>     the installer's play script, when one stands before %command%
 #   np_plugins_ready      true when NotProton keeps this prefix and its support folder is there
 #   np_plugins_preflight  what an install would refuse, before anything changes
-#   np_plugins_install    the game's descriptor, the libraries, and the first time every row on
+#   np_plugins_install    the game's descriptor, the libraries, and each row on the first time
 #   np_plugins_status     installed, half or absent: the files only
 #   np_plugins_restore    our switches out, the descriptor gone, and a library no descriptor names
 #
@@ -23,9 +24,11 @@
 #
 # A ROW IS ON ONLY WHILE THE GAME'S LAUNCH OPTIONS CARRY <id>=<on>: NotProton has no other
 # switch. The first install puts every toggle row's variable in, with steam-launch-options.pl
-# (Steam closed, and a journal so a restore gives back what was there); after that the
-# switches are the player's, in the game's Compatibility page, and installing again never
-# turns one back on. With Steam open the files go in and the rows stay off, and it says so.
+# (Steam closed, and a journal so a restore gives back what was there), and lists them in
+# NP_SWITCHED; after that the switches are the player's, in the game's Compatibility page, and
+# installing again never turns one back on. A toggle row a later version of the fix brings is
+# not in that list, so the install that brings it switches it on, once, the same way. With
+# Steam open the files go in and those rows stay off, and it says so.
 # The status ignores the switches for the same reason: a row the player turned off is not a
 # broken fix for the agent to repair.
 #
@@ -108,6 +111,15 @@ np_switches() {
     END { if (id != "" && !typed) print id "=" (on == "" ? "1" : on) }'
 }
 
+# The switches no install has put in yet: every one the first time, then a row the fix gained.
+np_new_switches() {
+  local s
+  if [ ! -f "$NP_SWITCHED" ]; then np_switches; return; fi
+  np_switches | while IFS= read -r s; do
+    /usr/bin/grep -q "^${s%%=*}=" "$NP_SWITCHED" || printf '%s\n' "$s"
+  done
+}
+
 np_ids() { np_switches_all | cut -d= -f1; }
 np_switches_all() { np_expected | /usr/bin/sed -n 's/^\[\(.*\)\]$/\1=/p'; }
 
@@ -139,7 +151,16 @@ np_other_records() {
   done
 }
 
-np_options() { /usr/bin/perl "$NP_OPTIONS" "$1" "$NP_APPID" "$NP_JOURNAL" "${@:2}"; }
+# NP_WRAPPER, set by an installer whose play script stands before %command%, is named to the
+# editor while that script is in the options, so it is taken for ours rather than refused as
+# another program. Named only then: a switch put in before the script never takes it in.
+np_options() {
+  local w=()
+  if [ -n "${NP_WRAPPER:-}" ] && /usr/bin/perl "$NP_OPTIONS" status "$NP_APPID" "$NP_JOURNAL" --wrapper "$NP_WRAPPER" >/dev/null 2>&1; then
+    w=(--wrapper "$NP_WRAPPER")
+  fi
+  /usr/bin/perl "$NP_OPTIONS" "$1" "$NP_APPID" "$NP_JOURNAL" ${w[@]+"${w[@]}"} "${@:2}"
+}
 
 np_plugins_preflight() {
   local id taken mine
@@ -162,12 +183,13 @@ np_plugins_preflight() {
     echo "       Remove a plugin you do not use in NotProton's Plugins page; nothing was changed." >&2
     return 1
   fi
-  # Whether the first install can switch the rows on: options it cannot edit stop the install,
-  # Steam open only leaves the rows off. NP_SWITCH is on, steam or none.
+  # Whether the install can switch on the rows none has switched on yet: options it cannot
+  # edit stop the install, Steam open only leaves the rows off. NP_SWITCH is on, steam or none.
   NP_SWITCH=none
-  if [ ! -f "$NP_SWITCHED" ] && [ -n "$(np_switches)" ]; then
+  NP_NEW="$(np_new_switches)"
+  if [ -n "$NP_NEW" ]; then
     local why
-    if why="$(np_options preflight $(np_switches) 2>&1 >/dev/null)"; then NP_SWITCH=on
+    if why="$(np_options preflight $NP_NEW 2>&1 >/dev/null)"; then NP_SWITCH=on
     elif np_steam_running; then NP_SWITCH=steam
     else printf '%s\n' "$why" >&2; return 1; fi
   fi
@@ -191,13 +213,17 @@ np_plugins_install() {
   done < <(np_libraries)
   np_expected > "$NP_CONF.mgf-new" && mv -f "$NP_CONF.mgf-new" "$NP_CONF"
   echo "  NotProton: $(np_ids | /usr/bin/grep -c .) row(s) in plugins/mgf-$NP_APPID.conf$(np_knows_apps && echo ", shown on this game's page only")"
+  local first=1
+  [ ! -f "$NP_SWITCHED" ] || first=0
   case "$NP_SWITCH" in
   on)
-    np_options install $(np_switches) >/dev/null || return 1
-    np_switches > "$NP_SWITCHED"
-    echo "  NotProton: switched on in the game's launch options: $(np_switches | tr '\n' ' ')" ;;
+    np_options install $NP_NEW >/dev/null || return 1
+    printf '%s\n' "$NP_NEW" >> "$NP_SWITCHED"
+    if [ "$first" = 1 ]; then echo "  NotProton: switched on in the game's launch options: $(printf '%s\n' "$NP_NEW" | tr '\n' ' ')"
+    else echo "  NotProton: a row new to this fix, switched on in the game's launch options: $(printf '%s\n' "$NP_NEW" | tr '\n' ' ')"; fi ;;
   steam)
-    echo "  NotProton: Steam is open, so the rows are off. Switch them on in the game's Compatibility page,"
+    if [ "$first" = 1 ]; then echo "  NotProton: Steam is open, so the rows are off. Switch them on in the game's Compatibility page,"
+    else echo "  NotProton: Steam is open, so the row new to this fix is off ($(printf '%s\n' "$NP_NEW" | cut -d= -f1 | tr '\n' ' ')). Switch it on in the game's Compatibility page,"; fi
     echo "             or quit Steam and install again to have them switched on." ;;
   *)
     [ ! -f "$NP_SWITCHED" ] || echo "  NotProton: the rows' switches are as you left them in the game's Compatibility page" ;;

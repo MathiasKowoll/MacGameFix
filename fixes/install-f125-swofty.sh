@@ -26,8 +26,10 @@
 #
 #   1. Wine 11.21 gave the game addresses from 0x7ff000000000 up once its 6.5 GB image had
 #      filled the low reserved area, and the game crashed some 30 s after start on a pointer
-#      with bit 47 set. Engine patch 0038 (the Rosetta improvement's ntdll.so) keeps such
-#      allocations low. This script only checks that the runner has it.
+#      with bit 47 set. mgf-low-allocations.dylib, which NotProton loads into this game alone
+#      through a row, keeps such allocations low (low-allocations/mgf-low-allocations.c). It
+#      does from outside ntdll.so what engine patch 0038 does inside it for every game, so the
+#      runner need not carry 0038, and NotProton's own ntdll.so does as well as ours.
 #   2. Swofty's mod loader is a version.dll beside the game; Wine loads its own unless
 #      F1_25.exe has the override version=native,builtin.
 #   3. Swofty wants Steam running and signed in: it reads ActiveProcess\pid and ActiveUser
@@ -38,12 +40,18 @@
 #      prefix. f125-swofty-play.sh does that from the launch options; f125-swofty-run.cmd
 #      says why it goes through cmd.exe.
 #
+# SWOFTY LAUNCHER IS THE PLAYER'S TO PROVIDE. It is not part of MacGameFix, and nothing here
+# downloads it: the player downloads its Windows release from Swofty's site
+# (https://f1.swofty.net). While no launcher is kept, the install ASKS where that download is,
+# with macOS's file chooser, from MacGameFix's window: the .zip, or, where the browser unpacked
+# it, swofty.exe in its bin folder. Cancel changes nothing. The launcher updates itself
+# afterwards, so an install with one kept asks nothing and the agent can run it. From a
+# terminal nothing is asked: MGVF_SWOFTY names the .zip, the unpacked folder or its swofty.exe,
+# and takes the place of a launcher kept before.
+#
 # WHAT IT PUTS WHERE.
-#   - Swofty Launcher's Windows release, downloaded from Swofty's own index
-#     (https://cdn.swofty.net/launcher/latest.json, which names the file, its size and its
-#     SHA-256) into ~/Library/Application Support/MacGameFix/swofty/launcher. It is not
-#     part of MacGameFix and is not redistributed by it. MGVF_SWOFTY_ZIP names a release
-#     .zip already downloaded, to use instead. The launcher updates itself afterwards.
+#   - The Swofty Launcher the player gave, copied into
+#     ~/Library/Application Support/MacGameFix/swofty/launcher.
 #   - f125-swofty-play.sh and f125-swofty-run.cmd beside it.
 #   - In the prefix's user.reg: the version override for F1_25.exe, and ActiveUser.
 #   - In the prefix's Steam folder, links to Steam's own files: config/loginusers.vdf, the
@@ -53,13 +61,15 @@
 #     three; which of the last two Swofty cannot do without is not known.
 #   - In Steam's launch options for the game: the play script before %command%
 #     (steam-launch-options.pl; Steam must be closed).
-#   - In NotProton's plugins folder: three rows for this game alone (notproton-plugins.sh,
-#     np-plugin-f125-swofty.conf), shown on its Compatibility page: "Start through Swofty
-#     Launcher", switched on by the first install; "Play opens", the game or Swofty
-#     Launcher's window; and "Profile", Swofty's active profile or vanilla. A NotProton row
-#     cannot change the program Steam starts, so the rows load nothing: they are the switches
-#     the play script reads. Whatever a player may set is a row: nothing is typed into the
-#     launch options by hand.
+#   - In NotProton's plugins folder: mgf-low-allocations.dylib, and four rows for this game
+#     alone (notproton-plugins.sh, np-plugin-f125-swofty.conf), shown on its Compatibility page:
+#     "Start through Swofty Launcher", switched on by the first install; "Keep the game's memory
+#     low", which loads the library, switched on by the install that first brings it; "Play
+#     opens", the game or Swofty Launcher's window; and "Profile", Swofty's active profile or
+#     vanilla. A NotProton row cannot change the program Steam starts, so the first row is a
+#     switch the play script reads. Whatever a player may set is a row: nothing is typed into
+#     the launch options by hand. The library needs NotProton's plugin host, which NotProton's
+#     Update installs; the install refuses without it.
 # .mgf-f125-swofty in the prefix lists which of these this script added, and --restore
 # removes those. The launcher, its data in the prefix and its saves stay.
 #
@@ -76,8 +86,8 @@
 # MGVF-GAME: F1 25 | F1_25.exe |
 # MGVF-TESTING: Mathias Kowoll
 # MGVF-INSTRUCTIONS: f125-instructions.md
-# MGVF-WHY: F1 25 only starts on a Mac through Swofty Launcher, and on NotProton it crashed half a minute in and Swofty could not find Steam. This downloads Swofty from its own site, prepares the game's prefix and makes Steam's Play start the game through it. Offline, without EA AntiCheat or multiplayer. NotProton with CrossOver Preview 41303 (Rosetta) only. AT YOUR OWN RISK: MacGameFix does not answer for failures in the game, its saves or its mods.
-# MGVF-CREDIT: Swofty Launcher, the mod launcher and offline play this starts | https://f1.swofty.net
+# MGVF-WHY: F1 25 only starts on a Mac through Swofty Launcher, a mod launcher you download yourself, and on NotProton it crashed half a minute in and Swofty could not find Steam. This asks you where your Swofty download is and copies it, keeps the game's memory where it does not crash, for this game alone, prepares the game's prefix and makes Steam's Play start the game through it. Offline, without EA AntiCheat or multiplayer. NotProton with CrossOver Preview 41303 (Rosetta) only. AT YOUR OWN RISK: MacGameFix does not answer for failures in the game, its saves or its mods.
+# MGVF-CREDIT: Swofty Launcher, the mod launcher and offline play this starts and does not include | https://f1.swofty.net
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -106,7 +116,7 @@ APPID=3059520
 PLAY="$HERE/f125-swofty-play.sh"
 RUN="$HERE/f125-swofty-run.cmd"
 OPTIONS="$HERE/steam-launch-options.pl"
-INDEX_URL="${MGVF_SWOFTY_INDEX:-https://cdn.swofty.net/launcher/latest.json}"
+LOWMEM="$HERE/mgf-low-allocations.dylib"
 STORE="${MGVF_SWOFTY_STORE:-$HOME/Library/Application Support/MacGameFix/swofty}"
 LAUNCHER="$STORE/launcher"
 STEAM="${MGVF_STEAM_ROOT:-$HOME/Library/Application Support/Steam}"
@@ -132,9 +142,6 @@ BUILD=""; SIDE=""
 { IFS= read -r BUILD || true; IFS= read -r SIDE || true; } < "$(dirname "$PFX")/notproton-build"
 RUNNER="${MGVF_CX:-$HOME/Library/Application Support/notproton/runners/crossover-$BUILD/CrossOver}"
 RUNNER="${RUNNER%/}"
-NTDLL="$RUNNER/lib/wine/x86_64-unix/ntdll.so"
-# 0038 carries its switch's name; CrossOver's own ntdll.so and ours before it do not.
-carries_fix() { [ -f "$NTDLL" ] && LC_ALL=C /usr/bin/grep -qa 'WINE_LOW_ALLOCATIONS_FIRST' "$NTDLL"; }
 right_runner() {
   case "$BUILD" in 27.0.0.41303|27.0.0.41303-fex) ;; *) return 1 ;; esac
   case "$SIDE" in *Rosetta*) return 0 ;; esac
@@ -160,9 +167,14 @@ if np_knows_groups; then
   ROWS_TMP="$(mktemp -d "${TMPDIR:-/tmp}/mgf-f125-rows.XXXXXX")"
   trap 'rm -rf "$ROWS_TMP"' EXIT
   /usr/bin/awk -v group="$ROWS_GROUP" '{ print } /^label[[:space:]]*=/ { print "group = " group }' "$ROWS" > "$ROWS_TMP/np-plugin-f125-swofty.conf"
+  # The library is looked for beside the template.
+  ln -s "$LOWMEM" "$ROWS_TMP/mgf-low-allocations.dylib"
   ROWS="$ROWS_TMP/np-plugin-f125-swofty.conf"
 fi
 np_plugins_setup "$APPID" "$PFX" "$ROWS"
+NP_WRAPPER="$STORE/f125-swofty-play.sh"
+# NotProton loads a row's library through its plugin host; without it the row is not offered.
+host_ok() { [ -f "$NP_SUPPORT/plugin-host.dylib" ]; }
 JOURNAL="$PFX/.mgf-f125-launch-options.json"
 STATE="$PFX/.mgf-f125-swofty"          # what this script added, one word a line
 BRIDGE="$PFX/drive_c/Program Files (x86)/Steam"
@@ -249,65 +261,50 @@ stopped() {
   return 1
 }
 
-# Swofty Launcher's Windows release, into $LAUNCHER. Its index names the file with its size
-# and SHA-256; the download is checked against both before anything is unpacked.
-fetch_launcher() {
-  local work rc=0
-  work="$(mktemp -d "${TMPDIR:-/tmp}/mgf-swofty.XXXXXX")" || return 1
-  fetch_launcher_into "$work" || rc=$?
-  rm -rf "$work"
-  return "$rc"
+# macOS's file chooser, from MacGameFix's window only. Prints the path, or nothing when the
+# player cancels. MGVF_CHOOSER stands in for it in the tests.
+ask_download() {
+  local prompt="Where is your Swofty Launcher download? Choose the Windows release .zip from f1.swofty.net, or, if your browser unpacked it, swofty.exe in its bin folder."
+  if [ -n "${MGVF_CHOOSER:-}" ]; then "$MGVF_CHOOSER" "$prompt" 2>/dev/null || true; return 0; fi
+  /usr/bin/osascript -e 'on run argv' -e 'try' -e 'return POSIX path of (choose file with prompt (item 1 of argv))' \
+    -e 'on error' -e 'return ""' -e 'end try' -e 'end run' "$prompt" 2>/dev/null || true
 }
-fetch_launcher_into() {  # <work folder>
-  local work="$1" zip name="" url="" sha="" got top
-  zip="${MGVF_SWOFTY_ZIP:-}"
-  if [ -n "$zip" ]; then
-    [ -f "$zip" ] || { echo "error: MGVF_SWOFTY_ZIP names no file: $zip" >&2; return 1; }
-    echo "  using $zip"
-  else
-    echo "  asking $INDEX_URL for the current release"
-    curl -fsSL --retry 2 --max-time 60 -o "$work/latest.json" "$INDEX_URL" || {
-      echo "error: could not reach Swofty's release index; check the connection and install again" >&2
-      return 1
-    }
-    # name, url and sha256 of the one Windows asset; an index that does not have exactly that is refused.
-    read -r name url sha < <(/usr/bin/perl -MJSON::PP -e '
-      local $/; my $d = eval { decode_json(<STDIN>) } or exit 1;
-      my @a = grep { ($_->{name} // "") =~ /^swofty-launcher-v[0-9][0-9.]*-windows-x86_64\.zip$/ } @{ $d->{assets} || [] };
-      exit 1 unless @a == 1;
-      my ($n, $u, $s) = @{ $a[0] }{qw(name url sha256)};
-      exit 1 unless ($u // "") =~ m{^https://(cdn\.swofty\.net|github\.com/Swofty-Developments/SwoftyLauncher)/[A-Za-z0-9._/-]+$}
-                 && ($s // "") =~ /^[0-9a-f]{64}$/;
-      print "$n $u $s\n";
-    ' < "$work/latest.json") || true
-    [ -n "$sha" ] || { echo "error: Swofty's release index does not name a Windows release this understands; nothing was changed" >&2; return 1; }
-    echo "  fetching $name (about 90 MB) from ${url%/"$name"}"
-    zip="$work/$name"
-    curl -fsSL --retry 2 -o "$zip" "$url" || {
-      echo "error: could not download $name; check the connection and install again" >&2
-      return 1
-    }
-    got="$(shasum -a 256 "$zip" | cut -d' ' -f1)"
-    [ "$got" = "$sha" ] || {
-      echo "error: the download is not the file the index names (sha256 $got); nothing was changed" >&2
-      return 1
-    }
+# What this install takes the launcher from, or nothing when the one kept stays (or none is
+# given). The window asks only while no launcher is kept.
+chosen() {
+  local d=""
+  if [ -n "${MGVF_SWOFTY:-}" ]; then d="$MGVF_SWOFTY"
+  elif ! launcher_ok && [ "${MGVF_FRONTEND:-}" = app ]; then d="$(ask_download)"
   fi
-  mkdir "$work/out"
-  ditto -x -k "$zip" "$work/out" || { echo "error: could not unpack $(basename "$zip")" >&2; return 1; }
-  # The release unpacks to one folder, or straight to bin/ and loader/.
-  top="$(find "$work/out" -maxdepth 3 -type f -path '*/bin/swofty.exe' | head -1)"
-  [ -z "$top" ] || top="$(dirname "$(dirname "$top")")"
-  [ -n "$top" ] && [ -s "$top/bin/swofty.exe" ] && [ -d "$top/loader" ] || {
-    echo "error: $(basename "$zip") does not hold bin/swofty.exe and loader/ where expected; nothing was changed" >&2
-    return 1
-  }
+  d="${d%/}"
+  [ -n "$d" ] && printf '%s\n' "$d"
+  return 0
+}
+# The launcher's folder in what the player gave: the one that holds bin/swofty.exe and loader/.
+# A .zip is unpacked into <work> first. Nothing when there is not exactly one.
+launcher_in() {  # <given> <work>
+  local from="$1" work="$2" found
+  case "$from" in
+  *.zip|*.ZIP)
+    mkdir -p "$work/out"
+    ditto -x -k "$from" "$work/out" || return 0
+    from="$work/out" ;;
+  *.exe|*.EXE) from="$(dirname "$(dirname "$from")")" ;;
+  esac
+  [ -d "$from" ] || return 0
+  found="$(find "$from" -maxdepth 3 -type f -path '*/bin/swofty.exe' 2>/dev/null)"
+  [ "$(printf '%s' "$found" | /usr/bin/grep -c .)" = 1 ] || return 0
+  found="$(dirname "$(dirname "$found")")"
+  [ -s "$found/bin/swofty.exe" ] && [ -d "$found/loader" ] && printf '%s\n' "$found"
+  return 0
+}
+take_launcher() {  # <launcher folder>
   mkdir -p "$STORE"
   rm -rf "$LAUNCHER.new"
-  mv "$top" "$LAUNCHER.new"
+  ditto "$1" "$LAUNCHER.new" || { rm -rf "$LAUNCHER.new"; echo "error: could not copy $1" >&2; return 1; }
   rm -rf "$LAUNCHER"
   mv "$LAUNCHER.new" "$LAUNCHER"
-  echo "  kept in $LAUNCHER"
+  echo "  copied into $LAUNCHER"
 }
 
 case "$MODE" in
@@ -316,7 +313,7 @@ case "$MODE" in
   echo "looking at $PFX, $STORE and Steam's launch options"
   have=0; of=8; why=""
   miss() { why="${why:+$why; }$1"; }
-  launcher_ok && have=$((have+1)) || miss "Swofty Launcher is not in $LAUNCHER"
+  launcher_ok && have=$((have+1)) || miss "Swofty Launcher is not in $LAUNCHER: install again and choose your Swofty download"
   scripts_ok && have=$((have+1)) || { scripts_any && old_scripts=1; miss "the play script is not in place"; }
   o=0; reg_has "$OVERRIDE_KEY" version || o=$?
   [ "$o" = 1 ] && miss "F1_25.exe has no version override" || have=$((have+1))
@@ -331,9 +328,9 @@ case "$MODE" in
   # Absent is judged by what is only ever this script's: the play script, the launch option, the
   # rows and its own list. The launcher stays after a restore, and a value the user had is not ours.
   if [ "$wrapped" = 0 ] && ! scripts_any && [ ! -f "$STATE" ] && [ "$rows" = absent ]; then echo absent
-  elif [ "$have" -eq "$of" ] && carries_fix; then echo installed
+  elif [ "$have" -eq "$of" ] && host_ok; then echo installed
   elif [ "$have" -eq "$of" ]; then
-    echo "Why: everything is in place, but the runner's ntdll.so does not keep the game's memory low: update the Rosetta improvement, or the game closes half a minute in" >&2
+    echo "Why: everything is in place, but NotProton's plugin host is not, so the row that keeps the game's memory low is not offered: update NotProton, or the game closes half a minute in" >&2
     echo half
   elif [ "$have" -eq $((of-1)) ] && [ "${old_scripts:-0}" = 1 ] && launcher_ok; then
     echo "an older play script is in place; installing again brings this one" >&2
@@ -361,9 +358,10 @@ case "$MODE" in
 esac
 
 right_runner || refuse "the game runs on NotProton's runner for CrossOver $BUILD${SIDE:+ ($SIDE)}; this needs CrossOver Preview 41303's, on Rosetta."
-carries_fix || refuse "the runner's ntdll.so ($NTDLL) does not keep the game's memory low: put in or update the Rosetta improvement for CrossOver Preview 41303 first."
 ACCOUNT="$(steam_account)" || refuse "cannot tell which account Steam is signed in with ($STEAM_LOGIN): open Steam, sign in, quit it, and install again."
 np_plugins_ready || refuse "NotProton's support folder ($NP_SUPPORT) is not there: open NotProton once, then install again."
+host_ok || refuse "NotProton's plugin host ($NP_SUPPORT/plugin-host.dylib) is not there, and the row that keeps the game's memory low needs it: update NotProton, then install again."
+[ -f "$LOWMEM" ] || refuse "mgf-low-allocations.dylib is not beside the installer."
 stopped || exit 1
 # Everything that can refuse does so before anything is written.
 mkdir -p "$STORE"
@@ -379,10 +377,28 @@ if ! np_plugins_preflight || ! options preflight >/dev/null; then
   [ "$lifted" = 0 ] || options install >/dev/null || true
   exit 1
 fi
+# The player's download, asked for after everything else that can refuse without it.
+put_back() { [ "$lifted" = 0 ] || options install >/dev/null || true; }
+GIVEN="$(chosen)"
+FROM=""
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/mgf-swofty.XXXXXX")"
+trap 'rm -rf "$WORK" ${ROWS_TMP:+"$ROWS_TMP"}' EXIT
+if [ -n "$GIVEN" ]; then
+  FROM="$(launcher_in "$GIVEN" "$WORK")"
+  [ -n "$FROM" ] || { put_back; refuse "$GIVEN is not Swofty Launcher's Windows release: it, or one folder in it, has to hold bin/swofty.exe and loader/."; }
+elif ! launcher_ok; then
+  put_back
+  echo "error: no Swofty Launcher was given." >&2
+  echo "       Swofty Launcher is not part of MacGameFix: download its Windows release from https://f1.swofty.net," >&2
+  if [ "${MGVF_FRONTEND:-}" = app ]; then echo "       then install again and choose the download when you are asked." >&2
+  else echo "       then install again with MGVF_SWOFTY=<the .zip, or the unpacked folder>." >&2; fi
+  echo "       Nothing was changed." >&2
+  exit 1
+fi
 
 echo "[1/4] Swofty Launcher"
-if launcher_ok && [ -z "${MGVF_SWOFTY_ZIP:-}" ]; then echo "  kept in $LAUNCHER"
-else fetch_launcher || exit 1; fi
+if [ -n "$FROM" ]; then take_launcher "$FROM" || exit 1
+else echo "  kept in $LAUNCHER"; fi
 launcher_ok || refuse "Swofty Launcher is not usable in $LAUNCHER."
 
 echo "[2/4] the play script"
