@@ -520,6 +520,20 @@ nothing went wrong rather than a fault cured.) Spider-Man 2, The Witcher 3, Torm
 needed theirs, Mortal Kombat 11's was made on 4.0b3, and God of War runs on DXMT, which the toolkit does not change. Every
 fix stays, for anyone on 4.0b2 and earlier.
 
+### Switching away from a game: play in Borderless
+
+A Windows game in exclusive fullscreen can stop drawing when you switch away with Cmd-Tab
+and come back: the window is there and the game keeps running, but the picture no longer
+changes. In fullscreen the game owns the display and has to set up its output again on its
+way back, and under Wine and D3DMetal that step can fail. In a borderless window (the game's
+**Borderless** or **Windowed Fullscreen** display mode) it is an ordinary window the size of
+the screen, and Cmd-Tab only moves the focus.
+
+So set every game you play this way to Borderless when it offers one. Seen on F1 25 under
+NotProton (CrossOver Preview 41303 on Rosetta, 2026-11-25): in Fullscreen it stopped drawing
+after a Cmd-Tab, in Borderless it switched back and forth without a problem. Steam's overlay
+was off for the game at the time, so which of the two made the difference was not separated.
+
 ### Nioh and Nioh 2 decode their own video
 
 Their cutscenes are WMV3, which no CrossOver decodes. Nioh plays them through
