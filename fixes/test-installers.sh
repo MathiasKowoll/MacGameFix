@@ -245,7 +245,7 @@ npc="$W/pbznp"; nhome="$npc/home"; npfx="$npc/compatdata/4115450/pfx"
 mkdir -p "$npfx/drive_c/windows/system32" "$nhome/Library/Application Support/notproton" "$npc/fixes"
 printf 'WINE REGISTRY Version 2\n#arch=win64\n' > "$npfx/user.reg"; touch "$npfx/system.reg"
 echo 27.0.0.41303-fex > "$npc/compatdata/4115450/notproton-build"
-for n in install-pbz-fix.sh bottles.sh msmpeg2vdec-sw.dll notproton-rosetta-pipeline-cache.dylib steam-launch-options.pl; do cp "$FIX/$n" "$npc/fixes/$n"; done
+for n in install-pbz-fix.sh bottles.sh msmpeg2vdec-sw.dll notproton-rosetta-pipeline-cache.dylib steam-launch-options.pl notproton-plugins.sh np-plugin-pbz.conf np-plugin-shared.conf mgf-engine.dylib; do cp "$FIX/$n" "$npc/fixes/$n"; done
 sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$npc/fixes/steam-launch-options.pl"
 nvdf="$nhome/Library/Application Support/Steam/userdata/1/config/localconfig.vdf"; mkdir -p "$(dirname "$nvdf")"
 printf '"UserLocalConfigStore"\n{\n\t"Software" { "Valve" { "Steam" { "apps" {\n\t\t"4115450"\n\t\t{\n\t\t\t"LaunchOptions"\t\t"D3DM_SUPPORT_DXR=0 %%command%%"\n\t\t}\n\t} } } }\n}\n' > "$nvdf"
@@ -281,6 +281,31 @@ last="$(npbz --restore 2>/dev/null | tail -1)"
 rm -f "$nplug/rosetta-pipeline-cache.conf"; npbz > /dev/null 2>&1; npbz --restore > /dev/null 2>&1
 [ ! -e "$nplug/rosetta-pipeline-cache.conf" ] && [ ! -e "$nplug/notproton-rosetta-pipeline-cache.dylib" ] && [ "$(cat "$nvdf")" = "$nvdf0" ] \
   && say ok "pbz in NotProton: what the fix wrote is gone again after a restore" || say FAIL "pbz NotProton: own files left ($(ls "$nplug"))"
+# On 41303 on Rosetta, with NotProton's plugin host: PBZ also takes the shared "Engine fixes"
+# row (0017, 0019 and 0020 from mgf-engine.dylib), its switch beside the pipeline cache's.
+[ ! -e "$nplug/mgf-4115450.conf" ] && say ok "pbz in NotProton without the plugin host or Rosetta named: no Engine fixes row" \
+  || say FAIL "pbz NotProton: a row without the host"
+printf '27.0.0.41303-fex\nCrossOver 2026 11 11-ARM64 - Rosetta\n' > "$npc/compatdata/4115450/notproton-build"
+echo host > "$nhome/Library/Application Support/notproton/plugin-host.dylib"
+npbzr() { MGVF_NOTPROTON_VERSION=1.2.7 MGVF_STEAM_RUNNING=0 npbz "$@"; }
+npstr() { HOME="$nhome" MGVF_BOTTLE="$npfx" MGVF_NOTPROTON_VERSION=1.2.7 MGVF_STEAM_RUNNING=0 /bin/bash "$npc/fixes/install-pbz-fix.sh" "$npc/game" --status 2>/dev/null | tail -1; }
+[ "$(npstr)" = absent ] && say ok "pbz in NotProton on 41303 Rosetta: absent before" || say FAIL "pbz rows: absent before ($(npstr))"
+npbzr > "$W/pbzrows.install.log" 2>&1 && [ "$(npstr)" = installed ] \
+  && cmp -s "$nplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
+  && /usr/bin/grep -q '^# shared rows: NOTPROTON_MGF_ENGINE$' "$nplug/mgf-4115450.conf" \
+  && /usr/bin/grep -q '^apps = 4115450$' "$nplug/mgf-shared.conf" \
+  && /usr/bin/grep -qF '"NOTPROTON_MGF_ENGINE=1 NOTPROTON_ROSETTA_PIPELINE_CACHE=1 D3DM_SUPPORT_DXR=0 %command%"' "$nvdf" \
+  && say ok "pbz in NotProton on 41303 Rosetta: the shared Engine fixes row, its library and its switch beside the pipeline cache's" \
+  || say FAIL "pbz rows: install ($(npstr), $(tail -3 "$W/pbzrows.install.log" | tr '\n' ' '))"
+rm -f "$nplug/mgf-shared.conf"
+[ "$(npstr)" = half ] && say ok "pbz in NotProton on 41303 Rosetta: the shared row missing is half" || say FAIL "pbz rows: missing row ($(npstr))"
+npbzr > /dev/null 2>&1 && [ "$(npstr)" = installed ] && say ok "pbz in NotProton on 41303 Rosetta: installing again puts it back" || say FAIL "pbz rows: repair ($(npstr))"
+last="$(npbzr --restore 2>/dev/null | tail -1)"
+[ "$last" = restored ] && [ "$(npstr)" = absent ] && [ "$(cat "$nvdf")" = "$nvdf0" ] \
+  && [ ! -e "$nplug/mgf-4115450.conf" ] && [ ! -e "$nplug/mgf-shared.conf" ] && [ ! -e "$nplug/mgf-engine.dylib" ] \
+  && say ok "pbz in NotProton on 41303 Rosetta: restored, the row, its library and both switches gone" \
+  || say FAIL "pbz rows: restore ($last, $(npstr), $(cat "$nvdf" | tr '\n' ' '))"
+rm -f "$nhome/Library/Application Support/notproton/plugin-host.dylib"
 printf '"UserLocalConfigStore" { "Software" { "Valve" { "Steam" { "apps" { "4115450" { "LaunchOptions" "wrapper %%command%%" } } } } } }\n' > "$nvdf"
 ! npbz > /dev/null 2>&1 && [ ! -e "$nplug/notproton-rosetta-pipeline-cache.dylib" ] && ! /usr/bin/grep -q native "$npfx/user.reg" \
   && say ok "pbz in NotProton: options it cannot edit stop the install before anything changes" || say FAIL "pbz NotProton: wrapper not refused up front"

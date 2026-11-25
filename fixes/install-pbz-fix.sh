@@ -66,7 +66,7 @@
 # MGVF-NEEDS: rosetta
 # MGVF-INSTRUCTIONS: pbz-instructions.md
 # MGVF-GAME: Phantom Blade Zero | PBZ.exe | platform/steam
-# MGVF-WHY: Never opens a window under Rosetta: its Denuvo checks the CPU for instructions Rosetta does not have. The Wine modules' ntdll shows them to this executable alone, it loads Microsoft's Visual C++ runtime first, and an H.264 decoder that offers NV12 brings back the black menu video. In NotProton it also turns on a pipeline cache, so the shaders Metal's own cache has no room for are not compiled again at every start.
+# MGVF-WHY: Never opens a window under Rosetta: its Denuvo checks the CPU for instructions Rosetta does not have. The Wine modules' ntdll shows them to this executable alone, it loads Microsoft's Visual C++ runtime first, and an H.264 decoder that offers NV12 brings back the black menu video. In NotProton it also turns on a pipeline cache, so the shaders Metal's own cache has no room for are not compiled again at every start. On NotProton's 41303 runner on Rosetta it also switches on the shared Engine fixes row for the game (NOTPROTON_MGF_ENGINE=1), whose library shows the protection the CPU it checks for from outside ntdll; checked with a test program, not yet played with the row.
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -136,6 +136,35 @@ JOURNAL="$PFX/.mgf-pbz-launch-options.json"
 CACHE_EARLIER="389defc20850ff9fdc43cfc87b804f15c5243ef738202de559717bdd3229f1d6 0d19abb364a827508b695300bcb85ceafadcf916f210a4a9b9c662366c48b9a2"
 NOTPROTON=0
 if [ -n "$PFX" ] && [ -f "$(dirname "$PFX")/notproton-build" ] && [ -d "$NP_SUPPORT" ]; then NOTPROTON=1; fi
+
+# MacGameFix's engine fixes for PBZ, through NotProton's shared "Engine fixes" row: the library
+# it loads, mgf-engine.dylib, arms in this game alone what engine patches 0017, 0019 and 0020 do
+# in the Wine modules' ntdll (Rosetta's CPUID leaf 7, CLWB, RDPID, non-canonical faults, the
+# CPUID Rosetta skips), from outside ntdll (engine/mgf-engine.c). PBZ has no row of its own: the
+# record is the one other games use (np-plugin-shared.conf, plugins/mgf-shared.conf), and this
+# game is added to its apps. On NotProton's runner for CrossOver Preview 41303 on Rosetta, with
+# its plugin host, only. While the Wine modules' ntdll still carries those patches, the row
+# changes nothing the game sees; it is what lets that ntdll go without them.
+ROWS_ON=0
+if [ "$NOTPROTON" = 1 ]; then
+  . "$HERE/notproton-plugins.sh"
+  PBZ_STEAM="${MGVF_STEAM_ROOT:-$HOME/Library/Application Support/Steam}"
+  np_plugins_setup "$APPID" "$PFX" "$HERE/np-plugin-pbz.conf"
+  NP_SHARED_TEMPLATE="$HERE/np-plugin-shared.conf"; NP_SHARED_LIBRARY="$HERE/mgf-engine.dylib"
+  NP_SHARED_USES="NOTPROTON_MGF_ENGINE"
+  # The group "MacGameFix" where NotProton knows groups, as F1 25's rows (install-f125-swofty.sh).
+  for run in "$PBZ_STEAM"/compatibilitytools.d/notproton-*/run; do
+    [ -f "$run" ] && LC_ALL=C /usr/bin/grep -qF 'names[i] == "group"' "$run" && NP_SHARED_GROUP="MacGameFix"
+  done
+  case "${MGVF_NOTPROTON_GROUPS:-}" in 0) NP_SHARED_GROUP="" ;; 1) NP_SHARED_GROUP="MacGameFix" ;; esac
+  # notproton-build: the runner's build, then what it runs on ("... - Rosetta" or "... - FEX").
+  { IFS= read -r pbz_build || true; IFS= read -r pbz_side || true; } < "$(dirname "$PFX")/notproton-build"
+  case "$pbz_build" in 27.0.0.41303|27.0.0.41303-fex)
+    case "$pbz_side" in *Rosetta*)
+      [ -f "$NP_SUPPORT/plugin-host.dylib" ] && [ -f "$NP_SHARED_LIBRARY" ] && [ -f "$NP_SHARED_TEMPLATE" ] && ROWS_ON=1 ;;
+    esac ;;
+  esac
+fi
 
 # bottles.sh answers from user.reg without starting wine, and edits a prefix's.
 [ -f "$HERE/bottles.sh" ] && . "$HERE/bottles.sh"
@@ -300,12 +329,18 @@ cache_restore() {
   return 0
 }
 
+# The row's files only: a row the player switched off is not a broken fix.
+rows_ok() { [ "$ROWS_ON" = 0 ] || [ "$(np_plugins_status | tail -1)" = installed ]; }
+
 status() {
   local n
   n="$(present)"
-  if [ "$n" -eq "$COUNT" ] && decoder_placed && { [ "$NOTPROTON" = 0 ] || cache_on; }; then echo installed
+  if [ "$n" -eq "$COUNT" ] && decoder_placed && { [ "$NOTPROTON" = 0 ] || cache_on; } && rows_ok; then echo installed
   elif [ "$n" -gt 0 ] || decoder_placed || { [ "$NOTPROTON" = 1 ] && cache_any; }; then
-    [ "$n" -eq "$COUNT" ] && decoder_placed && echo "Why: the pipeline cache is not on in NotProton" >&2
+    if [ "$n" -eq "$COUNT" ] && decoder_placed; then
+      if [ "$NOTPROTON" = 1 ] && ! cache_on; then echo "Why: the pipeline cache is not on in NotProton" >&2
+      else echo "Why: NotProton's Engine fixes row is not in place for the game" >&2; fi
+    fi
     echo half
   else echo absent; fi
 }
@@ -317,6 +352,9 @@ case "$ACTION" in
       if [ -n "$PFX" ]; then prefix_stopped "$PFX" || exit 1; fi
       if [ "$NOTPROTON" = 1 ] && [ -f "$JOURNAL" ]; then cache_options preflight >/dev/null || exit 1; fi
       [ "$NOTPROTON" = 0 ] || cache_restore || gone=0
+      if [ "$NOTPROTON" = 1 ] && { [ -f "$NP_CONF" ] || [ -f "$NP_SWITCHED" ] || [ -f "$NP_JOURNAL" ]; }; then
+        np_plugins_restore || gone=0
+      fi
       decoder_out
       if [ -n "$PFX" ]; then
         while IFS='|' read -r key name data; do
@@ -349,6 +387,7 @@ if [ "$NOTPROTON" = 1 ]; then
   [ -f "$CACHE_LIB" ] && [ -f "$OPTIONS" ] || { echo "error: the pipeline cache's files are not beside this script" >&2; exit 1; }
   # Steam closed, the game in its settings and no wrapper in its options, before anything changes.
   cache_options preflight >/dev/null || exit 1
+  if [ "$ROWS_ON" = 1 ]; then np_plugins_preflight || exit 1; fi
 fi
 [ -d "$SYS" ] || { echo "error: no system32 here yet -- run the game once first" >&2; exit 1; }
 # Only CrossOver's own file is kept aside: ours, from an earlier install, is not
@@ -370,6 +409,7 @@ if [ -n "$PFX" ]; then
   done < <(values)
   echo "  $COUNT values written for $EXE only, into the prefix's user.reg"
   [ "$NOTPROTON" = 0 ] || cache_install || exit 1
+  if [ "$ROWS_ON" = 1 ]; then np_plugins_install || exit 1; fi
 else
   cx="$(find_crossover)" || { echo "error: no CrossOver found in /Applications" >&2; exit 1; }
   reachable "$BOTTLE" "$cx" || { echo "error: this bottle cannot run reg.exe, so nothing was written." >&2; exit 1; }

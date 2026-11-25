@@ -13,6 +13,12 @@ NOTPROTON_ROSETTA_PIPELINE_CACHE=1 D3DM_SUPPORT_DXR=0 %command%
 
 If you would rather not use DLSS, `D3DM_ENABLE_METALFX=0` in its place turns DLSS off, and you choose TSR in the game. TSR ran better than DLSS in play, but that was not measured.
 
+# Engine fixes row
+
+On NotProton's runner for CrossOver Preview 41303, on Rosetta, the fix also adds the game to MacGameFix's shared row **Engine fixes (MacGameFix)**, on its Compatibility page in NotProton, and switches it on the first time: `NOTPROTON_MGF_ENGINE=1` goes in front of the launch options, so quit Steam before installing. The row's library makes Rosetta look to this game alone like the CPU its copy protection checks for: CPUID shows CLFLUSHOPT, CLWB and RDPID, the last two are emulated, an access through a non-canonical address faults as on Windows, and a CPUID Rosetta skips after self-modifying code is run. The Wine modules' `ntdll` still does the same for every game, so for now the row changes nothing in the game; it is what lets that `ntdll` go without it later. It was checked with a test program on a runner without it; the game has not been played with the row yet. It does not stand in for x86 execution breakpoints, which the Wine modules' `ntdll` also emulates. Leave it on.
+
+To play on the row alone, add `NOTPROTON_ENV_WINE_ROSETTA_CPUID7_OR=0` to the launch options: the Wine modules' `ntdll` then leaves CPUID, CLWB and RDPID to the row. Only to check the row; take it out afterwards.
+
 # Shaders
 
 The game compiles about 66,000 Metal pipelines while it loads, about 8 GB of GPU code. Metal's own cache stops at about 1.1 GB a file, so without the pipeline cache some 40% of them are compiled again at every start, and the loading bar slows down from about 60%.
