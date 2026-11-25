@@ -14,6 +14,9 @@
 //   timer-overflow   engine patch 0021  Forza Horizon 6 (2483190)  the threadpool's timer thread kept still
 //   dualstack-ipv4   engine patch 0026  Forza Horizon 6 (2483190)  IPv4 options on its dual-stack game
 //                                       socket, for the online sessions
+//   direct-syscall   engine patches     Forza Horizon 6 (2483190)  a direct system call or an
+//                    0028, 0029                        exception Rosetta delivers on top of a
+//                                                      suspend, replayed after it
 //   rosetta-cpu      engine patches     Phantom Blade Zero (4115450)  Rosetta's CPUID leaf 7, CLWB,
 //                    0017, 0019, 0020                     RDPID and faults as copy protection
 //                                                         expects them (no execution breakpoints)
@@ -47,6 +50,7 @@ void mgf_package_family_arm(const struct np_plugin_api *, const struct mach_head
 void mgf_timer_overflow_arm(const struct np_plugin_api *, const struct mach_header_64 *, intptr_t);
 void mgf_dualstack_ipv4_arm(const struct np_plugin_api *, const struct mach_header_64 *, intptr_t);
 void mgf_rosetta_cpu_arm(const struct np_plugin_api *, const struct mach_header_64 *, intptr_t);
+void mgf_direct_syscall_arm(const struct np_plugin_api *, const struct mach_header_64 *, intptr_t);
 void mgf_d3dmetal_hookable_start(void);
 
 // A fix either arms through ntdll.so (arm, when the host sees it) or starts by itself (start).
@@ -61,6 +65,7 @@ static const struct fix {
     {"timer-overflow", mgf_timer_overflow_arm, NULL, 2483190},
     {"dualstack-ipv4", mgf_dualstack_ipv4_arm, NULL, 2483190},
     {"rosetta-cpu", mgf_rosetta_cpu_arm, NULL, 4115450},
+    {"direct-syscall", mgf_direct_syscall_arm, NULL, 2483190},
     {"d3dmetal-hookable", NULL, mgf_d3dmetal_hookable_start, 4080220},
 };
 #define COUNT (sizeof(FIXES) / sizeof(FIXES[0]))
