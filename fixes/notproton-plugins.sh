@@ -248,12 +248,13 @@ np_libraries() {
   [ -z "$NP_SHARED_LIBRARY" ] || printf '%s\n' "$NP_SHARED_LIBRARY"
 }
 
-# A library in the folder is ours: the one we ship, or an earlier build a template names.
+# A library in the folder is ours: the one we ship, or an earlier build a template names (the
+# game's, or the shared rows' for the library they load).
 np_lib_ours() {
   local src="$1" live="$NP_PLUGINS/$(basename "$1")" t
   [ -f "$live" ] || return 1
   cmp -s "$live" "$src" && return 0
-  for t in "${NP_TEMPLATES[@]}"; do
+  for t in "${NP_TEMPLATES[@]}" ${NP_SHARED_TEMPLATE:+"$NP_SHARED_TEMPLATE"}; do
     case " $(np_meta "$t" earlier | tr '\n' ' ') " in *" $(np_sha "$live") "*) return 0 ;; esac
   done
   return 1

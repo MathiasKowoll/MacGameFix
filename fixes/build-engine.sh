@@ -18,6 +18,9 @@
 #     ntdll and kernelbase still resolving;
 #   - timer-overflow/check.c makes a threadpool timer, sets none, and measures its CPU time
 #     while it sleeps 3 s: the timer thread spins without the fix, and is still with it.
+#   - dualstack-ipv4/check.c sets IP_DONTFRAGMENT and IP_TTL on a dual-stack UDP socket, as
+#     Forza Horizon 6 does with its game socket, and reads them back: WSAEINVAL without the fix,
+#     and 200 from both IP_TTL and IPV6_UNICAST_HOPS with it.
 # Each runs without the library, where it has to fail (a check that passes either way tests
 # nothing), and with it, the fix named by MGF_ENGINE_FIXES. low-allocations has no check of its
 # own: it was played (see its source). d3dmetal-hookable's check (d3dmetal-hookable/check.c, an
@@ -41,7 +44,7 @@ trap cleanup EXIT
 /usr/bin/clang -arch arm64 -arch x86_64 -mmacosx-version-min=15.0 -Werror=unguarded-availability-new -std=c17 \
   -dynamiclib -O2 -Wall -Wextra -Werror -install_name @rpath/mgf-engine.dylib -o "$WORK/mgf-engine.dylib" \
   "$SRC/mgf-engine.c" "$SRC/low-allocations/mgf-low-allocations.c" "$SRC/package-family/mgf-package-family.c" \
-  "$SRC/timer-overflow/mgf-timer-overflow.c" -DMGF_ENGINE "$HERE/d3dmetal-hookable/mgf-d3dmetal-hookable.c"
+  "$SRC/timer-overflow/mgf-timer-overflow.c" "$SRC/dualstack-ipv4/mgf-dualstack-ipv4.c" -DMGF_ENGINE "$HERE/d3dmetal-hookable/mgf-d3dmetal-hookable.c"
 /usr/bin/codesign -f -s - "$WORK/mgf-engine.dylib" 2>/dev/null
 
 RUNNER="${MGVF_CHECK_RUNNER:-$HOME/Library/Application Support/notproton/runners/crossover-27.0.0.41303-fex/CrossOver}"
@@ -64,9 +67,9 @@ else
   export WINEPREFIX="$WORK/pfx" WINEDEBUG=-all WINELOADER="$WINE" WINESERVER="$SERVER"
   "$WINE" wineboot -i >/dev/null 2>&1
   "$SERVER" -w
-  check() {  # <fix> <the exit code without it>
+  check() {  # <fix> <the exit code without it> [libraries the check links]
     local fix="$1" without="$2" rc
-    x86_64-w64-mingw32-gcc -O1 -Wall -Werror -o "$WORK/$fix.exe" "$SRC/$fix/check.c"
+    x86_64-w64-mingw32-gcc -O1 -Wall -Werror -o "$WORK/$fix.exe" "$SRC/$fix/check.c" "${@:3}"
     echo "== $fix, without the library: it has to fail"
     rc=0; "$WINE" "$WORK/$fix.exe" || rc=$?
     "$SERVER" -w
@@ -78,6 +81,7 @@ else
   }
   check package-family 2
   check timer-overflow 3
+  check dualstack-ipv4 2 -lws2_32
 fi
 echo "== d3dmetal-hookable, with the library"
 /usr/bin/clang -arch x86_64 -O1 -mmacosx-version-min=14.0 -Wall -Wextra -Werror "$HERE/d3dmetal-hookable/check.c" -o "$WORK/hookable-check"

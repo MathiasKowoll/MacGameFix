@@ -936,7 +936,7 @@ cp "$f6pfx/drive_c/windows/system32/apd12.dll" "$f6/orig-apd12"
 # Exercise the exact installer on a fake executable, substituting only the fixture hash
 # in a disposable copy. Production has no environment switch to bypass the build gate.
 f6fix="$f6/fixes"; mkdir -p "$f6fix"
-for n in install-fh6-fix.sh fh6-runtime.sh fh6-launch-options.pl bottles.sh pe.pl d3d12-fh6.dll fh5-THIRD-PARTY-LICENCES.md notproton-rosetta-trap-boost.dylib fh6-signin.sh advapi32-fh6-26.3.0.39832.dll advapi32-fh6-27.0.0.41073.dll advapi32-fh6-27.0.0.41303.dll; do cp "$FIX/$n" "$f6fix/$n"; done
+for n in install-fh6-fix.sh fh6-runtime.sh fh6-launch-options.pl bottles.sh pe.pl d3d12-fh6.dll fh5-THIRD-PARTY-LICENCES.md notproton-rosetta-trap-boost.dylib fh6-signin.sh advapi32-fh6-26.3.0.39832.dll advapi32-fh6-27.0.0.41073.dll advapi32-fh6-27.0.0.41303.dll notproton-plugins.sh np-plugin-fh6.conf np-plugin-shared.conf mgf-engine.dylib steam-launch-options.pl; do cp "$FIX/$n" "$f6fix/$n"; done
 # The prefix's own advapi32.dll stands for 41073's: that build's hash is the fake's. The
 # runner's must stay as it is.
 printf "CodeWeavers' advapi32\n" > "$f6pfx/drive_c/windows/system32/advapi32.dll"
@@ -944,7 +944,7 @@ printf "runner advapi32\n" > "$f6run/lib/wine/x86_64-windows/advapi32.dll"
 sed -i '' "s/^    7c5e5f2f573e001eabfc39d252428dfcc79c773262b7d00b46301f53fb143dab)/    $(shasum -a 256 "$f6pfx/drive_c/windows/system32/advapi32.dll" | cut -d' ' -f1))/" "$f6fix/fh6-signin.sh"
 # The separate launch-options tests exercise the running-Steam refusal. This fixture
 # substitutes only process discovery so the real user's open Steam is irrelevant.
-sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$f6fix/fh6-launch-options.pl"
+sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$f6fix/fh6-launch-options.pl" "$f6fix/steam-launch-options.pl"
 fixturesha="$(shasum -a 256 "$f6game/forzahorizon6.exe" | cut -d' ' -f1)"
 sed -i '' "s/^GAME_SHA=.*/GAME_SHA=$fixturesha/" "$f6fix/fh6-runtime.sh"
 f6modules="$f6/modules"; mkdir -p "$f6modules"
@@ -1080,6 +1080,64 @@ elif [ "$(f6n_run /x/runners/crossover-27.0.0.41303-fex/CrossOver fh6_chain_in_n
 else
   say FAIL "fh6 on 41303: chain-in-ntdll detection or the previous build's acceptance"
 fi
+
+# 41303 on Rosetta, with NotProton's plugin host: FH6 also takes the shared "Engine fixes" row
+# (0021 and 0026 from mgf-engine.dylib), its switch going into the launch options after FH6's
+# own variables, and out again before them. On 41073 (above) the row is not part of the fix.
+[ ! -e "$f6home/Library/Application Support/notproton/plugins/mgf-2483190.conf" ] \
+  && say ok "fh6 on 41073: no Engine fixes row" || say FAIL "fh6 on 41073: a row was written"
+f6r="$W/fh6-rows"; f6rhome="$f6r/home"; f6rnp="$f6rhome/Library/Application Support/notproton"; f6rplug="$f6rnp/plugins"
+f6rrun="$f6rnp/runners/crossover-27.0.0.41303-fex/CrossOver"; f6rpfx="$f6r/pfx"; f6rfix="$f6r/fixes"
+mkdir -p "$f6rrun" "$f6rfix" "$f6r/game"
+cp -R "$f6run/" "$f6rrun/"; cp -R "$f6pfx" "$f6rpfx"; cp "$f6game/forzahorizon6.exe" "$f6r/game/"
+cp "$f6modules/engine-27.0.0.41303-x86_64-unix-ntdll.so" "$f6rrun/lib/wine/x86_64-unix/ntdll.so"
+echo host > "$f6rnp/plugin-host.dylib"
+printf '27.0.0.41303-fex\nCrossOver 2026 11 11-ARM64 - Rosetta\n' > "$f6r/notproton-build"
+for n in install-fh6-fix.sh fh6-runtime.sh fh6-launch-options.pl bottles.sh pe.pl d3d12-fh6.dll fh5-THIRD-PARTY-LICENCES.md notproton-rosetta-trap-boost.dylib fh6-signin.sh advapi32-fh6-26.3.0.39832.dll advapi32-fh6-27.0.0.41073.dll advapi32-fh6-27.0.0.41303.dll notproton-plugins.sh np-plugin-fh6.conf np-plugin-shared.conf mgf-engine.dylib steam-launch-options.pl; do cp "$FIX/$n" "$f6rfix/$n"; done
+# The prefix's advapi32.dll stands for 41303's here.
+sed -i '' "s/^    8790c1b25ce4805c6f5fe1f5f103ea51c9439869c04297763652f2970b94febc)/    $(shasum -a 256 "$f6rpfx/drive_c/windows/system32/advapi32.dll" | cut -d' ' -f1))/" "$f6rfix/fh6-signin.sh"
+sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$f6rfix/fh6-launch-options.pl" "$f6rfix/steam-launch-options.pl"
+sed -i '' "s/^GAME_SHA=.*/GAME_SHA=$fixturesha/" "$f6rfix/fh6-runtime.sh"
+f6rconfig="$f6rhome/Library/Application Support/Steam/userdata/1/config"; mkdir -p "$f6rconfig"
+printf '"UserLocalConfigStore" { "Software" { "Valve" { "Steam" { "apps" { "2483190" { "LaunchOptions" "PERSONAL=keep %%command%%" } } } } } }\n' > "$f6rconfig/localconfig.vdf"
+f6rdo() { HOME="$f6rhome" MGVF_MODULES="$f6modules" MGVF_CX="$f6rrun" MGVF_BOTTLE="$f6rpfx" MGVF_NOTPROTON_VERSION=1.2.7 MGVF_STEAM_RUNNING=0 /bin/bash "$f6rfix/install-fh6-fix.sh" "$f6r/game" "$@"; }
+f6rst() { f6rdo --status 2>/dev/null | /usr/bin/grep -E '^(installed|absent|half)$' | tail -1; }
+f6ropts() { /usr/bin/perl -ne 'print "$1\n" if /"LaunchOptions" "([^"]*)"/' "$f6rconfig/localconfig.vdf"; }
+[ "$(f6rst)" = absent ] && say ok "fh6 on 41303 with the plugin host: absent before" || say FAIL "fh6 rows: absent before ($(f6rst))"
+f6rdo --install > "$f6r/install.log" 2>&1 && [ "$(f6rst)" = installed ] \
+  && cmp -s "$f6rplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
+  && [ -f "$f6rplug/mgf-2483190.conf" ] && /usr/bin/grep -q '^# shared rows: NOTPROTON_MGF_ENGINE$' "$f6rplug/mgf-2483190.conf" \
+  && [ "$(/usr/bin/grep -c '^\[' "$f6rplug/mgf-shared.conf")" = 1 ] \
+  && /usr/bin/grep -q '^\[NOTPROTON_MGF_ENGINE\]$' "$f6rplug/mgf-shared.conf" \
+  && /usr/bin/grep -q '^apps = 2483190$' "$f6rplug/mgf-shared.conf" \
+  && f6ropts | /usr/bin/grep -q '^NOTPROTON_MGF_ENGINE=1 .*NOTPROTON_ROSETTA_TRAP_BOOST=1 .*PERSONAL=keep %command%$' \
+  && say ok "fh6 on 41303 with the plugin host: the shared Engine fixes row, its library and its switch go in with the fix" \
+  || say FAIL "fh6 rows: install ($(f6rst), $(f6ropts), $(tail -3 "$f6r/install.log" | tr '\n' ' '))"
+rm -f "$f6rplug/mgf-shared.conf"
+f6rwhy="$(f6rdo --status 2>&1)"
+[ "$(f6rst)" = half ] && case "$f6rwhy" in *"Engine fixes row"*) true ;; *) false ;; esac \
+  && say ok "fh6 on 41303: the shared row missing reads half, and says so" || say FAIL "fh6 rows: missing row ($(f6rst))"
+f6rdo --install > "$f6r/install2.log" 2>&1 && [ "$(f6rst)" = installed ] \
+  && [ "$(f6ropts | /usr/bin/grep -o 'NOTPROTON_MGF_ENGINE=1' | /usr/bin/grep -c .)" = 1 ] \
+  && say ok "fh6 on 41303: installing again puts the row back, the switch once" || say FAIL "fh6 rows: reinstall ($(f6rst), $(f6ropts))"
+# The engine library #156 shipped is replaced like our own; another is refused.
+if git -C "$FIX/.." show 5ac1817:fixes/mgf-engine.dylib > "$f6rplug/mgf-engine.dylib" 2>/dev/null; then
+  f6rdo --install > "$f6r/install3.log" 2>&1 && cmp -s "$f6rplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
+    && say ok "fh6 on 41303: the engine library an earlier MacGameFix shipped is updated" \
+    || say FAIL "fh6 rows: earlier library ($(tail -2 "$f6r/install3.log" | tr '\n' ' '))"
+else say ok "fh6 on 41303: skipped, #156's engine library is not in this checkout's history"; fi
+printf 'not ours\n' > "$f6rplug/mgf-engine.dylib"
+! f6rdo --install > "$f6r/install4.log" 2>&1 && /usr/bin/grep -q 'is a different library' "$f6r/install4.log" \
+  && say ok "fh6 on 41303: an engine library that is not ours is refused" || say FAIL "fh6 rows: other library ($(tail -2 "$f6r/install4.log" | tr '\n' ' '))"
+cp "$FIX/mgf-engine.dylib" "$f6rplug/mgf-engine.dylib"
+mv "$f6rnp/plugin-host.dylib" "$f6rnp/plugin-host.away"
+[ "$(f6rst)" = installed ] && say ok "fh6 on 41303 without the plugin host: the row is not part of the fix" || say FAIL "fh6 rows: no host ($(f6rst))"
+mv "$f6rnp/plugin-host.away" "$f6rnp/plugin-host.dylib"
+f6rdo --restore > "$f6r/restore.log" 2>&1 \
+  && [ ! -e "$f6rplug/mgf-2483190.conf" ] && [ ! -e "$f6rplug/mgf-shared.conf" ] && [ ! -e "$f6rplug/mgf-engine.dylib" ] \
+  && ! f6ropts | /usr/bin/grep -q NOTPROTON_MGF_ENGINE \
+  && say ok "fh6 on 41303: restore takes the row, its library and its switch out" \
+  || say FAIL "fh6 rows: restore ($(f6rst), $(f6ropts), $(tail -3 "$f6r/restore.log" | tr '\n' ' '))"
 
 # A CrossOver bottle: only the Xbox sign-in fix, nothing in CrossOver itself.
 f6cx="$f6/cx/CrossOver.app/Contents/SharedSupport/CrossOver"; f6b="$f6/bottle"; mkdir -p "$f6cx/bin" "$f6cx/lib/wine/x86_64-windows" "$f6b/drive_c/windows/system32" "$f6/cxgame"
