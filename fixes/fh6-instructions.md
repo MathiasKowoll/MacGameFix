@@ -20,6 +20,8 @@ With that line, DLSS in a performance mode and the game's own frame rate setting
 
 On NotProton's runner for CrossOver Preview 41303, FH6's exception handling is now built into the improvement's `ntdll`, so it needs no variables of its own. Installing the improvement again takes out what earlier versions wrote for it (`NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_CHAIN=1`, `NOTPROTON_ENV_WINE_SOFTWARE_ALU_BRIDGE=1`, `NOTPROTON_ENV_WINE_SOFTWARE_BRIDGE_RESUME=0` and `NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_STATS=0`), each only while it still has the value MacGameFix gave it. On the 41073 runner the first three are still needed, and MacGameFix keeps writing them there.
 
+On that runner, on Rosetta, the improvement also adds FH6 to MacGameFix's shared row **Engine fixes (MacGameFix)**, on the game's Compatibility page in NotProton, and switches it on the first time: `NOTPROTON_MGF_ENGINE=1` goes in front of the launch options, so quit Steam before installing. The row's library arms two Wine fixes in FH6 alone, from outside `ntdll`: the threadpool's timer thread kept from spinning (without it, about 88,000 timer requests a second), and the IPv4 options of the online sessions' socket, without which no session is joined. The improvement's `ntdll` still carries both, so for now the row changes nothing in the game; it is what lets that `ntdll`, and NotProton's own, go without them later. Both were checked with test programs on a runner without them; FH6 has not been played with the row yet. Leave it on.
+
 # Frame rate
 
 The steadiest play so far: set the frame rate to unlimited in the game's own video settings, and cap it with D3DMetal 4 instead, with one of these before `%command%` in the same launch options:
@@ -89,7 +91,7 @@ Add these yourself if you want them; none is needed to play.
 | `NOTPROTON_RAW_CONTROLLERS=0` | Keeps NotProton's usual controller handling instead of forcing direct access. Not an FPS improvement. |
 | `NOTPROTON_GAME_MODE=0` | Starts the game without NotProton's Game Mode. Every measurement on this page was played with it; whether it changes anything here is not measured. |
 | `NOTPROTON_ENV_WINE_SOFTWARE_EXCEPTION_STATS=0` | Turns the exception counters off. They are on by default, so `=1` changes nothing. Whether turning them off helps the stutter is not measured. |
-| `NOTPROTON_ENV_WINE_DUALSTACK_IPV4_OPTIONS=0` | Turns the socket handling in Online off, as it was before. Only to compare, or if the game does worse with it. |
+| `NOTPROTON_ENV_WINE_DUALSTACK_IPV4_OPTIONS=0` | Turns the improvement's `ntdll` socket handling for Online off. With the Engine fixes row on, the row's own copy of it still applies, so this is how to play Online on the row alone; with the row off as well, Online is as it was before. Only to compare, or if the game does worse with it. |
 | `MTL_HUD_ENABLED=1` | Shows the Metal HUD. |
 | `MTL_HUD_LOG_ENABLED=1` | Asks for the HUD's text log. That log can be missing; `metalperftrace` is used beside it for now. |
 

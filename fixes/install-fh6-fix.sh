@@ -12,7 +12,7 @@
 # MGVF-NEEDS: rosetta
 # MGVF-INSTRUCTIONS: fh6-instructions.md
 # MGVF-GAME: Forza Horizon 6 | forzahorizon6.exe |
-# MGVF-WHY: Played at a steady 60 frames a second on a MacBook Pro M4 Max, open world, races and online, with the launch options in its instructions. Sign-in and driving validated on Rosetta with the paired ntdll, timers and exception acceleration. Other hardware remains unvalidated. The game starts on D3DMetal 4, but its shaders hit unsupported SV_ShadingRate paths and several pipelines use D3D12 layouts D3DMetal translates incorrectly; a source-built game-specific proxy fixes those paths without FH5's descriptor-stride translation. Xbox sign-in persists across starts: a fixed advapi32 in the prefix, for forzahorizon6.exe alone; in a CrossOver bottle that is the only part installed. Tested on NotProton only; CrossOver bottles are untested. It also needs NOTPROTON_ROSETTA_TRAP_BOOST=1 in FH6's Steam launch options (on the 41073 runner, three more): the improvement writes it itself when Steam is closed and keeps your own options, so quit Steam before installing and leave it in place. On 41303 the exception handling is built into its ntdll.
+# MGVF-WHY: Played at a steady 60 frames a second on a MacBook Pro M4 Max, open world, races and online, with the launch options in its instructions. Sign-in and driving validated on Rosetta with the paired ntdll, timers and exception acceleration. Other hardware remains unvalidated. The game starts on D3DMetal 4, but its shaders hit unsupported SV_ShadingRate paths and several pipelines use D3D12 layouts D3DMetal translates incorrectly; a source-built game-specific proxy fixes those paths without FH5's descriptor-stride translation. Xbox sign-in persists across starts: a fixed advapi32 in the prefix, for forzahorizon6.exe alone; in a CrossOver bottle that is the only part installed. Tested on NotProton only; CrossOver bottles are untested. It also needs NOTPROTON_ROSETTA_TRAP_BOOST=1 in FH6's Steam launch options (on the 41073 runner, three more): the improvement writes it itself when Steam is closed and keeps your own options, so quit Steam before installing and leave it in place. On 41303 the exception handling is built into its ntdll. On 41303 on Rosetta it also switches on NotProton's shared Engine fixes row for FH6 (NOTPROTON_MGF_ENGINE=1), whose library arms the timer-thread and online-socket fixes from outside ntdll; checked with test programs, not yet played with the row.
 # MGVF-CREDIT: Gauthier Piarrette (Highball tsshim and FH6 measurements) | https://github.com/gauthierpiarrette/highball
 # MGVF-CREDIT: xvferxedd, FH6 D3DMetal extensions preserved with fh5-d3dmetal-fix (repository no longer online) | https://github.com/Andytizer/fh5-crossover-steam-fix/tree/main/upstream/source
 #
@@ -219,6 +219,39 @@ fi
 # Bundled dependencies used by fh6-runtime.sh:
 # $HERE/fh6-launch-options.pl $HERE/notproton-rosetta-trap-boost.dylib
 
+# MacGameFix's engine fixes for FH6, through NotProton's shared "Engine fixes" row: the library
+# it loads, mgf-engine.dylib, arms in this game alone engine patch 0021 (the threadpool's timer
+# thread kept from spinning) and 0026 (IPv4 options on the dual-stack socket of its online
+# sessions), from outside ntdll (engine/mgf-engine.c). FH6 has no row of its own: the record is
+# the one F1 25 and EA SPORTS FC 27 use (np-plugin-shared.conf, plugins/mgf-shared.conf), and
+# this game is added to its apps. On 41303 on Rosetta, with NotProton's plugin host, only: that
+# is where it was checked; elsewhere the row is not part of the fix. While FH6's own ntdll pair
+# above still carries 0021 and 0026, the row changes nothing the game sees; it is what lets that
+# pair, and NotProton's runner, go without them.
+. "$HERE/notproton-plugins.sh"
+# Bundled dependency used by notproton-plugins.sh: $HERE/steam-launch-options.pl
+FH6_STEAM="${MGVF_STEAM_ROOT:-$HOME/Library/Application Support/Steam}"
+np_plugins_setup 2483190 "$PFX" "$HERE/np-plugin-fh6.conf"
+NP_SHARED_TEMPLATE="$HERE/np-plugin-shared.conf"; NP_SHARED_LIBRARY="$HERE/mgf-engine.dylib"
+NP_SHARED_USES="NOTPROTON_MGF_ENGINE"
+# The group "MacGameFix" where NotProton knows groups, as F1 25's rows (install-f125-swofty.sh).
+fh6_np_knows_groups() {
+  case "${MGVF_NOTPROTON_GROUPS:-}" in 0) return 1 ;; 1) return 0 ;; esac
+  local run
+  for run in "$FH6_STEAM"/compatibilitytools.d/notproton-*/run; do
+    [ -f "$run" ] && LC_ALL=C /usr/bin/grep -qF 'names[i] == "group"' "$run" && return 0
+  done
+  return 1
+}
+if fh6_np_knows_groups; then NP_SHARED_GROUP="MacGameFix"; fi
+ROWS_ON=0
+# notproton-build's second line says what the runner runs on ("... - Rosetta" or "... - FEX").
+fh6_rosetta() { /usr/bin/sed -n 2p "$(dirname "$PFX")/notproton-build" 2>/dev/null | /usr/bin/grep -q Rosetta; }
+if [ "$FH6_BUILD" = 27.0.0.41303 ] && np_plugins_ready && fh6_rosetta \
+   && [ -f "$NP_SUPPORT/plugin-host.dylib" ] && [ -f "$NP_SHARED_LIBRARY" ] && [ -f "$NP_SHARED_TEMPLATE" ]; then
+  ROWS_ON=1
+fi
+
 is_proxy() { [ -f "$1" ] && cmp -s "$1" "$PROXY"; }
 is_alias() { [ -f "$1" ] && cmp -s "$1" "$EXPECTED"; }
 override_present() { user_reg_has_value "$PFX" "$KEY" "$VALUE"; }
@@ -246,6 +279,11 @@ parts() {
   total=$((total + 2))
   fh6_runtime_ok && pieces=$((pieces + 1)) || true
   fh6_options status >/dev/null 2>&1 && pieces=$((pieces + 1)) || true
+  # The row's files only: a row the player switched off is not a broken fix.
+  if [ "$ROWS_ON" = 1 ]; then
+    total=$((total + 1))
+    [ "$(np_plugins_status | tail -1)" = installed ] && pieces=$((pieces + 1)) || true
+  fi
   printf '%s %s\n' "$pieces" "$total"
 }
 
@@ -259,7 +297,7 @@ status() {
   echo "looking at $PFX and $RUNNER"
   if [ "$pieces" -eq "$total" ]; then echo installed
   elif [ "$pieces" -gt 0 ]; then
-    echo "Why: $pieces of $total compatibility components are in place (D3D12, ntdll, Xbox sign-in and launch options)" >&2
+    echo "Why: $pieces of $total compatibility components are in place (D3D12, ntdll, Xbox sign-in and launch options$([ "$ROWS_ON" = 1 ] && echo ", and NotProton's Engine fixes row"))" >&2
     echo half
   else echo absent; fi
 }
@@ -322,6 +360,8 @@ case "$MODE" in
     # Do not dismantle an unowned working baseline or an unknown proxy.
     [ -f "$PFX/.mgf-fh6-managed" ] || { echo "error: this baseline was installed outside MacGameFix; removal is not owned here." >&2; exit 1; }
     is_proxy "$LIVE" || { echo "error: D3D12 changed outside MacGameFix; removal refused." >&2; exit 1; }
+    # The row's switch comes out of the launch options before FH6's own variables do.
+    if [ -f "$NP_CONF" ] || [ -f "$NP_SWITCHED" ] || [ -f "$NP_JOURNAL" ]; then np_plugins_restore || exit 1; fi
     fh6_options restore
     fh6_restore_runtime
     if is_proxy "$LIVE"; then
@@ -349,6 +389,7 @@ esac
 
 stopped || exit 1
 fh6_preflight || exit 1
+if [ "$ROWS_ON" = 1 ]; then np_plugins_preflight || exit 1; fi
 
 # A kept "original" byte for byte this fix's own DLL holds no original: the game ships its
 # D3D12 runtime in D3D12/ and no d3d12.dll of its own. It was seen on 2026-11-19, beside the
@@ -403,6 +444,8 @@ is_proxy "$LIVE" && is_alias "$P_ALIAS" && pair_ok "$RUNNER" "$BACKEND" && overr
 if [ -n "$CLONE" ]; then pair_ok "$CLONE" "$CLONE_BACKEND" || exit 1; fi
 
 signin_install || exit 1
+# After FH6's own launch options, so its journal never holds the row's switch.
+if [ "$ROWS_ON" = 1 ]; then np_plugins_install || exit 1; fi
 
 : > "$PFX/.mgf-fh6-managed"
 echo "installed the source-built FH6 D3DMetal compatibility proxy"
