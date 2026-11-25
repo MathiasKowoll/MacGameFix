@@ -33,15 +33,15 @@ Swofty changes the game folder while the game runs and puts it back when the gam
 
 # The rows in NotProton
 
-The fix adds two rows to the game's Compatibility page in NotProton, for this game only, in a group of their own, **MacGameFix · F1 25**, and switches on **Engine fixes**, in the group **MacGameFix**, for this game:
+The fix adds no row of its own. It uses three of MacGameFix's rows, in the group **MacGameFix** on the game's Compatibility page in NotProton, which every game with a MacGameFix fix shares, each with its own settings:
 
 | Row | What it does |
 |---|---|
-| **Start through Swofty Launcher** | On: Play starts the game through Swofty. Off: Play starts the game's own launcher, which does not open on a Mac. The first install switches it on. |
-| **Play opens** | **The game**, with Swofty's active profile; **The game without mods**, Swofty's vanilla profile; or **Swofty Launcher's window**. |
-| **Engine fixes** | Shared by every game whose MacGameFix fix needs a Wine fix: it loads one library that, for F1 25, keeps the game's memory where Windows would put it. Off, the game closes about half a minute after it starts. The install switches it on; leave it on. |
+| **Engine fixes** | Loads one MacGameFix library that, for F1 25, keeps the game's memory where Windows would put it. Off, the game closes about half a minute after it starts. The install switches it on; leave it on. |
+| **Start through the mod tool** | On: Play starts the game through Swofty Launcher. Off: Play starts the game's own launcher, which does not open on a Mac. The first install switches it on. |
+| **Play opens** | **The game**, with Swofty's active profile; **The game without mods**, Swofty's vanilla profile; **The game, with exception notes for a report**; or **The mod tool's window**, Swofty Launcher's. |
 
-Choose **Swofty Launcher's window** to turn addons on or off, install mods, edit the game database or change the profile. Its own Play starts the game from there. Set the row back to **The game** to go straight into the game again.
+Choose **The mod tool's window** to turn addons on or off, install mods, edit the game database or change the profile. Its own Play starts the game from there. Set the row back to **The game** to go straight into the game again.
 
 The window needs the Wine modules with the fonts and window fixes for CrossOver Preview 41303 (engine patches 0039 and 0040). Without them it closes as it opens, and `f125-swofty-window.log` beside the play script says "failed to resolve font" or "initializing Direct Manipulation". Touchpad pinch and inertia do not work in it; the wheel and two-finger scrolling do.
 
@@ -68,9 +68,9 @@ Swofty's output for the last start is in `~/Library/Application Support/MacGameF
 |---|---|
 | The game closes about half a minute in, at the main menu | The row **Engine fixes** is off: switch it on. If it is on, update NotProton (the row needs its plugin host) and install the fix again. |
 | "Steam isn't running" or "not signed in" in the log | Install the fix again, with Steam closed. |
-| Play opens the game's own launcher, which closes | The row **Start through Swofty Launcher** is off. Switch it on in the game's Compatibility page. |
+| Play opens the game's own launcher, which closes | The row **Start through the mod tool** is off. Switch it on in the game's Compatibility page. |
 | The fix reads partial after a NotProton or prefix update | Install it again, with Steam closed. |
 
 # Removing it
 
-Remove gives the launch options and the prefix back as they were and takes the two rows out of NotProton, and the game out of **Engine fixes**. Swofty Launcher stays in `~/Library/Application Support/MacGameFix/swofty`, and its data and saves stay in the prefix.
+Remove gives the launch options and the prefix back as they were and takes the game out of MacGameFix's rows in NotProton. Swofty Launcher stays in `~/Library/Application Support/MacGameFix/swofty`, and its data and saves stay in the prefix.

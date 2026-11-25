@@ -1,6 +1,7 @@
 #!/bin/bash
-# Build the library EA SPORTS FC 27's fix installs into NotProton,
-# fixes/mgf-d3dmetal-hookable.dylib, from d3dmetal-hookable/, and run its check.
+# Build d3dmetal-hookable/ on its own and run its check, with it and without it. What ships is
+# the same source inside mgf-engine.dylib (build-engine.sh), which starts it in EA SPORTS FC 27;
+# --sign still writes a signed copy, fixes/mgf-d3dmetal-hookable.dylib, which nothing installs.
 #
 #   build-d3dmetal-hookable.sh            # the ad-hoc build, its check and its sha256
 #   build-d3dmetal-hookable.sh --sign     # also the Developer ID copy in fixes/

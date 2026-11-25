@@ -20,7 +20,9 @@
 #     while it sleeps 3 s: the timer thread spins without the fix, and is still with it.
 # Each runs without the library, where it has to fail (a check that passes either way tests
 # nothing), and with it, the fix named by MGF_ENGINE_FIXES. low-allocations has no check of its
-# own: it was played (see its source).
+# own: it was played (see its source). d3dmetal-hookable's check (d3dmetal-hookable/check.c, an
+# x86_64 program under Rosetta, no Wine) runs with this library, the fix named the same way;
+# build-d3dmetal-hookable.sh runs it without, where it has to fault.
 # The runner is MGVF_CHECK_RUNNER (the 41303 runner by default); CodeWeavers' files come from
 # MGVF_CHECK_STOCK (MacGameFix's backup of CrossOver Preview 41303's own by default). Without
 # either, or without mingw, the checks are skipped and the script says so.
@@ -39,7 +41,7 @@ trap cleanup EXIT
 /usr/bin/clang -arch arm64 -arch x86_64 -mmacosx-version-min=15.0 -Werror=unguarded-availability-new -std=c17 \
   -dynamiclib -O2 -Wall -Wextra -Werror -install_name @rpath/mgf-engine.dylib -o "$WORK/mgf-engine.dylib" \
   "$SRC/mgf-engine.c" "$SRC/low-allocations/mgf-low-allocations.c" "$SRC/package-family/mgf-package-family.c" \
-  "$SRC/timer-overflow/mgf-timer-overflow.c"
+  "$SRC/timer-overflow/mgf-timer-overflow.c" -DMGF_ENGINE "$HERE/d3dmetal-hookable/mgf-d3dmetal-hookable.c"
 /usr/bin/codesign -f -s - "$WORK/mgf-engine.dylib" 2>/dev/null
 
 RUNNER="${MGVF_CHECK_RUNNER:-$HOME/Library/Application Support/notproton/runners/crossover-27.0.0.41303-fex/CrossOver}"
@@ -77,6 +79,10 @@ else
   check package-family 2
   check timer-overflow 3
 fi
+echo "== d3dmetal-hookable, with the library"
+/usr/bin/clang -arch x86_64 -O1 -mmacosx-version-min=14.0 -Wall -Wextra -Werror "$HERE/d3dmetal-hookable/check.c" -o "$WORK/hookable-check"
+MGF_ENGINE_FIXES=d3dmetal-hookable MGF_D3DM_HOOKABLE_TEST=1 MGF_D3DM_HOOKABLE_LOG=/dev/null \
+  DYLD_INSERT_LIBRARIES="$WORK/mgf-engine.dylib" "$WORK/hookable-check"
 shasum -a 256 "$WORK/mgf-engine.dylib"
 [ "${1:-}" = --sign ] || exit 0
 ID="${MGVF_SIGN_ID:-$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)}"

@@ -1,7 +1,8 @@
 // mgf-d3dmetal-hookable: gives D3DMetal's method stubs a shape an inline hook can copy.
 //
-// A library NotProton loads into a game's Wine processes (a plugin row with inject = 1). It is
-// built by build-d3dmetal-hookable.sh; check.c beside it is its test.
+// Part of mgf-engine.dylib (engine/mgf-engine.c), which NotProton loads through the shared
+// "Engine fixes" row and which starts this in EA SPORTS FC 27 alone. build-d3dmetal-hookable.sh
+// builds it on its own for its test, check.c beside it.
 //
 // D3DMetal 4's PE DLLs (dxgi.dll, d3d12.dll, ... in CrossOver's lib/apple_gptk) hand a program
 // COM methods that are 16-byte stubs, written at run time into the DLL's .data:
@@ -178,8 +179,13 @@ static void *work(void *arg) {
   return NULL;
 }
 
+#ifdef MGF_ENGINE
+// mgf-engine.dylib (engine/mgf-engine.c) starts this in EA SPORTS FC 27 alone.
+void mgf_d3dmetal_hookable_start(void) {
+#else
 __attribute__((constructor))
 static void hookable_init(void) {
+#endif
   const char *test = getenv("MGF_D3DM_HOOKABLE_TEST");
   testing = test && !strcmp(test, "1");
   const char *path = getenv("MGF_D3DM_HOOKABLE_LOG");
@@ -190,4 +196,7 @@ static void hookable_init(void) {
   if (pthread_create(&thread, &attr, work, NULL)) say("no thread: nothing done");
   pthread_attr_destroy(&attr);
 }
+#endif
+#if defined(MGF_ENGINE) && !defined(__x86_64__)
+void mgf_d3dmetal_hookable_start(void) {}
 #endif
