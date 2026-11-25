@@ -8,11 +8,12 @@ It is a fix being tested, played on one Mac. If that is not acceptable to you, d
 
 # Before you install
 
+- Download Swofty Launcher yourself, from [Swofty's site](https://f1.swofty.net): its Windows release, a .zip. It is not part of MacGameFix, and MacGameFix does not download it. You can leave it as it came, or unpacked if your browser unpacked it.
 - Start F1 25 once from Steam, so NotProton makes the game's prefix. The game's own launcher does not open on a Mac; close it and go on.
-- The game must be on NotProton's runner for CrossOver Preview 41303, on Rosetta, with MacGameFix's **Rosetta** improvement installed in it. Without it the game closes about half a minute after it starts.
+- The game must be on NotProton's runner for CrossOver Preview 41303, on Rosetta. NotProton must be up to date: the fix loads a library through NotProton's plugin host.
 - Quit Steam before you install: it writes the launch options when it quits.
 
-Installing downloads Swofty Launcher, about 90 MB, from Swofty's own site. It is not part of MacGameFix.
+The first install asks where your Swofty download is: choose the .zip, or, if your browser unpacked it, `swofty.exe` in its `bin` folder. MacGameFix copies it and keeps it; Swofty updates itself from then on, so installing again later asks nothing.
 
 # The first start
 
@@ -32,11 +33,12 @@ Swofty changes the game folder while the game runs and puts it back when the gam
 
 # The rows in NotProton
 
-The fix adds three rows to the game's Compatibility page in NotProton, for this game only, in a group of their own, **MacGameFix · F1 25**:
+The fix adds four rows to the game's Compatibility page in NotProton, for this game only, in a group of their own, **MacGameFix · F1 25**:
 
 | Row | What it does |
 |---|---|
 | **Start through Swofty Launcher** | On: Play starts the game through Swofty. Off: Play starts the game's own launcher, which does not open on a Mac. The first install switches it on. |
+| **Keep the game's memory low** | Loads a library into this game alone that keeps its memory where Windows would put it. Off, the game closes about half a minute after it starts. The install switches it on; leave it on. |
 | **Play opens** | **The game**, or **Swofty Launcher's window**. |
 | **Profile** | Which of Swofty's profiles Play starts the game with: **Swofty's active profile** or **Vanilla, without mods**. |
 
@@ -65,11 +67,11 @@ Swofty's output for the last start is in `~/Library/Application Support/MacGameF
 
 | What you see | What to do |
 |---|---|
-| The game closes about half a minute in, at the main menu | The runner lost the Rosetta improvement. Install it again in **Improvements**. |
+| The game closes about half a minute in, at the main menu | The row **Keep the game's memory low** is off: switch it on. If it is on, update NotProton (the row needs its plugin host) and install the fix again. |
 | "Steam isn't running" or "not signed in" in the log | Install the fix again, with Steam closed. |
 | Play opens the game's own launcher, which closes | The row **Start through Swofty Launcher** is off. Switch it on in the game's Compatibility page. |
 | The fix reads partial after a NotProton or prefix update | Install it again, with Steam closed. |
 
 # Removing it
 
-Remove gives the launch options and the prefix back as they were and takes the three rows out of NotProton. Swofty Launcher stays in `~/Library/Application Support/MacGameFix/swofty`, and its data and saves stay in the prefix.
+Remove gives the launch options and the prefix back as they were and takes the four rows and the library out of NotProton. Swofty Launcher stays in `~/Library/Application Support/MacGameFix/swofty`, and its data and saves stay in the prefix.

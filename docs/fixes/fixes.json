@@ -357,47 +357,73 @@
       "executable": "F1_25.exe",
       "carrierDirectory": "",
       "alsoRuns": [],
-      "summary": "F1 25 only starts on a Mac through Swofty Launcher, and on NotProton it crashed half a minute in and Swofty could not find Steam. This downloads Swofty from its own site, prepares the game's prefix and makes Steam's Play start the game through it. Offline, without EA AntiCheat or multiplayer. NotProton with CrossOver Preview 41303 (Rosetta) only. AT YOUR OWN RISK: MacGameFix does not answer for failures in the game, its saves or its mods.",
+      "summary": "F1 25 only starts on a Mac through Swofty Launcher, a mod launcher you download yourself, and on NotProton it crashed half a minute in and Swofty could not find Steam. This asks you where your Swofty download is and copies it, keeps the game's memory where it does not crash, for this game alone, prepares the game's prefix and makes Steam's Play start the game through it. Offline, without EA AntiCheat or multiplayer. NotProton with CrossOver Preview 41303 (Rosetta) only. AT YOUR OWN RISK: MacGameFix does not answer for failures in the game, its saves or its mods.",
       "page": null,
       "testing": "Mathias Kowoll",
       "installs": [
         "bottles.sh",
         "f125-swofty-play.sh",
         "f125-swofty-run.cmd",
+        "mgf-low-allocations.dylib",
         "notproton-plugins.sh",
         "np-plugin-f125-swofty.conf",
         "steam-launch-options.pl"
       ],
-      "builtFrom": [],
+      "builtFrom": [
+        "low-allocations/mgf-low-allocations.c",
+        "build-low-allocations.sh"
+      ],
       "license": "GPL-3.0-or-later",
       "credits": [
         {
           "name": "Swofty Launcher",
           "url": "https://f1.swofty.net",
-          "note": "The mod launcher and the offline play that start the game. It is downloaded from Swofty's own release index when the fix is installed and is not part of MacGameFix."
+          "note": "The mod launcher and the offline play that start the game. You download it from Swofty's site; the install asks where the download is and copies it. It is not part of MacGameFix, and MacGameFix does not download it."
         }
       ],
       "excerpts": [
         {
+          "file": "fixes/low-allocations/mgf-low-allocations.c",
+          "symbol": null,
+          "note": "An allocation the game asks for with no address is first asked for below the area Wine 11.21 reserves near the top, with an address requirement; only when nothing is free there does the game's own request go through as it was.",
+          "language": "c",
+          "startLine": 121,
+          "endLine": 138,
+          "commit": "1a2cb2ac9e2b6b09ce2a5b5b1b94bfc454ce5f94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/1a2cb2ac9e2b6b09ce2a5b5b1b94bfc454ce5f94/fixes/low-allocations/mgf-low-allocations.c#L121-L138",
+          "code": "static NTSTATUS alloc_hook(HANDLE process, void **addr, uintptr_t zero_bits, size_t *size, uint32_t type,\n                           uint32_t protect) {\n    if (!zero_bits && wants_low(process, addr, type) && size) {\n        mem_extended_parameter params[1];\n        mem_address_requirements req;\n        size_t want = *size;\n        uint32_t n = with_low_limit(NULL, 0, params, 1, &req);\n        NTSTATUS status = real_alloc_ex(process, addr, size, type, protect, params, n);\n        if (status == STATUS_SUCCESS) {\n            say_low(*addr);\n            return status;\n        }\n        *addr = NULL;\n        *size = want;\n        say_fell_back();\n    }\n    return real_alloc(process, addr, zero_bits, size, type, protect);\n}"
+        },
+        {
+          "file": "fixes/low-allocations/mgf-low-allocations.c",
+          "symbol": null,
+          "note": "NotProton's ntdll stays as it is: the library swaps the syscall table's four entries, all or none, inside F1 25's process only.",
+          "language": "c",
+          "startLine": 219,
+          "endLine": 244,
+          "commit": "1a2cb2ac9e2b6b09ce2a5b5b1b94bfc454ce5f94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/1a2cb2ac9e2b6b09ce2a5b5b1b94bfc454ce5f94/fixes/low-allocations/mgf-low-allocations.c#L219-L244",
+          "code": "static void arm(const struct mach_header_64 *mh, intptr_t slide, const char *image) {\n    (void)image;\n    uintptr_t alloc, alloc_ex, map, map_ex;\n    uintptr_t *alloc_slot = entry(mh, slide, \"_NtAllocateVirtualMemory\", &alloc);\n    uintptr_t *alloc_ex_slot = entry(mh, slide, \"_NtAllocateVirtualMemoryEx\", &alloc_ex);\n    uintptr_t *map_slot = entry(mh, slide, \"_NtMapViewOfSection\", &map);\n    uintptr_t *map_ex_slot = entry(mh, slide, \"_NtMapViewOfSectionEx\", &map_ex);\n    if (!alloc_slot || !alloc_ex_slot || !map_slot || !map_ex_slot) return;\n    real_alloc = (alloc_fn)alloc;\n    real_alloc_ex = (alloc_ex_fn)alloc_ex;\n    real_map = (map_fn)map;\n    real_map_ex = (map_ex_fn)map_ex;\n    query_section = (query_section_fn)api->symbol(mh, slide, \"_NtQuerySection\");\n    // All four or none: the Ex calls are what the others ask through.\n    if (!api->swap_pointer(alloc_ex_slot, alloc_ex, (uintptr_t)alloc_ex_hook)) {\n        api->log(TAG, \"the syscall table could not be written, not armed\");\n        return;\n    }\n    if (!api->swap_pointer(map_ex_slot, map_ex, (uintptr_t)map_ex_hook)\n        || !api->swap_pointer(alloc_slot, alloc, (uintptr_t)alloc_hook)\n        || !api->swap_pointer(map_slot, map, (uintptr_t)map_hook)) {\n        api->log(TAG, \"only part of the syscall table could be written; what was written stays\");\n        return;\n    }\n    api->log(TAG, \"allocations with no address are asked below 0x7ff000000000 first\");\n}"
+        },
+        {
           "file": "fixes/install-f125-swofty.sh",
           "symbol": null,
-          "note": "Swofty Launcher comes from Swofty's own index, which names the Windows release with its SHA-256; a file on another host, or one that does not match, is refused before anything is unpacked.",
+          "note": "Swofty Launcher is the player's own download: the .zip, the unpacked folder or its swofty.exe. Whatever is given has to hold exactly one bin/swofty.exe with loader/ beside it, or nothing is changed.",
           "language": "bash",
-          "startLine": 261,
-          "endLine": 311,
-          "commit": "be322debb2248002290a225d3bf78e7a697da3bf",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/be322debb2248002290a225d3bf78e7a697da3bf/fixes/install-f125-swofty.sh#L261-L311",
-          "code": "fetch_launcher_into() {  # <work folder>\n  local work=\"$1\" zip name=\"\" url=\"\" sha=\"\" got top\n  zip=\"${MGVF_SWOFTY_ZIP:-}\"\n  if [ -n \"$zip\" ]; then\n    [ -f \"$zip\" ] || { echo \"error: MGVF_SWOFTY_ZIP names no file: $zip\" >&2; return 1; }\n    echo \"  using $zip\"\n  else\n    echo \"  asking $INDEX_URL for the current release\"\n    curl -fsSL --retry 2 --max-time 60 -o \"$work/latest.json\" \"$INDEX_URL\" || {\n      echo \"error: could not reach Swofty's release index; check the connection and install again\" >&2\n      return 1\n    }\n    # name, url and sha256 of the one Windows asset; an index that does not have exactly that is refused.\n    read -r name url sha < <(/usr/bin/perl -MJSON::PP -e '\n      local $/; my $d = eval { decode_json(<STDIN>) } or exit 1;\n      my @a = grep { ($_->{name} // \"\") =~ /^swofty-launcher-v[0-9][0-9.]*-windows-x86_64\\.zip$/ } @{ $d->{assets} || [] };\n      exit 1 unless @a == 1;\n      my ($n, $u, $s) = @{ $a[0] }{qw(name url sha256)};\n      exit 1 unless ($u // \"\") =~ m{^https://(cdn\\.swofty\\.net|github\\.com/Swofty-Developments/SwoftyLauncher)/[A-Za-z0-9._/-]+$}\n                 && ($s // \"\") =~ /^[0-9a-f]{64}$/;\n      print \"$n $u $s\\n\";\n    ' < \"$work/latest.json\") || true\n    [ -n \"$sha\" ] || { echo \"error: Swofty's release index does not name a Windows release this understands; nothing was changed\" >&2; return 1; }\n    echo \"  fetching $name (about 90 MB) from ${url%/\"$name\"}\"\n    zip=\"$work/$name\"\n    curl -fsSL --retry 2 -o \"$zip\" \"$url\" || {\n      echo \"error: could not download $name; check the connection and install again\" >&2\n      return 1\n    }\n    got=\"$(shasum -a 256 \"$zip\" | cut -d' ' -f1)\"\n    [ \"$got\" = \"$sha\" ] || {\n      echo \"error: the download is not the file the index names (sha256 $got); nothing was changed\" >&2\n      return 1\n    }\n  fi\n  mkdir \"$work/out\"\n  ditto -x -k \"$zip\" \"$work/out\" || { echo \"error: could not unpack $(basename \"$zip\")\" >&2; return 1; }\n  # The release unpacks to one folder, or straight to bin/ and loader/.\n  top=\"$(find \"$work/out\" -maxdepth 3 -type f -path '*/bin/swofty.exe' | head -1)\"\n  [ -z \"$top\" ] || top=\"$(dirname \"$(dirname \"$top\")\")\"\n  [ -n \"$top\" ] && [ -s \"$top/bin/swofty.exe\" ] && [ -d \"$top/loader\" ] || {\n    echo \"error: $(basename \"$zip\") does not hold bin/swofty.exe and loader/ where expected; nothing was changed\" >&2\n    return 1\n  }\n  mkdir -p \"$STORE\"\n  rm -rf \"$LAUNCHER.new\"\n  mv \"$top\" \"$LAUNCHER.new\"\n  rm -rf \"$LAUNCHER\"\n  mv \"$LAUNCHER.new\" \"$LAUNCHER\"\n  echo \"  kept in $LAUNCHER\"\n}"
+          "startLine": 285,
+          "endLine": 300,
+          "commit": "1a2cb2ac9e2b6b09ce2a5b5b1b94bfc454ce5f94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/1a2cb2ac9e2b6b09ce2a5b5b1b94bfc454ce5f94/fixes/install-f125-swofty.sh#L285-L300",
+          "code": "launcher_in() {  # <given> <work>\n  local from=\"$1\" work=\"$2\" found\n  case \"$from\" in\n  *.zip|*.ZIP)\n    mkdir -p \"$work/out\"\n    ditto -x -k \"$from\" \"$work/out\" || return 0\n    from=\"$work/out\" ;;\n  *.exe|*.EXE) from=\"$(dirname \"$(dirname \"$from\")\")\" ;;\n  esac\n  [ -d \"$from\" ] || return 0\n  found=\"$(find \"$from\" -maxdepth 3 -type f -path '*/bin/swofty.exe' 2>/dev/null)\"\n  [ \"$(printf '%s' \"$found\" | /usr/bin/grep -c .)\" = 1 ] || return 0\n  found=\"$(dirname \"$(dirname \"$found\")\")\"\n  [ -s \"$found/bin/swofty.exe\" ] && [ -d \"$found/loader\" ] && printf '%s\\n' \"$found\"\n  return 0\n}"
         },
         {
           "file": "fixes/install-f125-swofty.sh",
           "symbol": null,
           "note": "Swofty reads ActiveUser to see that Steam is signed in. NotProton's Steam stub does not write it, so the account comes from Steam's own loginusers.vdf.",
           "language": "bash",
-          "startLine": 178,
-          "endLine": 189,
-          "commit": "be322debb2248002290a225d3bf78e7a697da3bf",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/be322debb2248002290a225d3bf78e7a697da3bf/fixes/install-f125-swofty.sh#L178-L189",
+          "startLine": 190,
+          "endLine": 201,
+          "commit": "1a2cb2ac9e2b6b09ce2a5b5b1b94bfc454ce5f94",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/1a2cb2ac9e2b6b09ce2a5b5b1b94bfc454ce5f94/fixes/install-f125-swofty.sh#L190-L201",
           "code": "steam_account() {\n  [ -f \"$STEAM_LOGIN\" ] || return 1\n  /usr/bin/perl -e '\n    use strict; use warnings; local $/; my $s = <STDIN>; my (@ids, $recent);\n    while ($s =~ /\"(7656\\d{13})\"\\s*\\{([^{}]*)\\}/g) {\n      push @ids, $1; $recent = $1 if $2 =~ /\"MostRecent\"\\s+\"1\"/i;\n    }\n    $recent //= $ids[0] if @ids == 1;\n    exit 1 unless defined $recent;\n    print $recent - 76561197960265728, \"\\n\";\n  ' < \"$STEAM_LOGIN\"\n}"
         },
         {
@@ -436,9 +462,9 @@
       ],
       "symptom": "Steam's Play opens EA AntiCheat's launcher, which does not run on a Mac. Through Swofty Launcher on NotProton the game closed about half a minute after it started, at the main menu, and Swofty reported that Steam was not running.",
       "cause": "Three things. Wine 11.21 searches its reserved address areas bottom-up, and a 6.5 GB image fills the low one, so the game's objects landed at 0x7ff000000000 and up, and a pointer to a low object came back with bit 47 set (crash at F1_25.exe+0x416a797, four times of four). Swofty takes NotProton's STEAM_COMPAT_TOOL_PATHS for Proton's folder and starts the game with a proton script NotProton's tool does not have. And NotProton's Steam stub writes the running Steam's process but not ActiveUser, and its Steam folder has no loginusers.vdf, which is where Swofty looks for a signed-in Steam.",
-      "fix": "Engine patch 0038, in the Wine modules' ntdll.so (the Rosetta improvement, CrossOver Preview 41303), keeps allocations with no address below the high reserved area. This fix checks the runner has it, downloads Swofty Launcher from Swofty's index, writes the version override and ActiveUser into the prefix, links Steam's loginusers.vdf, depot manifests and content log into the prefix's Steam folder, and puts a script before %command% in Steam's launch options that starts Swofty's command line in place of EA AntiCheat's launcher, with STEAM_COMPAT_TOOL_PATHS cleared. Three rows on the game's Compatibility page in NotProton switch it, choose what Play opens, the game or Swofty Launcher's window, and which of Swofty's profiles a start plays; a NotProton row cannot change the program Steam starts, so the rows are the switches the script reads, and nothing a player may set is typed into the launch options by hand. Played on 2026-11-23 from a clean prefix: the modded profile reached the menu and a race, the game's objects at 0x4.., 0x5.. and 0x6...",
+      "fix": "A row on the game's Compatibility page, Keep the game's memory low, has NotProton load mgf-low-allocations.dylib into F1 25 alone; it asks allocations with no address below the high reserved area first, which is what engine patch 0038 does inside ntdll.so for every game, so the runner need not carry 0038. The fix copies the Swofty Launcher the player downloaded, writes the version override and ActiveUser into the prefix, links Steam's loginusers.vdf, depot manifests and content log into the prefix's Steam folder, and puts a script before %command% in Steam's launch options that starts Swofty's command line in place of EA AntiCheat's launcher, with STEAM_COMPAT_TOOL_PATHS cleared. Three more rows switch it, choose what Play opens, the game or Swofty Launcher's window, and which of Swofty's profiles a start plays; a NotProton row cannot change the program Steam starts, so those rows are the switches the script reads, and nothing a player may set is typed into the launch options by hand. Played on 2026-11-23 from a clean prefix with patch 0038: the modded profile reached the menu and a race, the game's objects at 0x4.., 0x5.. and 0x6... Played on 2026-11-24 with 0038 switched off and the library loaded: a full race without the crash.",
       "backend": "D3DMetal. Ray tracing closed the game when it was turned on; it is left off.",
-      "crossover": "CrossOver Preview 27 (27.0.0.41303), NotProton runner on Rosetta, 2026-11-23",
+      "crossover": "CrossOver Preview 27 (27.0.0.41303), NotProton runner on Rosetta, 2026-11-23 and 2026-11-24",
       "pageUrl": null,
       "graphicsBackend": "d3dmetal",
       "gptk": null,
