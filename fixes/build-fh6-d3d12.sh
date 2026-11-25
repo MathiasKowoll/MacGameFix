@@ -35,7 +35,7 @@ trap 'rm -rf "$WORK"' EXIT
 # the distribution filename and makes the semantic rebuild check report drift.
 "$CC" -shared -O2 -Wall -static-libgcc -DMGF_FH6_PROFILE=1 \
   -o "$WORK/d3d12.dll" \
-  "$SRC/d3d12.c" "$SRC/dxil_shadingrate.c" "$SRC/inspect.c" "$SRC/d3d12.def"
+  "$SRC/d3d12.c" "$SRC/dxil_shadingrate.c" "$SRC/inspect.c" "$SRC/d3d12.def" -lntdll
 mv -f "$WORK/d3d12.dll" "$OUTPUT"
 
 shasum -a 256 "$OUTPUT"
