@@ -23,9 +23,12 @@
 # an editor of players, teams and the career database that runs inside the game, offline):
 #
 #   1. The game imports FindPackagesByPackageFamily from kernel32, which Wine 11.21 lacks:
-#      "There is a problem with your game's setup. Please reinstall your game." Engine patch
-#      0041 (the Rosetta improvement's kernelbase.dll and kernel32.dll) adds it. This script
-#      only checks that the runner has it.
+#      "There is a problem with your game's setup. Please reinstall your game."
+#      mgf-package-family.dylib, which NotProton loads into this game alone through a row,
+#      adds it in memory to the kernel32.dll Wine maps in the game's process
+#      (package-family/mgf-package-family.c). It does what engine patch 0041 does in the
+#      runner's kernelbase.dll and kernel32.dll for every game, so the runner need not carry
+#      0041, and a runner that does is left as it is.
 #   2. EA AntiCheat's launcher ends after 10 s with 0xE111000B and starts no game. Live
 #      Editor's own launcher puts a stand-in in its place for the session; with the stand-in
 #      alone the game ends 9 s in, with Live Editor's DLL injected it goes on. So the game
@@ -55,12 +58,14 @@
 #   - fc27-le-play.sh and fc27-le-run.cmd beside it.
 #   - In Steam's launch options for the game: the play script before %command%
 #     (steam-launch-options.pl; Steam must be closed).
-#   - In NotProton's plugins folder: mgf-d3dmetal-hookable.dylib and three rows for this game
-#     alone (notproton-plugins.sh, np-plugin-fc27-live-editor.conf), shown on its Compatibility
-#     page: "Start with Live Editor", switched on by the first install, which is also what has
-#     NotProton load the library; "Play opens", the game or Live Editor's launcher window; and
-#     "Exception notes for a report". Whatever a player may set is a row: nothing is typed into
-#     the launch options by hand.
+#   - In NotProton's plugins folder: mgf-d3dmetal-hookable.dylib, mgf-package-family.dylib and
+#     four rows for this game alone (notproton-plugins.sh, np-plugin-fc27-live-editor.conf),
+#     shown on its Compatibility page: "Start with Live Editor", switched on by the first
+#     install, which is also what has NotProton load the first library; "Activation fix", which
+#     loads the second, switched on by the install that first brings it; "Play opens", the game
+#     or Live Editor's launcher window; and "Exception notes for a report". Whatever a player
+#     may set is a row: nothing is typed into the launch options by hand. The libraries need
+#     NotProton's plugin host, which NotProton's Update installs; the install refuses without it.
 # Nothing is written into the prefix. Live Editor's launcher keeps its own settings there
 # (C:\FC 27 Live Editor), and the play script raises one of them, the injection delay.
 #
@@ -82,7 +87,7 @@
 # MGVF-TESTING: Mathias Kowoll
 # MGVF-INSTRUCTIONS: fc27-instructions.md
 # MGVF-BY-HAND: It asks you for your Live Editor folder, so it is never run in the background: install it again from here when a game update needs a new Live Editor.
-# MGVF-WHY: The Steam copy only starts on a Mac with FC 27 Live Editor in it, a mod tool you download and provide: EA AntiCheat's launcher starts nothing here, and the game closed the moment the editor's window went in. This asks you for your Live Editor folder and copies it, loads a library that lets its Direct3D hooks work on D3DMetal and makes Steam's Play start the game with it. Offline, without EA AntiCheat or online modes. NotProton with CrossOver Preview 41303 (Rosetta) only. AT YOUR OWN RISK: MacGameFix does not answer for failures in the game, its saves, its mods or your account.
+# MGVF-WHY: The Steam copy only starts on a Mac with FC 27 Live Editor in it, a mod tool you download and provide: EA AntiCheat's launcher starts nothing here, and the game closed the moment the editor's window went in. This asks you for your Live Editor folder and copies it, gives the game, alone, the Windows function its activation asks for, loads a library that lets its Direct3D hooks work on D3DMetal and makes Steam's Play start the game with it. Offline, without EA AntiCheat or online modes. NotProton with CrossOver Preview 41303 (Rosetta) only. AT YOUR OWN RISK: MacGameFix does not answer for failures in the game, its saves, its mods or your account.
 # MGVF-CREDIT: xAranaktu, FC 27 Live Editor, the mod tool this starts and does not include | https://github.com/xAranaktu/FC-27-Live-Editor
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
@@ -114,6 +119,7 @@ RUN="$HERE/fc27-le-run.cmd"
 OPTIONS="$HERE/steam-launch-options.pl"
 # The library np-plugin-fc27-live-editor.conf names; notproton-plugins.sh copies it.
 HOOKS="$HERE/mgf-d3dmetal-hookable.dylib"
+PACKAGES="$HERE/mgf-package-family.dylib"
 STORE="${MGVF_FC27_STORE:-$HOME/Library/Application Support/MacGameFix/fc27-live-editor}"
 EDITOR="$STORE/LiveEditor"
 STEAM="${MGVF_STEAM_ROOT:-$HOME/Library/Application Support/Steam}"
@@ -138,9 +144,6 @@ BUILD=""; SIDE=""
 { IFS= read -r BUILD || true; IFS= read -r SIDE || true; } < "$(dirname "$PFX")/notproton-build"
 RUNNER="${MGVF_CX:-$HOME/Library/Application Support/notproton/runners/crossover-$BUILD/CrossOver}"
 RUNNER="${RUNNER%/}"
-KERNEL32="$RUNNER/lib/wine/x86_64-windows/kernel32.dll"
-# 0041 adds the function's name to kernel32.dll's exports; CrossOver's own does not have it.
-carries_fix() { [ -f "$KERNEL32" ] && LC_ALL=C /usr/bin/grep -qa 'FindPackagesByPackageFamily' "$KERNEL32"; }
 right_runner() {
   case "$BUILD" in 27.0.0.41303|27.0.0.41303-fex) ;; *) return 1 ;; esac
   case "$SIDE" in *Rosetta*) return 0 ;; esac
@@ -165,9 +168,13 @@ if np_knows_groups; then
   /usr/bin/awk -v group="$ROWS_GROUP" '{ print } /^label[[:space:]]*=/ { print "group = " group }' "$ROWS" > "$ROWS_TMP/np-plugin-fc27-live-editor.conf"
   # The library is looked for beside the template.
   ln -s "$HOOKS" "$ROWS_TMP/mgf-d3dmetal-hookable.dylib"
+  ln -s "$PACKAGES" "$ROWS_TMP/mgf-package-family.dylib"
   ROWS="$ROWS_TMP/np-plugin-fc27-live-editor.conf"
 fi
 np_plugins_setup "$APPID" "$PFX" "$ROWS"
+NP_WRAPPER="$STORE/fc27-le-play.sh"
+# NotProton loads a row's library through its plugin host; without it the rows are not offered.
+host_ok() { [ -f "$NP_SUPPORT/plugin-host.dylib" ]; }
 JOURNAL="$PFX/.mgf-fc27-launch-options.json"
 
 options() { /usr/bin/perl "$OPTIONS" "$1" "$APPID" "$JOURNAL" --wrapper "$STORE/fc27-le-play.sh"; }
@@ -249,9 +256,9 @@ case "$MODE" in
   # Absent is judged by what is only ever this script's: the play script, the launch option and
   # the rows. The Live Editor folder is the player's and stays after a restore.
   if [ "$wrapped" = 0 ] && ! scripts_any && [ "$rows" = absent ]; then echo absent
-  elif [ "$have" -eq "$of" ] && carries_fix; then echo installed
+  elif [ "$have" -eq "$of" ] && host_ok; then echo installed
   elif [ "$have" -eq "$of" ]; then
-    echo "Why: everything is in place, but the runner's kernel32.dll lacks the function the game asks for: update the Rosetta improvement, or the game says \"There is a problem with your game's setup\"" >&2
+    echo "Why: everything is in place, but NotProton's plugin host is not, so the rows that load the libraries are not offered: update NotProton, or the game says \"There is a problem with your game's setup\"" >&2
     echo half
   elif [ "$have" -eq $((of-1)) ] && [ "$old_scripts" = 1 ] && editor_ok; then
     echo "an older play script is in place; installing again brings this one" >&2
@@ -280,9 +287,10 @@ case "$MODE" in
 esac
 
 right_runner || refuse "the game runs on NotProton's runner for CrossOver $BUILD${SIDE:+ ($SIDE)}; this needs CrossOver Preview 41303's, on Rosetta."
-carries_fix || refuse "the runner's kernel32.dll ($KERNEL32) lacks the function the game asks for: put in or update the Rosetta improvement for CrossOver Preview 41303 first."
 np_plugins_ready || refuse "NotProton's support folder ($NP_SUPPORT) is not there: open NotProton once, then install again."
+host_ok || refuse "NotProton's plugin host ($NP_SUPPORT/plugin-host.dylib) is not there, and the rows that load the libraries need it: update NotProton, then install again."
 [ -f "$HOOKS" ] || refuse "mgf-d3dmetal-hookable.dylib is not beside the installer."
+[ -f "$PACKAGES" ] || refuse "mgf-package-family.dylib is not beside the installer."
 stopped || exit 1
 # Everything that can refuse without the player's folder does so before the player is asked,
 # and everything that can refuse at all before anything is written.
