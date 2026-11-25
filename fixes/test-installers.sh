@@ -362,10 +362,10 @@ f1 > /dev/null 2>&1; sed -i '' 's/NOTPROTON_MGF_F125_SWOFTY_3059520=1 //' "$fvdf
 # An install from before the memory row: its switch was never put in. The install that brings the row switches it on, once, and leaves the player's other switch as it is.
 fsw="$fc/compatdata/3059520/.mgf-notproton-plugins-switched"
 /usr/bin/sed -i '' '/^NOTPROTON_MGF_F125_LOWMEM_3059520=/d' "$fsw"; sed -i '' 's/NOTPROTON_MGF_F125_LOWMEM_3059520=1 //' "$fvdf"
-f1 > "$W/f125.newrow.log" 2>&1 && [ "$(f1st)" = installed ] && fswitched NOTPROTON_MGF_F125_LOWMEM && ! /usr/bin/grep -q 'NOTPROTON_MGF_F125_SWOFTY' "$fvdf" \
+[ "$(f1st)" = half ] && f1 > "$W/f125.newrow.log" 2>&1 && [ "$(f1st)" = installed ] && fswitched NOTPROTON_MGF_F125_LOWMEM && ! /usr/bin/grep -q 'NOTPROTON_MGF_F125_SWOFTY' "$fvdf" \
   && /usr/bin/grep -q 'a row new to this fix' "$W/f125.newrow.log" && /usr/bin/grep -qx 'NOTPROTON_MGF_F125_LOWMEM_3059520=1' "$fsw" \
   && sed -i '' 's/NOTPROTON_MGF_F125_LOWMEM_3059520=1 //' "$fvdf" && f1 > /dev/null 2>&1 && ! /usr/bin/grep -q 'NOTPROTON_MGF_F125_LOWMEM' "$fvdf" \
-  && say ok "f1 25 in NotProton: a row the fix gained is switched on by the install that brings it, once, and the player's other switch stays off" || say FAIL "f1 25: new row ($(f1st)): $(tail -2 "$W/f125.newrow.log")"
+  && say ok "f1 25 in NotProton: a row the fix gained and never switched on reads half; the install switches it on, once, and the player's other switch stays off" || say FAIL "f1 25: new row ($(f1st)): $(tail -2 "$W/f125.newrow.log")"
 f1 --restore > /dev/null 2>&1; [ "$(cat "$fvdf")" = "$fvdf0" ] && [ "$(f1st)" = absent ] || say FAIL "f1 25: restore after the new row ($(f1st))"
 # An install from before the rows: the script already in the options, the rows never switched. The switches still go in.
 f1 > /dev/null 2>&1

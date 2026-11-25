@@ -29,8 +29,9 @@
 # installing again never turns one back on. A toggle row a later version of the fix brings is
 # not in that list, so the install that brings it switches it on, once, the same way. With
 # Steam open the files go in and those rows stay off, and it says so.
-# The status ignores the switches for the same reason: a row the player turned off is not a
-# broken fix for the agent to repair.
+# The status ignores the player's switches for the same reason: a row the player turned off is
+# not a broken fix for the agent to repair. A row no install has switched on yet is: the status
+# reads half until one can, with Steam closed.
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -240,6 +241,11 @@ np_plugins_status() {
   while IFS= read -r l; do
     cmp -s "$l" "$NP_PLUGINS/$(basename "$l")" || { echo "Why: $(basename "$l") in NotProton's plugins folder is missing or another build" >&2; echo half; return; }
   done < <(np_libraries)
+  # A row the fix gained that no install could switch on yet (Steam was open): installing
+  # again with Steam closed does it. The rows the player switched off are in the list.
+  if [ -f "$NP_SWITCHED" ] && [ -n "$(np_new_switches)" ]; then
+    echo "Why: a row new to this fix is not switched on yet: quit Steam and install again" >&2; echo half; return
+  fi
   echo installed
 }
 
