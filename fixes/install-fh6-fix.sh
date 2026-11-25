@@ -12,7 +12,7 @@
 # MGVF-NEEDS: rosetta
 # MGVF-INSTRUCTIONS: fh6-instructions.md
 # MGVF-GAME: Forza Horizon 6 | forzahorizon6.exe |
-# MGVF-WHY: Played at a steady 60 frames a second on a MacBook Pro M4 Max, open world, races and online, with the launch options in its instructions. Sign-in and driving validated on Rosetta with the paired ntdll, timers and exception acceleration. Other hardware remains unvalidated. The game starts on D3DMetal 4, but its shaders hit unsupported SV_ShadingRate paths and several pipelines use D3D12 layouts D3DMetal translates incorrectly; a source-built game-specific proxy fixes those paths without FH5's descriptor-stride translation. Xbox sign-in persists across starts: a fixed advapi32 in the prefix, for forzahorizon6.exe alone; in a CrossOver bottle that is the only part installed. Tested on NotProton only; CrossOver bottles are untested. It also needs NOTPROTON_ROSETTA_TRAP_BOOST=1 in FH6's Steam launch options (on the 41073 runner, three more): the improvement writes it itself when Steam is closed and keeps your own options, so quit Steam before installing and leave it in place. On 41303 the exception handling is built into its ntdll. On 41303 on Rosetta it also switches on NotProton's shared Engine fixes row for FH6 (NOTPROTON_MGF_ENGINE=1), whose library arms the timer-thread and online-socket fixes from outside ntdll; checked with test programs, not yet played with the row.
+# MGVF-WHY: Played at a steady 60 frames a second on a MacBook Pro M4 Max, open world, races and online, with the launch options in its instructions. Sign-in and driving validated on Rosetta with the paired ntdll, timers and exception acceleration. Other hardware remains unvalidated. The game starts on D3DMetal 4, but its shaders hit unsupported SV_ShadingRate paths and several pipelines use D3D12 layouts D3DMetal translates incorrectly; a source-built game-specific proxy fixes those paths without FH5's descriptor-stride translation. Xbox sign-in persists across starts: a fixed advapi32 in the prefix, for forzahorizon6.exe alone; in a CrossOver bottle that is the only part installed. Tested on NotProton only; CrossOver bottles are untested. It also needs NOTPROTON_ROSETTA_TRAP_BOOST=1 in FH6's Steam launch options (on the 41073 runner, three more): the improvement writes it itself when Steam is closed and keeps your own options, so quit Steam before installing and leave it in place. On 41303 the exception chain comes from this game's D3D12 proxy, hooked into NotProton's own ntdll.dll, and the fix no longer replaces ntdll.dll; played as well as the replaced file. On 41303 on Rosetta it also switches on NotProton's shared Engine fixes row for FH6 (NOTPROTON_MGF_ENGINE=1), whose library arms the timer-thread and online-socket fixes from outside ntdll; checked with test programs, not yet played with the row.
 # MGVF-CREDIT: Gauthier Piarrette (Highball tsshim and FH6 measurements) | https://github.com/gauthierpiarrette/highball
 # MGVF-CREDIT: xvferxedd, FH6 D3DMetal extensions preserved with fh5-d3dmetal-fix (repository no longer online) | https://github.com/Andytizer/fh5-crossover-steam-fix/tree/main/upstream/source
 #
@@ -276,8 +276,12 @@ parts() {
   local sp st
   read -r sp st < <(signin_parts)
   pieces=$((pieces + sp)); total=$((total + st))
-  total=$((total + 2))
-  fh6_runtime_ok && pieces=$((pieces + 1)) || true
+  total=$((total + 1))
+  # On 41303 nothing of the fix's own is in ntdll: the runtime counts only when it is wrong (the modules'
+  # ntdll.so missing, or an ntdll.dll an earlier install put in still there), so it never makes the fix
+  # look present on a runner the Rosetta improvement alone has been to.
+  if [ "$FH6_OWN_PE" = 1 ]; then total=$((total + 1)); fh6_runtime_ok && pieces=$((pieces + 1)) || true
+  else fh6_runtime_ok || total=$((total + 1)); fi
   fh6_options status >/dev/null 2>&1 && pieces=$((pieces + 1)) || true
   # The row's files only: a row the player switched off is not a broken fix.
   if [ "$ROWS_ON" = 1 ]; then

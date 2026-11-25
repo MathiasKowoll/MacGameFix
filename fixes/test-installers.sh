@@ -1145,6 +1145,15 @@ f6rwhy="$(f6rdo --status 2>&1)"
 f6rdo --install > "$f6r/install2.log" 2>&1 && [ "$(f6rst)" = installed ] \
   && [ "$(f6ropts | /usr/bin/grep -o 'NOTPROTON_MGF_ENGINE=1' | /usr/bin/grep -c .)" = 1 ] \
   && say ok "fh6 on 41303: installing again puts the row back, the switch once" || say FAIL "fh6 rows: reinstall ($(f6rst), $(f6ropts))"
+# 41303 leaves ntdll.dll to NotProton (the exception chain is the proxy's): the install puts none in, and
+# one an earlier install put in the prefix goes, the kept one back in its place.
+f6rsys="$f6rpfx/drive_c/windows/system32"
+! cmp -s "$f6rsys/ntdll.dll" "$f6modules/engine-27.0.0.41303-x86_64-windows-ntdll.dll" && ! cmp -s "$f6rrun/lib/wine/x86_64-windows/ntdll.dll" "$f6modules/engine-27.0.0.41303-x86_64-windows-ntdll.dll" \
+  && say ok "fh6 on 41303: no ntdll.dll of MacGameFix's in the runner or the prefix" || say FAIL "fh6 on 41303: an ntdll.dll of ours went in"
+cp "$f6modules/engine-27.0.0.41303-x86_64-windows-ntdll.dll" "$f6rsys/ntdll.dll"; printf "NotProton's ntdll.dll\n" > "$f6rsys/ntdll.dll.mgf-fh6-original"
+[ "$(f6rst)" = half ] && say ok "fh6 on 41303: the ntdll.dll an earlier install put in the prefix reads half" || say FAIL "fh6 on 41303: earlier ntdll.dll ($(f6rst))"
+f6rdo --install > "$f6r/install-pe.log" 2>&1 && [ "$(cat "$f6rsys/ntdll.dll")" = "NotProton's ntdll.dll" ] && [ ! -e "$f6rsys/ntdll.dll.mgf-fh6-original" ] && [ "$(f6rst)" = installed ] \
+  && say ok "fh6 on 41303: installing again puts the kept ntdll.dll back in the prefix" || say FAIL "fh6 on 41303: ntdll.dll out ($(f6rst), $(tail -2 "$f6r/install-pe.log" | tr '\n' ' '))"
 # The engine library #156 shipped is replaced like our own; another is refused.
 if git -C "$FIX/.." show 5ac1817:fixes/mgf-engine.dylib > "$f6rplug/mgf-engine.dylib" 2>/dev/null; then
   f6rdo --install > "$f6r/install3.log" 2>&1 && cmp -s "$f6rplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \

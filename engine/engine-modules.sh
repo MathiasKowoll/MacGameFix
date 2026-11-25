@@ -15,7 +15,8 @@
 #             dwrite.dll and directmanipulation.dll, with which a program built on
 #             GPUI finds its fonts and opens its window (0039 and 0040), and kernel32.dll,
 #             which forwards to kernelbase.dll the function EA SPORTS FC 27's activation
-#             looks up (0041)
+#             looks up (0041); and on 41073's Intel side, and in CrossOver apps, ntdll.dll (a
+#             NotProton runner of 41303 keeps NotProton's own: see LEAVE below)
 # Without --part every improvement the build carries is meant, as before there were two.
 # An improvement is in when the list in the backup folder names one of its modules. One
 # that was never installed, or was taken out with --part, is absent whatever the other is.
@@ -114,10 +115,28 @@ for side in x86_64 aarch64; do
     say "This CrossOver has a $side side, and there are no modules for it."
   fi
 done
+# What a NotProton runner leaves to NotProton. From 41303 on, its own patched ntdll.dll (CodeWeavers'
+# with NotProton's Steam bridge) stays: what MacGameFix's ntdll.dll brought, Forza Horizon 6's exception
+# chain (0023-0025), now comes from that game's own proxy (fixes/fh6-d3d12/exception_chain.h), which
+# hooks it into this ntdll.dll, and played as well as the file (2026-11-25). A CrossOver app keeps
+# the module. One put in before is retired: the kept file goes back, while ours is still there.
+LEAVE=""
+if [ -z "$APP" ]; then case "$BUILD" in 27.0.0.41303) LEAVE="x86_64-windows/ntdll.dll" ;; esac; fi
+leaves() { case " $LEAVE " in *" $1 "*) return 0 ;; esac; return 1; }
 # The improvement asked for alone.
 KEEP=""
-for f in $FILES; do in_part "$f" && KEEP="$KEEP $f"; done
+for f in $FILES; do in_part "$f" && ! leaves "$f" && KEEP="$KEEP $f"; done
 FILES="$KEEP"
+# The modules retired here that are still ours in this CrossOver.
+retired() {
+  local f r
+  for f in $LEAVE; do
+    in_part "$f" || continue
+    r="$(recorded "$f")"
+    [ -n "$r" ] && [ "$(sha "$LIB/$f")" = "$r" ] && printf '%s\n' "$f"
+  done
+  return 0
+}
 sha() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1; }
 recorded() { [ -f "$SAVE/installed.list" ] && sed -n "s|^\([0-9a-f]*\)  $1\$|\1|p" "$SAVE/installed.list"; }
 # Whether the improvement a module belongs to is in: the list names one of its modules.
@@ -140,6 +159,8 @@ state() {
     elif [ -n "$t" ] && [ -z "$(recorded "$f")" ] && part_in "$f"; then
       old=$((old + 1)); fi
   done
+  # A retired module still in place: an update takes it out.
+  for f in $(retired); do n=$((n + 1)); old=$((old + 1)); done
   if [ "$n" -gt 0 ] && [ "$ours" -eq "$n" ]; then echo installed
   elif [ "$old" -gt 0 ] && [ $((ours + old)) -eq "$n" ]; then echo outdated
   elif [ $((ours + old)) -gt 0 ]; then echo half
@@ -212,9 +233,15 @@ install)
   : >"$SAVE/installed.list.new"
   if [ -f "$SAVE/installed.list" ]; then
     while read -r h f; do
-      case " $FILES " in *" $f "*) ;; *) printf '%s  %s\n' "$h" "$f" >>"$SAVE/installed.list.new" ;; esac
+      case " $FILES " in *" $f "*) ;; *) leaves "$f" && in_part "$f" || printf '%s  %s\n' "$h" "$f" >>"$SAVE/installed.list.new" ;; esac
     done <"$SAVE/installed.list"
   fi
+  for f in $(retired); do
+    if [ -f "$SAVE/$f.absent" ]; then rm -f "$LIB/$f" 2>/dev/null || refused "$LIB/$f"
+    elif [ -f "$SAVE/$f" ]; then put "$SAVE/$f" "$LIB/$f" -p || refused "$LIB/$f"
+    else continue; fi
+    say "  $f: CrossOver's own back, left to NotProton"
+  done
   for f in $FILES; do
     t="$(sha "$LIB/$f")"; s="$(sha "$(src "$f")")"
     # The first time, a file that is neither ours nor what we last put there is
