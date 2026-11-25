@@ -14,10 +14,12 @@
 # finds it in its environment (the app id is part of the name):
 #   NOTPROTON_MGF_F125_SWOFTY_<appid>=1       "Start through Swofty Launcher". Without it,
 #                                             Steam's own command runs unchanged.
-#   NOTPROTON_MGF_F125_OPENS_<appid>=window   "Play opens": Swofty Launcher's window instead
-#                                             of the game. Anything else, or nothing: the game.
-#   NOTPROTON_MGF_F125_PROFILE_<appid>=vanilla  "Profile": Swofty's profile without addons for
-#                                             this start. "active", or nothing: the active one.
+#   NOTPROTON_MGF_F125_PLAY_<appid>=window    "Play opens": Swofty Launcher's window instead
+#                                             of the game.
+#   NOTPROTON_MGF_F125_PLAY_<appid>=vanilla   "Play opens": the game with Swofty's profile
+#                                             without addons, for this start.
+#                                             Anything else, or nothing: the game with the
+#                                             active profile.
 #
 # Anything else Steam runs through the tool, such as its install scripts, goes through unchanged.
 #
@@ -31,7 +33,9 @@ fi
 case "$game" in */EAAntiCheat.GameServiceLauncher.exe|*/F1_25.exe) ;; *) exec "$@" ;; esac
 app="${STEAM_COMPAT_APP_ID:-}"
 case "$app" in ""|*[!0-9]*) exec "$@" ;; esac
-eval "switch=\${NOTPROTON_MGF_F125_SWOFTY_$app:-}; opens=\${NOTPROTON_MGF_F125_OPENS_$app:-game}; profile=\${NOTPROTON_MGF_F125_PROFILE_$app:-active}"
+eval "switch=\${NOTPROTON_MGF_F125_SWOFTY_$app:-}; play=\${NOTPROTON_MGF_F125_PLAY_$app:-game}"
+opens=game; profile=active
+case "$play" in window) opens=window ;; vanilla) profile=vanilla ;; esac
 [ "$switch" = 1 ] || exec "$@"
 # A path as the prefix sees it: the Steam library on the drive NotProton gives it there (S: so
 # far, read from the prefix's dosdevices), anything else under Z:.

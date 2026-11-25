@@ -12,20 +12,20 @@
 # starts FC27.exe, and its DLL goes into the game. This puts the batch file that does it in
 # the place of Steam's command; fc27-le-run.cmd says what it does and why.
 #
-# Three rows on the game's Compatibility page in NotProton decide what happens. NotProton keeps
+# Two rows on the game's Compatibility page in NotProton decide what happens. NotProton keeps
 # a row's value as a variable in the launch options, in front of this script, so the script
 # finds it in its environment (the app id is part of the name):
 #   NOTPROTON_MGF_FC27_LE_<appid>=1          "Start with Live Editor". Without it, Steam's own
 #                                            command runs unchanged. The same row has NotProton
 #                                            load mgf-d3dmetal-hookable.dylib into the game.
-#   NOTPROTON_MGF_FC27_OPENS_<appid>=window  "Play opens": Live Editor's launcher window alone.
-#                                            Anything else, or nothing: the game.
-#   NOTPROTON_MGF_FC27_TRACE_<appid>=on      "Exception notes for a report": Wine writes every
+#   NOTPROTON_MGF_FC27_PLAY_<appid>=window   "Play opens": Live Editor's launcher window alone.
+#   NOTPROTON_MGF_FC27_PLAY_<appid>=trace    "Play opens": the game, and Wine writes every
 #                                            exception the game raises, with times, to
 #                                            NotProton's Wine log for the game
 #                                            (launchers/<appid>/notproton-wine.log). A Wine
 #                                            process gets its parent's unix environment, so it
 #                                            reaches FC27.exe through the EA app.
+#                                            Anything else, or nothing: the game.
 #
 # Anything else Steam runs through the tool goes through unchanged.
 #
@@ -39,7 +39,9 @@ fi
 case "$target" in steam2ea://launchgame/*) ;; *) exec "$@" ;; esac
 app="${STEAM_COMPAT_APP_ID:-}"
 case "$app" in ""|*[!0-9]*) exec "$@" ;; esac
-eval "switch=\${NOTPROTON_MGF_FC27_LE_$app:-}; opens=\${NOTPROTON_MGF_FC27_OPENS_$app:-game}; trace=\${NOTPROTON_MGF_FC27_TRACE_$app:-off}"
+eval "switch=\${NOTPROTON_MGF_FC27_LE_$app:-}; play=\${NOTPROTON_MGF_FC27_PLAY_$app:-game}"
+opens=game; trace=off
+case "$play" in window) opens=window ;; trace) trace=on ;; esac
 [ "$switch" = 1 ] || exec "$@"
 
 # Live Editor's launcher keeps its settings in the prefix, in C:\FC 27 Live Editor\le_config.json,

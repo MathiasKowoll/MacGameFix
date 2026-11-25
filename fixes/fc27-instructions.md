@@ -35,14 +35,13 @@ While a session starts, Live Editor's launcher replaces one file in the game fol
 
 # The rows in NotProton
 
-The fix adds four rows to the game's Compatibility page in NotProton, for this game only, in a group of their own, **MacGameFix · FC 27**:
+The fix adds two rows to the game's Compatibility page in NotProton, for this game only, in a group of their own, **MacGameFix · FC 27**, and switches on **Engine fixes**, in the group **MacGameFix**, for this game:
 
 | Row | What it does |
 |---|---|
 | **Start with Live Editor** | On: Play starts the game with Live Editor, and NotProton loads the library that lets its window work on a Mac. Off: Play starts the game's own launcher, which starts nothing. The first install switches it on. |
-| **Activation fix** | Loads a library into this game alone that gives it the Windows function its activation asks for, which Wine lacks. Off, the game says "There is a problem with your game's setup". The install switches it on; leave it on. |
-| **Play opens** | **The game**, or **Live Editor's launcher window** alone. |
-| **Exception notes for a report** | Off to play. On for one start, when you report a game that closes. |
+| **Play opens** | **The game**; **The game, with exception notes for a report**, for one start when you report a game that closes; or **Live Editor's launcher window** alone. |
+| **Engine fixes** | Shared by every game whose MacGameFix fix needs a Wine fix: it loads one library that, for FC 27, gives the game the Windows function its activation asks for. Off, the game says "There is a problem with your game's setup". The install switches it on; leave it on. |
 
 Choose **Live Editor's launcher window** to look at the launcher's settings before a session. Its own "Run Game" button starts nothing here; close the window, set the row back to **The game** and press Play.
 
@@ -65,15 +64,15 @@ The play script's notes for the last start are in `~/Library/Application Support
 
 | What you see | What to do |
 |---|---|
-| "There is a problem with your game's setup. Please reinstall your game." | The row **Activation fix** is off: switch it on. If it is on, update NotProton (the row needs its plugin host) and install the fix again. |
+| "There is a problem with your game's setup. Please reinstall your game." | The row **Engine fixes** is off: switch it on. If it is on, update NotProton (the row needs its plugin host) and install the fix again. |
 | The launcher stays at "Injecting" with "Starting EA Javelin Anticheat…" for more than half a minute | Stop the game from Steam and press Play again. |
 | The browser opens for a Patreon sign-in and no game starts | Expected at the first Play with a Live Editor version that is out for its patrons first. Sign in, wait for the console window to say it was saved, and press Play again. |
 | The game closes right after the EA SPORTS logo | The row **Start with Live Editor** lost its library, or Live Editor is not the version for this game. Install the fix again; check Live Editor's version. |
 | Play starts nothing | The row **Start with Live Editor** is off. Switch it on in the game's Compatibility page. |
 | The fix reads partial after a NotProton or prefix update | Install it again, with Steam closed. |
 
-For a report of a game that closes, set the row **Exception notes for a report** to **On** for one start, and send NotProton's Wine log for the game with the three logs above. Set it back to **Off** afterwards: the log grows fast.
+For a report of a game that closes, set the row **Play opens** to **The game, with exception notes for a report** for one start, and send NotProton's Wine log for the game with the three logs above. Set it back to **The game** afterwards: the log grows fast.
 
 # Removing it
 
-Remove gives the launch options back as they were and takes the four rows and the two libraries out of NotProton. Your Live Editor folder stays in `~/Library/Application Support/MacGameFix/fc27-live-editor`, and its settings in the prefix (`C:\FC 27 Live Editor`).
+Remove gives the launch options back as they were and takes the two rows and the library out of NotProton, and the game out of **Engine fixes**. Your Live Editor folder stays in `~/Library/Application Support/MacGameFix/fc27-live-editor`, and its settings in the prefix (`C:\FC 27 Live Editor`).

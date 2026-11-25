@@ -299,7 +299,7 @@ printf '27.0.0.41303-fex\nCrossOver 2026 11 11-ARM64 - Rosetta\n' > "$fc/compatd
 echo stock > "$fc/runner/lib/wine/x86_64-unix/ntdll.so"
 echo launcher > "$fc/rel/swofty-launcher-v9.9.9-windows-x86_64/bin/swofty.exe"; echo core > "$fc/rel/swofty-launcher-v9.9.9-windows-x86_64/loader/version.dll"
 (cd "$fc/rel" && ditto -c -k --keepParent swofty-launcher-v9.9.9-windows-x86_64 "$fc/sw.zip")
-for n in install-f125-swofty.sh bottles.sh f125-swofty-play.sh f125-swofty-run.cmd steam-launch-options.pl notproton-plugins.sh np-plugin-f125-swofty.conf mgf-low-allocations.dylib; do cp "$FIX/$n" "$fc/fixes/$n"; done
+for n in install-f125-swofty.sh bottles.sh f125-swofty-play.sh f125-swofty-run.cmd steam-launch-options.pl notproton-plugins.sh np-plugin-f125-swofty.conf mgf-engine.dylib np-plugin-engine.conf; do cp "$FIX/$n" "$fc/fixes/$n"; done
 fnp="$fhome/Library/Application Support/notproton"; mkdir -p "$fnp"; fplug="$fnp/plugins"; echo host > "$fnp/plugin-host.dylib"
 sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$fc/fixes/steam-launch-options.pl"
 fsteam="$fhome/Library/Application Support/Steam"; fvdf="$fsteam/userdata/1/config/localconfig.vdf"; mkdir -p "$(dirname "$fvdf")" "$fsteam/config"
@@ -315,7 +315,7 @@ f1st() { f1 --status 2>/dev/null | tail -1; }
 # Each switch once, before the play script, which stands right before %command%.
 fswitched() {
   local o; o="$(/usr/bin/sed -n 's/.*"LaunchOptions" "\(.*\)".*/\1/p' "$fvdf")"
-  for k in "$@"; do case " $o " in *" ${k}_3059520=1 "*) ;; *) return 1 ;; esac; done
+  for k in "$@"; do case " $o " in *" ${k}=1 "*) ;; *) return 1 ;; esac; done
   case "$o" in *"\\\"$fstore/f125-swofty-play.sh\\\" %command%") ;; *) return 1 ;; esac
   [ "$(printf '%s' "$o" | /usr/bin/grep -o 'f125-swofty-play.sh' | /usr/bin/grep -c .)" = 1 ]
 }
@@ -327,13 +327,14 @@ f1 > "$W/f125.install.log" 2>&1 || say FAIL "f1 25: install failed: $(tail -2 "$
   && /usr/bin/grep -qx '"version"="native,builtin"' "$fpfx/user.reg" && /usr/bin/grep -qx '"ActiveUser"=dword:049ee881' "$fpfx/user.reg" \
   && [ -L "$flogin" ] && /usr/bin/grep -q someone "$flogin" \
   && [ "$(cat "$fbridge/depotcache/3059521_44.manifest")" = list ] && [ ! -e "$fbridge/depotcache/3059522_55.manifest" ] && [ "$(cat "$fbridge/logs/content_log.txt")" = log ] \
-  && fswitched NOTPROTON_MGF_F125_SWOFTY NOTPROTON_MGF_F125_LOWMEM && /usr/bin/grep -q 'MGF_FANS=max' "$fvdf" \
-  && /usr/bin/grep -qx '\[NOTPROTON_MGF_F125_SWOFTY_3059520\]' "$fplug/mgf-3059520.conf" && /usr/bin/grep -qx '\[NOTPROTON_MGF_F125_LOWMEM_3059520\]' "$fplug/mgf-3059520.conf" \
-  && /usr/bin/grep -qx '\[NOTPROTON_MGF_F125_OPENS_3059520\]' "$fplug/mgf-3059520.conf" && /usr/bin/grep -qx '\[NOTPROTON_MGF_F125_PROFILE_3059520\]' "$fplug/mgf-3059520.conf" \
-  && [ "$(/usr/bin/grep -c '^apps = 3059520$' "$fplug/mgf-3059520.conf")" = 4 ] \
-  && /usr/bin/grep -qx 'requires = Library/Application Support/notproton/plugins/mgf-low-allocations.dylib' "$fplug/mgf-3059520.conf" && cmp -s "$fplug/mgf-low-allocations.dylib" "$FIX/mgf-low-allocations.dylib" \
-  && [ "$(/usr/bin/grep -c '^description = .*Played on NotProton, CrossOver Preview 41303 on Rosetta (D3DMetal 4.0b3), 2026-11-2[34]$' "$fplug/mgf-3059520.conf")" = 4 ] \
-  && say ok "f1 25 in NotProton: the player's launcher, the play script, the two values, the links, the library, four rows for this game that each say where they were played, and both switches and the script in the launch options, on a runner without patch 0038" || say FAIL "f1 25: installed ($(f1st)): $(tail -3 "$W/f125.install.log")"
+  && fswitched NOTPROTON_MGF_F125_SWOFTY_3059520 NOTPROTON_MGF_ENGINE && /usr/bin/grep -q 'MGF_FANS=max' "$fvdf" \
+  && [ "$(/usr/bin/grep -c '^\[' "$fplug/mgf-3059520.conf")" = 2 ] && /usr/bin/grep -qx '\[NOTPROTON_MGF_F125_SWOFTY_3059520\]' "$fplug/mgf-3059520.conf" \
+  && /usr/bin/grep -qx '\[NOTPROTON_MGF_F125_PLAY_3059520\]' "$fplug/mgf-3059520.conf" && /usr/bin/grep -qx '# engine fixes: on' "$fplug/mgf-3059520.conf" \
+  && [ "$(/usr/bin/grep -c '^apps = 3059520$' "$fplug/mgf-3059520.conf")" = 2 ] \
+  && [ "$(/usr/bin/grep -c '^description = .*Played on NotProton, CrossOver Preview 41303 on Rosetta (D3DMetal 4.0b3), 2026-11-2[34]$' "$fplug/mgf-3059520.conf")" = 2 ] \
+  && /usr/bin/grep -qx '\[NOTPROTON_MGF_ENGINE\]' "$fplug/mgf-engine.conf" && /usr/bin/grep -qx 'apps = 3059520' "$fplug/mgf-engine.conf" && [ "$(/usr/bin/grep -c '^apps' "$fplug/mgf-engine.conf")" = 1 ] \
+  && /usr/bin/grep -qx 'requires = Library/Application Support/notproton/plugins/mgf-engine.dylib' "$fplug/mgf-engine.conf" && cmp -s "$fplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
+  && say ok "f1 25 in NotProton: the player's launcher, the play script, the two values, the links, two rows for this game that each say where they were played, the game in the shared engine row with its library, and both switches and the script in the launch options, on a runner without patch 0038" || say FAIL "f1 25: installed ($(f1st)): $(tail -3 "$W/f125.install.log")"
 mv "$fnp/plugin-host.dylib" "$fnp/plugin-host.away"
 fout="$(f1 --status 2>&1)"   # read whole: a reader that leaves early would end the status with a broken pipe
 [ "$(f1st)" = half ] && case "$fout" in *'update NotProton'*) true ;; *) false ;; esac \
@@ -348,36 +349,53 @@ MGVF_BOTTLE="$fpfx" /bin/bash -c '. "$0/bottles.sh"; user_reg_edit "$1" delete "
 rm -f "$fbridge/depotcache/3059521_44.manifest"
 [ "$(f1st)" = half ] && f1 > /dev/null 2>&1 && [ "$(f1st)" = installed ] && [ -L "$fbridge/depotcache/3059521_44.manifest" ] \
   && say ok "f1 25 in NotProton: a link to Steam's list taken out is half, and installing again repairs it" || say FAIL "f1 25: half and repair ($(f1st))"
-rm -f "$fplug/mgf-low-allocations.dylib"
-[ "$(f1st)" = half ] && f1 > /dev/null 2>&1 && [ "$(f1st)" = installed ] && cmp -s "$fplug/mgf-low-allocations.dylib" "$FIX/mgf-low-allocations.dylib" \
+rm -f "$fplug/mgf-engine.dylib"
+[ "$(f1st)" = half ] && f1 > /dev/null 2>&1 && [ "$(f1st)" = installed ] && cmp -s "$fplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
   && say ok "f1 25 in NotProton: the library taken out is half, and installing again puts it back" || say FAIL "f1 25: library repair ($(f1st))"
 last="$(f1 --restore 2>/dev/null | tail -1)"
 [ "$last" = restored ] && [ "$(f1st)" = absent ] && [ "$(cat "$fvdf")" = "$fvdf0" ] && [ "$(cat "$fpfx/user.reg")" = "$(printf "$freg0")" ] \
-  && [ ! -e "$fplug/mgf-3059520.conf" ] && [ ! -e "$fplug/mgf-low-allocations.dylib" ] && [ ! -e "$flogin" ] && [ ! -L "$flogin" ] && [ ! -L "$fbridge/depotcache/3059521_44.manifest" ] && [ ! -L "$fbridge/logs/content_log.txt" ] && [ ! -e "$fstore/f125-swofty-play.sh" ] && [ -f "$fstore/launcher/bin/swofty.exe" ] && [ ! -e "$fpfx/.mgf-f125-swofty" ] \
+  && [ ! -e "$fplug/mgf-3059520.conf" ] && [ ! -e "$fplug/mgf-engine.conf" ] && [ ! -e "$fplug/mgf-engine.dylib" ] && [ ! -e "$flogin" ] && [ ! -L "$flogin" ] && [ ! -L "$fbridge/depotcache/3059521_44.manifest" ] && [ ! -L "$fbridge/logs/content_log.txt" ] && [ ! -e "$fstore/f125-swofty-play.sh" ] && [ -f "$fstore/launcher/bin/swofty.exe" ] && [ ! -e "$fpfx/.mgf-f125-swofty" ] \
   && say ok "f1 25 in NotProton: restored, the launch options and the registry as they were, the library out, the launcher kept" || say FAIL "f1 25: restore ($last, $(f1st))"
+# Two games on the shared engine row: its apps are both, and removing one leaves the row, its
+# library and the other game's app. A stand-in descriptor plays FC 27's part.
+printf '# MacGameFix writes this file for app 4080220 and removes it with the fix; edits do not last.\n# engine fixes: on\n[NOTPROTON_MGF_FC27_LE_4080220]\nlabel = x\n' > "$fplug/mgf-4080220.conf"
+f1 > /dev/null 2>&1
+[ "$(f1st)" = installed ] && [ "$(/usr/bin/grep -c '^apps = ' "$fplug/mgf-engine.conf")" = 2 ] && /usr/bin/grep -qx 'apps = 4080220' "$fplug/mgf-engine.conf" \
+  && f1 --restore > /dev/null 2>&1 && [ "$(f1st)" = absent ] && /usr/bin/grep -qx 'apps = 4080220' "$fplug/mgf-engine.conf" && ! /usr/bin/grep -q 'apps = 3059520' "$fplug/mgf-engine.conf" \
+  && cmp -s "$fplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
+  && say ok "f1 25 in NotProton: two games share the engine row, and removing one leaves the row and its library for the other" || say FAIL "f1 25: shared engine row ($(f1st))"
+rm -f "$fplug/mgf-4080220.conf" "$fplug/mgf-engine.conf" "$fplug/mgf-engine.dylib"
+# An earlier install's mgf-low-allocations.dylib, the build PR #154 shipped, is taken out; a file of that name that is not that build stays.
+if /usr/bin/git -C "$FIX" show 1a2cb2a:fixes/mgf-low-allocations.dylib > "$W/f125-old-lib" 2>/dev/null; then
+  mkdir -p "$fplug"; cp "$W/f125-old-lib" "$fplug/mgf-low-allocations.dylib"
+  f1 > "$W/f125.retire.log" 2>&1; [ ! -e "$fplug/mgf-low-allocations.dylib" ] && /usr/bin/grep -q 'no longer uses, taken out' "$W/f125.retire.log" \
+    && echo other > "$fplug/mgf-low-allocations.dylib" && f1 > /dev/null 2>&1 && [ "$(cat "$fplug/mgf-low-allocations.dylib")" = other ] \
+    && say ok "f1 25 in NotProton: the library an earlier install put in is taken out, and a file of that name that is not ours stays" || say FAIL "f1 25: retired library: $(tail -2 "$W/f125.retire.log")"
+  rm -f "$fplug/mgf-low-allocations.dylib"; f1 --restore > /dev/null 2>&1
+fi
 # The player's switches are theirs: a row turned off stays off through another install, and the fix still reads installed.
 f1 > /dev/null 2>&1; sed -i '' 's/NOTPROTON_MGF_F125_SWOFTY_3059520=1 //' "$fvdf"
-[ "$(f1st)" = installed ] && f1 > /dev/null 2>&1 && ! /usr/bin/grep -q 'NOTPROTON_MGF_F125_SWOFTY' "$fvdf" && fswitched NOTPROTON_MGF_F125_LOWMEM \
+[ "$(f1st)" = installed ] && f1 > /dev/null 2>&1 && ! /usr/bin/grep -q 'NOTPROTON_MGF_F125_SWOFTY' "$fvdf" && fswitched NOTPROTON_MGF_ENGINE \
   && say ok "f1 25 in NotProton: a row the player switched off is not a broken fix, and installing again leaves it off" || say FAIL "f1 25: the player's switch ($(f1st))"
 # An install from before the memory row: its switch was never put in. The install that brings the row switches it on, once, and leaves the player's other switch as it is.
 fsw="$fc/compatdata/3059520/.mgf-notproton-plugins-switched"
-/usr/bin/sed -i '' '/^NOTPROTON_MGF_F125_LOWMEM_3059520=/d' "$fsw"; sed -i '' 's/NOTPROTON_MGF_F125_LOWMEM_3059520=1 //' "$fvdf"
-[ "$(f1st)" = half ] && f1 > "$W/f125.newrow.log" 2>&1 && [ "$(f1st)" = installed ] && fswitched NOTPROTON_MGF_F125_LOWMEM && ! /usr/bin/grep -q 'NOTPROTON_MGF_F125_SWOFTY' "$fvdf" \
-  && /usr/bin/grep -q 'a row new to this fix' "$W/f125.newrow.log" && /usr/bin/grep -qx 'NOTPROTON_MGF_F125_LOWMEM_3059520=1' "$fsw" \
-  && sed -i '' 's/NOTPROTON_MGF_F125_LOWMEM_3059520=1 //' "$fvdf" && f1 > /dev/null 2>&1 && ! /usr/bin/grep -q 'NOTPROTON_MGF_F125_LOWMEM' "$fvdf" \
+/usr/bin/sed -i '' '/^NOTPROTON_MGF_ENGINE=/d' "$fsw"; sed -i '' 's/NOTPROTON_MGF_ENGINE=1 //' "$fvdf"
+[ "$(f1st)" = half ] && f1 > "$W/f125.newrow.log" 2>&1 && [ "$(f1st)" = installed ] && fswitched NOTPROTON_MGF_ENGINE && ! /usr/bin/grep -q 'NOTPROTON_MGF_F125_SWOFTY' "$fvdf" \
+  && /usr/bin/grep -q 'a row new to this fix' "$W/f125.newrow.log" && /usr/bin/grep -qx 'NOTPROTON_MGF_ENGINE=1' "$fsw" \
+  && sed -i '' 's/NOTPROTON_MGF_ENGINE=1 //' "$fvdf" && f1 > /dev/null 2>&1 && ! /usr/bin/grep -q 'NOTPROTON_MGF_ENGINE' "$fvdf" \
   && say ok "f1 25 in NotProton: a row the fix gained and never switched on reads half; the install switches it on, once, and the player's other switch stays off" || say FAIL "f1 25: new row ($(f1st)): $(tail -2 "$W/f125.newrow.log")"
 f1 --restore > /dev/null 2>&1; [ "$(cat "$fvdf")" = "$fvdf0" ] && [ "$(f1st)" = absent ] || say FAIL "f1 25: restore after the new row ($(f1st))"
 # An install from before the rows: the script already in the options, the rows never switched. The switches still go in.
 f1 > /dev/null 2>&1
 rm -f "$fsw" "$fc/compatdata/3059520/.mgf-notproton-plugins.json" "$fplug/mgf-3059520.conf"
-sed -i '' 's/NOTPROTON_MGF_F125_[A-Z]*_3059520=1 //g' "$fvdf"
-f1 > "$W/f125.rows.log" 2>&1 && [ "$(f1st)" = installed ] && fswitched NOTPROTON_MGF_F125_SWOFTY NOTPROTON_MGF_F125_LOWMEM \
+sed -i '' -e 's/NOTPROTON_MGF_F125_[A-Z]*_3059520=1 //g' -e 's/NOTPROTON_MGF_ENGINE=1 //' "$fvdf"
+f1 > "$W/f125.rows.log" 2>&1 && [ "$(f1st)" = installed ] && fswitched NOTPROTON_MGF_F125_SWOFTY_3059520 NOTPROTON_MGF_ENGINE \
   && say ok "f1 25 in NotProton: over an install from before the rows, the switches go in and the script stays once" || say FAIL "f1 25: rows over an earlier install ($(f1st)): $(tail -2 "$W/f125.rows.log")"
 f1 --restore > /dev/null 2>&1; [ "$(f1st)" = absent ] || say FAIL "f1 25: restore after the rows ($(f1st))"
 fvdf_with 'MGF_FANS=max %command%'
 # Where NotProton knows groups, the rows carry one of the game's own; where it does not, none, as it would refuse the row.
 MGVF_NOTPROTON_GROUPS=1 f1 > /dev/null 2>&1
-[ "$(/usr/bin/grep -c '^group = MacGameFix · F1 25$' "$fplug/mgf-3059520.conf")" = 4 ] && [ "$(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1)" = installed ] \
+[ "$(/usr/bin/grep -c '^group = MacGameFix · F1 25$' "$fplug/mgf-3059520.conf")" = 2 ] && /usr/bin/grep -qx 'group = MacGameFix' "$fplug/mgf-engine.conf" && [ "$(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1)" = installed ] \
   && say ok "f1 25 in NotProton: with a NotProton that knows groups, every row is in the game's own group" || say FAIL "f1 25: grouped rows ($(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1))"
 f1 > /dev/null 2>&1; ! /usr/bin/grep -q '^group' "$fplug/mgf-3059520.conf" && [ "$(f1st)" = installed ] \
   && say ok "f1 25 in NotProton: with one that does not, the rows carry no group" || say FAIL "f1 25: ungrouped rows ($(f1st))"
@@ -437,10 +455,11 @@ fplay() { env -i HOME="$fhome" PATH=/usr/bin:/bin STEAM_COMPAT_APP_ID=3059520 ST
 fout="$(fplay)"; case "$fout" in "waitforexitandrun|/lib/steamapps/common/F1/F1_25.exe|"*) true ;; *) false ;; esac \
   && say ok "f1 25's play script: with the row off, Steam's own command goes through" || say FAIL "f1 25 play: row off: $fout"
 fout="$(fplay NOTPROTON_MGF_F125_SWOFTY_3059520=1)"; case "$fout" in "waitforexitandrun|cmd.exe|/d|/c|call|"*"profile= opens=") true ;; *) false ;; esac \
-  && fout="$(fplay NOTPROTON_MGF_F125_SWOFTY_3059520=1 NOTPROTON_MGF_F125_PROFILE_3059520=active)" && case "$fout" in *"profile= opens=") true ;; *) false ;; esac \
-  && fout="$(fplay NOTPROTON_MGF_F125_SWOFTY_3059520=1 NOTPROTON_MGF_F125_PROFILE_3059520=vanilla NOTPROTON_MGF_F125_OPENS_3059520=window)" && case "$fout" in *"profile=vanilla opens=window") true ;; *) false ;; esac \
-  && fout="$(fplay NOTPROTON_MGF_F125_SWOFTY_3059520=1 'NOTPROTON_MGF_F125_PROFILE_3059520=a b&c')" && case "$fout" in *"profile= opens=") true ;; *) false ;; esac \
-  && say ok "f1 25's play script: the batch file takes the command's place; the Profile row's vanilla reaches Swofty, active and a name that is no profile's do not" || say FAIL "f1 25 play: rows: $fout"
+  && fout="$(fplay NOTPROTON_MGF_F125_SWOFTY_3059520=1 NOTPROTON_MGF_F125_PLAY_3059520=game)" && case "$fout" in *"profile= opens=") true ;; *) false ;; esac \
+  && fout="$(fplay NOTPROTON_MGF_F125_SWOFTY_3059520=1 NOTPROTON_MGF_F125_PLAY_3059520=vanilla)" && case "$fout" in *"profile=vanilla opens=") true ;; *) false ;; esac \
+  && fout="$(fplay NOTPROTON_MGF_F125_SWOFTY_3059520=1 NOTPROTON_MGF_F125_PLAY_3059520=window)" && case "$fout" in *"profile= opens=window") true ;; *) false ;; esac \
+  && fout="$(fplay NOTPROTON_MGF_F125_SWOFTY_3059520=1 'NOTPROTON_MGF_F125_PLAY_3059520=a b&c')" && case "$fout" in *"profile= opens=") true ;; *) false ;; esac \
+  && say ok "f1 25's play script: the batch file takes the command's place; Play opens' vanilla reaches Swofty as its profile and window opens its window, the game and anything else do neither" || say FAIL "f1 25 play: rows: $fout"
 touch "$fpfx/cxbottle.conf"; [ "$(f1st)" = norecipe ] && say ok "f1 25: a CrossOver bottle has no recipe" || say FAIL "f1 25: bottle ($(f1st))"; rm -f "$fpfx/cxbottle.conf"
 
 # EA SPORTS FC 27 with FC 27 Live Editor, in a NotProton prefix: the Live Editor folder the
@@ -455,7 +474,7 @@ printf '27.0.0.41303-fex\nCrossOver 2026 11 11-ARM64 - Rosetta\n' > "$ec/compatd
 echo stock > "$ec/runner/lib/wine/x86_64-windows/kernel32.dll"
 # A Live Editor folder: <where> <what its DLL holds> <its DLL's time, touch -t>.
 editor() { mkdir -p "$1/FakeEAACLauncher" "$1/lua" "$1/Logs"; echo launcher > "$1/Launcher.exe"; echo "$2" > "$1/FCLiveEditor.DLL"; echo standin > "$1/FakeEAACLauncher/EAAntiCheat.GameServiceLauncher.exe"; echo used > "$1/Logs/a.log"; touch -t "$3" "$1/FCLiveEditor.DLL"; }
-for n in install-fc27-live-editor.sh bottles.sh fc27-le-play.sh fc27-le-run.cmd steam-launch-options.pl notproton-plugins.sh np-plugin-fc27-live-editor.conf mgf-d3dmetal-hookable.dylib mgf-package-family.dylib; do cp "$FIX/$n" "$ec/fixes/$n"; done
+for n in install-fc27-live-editor.sh bottles.sh fc27-le-play.sh fc27-le-run.cmd steam-launch-options.pl notproton-plugins.sh np-plugin-fc27-live-editor.conf mgf-d3dmetal-hookable.dylib mgf-engine.dylib np-plugin-engine.conf; do cp "$FIX/$n" "$ec/fixes/$n"; done
 enp="$ehome/Library/Application Support/notproton"; mkdir -p "$enp"; eplug="$enp/plugins"; echo host > "$enp/plugin-host.dylib"
 sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$ec/fixes/steam-launch-options.pl"
 evdf="$ehome/Library/Application Support/Steam/userdata/1/config/localconfig.vdf"; mkdir -p "$(dirname "$evdf")"
@@ -465,7 +484,7 @@ e1st() { e1 --status 2>/dev/null | tail -1; }
 # Each switch once, before the play script, which stands right before %command%.
 eswitched() {
   local o; o="$(/usr/bin/sed -n 's/.*"LaunchOptions" "\(.*\)".*/\1/p' "$evdf")"
-  for k in "$@"; do case " $o " in *" ${k}_4080220=1 "*) ;; *) return 1 ;; esac; done
+  for k in "$@"; do case " $o " in *" ${k}=1 "*) ;; *) return 1 ;; esac; done
   case "$o" in *"\\\"$estore/fc27-le-play.sh\\\" %command%") ;; *) return 1 ;; esac
   [ "$(printf '%s' "$o" | /usr/bin/grep -o 'fc27-le-play.sh' | /usr/bin/grep -c .)" = 1 ]
 }
@@ -485,16 +504,16 @@ printf '%s/\n' "$edl" > "$ec/answer"   # the folder around it, as the chooser gi
 ewin > "$W/fc27.install.log" 2>&1 || say FAIL "fc 27: install failed: $(tail -2 "$W/fc27.install.log")"
 [ "$(e1st)" = installed ] && [ "$(cat "$estore/LiveEditor/FCLiveEditor.DLL")" = one ] && [ -f "$estore/LiveEditor/FakeEAACLauncher/EAAntiCheat.GameServiceLauncher.exe" ] && [ ! -e "$estore/LiveEditor/Logs" ] \
   && cmp -s "$estore/fc27-le-play.sh" "$FIX/fc27-le-play.sh" && [ -x "$estore/fc27-le-play.sh" ] && cmp -s "$estore/fc27-le-run.cmd" "$FIX/fc27-le-run.cmd" \
-  && eswitched NOTPROTON_MGF_FC27_LE NOTPROTON_MGF_FC27_PACKAGES && /usr/bin/grep -q 'MGF_FANS=max' "$evdf" \
-  && /usr/bin/grep -qx '\[NOTPROTON_MGF_FC27_LE_4080220\]' "$eplug/mgf-4080220.conf" && /usr/bin/grep -qx '\[NOTPROTON_MGF_FC27_PACKAGES_4080220\]' "$eplug/mgf-4080220.conf" \
-  && /usr/bin/grep -qx '\[NOTPROTON_MGF_FC27_OPENS_4080220\]' "$eplug/mgf-4080220.conf" \
-  && /usr/bin/grep -qx '\[NOTPROTON_MGF_FC27_TRACE_4080220\]' "$eplug/mgf-4080220.conf" && ! /usr/bin/grep -q 'NOTPROTON_MGF_FC27_TRACE' "$evdf" \
-  && [ "$(/usr/bin/grep -c '^description = .*Played on NotProton, CrossOver Preview 41303 on Rosetta (D3DMetal 4.0b3), 2026-11-2[34]$' "$eplug/mgf-4080220.conf")" = 4 ] \
-  && [ "$(/usr/bin/grep -c '^inject = 1$' "$eplug/mgf-4080220.conf")" = 2 ] && [ "$(/usr/bin/grep -c '^apps = 4080220$' "$eplug/mgf-4080220.conf")" = 4 ] \
-  && cmp -s "$eplug/mgf-d3dmetal-hookable.dylib" "$FIX/mgf-d3dmetal-hookable.dylib" && cmp -s "$eplug/mgf-package-family.dylib" "$FIX/mgf-package-family.dylib" \
+  && eswitched NOTPROTON_MGF_FC27_LE_4080220 NOTPROTON_MGF_ENGINE && /usr/bin/grep -q 'MGF_FANS=max' "$evdf" \
+  && [ "$(/usr/bin/grep -c '^\[' "$eplug/mgf-4080220.conf")" = 2 ] && /usr/bin/grep -qx '\[NOTPROTON_MGF_FC27_LE_4080220\]' "$eplug/mgf-4080220.conf" \
+  && /usr/bin/grep -qx '\[NOTPROTON_MGF_FC27_PLAY_4080220\]' "$eplug/mgf-4080220.conf" && ! /usr/bin/grep -q 'NOTPROTON_MGF_FC27_PLAY' "$evdf" \
+  && [ "$(/usr/bin/grep -c '^description = .*Played on NotProton, CrossOver Preview 41303 on Rosetta (D3DMetal 4.0b3), 2026-11-2[34]$' "$eplug/mgf-4080220.conf")" = 2 ] \
+  && [ "$(/usr/bin/grep -c '^inject = 1$' "$eplug/mgf-4080220.conf")" = 1 ] && [ "$(/usr/bin/grep -c '^apps = 4080220$' "$eplug/mgf-4080220.conf")" = 2 ] \
+  && /usr/bin/grep -qx 'apps = 4080220' "$eplug/mgf-engine.conf" && /usr/bin/grep -qx 'inject = 1' "$eplug/mgf-engine.conf" \
+  && cmp -s "$eplug/mgf-d3dmetal-hookable.dylib" "$FIX/mgf-d3dmetal-hookable.dylib" && cmp -s "$eplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
   && [ ! -e "$ec/game/EAAntiCheat.GameServiceLauncher.exe" ] \
   && case "$(cat "$W/fc27.install.log")" in *'AT YOUR OWN RISK'*'Offline only'*) true ;; *) false ;; esac \
-  && say ok "fc 27 in NotProton: the folder the player chose (the one around Live Editor's) copied without its logs, the play script, four rows that each say where they were played and the two libraries for this game, the two switches and the script in the launch options, on a runner without patch 0041, nothing in the game folder, and the warning" || say FAIL "fc 27: installed ($(e1st)): $(tail -3 "$W/fc27.install.log")"
+  && say ok "fc 27 in NotProton: the folder the player chose (the one around Live Editor's) copied without its logs, the play script, two rows that each say where they were played and the library for this game, the game in the shared engine row with its library, the two switches and the script in the launch options, on a runner without patch 0041, nothing in the game folder, and the warning" || say FAIL "fc 27: installed ($(e1st)): $(tail -3 "$W/fc27.install.log")"
 mv "$enp/plugin-host.dylib" "$enp/plugin-host.away"
 eout="$(e1 --status 2>&1)"
 [ "$(e1st)" = half ] && case "$eout" in *'update NotProton'*) true ;; *) false ;; esac \
@@ -504,9 +523,9 @@ mv "$enp/plugin-host.away" "$enp/plugin-host.dylib"
 # An install from before the activation row: its switch was never put in. It reads half, and the
 # install that brings the row switches it on, once, with the play script already in the options.
 esw="$ec/compatdata/4080220/.mgf-notproton-plugins-switched"
-/usr/bin/sed -i '' '/^NOTPROTON_MGF_FC27_PACKAGES_4080220=/d' "$esw"; sed -i '' 's/NOTPROTON_MGF_FC27_PACKAGES_4080220=1 //' "$evdf"
-[ "$(e1st)" = half ] && e1 > "$W/fc27.newrow.log" 2>&1 && [ "$(e1st)" = installed ] && eswitched NOTPROTON_MGF_FC27_LE NOTPROTON_MGF_FC27_PACKAGES \
-  && say ok "fc 27 in NotProton: over an install from before the activation row, the row is switched on once and the script stays once" || say FAIL "fc 27: new row ($(e1st)): $(tail -2 "$W/fc27.newrow.log")"
+/usr/bin/sed -i '' '/^NOTPROTON_MGF_ENGINE=/d' "$esw"; sed -i '' 's/NOTPROTON_MGF_ENGINE=1 //' "$evdf"
+[ "$(e1st)" = half ] && e1 > "$W/fc27.newrow.log" 2>&1 && [ "$(e1st)" = installed ] && eswitched NOTPROTON_MGF_FC27_LE_4080220 NOTPROTON_MGF_ENGINE \
+  && say ok "fc 27 in NotProton: over an install from before the engine row, the row is switched on once and the script stays once" || say FAIL "fc 27: new row ($(e1st)): $(tail -2 "$W/fc27.newrow.log")"
 # A new version by hand: installing again asks again. Cancel keeps the copy in use, the same
 # folder is not copied twice, and a new one is taken with the copy that was in use kept once.
 echo mine > "$estore/LiveEditor/lua/mine.lua"
@@ -540,21 +559,23 @@ case "$eout" in "waitforexitandrun|cmd.exe|/d|/c|call|Z:$(printf '%s' "$estore/f
   && say ok "fc 27's play script: with the row on, the batch file takes the command's place, and the launcher's delay is raised and its injection switched on" || say FAIL "fc 27 play: row on: $eout / $(tr -d '\n' < "$ecfg")"
 sed -i '' 's/"dll_inject_delay": 1000/"dll_inject_delay": 2500/' "$ecfg"; eplay NOTPROTON_MGF_FC27_LE_4080220=1 > /dev/null
 /usr/bin/grep -q '"dll_inject_delay": 2500,' "$ecfg" && say ok "fc 27's play script: a longer delay the player set is kept" || say FAIL "fc 27 play: lowered a delay"
-ecfg_new; eout="$(eplay NOTPROTON_MGF_FC27_LE_4080220=1 NOTPROTON_MGF_FC27_OPENS_4080220=window NOTPROTON_MGF_FC27_TRACE_4080220=on)"
-case "$eout" in *"opens=window trace=err+all,fixme-all,+seh,+timestamp,+pid log="*) true ;; *) false ;; esac && /usr/bin/grep -q '"auto_inject": false,' "$ecfg" && /usr/bin/grep -q '"dll_inject_delay": 100,' "$ecfg" \
-  && say ok "fc 27's play script: the launcher's window is asked for with the settings as they are, and the notes row turns Wine's exception notes on" || say FAIL "fc 27 play: window: $eout"
+ecfg_new; eout="$(eplay NOTPROTON_MGF_FC27_LE_4080220=1 NOTPROTON_MGF_FC27_PLAY_4080220=window)"
+case "$eout" in *"opens=window trace= log="*) true ;; *) false ;; esac && /usr/bin/grep -q '"auto_inject": false,' "$ecfg" && /usr/bin/grep -q '"dll_inject_delay": 100,' "$ecfg" \
+  && ecfg_new && eout="$(eplay NOTPROTON_MGF_FC27_LE_4080220=1 NOTPROTON_MGF_FC27_PLAY_4080220=trace)" \
+  && case "$eout" in *"opens= trace=err+all,fixme-all,+seh,+timestamp,+pid log="*) true ;; *) false ;; esac && /usr/bin/grep -q '"auto_inject": true,' "$ecfg" \
+  && say ok "fc 27's play script: Play opens' window asks for the launcher's window with the settings as they are, and its notes choice starts the game with Wine's exception notes on" || say FAIL "fc 27 play: window and notes: $eout"
 eout="$(env -i HOME="$ehome" PATH=/usr/bin:/bin STEAM_COMPAT_APP_ID=4080220 NOTPROTON_MGF_FC27_LE_4080220=1 "$estore/fc27-le-play.sh" "$ec/tool" waitforexitandrun /some/installer.exe)"
 case "$eout" in "waitforexitandrun|/some/installer.exe|"*) true ;; *) false ;; esac && say ok "fc 27's play script: anything else Steam runs through the tool goes through unchanged" || say FAIL "fc 27 play: other: $eout"
 # Groups, where NotProton knows them: both rows carry the game's own, and the library still goes in.
 e1 --restore > /dev/null 2>&1
 MGVF_NOTPROTON_GROUPS=1 e1 > /dev/null 2>&1
-[ "$(MGVF_NOTPROTON_GROUPS=1 e1st)" = installed ] && [ "$(/usr/bin/grep -c '^group = MacGameFix · FC 27$' "$eplug/mgf-4080220.conf")" = 4 ] && cmp -s "$eplug/mgf-d3dmetal-hookable.dylib" "$FIX/mgf-d3dmetal-hookable.dylib" && cmp -s "$eplug/mgf-package-family.dylib" "$FIX/mgf-package-family.dylib" \
+[ "$(MGVF_NOTPROTON_GROUPS=1 e1st)" = installed ] && [ "$(/usr/bin/grep -c '^group = MacGameFix · FC 27$' "$eplug/mgf-4080220.conf")" = 2 ] && /usr/bin/grep -qx 'group = MacGameFix' "$eplug/mgf-engine.conf" && cmp -s "$eplug/mgf-d3dmetal-hookable.dylib" "$FIX/mgf-d3dmetal-hookable.dylib" && cmp -s "$eplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
   && say ok "fc 27 in NotProton: where NotProton knows groups the rows carry the game's own, and the library is found all the same" || say FAIL "fc 27: groups ($(MGVF_NOTPROTON_GROUPS=1 e1st))"
 # Removing: the options and NotProton as they were, the player's Live Editor kept, and the game's
 # own EA AntiCheat launcher back where a cut-short session left the stand-in.
 echo standin > "$ec/game/EAAntiCheat.GameServiceLauncher.exe"; echo theirs > "$ec/game/EAAntiCheat.GameServiceLauncher.exe.backup"
 MGVF_NOTPROTON_GROUPS=1 e1 --restore > "$W/fc27.restore.log" 2>&1
-[ "$(e1st)" = absent ] && [ "$(cat "$evdf")" = "$evdf0" ] && [ ! -e "$eplug/mgf-4080220.conf" ] && [ ! -e "$eplug/mgf-d3dmetal-hookable.dylib" ] && [ ! -e "$eplug/mgf-package-family.dylib" ] \
+[ "$(e1st)" = absent ] && [ "$(cat "$evdf")" = "$evdf0" ] && [ ! -e "$eplug/mgf-4080220.conf" ] && [ ! -e "$eplug/mgf-d3dmetal-hookable.dylib" ] && [ ! -e "$eplug/mgf-engine.conf" ] && [ ! -e "$eplug/mgf-engine.dylib" ] \
   && [ ! -e "$estore/fc27-le-play.sh" ] && [ "$(cat "$estore/LiveEditor/FCLiveEditor.DLL")" = two ] \
   && [ "$(cat "$ec/game/EAAntiCheat.GameServiceLauncher.exe")" = theirs ] && [ ! -e "$ec/game/EAAntiCheat.GameServiceLauncher.exe.backup" ] \
   && say ok "fc 27 in NotProton: removed, the launch options and NotProton are as before, the player's Live Editor stays, and the game's own EA AntiCheat launcher is back" || say FAIL "fc 27: restore ($(e1st)): $(tail -3 "$W/fc27.restore.log")"

@@ -24,9 +24,10 @@
 #
 #   1. The game imports FindPackagesByPackageFamily from kernel32, which Wine 11.21 lacks:
 #      "There is a problem with your game's setup. Please reinstall your game."
-#      mgf-package-family.dylib, which NotProton loads into this game alone through a row,
-#      adds it in memory to the kernel32.dll Wine maps in the game's process
-#      (package-family/mgf-package-family.c). It does what engine patch 0041 does in the
+#      MacGameFix's engine library (engine/mgf-engine.c), which NotProton loads through the
+#      shared "Engine fixes" row and which arms its fix for this game alone, adds it in memory
+#      to the kernel32.dll Wine maps in the game's process
+#      (engine/package-family/mgf-package-family.c). It does what engine patch 0041 does in the
 #      runner's kernelbase.dll and kernel32.dll for every game, so the runner need not carry
 #      0041, and a runner that does is left as it is.
 #   2. EA AntiCheat's launcher ends after 10 s with 0xE111000B and starts no game. Live
@@ -58,14 +59,16 @@
 #   - fc27-le-play.sh and fc27-le-run.cmd beside it.
 #   - In Steam's launch options for the game: the play script before %command%
 #     (steam-launch-options.pl; Steam must be closed).
-#   - In NotProton's plugins folder: mgf-d3dmetal-hookable.dylib, mgf-package-family.dylib and
-#     four rows for this game alone (notproton-plugins.sh, np-plugin-fc27-live-editor.conf),
-#     shown on its Compatibility page: "Start with Live Editor", switched on by the first
-#     install, which is also what has NotProton load the first library; "Activation fix", which
-#     loads the second, switched on by the install that first brings it; "Play opens", the game
-#     or Live Editor's launcher window; and "Exception notes for a report". Whatever a player
-#     may set is a row: nothing is typed into the launch options by hand. The libraries need
-#     NotProton's plugin host, which NotProton's Update installs; the install refuses without it.
+#   - In NotProton's plugins folder: mgf-d3dmetal-hookable.dylib and two rows for this game
+#     alone (notproton-plugins.sh, np-plugin-fc27-live-editor.conf), shown on its Compatibility
+#     page: "Start with Live Editor", switched on by the first install, which is also what has
+#     NotProton load the library, and "Play opens", the game, the game with Wine's exception
+#     notes for a report, or Live Editor's launcher window; and this game added to the shared
+#     "Engine fixes" row (np-plugin-engine.conf) with its library, mgf-engine.dylib, the row
+#     switched on for this game by the install that first brings it. Whatever a player may set
+#     is a row: nothing is typed into the launch options by hand. The libraries need NotProton's
+#     plugin host, which NotProton's Update installs; the install refuses without it. An earlier
+#     install's mgf-package-family.dylib is taken out.
 # Nothing is written into the prefix. Live Editor's launcher keeps its own settings there
 # (C:\FC 27 Live Editor), and the play script raises one of them, the injection delay.
 #
@@ -119,7 +122,8 @@ RUN="$HERE/fc27-le-run.cmd"
 OPTIONS="$HERE/steam-launch-options.pl"
 # The library np-plugin-fc27-live-editor.conf names; notproton-plugins.sh copies it.
 HOOKS="$HERE/mgf-d3dmetal-hookable.dylib"
-PACKAGES="$HERE/mgf-package-family.dylib"
+ENGINE="$HERE/mgf-engine.dylib"
+ENGINE_ROW="$HERE/np-plugin-engine.conf"
 STORE="${MGVF_FC27_STORE:-$HOME/Library/Application Support/MacGameFix/fc27-live-editor}"
 EDITOR="$STORE/LiveEditor"
 STEAM="${MGVF_STEAM_ROOT:-$HOME/Library/Application Support/Steam}"
@@ -168,10 +172,11 @@ if np_knows_groups; then
   /usr/bin/awk -v group="$ROWS_GROUP" '{ print } /^label[[:space:]]*=/ { print "group = " group }' "$ROWS" > "$ROWS_TMP/np-plugin-fc27-live-editor.conf"
   # The library is looked for beside the template.
   ln -s "$HOOKS" "$ROWS_TMP/mgf-d3dmetal-hookable.dylib"
-  ln -s "$PACKAGES" "$ROWS_TMP/mgf-package-family.dylib"
   ROWS="$ROWS_TMP/np-plugin-fc27-live-editor.conf"
 fi
 np_plugins_setup "$APPID" "$PFX" "$ROWS"
+NP_ENGINE_TEMPLATE="$ENGINE_ROW"; NP_ENGINE_LIBRARY="$ENGINE"
+if np_knows_groups; then NP_ENGINE_GROUP="MacGameFix"; fi
 NP_WRAPPER="$STORE/fc27-le-play.sh"
 # NotProton loads a row's library through its plugin host; without it the rows are not offered.
 host_ok() { [ -f "$NP_SUPPORT/plugin-host.dylib" ]; }
@@ -290,7 +295,7 @@ right_runner || refuse "the game runs on NotProton's runner for CrossOver $BUILD
 np_plugins_ready || refuse "NotProton's support folder ($NP_SUPPORT) is not there: open NotProton once, then install again."
 host_ok || refuse "NotProton's plugin host ($NP_SUPPORT/plugin-host.dylib) is not there, and the rows that load the libraries need it: update NotProton, then install again."
 [ -f "$HOOKS" ] || refuse "mgf-d3dmetal-hookable.dylib is not beside the installer."
-[ -f "$PACKAGES" ] || refuse "mgf-package-family.dylib is not beside the installer."
+[ -f "$ENGINE" ] && [ -f "$ENGINE_ROW" ] || refuse "mgf-engine.dylib and np-plugin-engine.conf are not beside the installer."
 stopped || exit 1
 # Everything that can refuse without the player's folder does so before the player is asked,
 # and everything that can refuse at all before anything is written.

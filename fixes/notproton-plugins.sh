@@ -3,6 +3,8 @@
 #   . "$HERE/notproton-plugins.sh"
 #   np_plugins_setup <appid> <prefix> <template>...
 #   NP_WRAPPER=<path>     the installer's play script, when one stands before %command%
+#   NP_ENGINE_TEMPLATE=<np-plugin-engine.conf> NP_ENGINE_LIBRARY=<mgf-engine.dylib>
+#   NP_ENGINE_GROUP=<group, or empty>     the game uses the shared engine row (below)
 #   np_plugins_ready      true when NotProton keeps this prefix and its support folder is there
 #   np_plugins_preflight  what an install would refuse, before anything changes
 #   np_plugins_install    the game's descriptor, the libraries, and each row on the first time
@@ -14,13 +16,23 @@
 # Lines that start "# library = " name the files the record needs from beside the installer;
 # they are copied into NotProton's plugins folder, which is where the record's "requires"
 # points. "# earlier = <sha256>..." names builds of a library from before it was ours to
-# ship, which are replaced like our own.
+# ship, which are replaced like our own. "# retired = <file> <sha256>..." names a library an
+# earlier version of the fix put in the folder and this one no longer uses: an install takes it
+# out when it is one of those builds and no descriptor names it.
 #
 # ONE DESCRIPTOR PER GAME. Every record goes into plugins/mgf-<appid>.conf with the app id
 # added to its id (NotProton refuses one id in two files) and, from NotProton 1.2.7, an
 # "apps = <appid>" line, so the row shows on that game's page only. Removing one game's fix
 # removes that file and nothing of another game's; a library goes once no descriptor in the
 # folder names it. NotProton's own Delete does the same from its side.
+#
+# THE SHARED ENGINE ROW. NotProton reads at most 32 records for every game together, so the
+# engine fixes (engine/mgf-engine.c) share one row, NOTPROTON_MGF_ENGINE, in its own file,
+# plugins/mgf-engine.conf, with the one library that arms each game's fixes in that game alone.
+# A game that uses it has "# engine fixes: on" in its descriptor; the row's "apps" are those
+# games, written again from the descriptors whenever one comes or goes, and the row and its
+# library go with the last of them. Its switch is one of the game's own: the same variable in
+# each game's launch options, put in and taken out with the game's other switches.
 #
 # A ROW IS ON ONLY WHILE THE GAME'S LAUNCH OPTIONS CARRY <id>=<on>: NotProton has no other
 # switch. The first install puts every toggle row's variable in, with steam-launch-options.pl
@@ -44,6 +56,13 @@ NP_PLUGINS="$NP_SUPPORT/plugins"
 NP_REQUIRES_BASE="Library/Application Support/notproton/plugins"
 # NotProton reads at most this many records from the folder (NP_CONF_RECORDS_MAX).
 NP_RECORDS_MAX=32
+
+NP_ENGINE_ID=NOTPROTON_MGF_ENGINE
+NP_ENGINE_CONF="$NP_PLUGINS/mgf-engine.conf"
+NP_ENGINE_MARK="# engine fixes: on"
+NP_ENGINE_TEMPLATE=""
+NP_ENGINE_LIBRARY=""
+NP_ENGINE_GROUP=""
 
 np_plugins_setup() {
   NP_APPID="$1"; NP_PFX="${2%/}"; shift 2
@@ -91,6 +110,7 @@ np_expected() {
   local t apps=0
   np_knows_apps && apps=1
   printf '# MacGameFix writes this file for app %s and removes it with the fix; edits do not last.\n' "$NP_APPID"
+  [ -z "$NP_ENGINE_TEMPLATE" ] || printf '%s\n' "$NP_ENGINE_MARK"
   for t in "${NP_TEMPLATES[@]}"; do
     /usr/bin/awk -v app="$NP_APPID" -v apps="$apps" '
       /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
@@ -102,7 +122,8 @@ np_expected() {
   done
 }
 
-# Each record's id and the value that switches it on: toggles only (no "type").
+# Each record's id and the value that switches it on: toggles only (no "type"), and the shared
+# engine row's when the game uses it.
 np_switches() {
   np_expected | /usr/bin/awk '
     /^\[/ { if (id != "" && !typed) print id "=" (on == "" ? "1" : on)
@@ -110,6 +131,42 @@ np_switches() {
     /^on[[:space:]]*=/ { on = $0; sub(/^on[[:space:]]*=[[:space:]]*/, "", on) }
     /^type[[:space:]]*=/ { typed = 1 }
     END { if (id != "" && !typed) print id "=" (on == "" ? "1" : on) }'
+  [ -z "$NP_ENGINE_TEMPLATE" ] || printf '%s=1\n' "$NP_ENGINE_ID"
+}
+
+# The apps whose descriptors use the engine row, this game's included when its descriptor is in.
+np_engine_apps() {
+  local f a
+  for f in "$NP_PLUGINS"/mgf-*.conf; do
+    [ -f "$f" ] && [ "$f" != "$NP_ENGINE_CONF" ] || continue
+    /usr/bin/grep -qxF "$NP_ENGINE_MARK" "$f" || continue
+    a="$(basename "$f" .conf)"; a="${a#mgf-}"
+    case "$a" in *[!0-9]*|"") continue ;; esac
+    printf '%s\n' "$a"
+  done | sort -n
+}
+
+# The engine row's file for the apps given on stdin; nothing when there are none.
+np_engine_expected() {
+  local apps tpl
+  apps="$(cat)"
+  [ -n "$apps" ] || return 0
+  tpl="${NP_ENGINE_TEMPLATE:-$(dirname "${BASH_SOURCE[0]}")/np-plugin-engine.conf}"
+  printf '# MacGameFix writes this file for the games whose fix uses its engine fixes, and removes it with the last of them; edits do not last.\n'
+  /usr/bin/awk -v group="$NP_ENGINE_GROUP" '
+    /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+    { print }
+    /^label[[:space:]]*=/ && group != "" { print "group = " group }' "$tpl"
+  if np_knows_apps; then printf '%s\n' "$apps" | /usr/bin/sed 's/^/apps = /'; fi
+}
+
+# The engine row's file written again from the descriptors, or removed with the last of them.
+np_engine_write() {
+  local text
+  text="$(np_engine_apps | np_engine_expected)"
+  if [ -z "$text" ]; then /bin/rm -f "$NP_ENGINE_CONF"; return 0; fi
+  [ "$(cat "$NP_ENGINE_CONF" 2>/dev/null)" = "$text" ] && return 0
+  printf '%s\n' "$text" > "$NP_ENGINE_CONF.mgf-new" && mv -f "$NP_ENGINE_CONF.mgf-new" "$NP_ENGINE_CONF"
 }
 
 # The switches no install has put in yet: every one the first time, then a row the fix gained.
@@ -130,6 +187,7 @@ np_libraries() {
   for t in "${NP_TEMPLATES[@]}"; do
     while IFS= read -r l; do [ -n "$l" ] && printf '%s/%s\n' "$(dirname "$t")" "$l"; done < <(np_meta "$t" library)
   done
+  [ -z "$NP_ENGINE_LIBRARY" ] || printf '%s\n' "$NP_ENGINE_LIBRARY"
 }
 
 # A library in the folder is ours: the one we ship, or an earlier build a template names.
@@ -147,7 +205,7 @@ np_lib_ours() {
 np_other_records() {
   local f
   for f in "$NP_PLUGINS"/*.conf; do
-    [ -f "$f" ] && [ "$f" != "$NP_CONF" ] || continue
+    [ -f "$f" ] && [ "$f" != "$NP_CONF" ] && [ "$f" != "$NP_ENGINE_CONF" ] || continue
     /usr/bin/grep -h '^[[:space:]]*\[' "$f" | /usr/bin/sed 's/^[[:space:]]*\[\(.*\)\][[:space:]]*$/\1/'
   done
 }
@@ -173,12 +231,13 @@ np_plugins_preflight() {
     fi
   done < <(np_libraries)
   taken="$(np_other_records)"
-  for id in $(np_ids); do
+  for id in $(np_ids) ${NP_ENGINE_TEMPLATE:+$NP_ENGINE_ID}; do
     if printf '%s\n' "$taken" | /usr/bin/grep -qx "$id"; then
       echo "error: another plugin file already has $id; nothing was changed." >&2; return 1
     fi
   done
   mine="$(np_ids | /usr/bin/grep -c .)"
+  [ -z "$NP_ENGINE_TEMPLATE" ] || [ -f "$NP_ENGINE_CONF" ] || mine=$((mine + 1))
   if [ $(( $(printf '%s\n' "$taken" | /usr/bin/grep -c .) + mine )) -gt "$NP_RECORDS_MAX" ]; then
     echo "error: NotProton reads at most $NP_RECORDS_MAX plugin rows, and with this game's there would be more." >&2
     echo "       Remove a plugin you do not use in NotProton's Plugins page; nothing was changed." >&2
@@ -214,6 +273,9 @@ np_plugins_install() {
   done < <(np_libraries)
   np_expected > "$NP_CONF.mgf-new" && mv -f "$NP_CONF.mgf-new" "$NP_CONF"
   echo "  NotProton: $(np_ids | /usr/bin/grep -c .) row(s) in plugins/mgf-$NP_APPID.conf$(np_knows_apps && echo ", shown on this game's page only")"
+  np_engine_write || return 1
+  [ -z "$NP_ENGINE_TEMPLATE" ] || echo "  NotProton: the shared engine row in plugins/mgf-engine.conf, for $(np_engine_apps | /usr/bin/grep -c .) game(s)"
+  np_retire
   local first=1
   [ ! -f "$NP_SWITCHED" ] || first=0
   case "$NP_SWITCH" in
@@ -238,6 +300,9 @@ np_plugins_status() {
     echo absent; return
   fi
   [ "$(cat "$NP_CONF")" = "$(np_expected)" ] || { echo "Why: plugins/mgf-$NP_APPID.conf is not what this fix writes" >&2; echo half; return; }
+  if [ -n "$NP_ENGINE_TEMPLATE" ] && [ "$(cat "$NP_ENGINE_CONF" 2>/dev/null)" != "$(np_engine_apps | np_engine_expected)" ]; then
+    echo "Why: plugins/mgf-engine.conf, the shared engine row, is missing or not what the fixes write" >&2; echo half; return
+  fi
   while IFS= read -r l; do
     cmp -s "$l" "$NP_PLUGINS/$(basename "$l")" || { echo "Why: $(basename "$l") in NotProton's plugins folder is missing or another build" >&2; echo half; return; }
   done < <(np_libraries)
@@ -256,8 +321,25 @@ np_plugins_restore() {
   local l
   if [ -f "$NP_JOURNAL" ]; then np_options restore $(np_switches) >/dev/null || return 1; fi
   /bin/rm -f "$NP_CONF" "$NP_SWITCHED"
+  # The engine row without this game, or gone with the last one.
+  [ -z "$NP_ENGINE_TEMPLATE" ] || np_engine_write || return 1
   while IFS= read -r l; do
     np_lib_named "$l" || ! np_lib_ours "$l" || /bin/rm -f "$NP_PLUGINS/$(basename "$l")"
   done < <(np_libraries)
   return 0
+}
+
+# Libraries an earlier version of the fix put in the folder and this one no longer uses.
+np_retire() {
+  local t line file shas live
+  for t in "${NP_TEMPLATES[@]}"; do
+    while IFS= read -r line; do
+      file="${line%% *}"; shas=" ${line#* } "
+      case "$file" in ""|*/*) continue ;; esac
+      live="$NP_PLUGINS/$file"
+      [ -f "$live" ] || continue
+      np_lib_named "$live" && continue
+      case "$shas" in *" $(np_sha "$live") "*) /bin/rm -f "$live"; echo "  NotProton: $file, which this fix no longer uses, taken out" ;; esac
+    done < <(np_meta "$t" retired)
+  done
 }

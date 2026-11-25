@@ -26,8 +26,9 @@
 #
 #   1. Wine 11.21 gave the game addresses from 0x7ff000000000 up once its 6.5 GB image had
 #      filled the low reserved area, and the game crashed some 30 s after start on a pointer
-#      with bit 47 set. mgf-low-allocations.dylib, which NotProton loads into this game alone
-#      through a row, keeps such allocations low (low-allocations/mgf-low-allocations.c). It
+#      with bit 47 set. MacGameFix's engine library (engine/mgf-engine.c), which NotProton
+#      loads through the shared "Engine fixes" row and which arms its fix for this game alone,
+#      keeps such allocations low (engine/low-allocations/mgf-low-allocations.c). It
 #      does from outside ntdll.so what engine patch 0038 does inside it for every game, so the
 #      runner need not carry 0038, and NotProton's own ntdll.so does as well as ours.
 #   2. Swofty's mod loader is a version.dll beside the game; Wine loads its own unless
@@ -61,15 +62,16 @@
 #     three; which of the last two Swofty cannot do without is not known.
 #   - In Steam's launch options for the game: the play script before %command%
 #     (steam-launch-options.pl; Steam must be closed).
-#   - In NotProton's plugins folder: mgf-low-allocations.dylib, and four rows for this game
-#     alone (notproton-plugins.sh, np-plugin-f125-swofty.conf), shown on its Compatibility page:
-#     "Start through Swofty Launcher", switched on by the first install; "Keep the game's memory
-#     low", which loads the library, switched on by the install that first brings it; "Play
-#     opens", the game or Swofty Launcher's window; and "Profile", Swofty's active profile or
-#     vanilla. A NotProton row cannot change the program Steam starts, so the first row is a
-#     switch the play script reads. Whatever a player may set is a row: nothing is typed into
-#     the launch options by hand. The library needs NotProton's plugin host, which NotProton's
-#     Update installs; the install refuses without it.
+#   - In NotProton's plugins folder: two rows for this game alone (notproton-plugins.sh,
+#     np-plugin-f125-swofty.conf), shown on its Compatibility page: "Start through Swofty
+#     Launcher", switched on by the first install, and "Play opens", the game with Swofty's
+#     active profile, the game without mods, or Swofty Launcher's window; and this game added to
+#     the shared "Engine fixes" row (np-plugin-engine.conf) with its library, mgf-engine.dylib,
+#     the row switched on for this game by the install that first brings it. A NotProton row
+#     cannot change the program Steam starts, so the first row is a switch the play script
+#     reads. Whatever a player may set is a row: nothing is typed into the launch options by
+#     hand. The library needs NotProton's plugin host, which NotProton's Update installs; the
+#     install refuses without it. An earlier install's mgf-low-allocations.dylib is taken out.
 # .mgf-f125-swofty in the prefix lists which of these this script added, and --restore
 # removes those. The launcher, its data in the prefix and its saves stay.
 #
@@ -116,7 +118,8 @@ APPID=3059520
 PLAY="$HERE/f125-swofty-play.sh"
 RUN="$HERE/f125-swofty-run.cmd"
 OPTIONS="$HERE/steam-launch-options.pl"
-LOWMEM="$HERE/mgf-low-allocations.dylib"
+ENGINE="$HERE/mgf-engine.dylib"
+ENGINE_ROW="$HERE/np-plugin-engine.conf"
 STORE="${MGVF_SWOFTY_STORE:-$HOME/Library/Application Support/MacGameFix/swofty}"
 LAUNCHER="$STORE/launcher"
 STEAM="${MGVF_STEAM_ROOT:-$HOME/Library/Application Support/Steam}"
@@ -167,11 +170,11 @@ if np_knows_groups; then
   ROWS_TMP="$(mktemp -d "${TMPDIR:-/tmp}/mgf-f125-rows.XXXXXX")"
   trap 'rm -rf "$ROWS_TMP"' EXIT
   /usr/bin/awk -v group="$ROWS_GROUP" '{ print } /^label[[:space:]]*=/ { print "group = " group }' "$ROWS" > "$ROWS_TMP/np-plugin-f125-swofty.conf"
-  # The library is looked for beside the template.
-  ln -s "$LOWMEM" "$ROWS_TMP/mgf-low-allocations.dylib"
   ROWS="$ROWS_TMP/np-plugin-f125-swofty.conf"
 fi
 np_plugins_setup "$APPID" "$PFX" "$ROWS"
+NP_ENGINE_TEMPLATE="$ENGINE_ROW"; NP_ENGINE_LIBRARY="$ENGINE"
+if np_knows_groups; then NP_ENGINE_GROUP="MacGameFix"; fi
 NP_WRAPPER="$STORE/f125-swofty-play.sh"
 # NotProton loads a row's library through its plugin host; without it the row is not offered.
 host_ok() { [ -f "$NP_SUPPORT/plugin-host.dylib" ]; }
@@ -361,7 +364,7 @@ right_runner || refuse "the game runs on NotProton's runner for CrossOver $BUILD
 ACCOUNT="$(steam_account)" || refuse "cannot tell which account Steam is signed in with ($STEAM_LOGIN): open Steam, sign in, quit it, and install again."
 np_plugins_ready || refuse "NotProton's support folder ($NP_SUPPORT) is not there: open NotProton once, then install again."
 host_ok || refuse "NotProton's plugin host ($NP_SUPPORT/plugin-host.dylib) is not there, and the row that keeps the game's memory low needs it: update NotProton, then install again."
-[ -f "$LOWMEM" ] || refuse "mgf-low-allocations.dylib is not beside the installer."
+[ -f "$ENGINE" ] && [ -f "$ENGINE_ROW" ] || refuse "mgf-engine.dylib and np-plugin-engine.conf are not beside the installer."
 stopped || exit 1
 # Everything that can refuse does so before anything is written.
 mkdir -p "$STORE"
