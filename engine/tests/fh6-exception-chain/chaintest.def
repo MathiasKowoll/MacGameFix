@@ -1,0 +1,11 @@
+LIBRARY chaintest.dll
+EXPORTS
+__wine_software_exception_chain_stats DATA
+__wine_software_exception_chain_diagnostics DATA
+__wine_software_exception_bridge_census DATA
+__wine_software_exception_chain_configuration DATA
+__wine_software_exception_chain_context_valid
+__wine_exception_burst_control DATA
+__wine_exception_burst_records DATA
+__wine_bridge_refusal_control DATA
+__wine_bridge_refusal_records DATA

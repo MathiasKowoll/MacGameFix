@@ -132,7 +132,8 @@ for dll in "$HERE"/*.dll; do
     out="$TMP/$name.d"; mkdir -p "$out"
     src="$HERE/fh5-d3d12"
     profile=""
-    [ "$name" != d3d12-fh6.dll ] || { profile="-DMGF_FH6_PROFILE=1"; src="$HERE/fh6-d3d12"; }
+    # FH6's profile carries the exception chain, which calls ntdll's own exports (build-fh6-d3d12.sh).
+    [ "$name" != d3d12-fh6.dll ] || { profile="-DMGF_FH6_PROFILE=1 -lntdll"; src="$HERE/fh6-d3d12"; }
     if ! "$CC" -shared -O2 -Wall -static-libgcc $profile -o "$out/d3d12.dll" \
           "$src/d3d12.c" "$src/dxil_shadingrate.c" "$src/inspect.c" "$src/d3d12.def" \
           2>"$out/err"; then

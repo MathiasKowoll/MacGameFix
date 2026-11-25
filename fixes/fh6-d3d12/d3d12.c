@@ -59,6 +59,9 @@ int hb_debug;
 #include <winternl.h>
 #include "memfix.h"
 #include "fiberhook.h"
+#if MGF_FH6_PROFILE
+#include "exception_chain.h"
+#endif
 #if !MGF_FH6_PROFILE
 #include "unwindguard.h"
 #endif
@@ -1241,6 +1244,18 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved)
         // The separate fiber experiment remains opt-in and is not enabled by either shipped profile.
         { char v[8]; if (!(GetEnvironmentVariableA("HB_FH6_MEMFIX", v, sizeof v) == 1 && v[0] == '0')) memfix_install(); }
         { char v[8]; if (GetEnvironmentVariableA("HB_FH6_FIBERFIX", v, sizeof v) == 1 && v[0] == '1') fh_log(fiberhook_install(), 0, 0xF1000000u); }   // opt-in: crashes FH6 at startup on Bridgeplay winecx-11.17
+#if MGF_FH6_PROFILE
+        // The exception chain (exception_chain.h), once nothing above can make this DLL fail to load: ntdll.dll
+        // then calls into it for good, so it is pinned first.
+        {
+            HMODULE pinned; const char *why;
+            if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN | GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                                   (LPCWSTR)(void *)DllMain, &pinned)) {
+                chain_install(&why);
+                LOG("exception chain: %s", why);
+            } else LOG("exception chain: this DLL could not be pinned, not installed");
+        }
+#endif
         LOG("loaded in front of the real d3d12.dll");
     }
     if (reason == DLL_PROCESS_DETACH) { ds_finish(); inspect_finish(); }
