@@ -3,7 +3,7 @@
 // Wine fixes that used to be engine patches in the runner's ntdll.so or kernel32.dll, for every
 // game, made again from outside those files, for the games that need them. NotProton loads this
 // library into a game when the game's row is on; it looks at which game it is in and arms that
-// game's fixes alone. Another game with the row on gets nothing from it.
+// game's fixes, and the ones for every game (once-reentry), alone.
 //
 // One row for them all, rather than one for each game, because NotProton reads at most 32 rows
 // from its plugins folder, for every game together. Each game's fix (its installer) adds its app
@@ -20,6 +20,9 @@
 //   rosetta-cpu      engine patches     Phantom Blade Zero (4115450)  Rosetta's CPUID leaf 7, CLWB,
 //                    0017, 0019, 0020                     RDPID and faults as copy protection
 //                                                         expects them (no execution breakpoints)
+//   once-reentry     -                  every game the row is on for  a pthread_once a thread
+//                                       enters again from a suspend returns instead of ending the
+//                                       process (F1 25 under Swofty's offline play; once-reentry/)
 //   d3dmetal-hookable  -                EA SPORTS FC 27 (4080220)  D3DMetal's method stubs made
 //                                       hookable for FC 27 Live Editor's window
 //                                       (../d3dmetal-hookable/mgf-d3dmetal-hookable.c)
@@ -51,6 +54,7 @@ void mgf_timer_overflow_arm(const struct np_plugin_api *, const struct mach_head
 void mgf_dualstack_ipv4_arm(const struct np_plugin_api *, const struct mach_header_64 *, intptr_t);
 void mgf_rosetta_cpu_arm(const struct np_plugin_api *, const struct mach_header_64 *, intptr_t);
 void mgf_direct_syscall_arm(const struct np_plugin_api *, const struct mach_header_64 *, intptr_t);
+void mgf_once_reentry_arm(const struct np_plugin_api *, const struct mach_header_64 *, intptr_t);
 void mgf_d3dmetal_hookable_start(void);
 
 // A fix either arms through ntdll.so (arm, when the host sees it) or starts by itself (start).
@@ -66,6 +70,7 @@ static const struct fix {
     {"dualstack-ipv4", mgf_dualstack_ipv4_arm, NULL, 2483190},
     {"rosetta-cpu", mgf_rosetta_cpu_arm, NULL, 4115450},
     {"direct-syscall", mgf_direct_syscall_arm, NULL, 2483190},
+    {"once-reentry", mgf_once_reentry_arm, NULL, 0},  // every game
     {"d3dmetal-hookable", NULL, mgf_d3dmetal_hookable_start, 4080220},
 };
 #define COUNT (sizeof(FIXES) / sizeof(FIXES[0]))
@@ -105,7 +110,7 @@ __attribute__((constructor)) static void mgf_engine_init(void) {
     const char *only = getenv("MGF_ENGINE_FIXES");
     unsigned app = this_app(), arms = 0, starts = 0;
     for (unsigned i = 0; i < COUNT; i++) {
-        wanted[i] = (only && *only) ? listed(only, FIXES[i].name) : FIXES[i].app == app;
+        wanted[i] = (only && *only) ? listed(only, FIXES[i].name) : (FIXES[i].app == 0 || FIXES[i].app == app);
         if (!wanted[i]) continue;
         if (FIXES[i].start) {
             FIXES[i].start();

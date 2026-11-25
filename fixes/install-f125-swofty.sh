@@ -31,6 +31,10 @@
 #      keeps such allocations low (engine/low-allocations/mgf-low-allocations.c). It
 #      does from outside ntdll.so what engine patch 0038 does inside it for every game, so the
 #      runner need not carry 0038, and NotProton's own ntdll.so does as well as ours.
+#      The same library keeps Wine from ending the game as it starts: Swofty's offline play
+#      changes the game's memory as it resumes it, and Wine ran that on the main thread while
+#      it was setting up D3DMetal's code regions, inside a pthread_once it then entered again;
+#      macOS ended the process (5 of 7 starts on 2026-11-25). engine/once-reentry/ says how.
 #   2. Swofty's mod loader is a version.dll beside the game; Wine loads its own unless
 #      F1_25.exe has the override version=native,builtin.
 #   3. Swofty wants Steam running and signed in: it reads ActiveProcess\pid and ActiveUser

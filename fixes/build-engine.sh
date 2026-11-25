@@ -29,8 +29,8 @@
 #     raising exceptions, while another suspends them. Without the fix a look at a thread never
 #     returns, a call comes back with its own number, or Wine ends a thread; with it, none.
 # Each runs without the library, where it has to fail (a check that passes either way tests
-# nothing), and with it, the fix named by MGF_ENGINE_FIXES. low-allocations has no check of its
-# own: it was played (see its source). d3dmetal-hookable's check (d3dmetal-hookable/check.c, an
+# nothing), and with it, the fix named by MGF_ENGINE_FIXES. low-allocations and once-reentry have
+# no check of their own: they are played (see their sources). d3dmetal-hookable's check (d3dmetal-hookable/check.c, an
 # x86_64 program under Rosetta, no Wine) runs with this library, the fix named the same way;
 # build-d3dmetal-hookable.sh runs it without, where it has to fault.
 # The runner is MGVF_CHECK_RUNNER (the 41303 runner by default); CodeWeavers' files come from
@@ -52,7 +52,7 @@ trap cleanup EXIT
   -dynamiclib -O2 -Wall -Wextra -Werror -install_name @rpath/mgf-engine.dylib -o "$WORK/mgf-engine.dylib" \
   "$SRC/mgf-engine.c" "$SRC/low-allocations/mgf-low-allocations.c" "$SRC/package-family/mgf-package-family.c" \
   "$SRC/timer-overflow/mgf-timer-overflow.c" "$SRC/dualstack-ipv4/mgf-dualstack-ipv4.c" \
-  "$SRC/rosetta-cpu/mgf-rosetta-cpu.c" "$SRC/direct-syscall/mgf-direct-syscall.c" "$SRC/mgf-signals.c" -DMGF_ENGINE "$HERE/d3dmetal-hookable/mgf-d3dmetal-hookable.c"
+  "$SRC/rosetta-cpu/mgf-rosetta-cpu.c" "$SRC/direct-syscall/mgf-direct-syscall.c" "$SRC/once-reentry/mgf-once-reentry.c" "$SRC/mgf-signals.c" -DMGF_ENGINE "$HERE/d3dmetal-hookable/mgf-d3dmetal-hookable.c"
 /usr/bin/codesign -f -s - "$WORK/mgf-engine.dylib" 2>/dev/null
 
 RUNNER="${MGVF_CHECK_RUNNER:-$HOME/Library/Application Support/notproton/runners/crossover-27.0.0.41303-fex/CrossOver}"
