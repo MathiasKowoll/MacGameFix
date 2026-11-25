@@ -293,7 +293,7 @@ npstr() { HOME="$nhome" MGVF_BOTTLE="$npfx" MGVF_NOTPROTON_VERSION=1.2.7 MGVF_ST
 npbzr > "$W/pbzrows.install.log" 2>&1 && [ "$(npstr)" = installed ] \
   && cmp -s "$nplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
   && /usr/bin/grep -q '^# shared rows: NOTPROTON_MGF_ENGINE$' "$nplug/mgf-4115450.conf" \
-  && /usr/bin/grep -q '^apps = 4115450$' "$nplug/mgf-shared.conf" \
+  && /usr/bin/grep -qxF '[NOTPROTON_MGF_ENGINE]' "$nplug/mgf-shared.conf" && ! /usr/bin/grep -q '^apps' "$nplug/mgf-shared.conf" \
   && /usr/bin/grep -qF '"NOTPROTON_MGF_ENGINE=1 NOTPROTON_ROSETTA_PIPELINE_CACHE=1 D3DM_SUPPORT_DXR=0 %command%"' "$nvdf" \
   && say ok "pbz in NotProton on 41303 Rosetta: the shared Engine fixes row, its library and its switch beside the pipeline cache's" \
   || say FAIL "pbz rows: install ($(npstr), $(tail -3 "$W/pbzrows.install.log" | tr '\n' ' '))"
@@ -360,7 +360,7 @@ f1 > "$W/f125.install.log" 2>&1 || say FAIL "f1 25: install failed: $(tail -2 "$
   && /usr/bin/grep -qx 'choice = default = default' "$fplug/mgf-shared.conf" && /usr/bin/grep -qx 'choice = race-setup = race-setup' "$fplug/mgf-shared.conf" \
   && ! /usr/bin/grep -q 'choice = bad' "$fplug/mgf-shared.conf" && [ "$(/usr/bin/grep -c '^choice = vanilla' "$fplug/mgf-shared.conf")" = 1 ] \
   && /usr/bin/grep -qx '\[NOTPROTON_MGF_MODTOOL\]' "$fplug/mgf-shared.conf" && /usr/bin/grep -qx '\[NOTPROTON_MGF_PLAY\]' "$fplug/mgf-shared.conf" \
-  && [ "$(/usr/bin/grep -c '^apps = 3059520$' "$fplug/mgf-shared.conf")" = 4 ] && [ "$(/usr/bin/grep -c '^apps' "$fplug/mgf-shared.conf")" = 4 ] \
+  && [ "$(/usr/bin/grep -c '^apps = 3059520$' "$fplug/mgf-shared.conf")" = 3 ] && [ "$(/usr/bin/grep -c '^apps' "$fplug/mgf-shared.conf")" = 3 ] \
   && [ "$(/usr/bin/grep -c '^description = .*Played on NotProton, CrossOver Preview 41303 on Rosetta (D3DMetal 4.0b3), 2026-11-24$' "$fplug/mgf-shared.conf")" = 4 ] \
   && /usr/bin/grep -qx 'requires = Library/Application Support/notproton/plugins/mgf-engine.dylib' "$fplug/mgf-shared.conf" && cmp -s "$fplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
   && ! /usr/bin/grep -q 'NOTPROTON_MGF_PLAY' "$fvdf" \
@@ -392,11 +392,12 @@ f1 > /dev/null 2>&1; echo '{}' > "$fprof/wet.json"
   && rm -f "$fprof/wet.json" && [ "$(f1st)" = half ] && f1 > /dev/null 2>&1 && ! /usr/bin/grep -q 'choice = wet' "$fplug/mgf-shared.conf" \
   && say ok "f1 25 in NotProton: a Swofty profile made or removed since reads half, and installing again offers what is there" || say FAIL "f1 25: profiles followed ($(f1st))"
 f1 --restore > /dev/null 2>&1
-# Two games on the shared engine row: its apps are both, and removing one leaves the row, its
-# library and the other game's app. A stand-in descriptor plays FC 27's part.
+# Two games on the shared rows: each row's apps are the games that use it (Engine fixes has none:
+# it shows on every game), and removing one leaves the rows, their library and the other game's
+# app. A stand-in descriptor plays FC 27's part.
 printf '# MacGameFix writes this file for app 4080220 and removes it with the fix; edits do not last.\n# shared rows: NOTPROTON_MGF_ENGINE NOTPROTON_MGF_MODTOOL NOTPROTON_MGF_PLAY\n' > "$fplug/mgf-4080220.conf"
 f1 > /dev/null 2>&1
-[ "$(f1st)" = installed ] && [ "$(/usr/bin/grep -c '^apps = ' "$fplug/mgf-shared.conf")" = 7 ] && [ "$(/usr/bin/grep -c '^apps = 4080220$' "$fplug/mgf-shared.conf")" = 3 ] \
+[ "$(f1st)" = installed ] && [ "$(/usr/bin/grep -c '^apps = ' "$fplug/mgf-shared.conf")" = 5 ] && [ "$(/usr/bin/grep -c '^apps = 4080220$' "$fplug/mgf-shared.conf")" = 2 ] \
   && f1 --restore > /dev/null 2>&1 && [ "$(f1st)" = absent ] && /usr/bin/grep -qx 'apps = 4080220' "$fplug/mgf-shared.conf" && ! /usr/bin/grep -q 'apps = 3059520' "$fplug/mgf-shared.conf" \
   && cmp -s "$fplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
   && say ok "f1 25 in NotProton: two games share the rows, and removing one leaves them and the library for the other" || say FAIL "f1 25: shared engine row ($(f1st))"
@@ -548,7 +549,7 @@ ewin > "$W/fc27.install.log" 2>&1 || say FAIL "fc 27: install failed: $(tail -2 
   && cmp -s "$estore/fc27-le-play.sh" "$FIX/fc27-le-play.sh" && [ -x "$estore/fc27-le-play.sh" ] && cmp -s "$estore/fc27-le-run.cmd" "$FIX/fc27-le-run.cmd" \
   && eswitched NOTPROTON_MGF_MODTOOL NOTPROTON_MGF_ENGINE && /usr/bin/grep -q 'MGF_FANS=max' "$evdf" \
   && [ "$(/usr/bin/grep -c '^\[' "$eplug/mgf-4080220.conf")" = 0 ] && /usr/bin/grep -qx '# shared rows: NOTPROTON_MGF_ENGINE NOTPROTON_MGF_MODTOOL NOTPROTON_MGF_PLAY' "$eplug/mgf-4080220.conf" \
-  && [ "$(/usr/bin/grep -c '^\[' "$eplug/mgf-shared.conf")" = 3 ] && [ "$(/usr/bin/grep -c '^apps = 4080220$' "$eplug/mgf-shared.conf")" = 3 ] \
+  && [ "$(/usr/bin/grep -c '^\[' "$eplug/mgf-shared.conf")" = 3 ] && [ "$(/usr/bin/grep -c '^apps = 4080220$' "$eplug/mgf-shared.conf")" = 2 ] \
   && ! /usr/bin/grep -q 'NOTPROTON_MGF_PLAY' "$evdf" && /usr/bin/grep -qx 'inject = 1' "$eplug/mgf-shared.conf" \
   && cmp -s "$eplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" && [ ! -e "$eplug/mgf-d3dmetal-hookable.dylib" ] \
   && [ ! -e "$ec/game/EAAntiCheat.GameServiceLauncher.exe" ] \
@@ -1134,7 +1135,7 @@ f6rdo --install > "$f6r/install.log" 2>&1 && [ "$(f6rst)" = installed ] \
   && [ -f "$f6rplug/mgf-2483190.conf" ] && /usr/bin/grep -q '^# shared rows: NOTPROTON_MGF_ENGINE$' "$f6rplug/mgf-2483190.conf" \
   && [ "$(/usr/bin/grep -c '^\[' "$f6rplug/mgf-shared.conf")" = 1 ] \
   && /usr/bin/grep -q '^\[NOTPROTON_MGF_ENGINE\]$' "$f6rplug/mgf-shared.conf" \
-  && /usr/bin/grep -q '^apps = 2483190$' "$f6rplug/mgf-shared.conf" \
+  && /usr/bin/grep -qxF '[NOTPROTON_MGF_ENGINE]' "$f6rplug/mgf-shared.conf" && ! /usr/bin/grep -q '^apps' "$f6rplug/mgf-shared.conf" \
   && f6ropts | /usr/bin/grep -q '^NOTPROTON_MGF_ENGINE=1 .*NOTPROTON_ROSETTA_TRAP_BOOST=1 .*PERSONAL=keep %command%$' \
   && say ok "fh6 on 41303 with the plugin host: the shared Engine fixes row, its library and its switch go in with the fix" \
   || say FAIL "fh6 rows: install ($(f6rst), $(f6ropts), $(tail -3 "$f6r/install.log" | tr '\n' ' '))"

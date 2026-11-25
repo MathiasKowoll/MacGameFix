@@ -17,7 +17,7 @@
 //   direct-syscall   engine patches     Forza Horizon 6 (2483190)  a direct system call or an
 //                    0028, 0029                        exception Rosetta delivers on top of a
 //                                                      suspend, replayed after it
-//   rosetta-cpu      engine patches     Phantom Blade Zero (4115450)  Rosetta's CPUID leaf 7, CLWB,
+//   rosetta-cpu      engine patches     every game the row is on for  Rosetta's CPUID leaf 7, CLWB,
 //                    0017, 0019, 0020                     RDPID and faults as copy protection
 //                                                         expects them (no execution breakpoints)
 //   once-reentry     -                  every game the row is on for  a pthread_once a thread
@@ -68,7 +68,7 @@ static const struct fix {
     {"package-family", mgf_package_family_arm, NULL, 4080220},
     {"timer-overflow", mgf_timer_overflow_arm, NULL, 2483190},
     {"dualstack-ipv4", mgf_dualstack_ipv4_arm, NULL, 2483190},
-    {"rosetta-cpu", mgf_rosetta_cpu_arm, NULL, 4115450},
+    {"rosetta-cpu", mgf_rosetta_cpu_arm, NULL, 0},  // every game: what engine patch 0020 did
     {"direct-syscall", mgf_direct_syscall_arm, NULL, 2483190},
     {"once-reentry", mgf_once_reentry_arm, NULL, 0},  // every game
     {"d3dmetal-hookable", NULL, mgf_d3dmetal_hookable_start, 4080220},
