@@ -15,6 +15,9 @@
 // hook put in that entry chains to what the entry held, the thunk included, so the narrow
 // argument is still extended as the dispatcher's callers expect.
 //
+// mgf_signal_first (mgf-signals.c) puts a fix's handler for a signal before Wine's: Wine
+// installs its own late, from ntdll.so, and mgf-signals.c says how they are kept in front.
+//
 // Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -71,5 +74,17 @@ static inline uintptr_t *mgf_syscall_slot(const struct np_plugin_api *api, const
     *old = *found;
     return found;
 }
+
+#include <signal.h>
+#include <sys/ucontext.h>
+
+// A fix's handler: 1 when it dealt with the signal (the thread resumes from the context as the
+// handler left it), 0 to pass it on, to the next fix's and then to Wine's.
+typedef int (*mgf_signal_fn)(int sig, siginfo_t *info, ucontext_t *context);
+
+// Puts `fn` before the handler ntdll.so will install for `sig`; called from a fix's arm, when
+// ntdll.so has loaded and before its process setup. 0 when it cannot.
+int mgf_signal_first(const struct np_plugin_api *api, const struct mach_header_64 *mh, intptr_t slide, int sig,
+                     mgf_signal_fn fn);
 
 #endif
