@@ -174,7 +174,10 @@ np_shared_choices() {
 }
 
 # The shared rows' file for the table given on stdin: each record some game uses, with those
-# games as its apps; nothing when no game uses any.
+# games as its apps; nothing when no game uses any. A record the template names on a
+# "# every game = <id>..." line gets no apps, so NotProton shows it on every game's page and the
+# player can switch it on for a game no fix knows; it is still written only while some game's
+# fix uses it.
 np_shared_expected() {
   local table apps=0
   table="$(cat)"
@@ -182,8 +185,10 @@ np_shared_expected() {
   np_knows_apps && apps=1
   printf '# MacGameFix writes this file for the games whose fixes use its rows, and removes it with the last of them; edits do not last.\n'
   NP_TABLE="$table" NP_CHOICES="$(np_shared_choices)" np_shared_records | NP_TABLE="$table" NP_CHOICES="$(np_shared_choices)" \
+    NP_EVERY="$(/usr/bin/sed -n 's/^# every game = //p' "$NP_SHARED_TEMPLATE" 2>/dev/null)" \
     /usr/bin/awk -v group="$NP_SHARED_GROUP" -v apps="$apps" -v max="$NP_CHOICES_MAX" '
     BEGIN { n = split(ENVIRON["NP_TABLE"], rows, "\n"); for (i = 1; i <= n; i++) { split(rows[i], f, " "); use[f[2]] = use[f[2]] " " f[1] }
+            n = split(ENVIRON["NP_EVERY"], f, " "); for (i = 1; i <= n; i++) every[f[i]] = 1
             n = split(ENVIRON["NP_CHOICES"], rows, "\n")
             for (i = 1; i <= n; i++) { p = index(rows[i], " = "); if (p) { k = substr(rows[i], 1, p - 1); extra[k] = extra[k] "\n" substr(rows[i], p + 3) } } }
     function flush(   i, k, a, m, last, have, c, v, e, ne) {
@@ -204,7 +209,7 @@ np_shared_expected() {
           }
         }
         delete taken
-        if (apps) { m = split(use[id], a, " "); for (k = 1; k <= m; k++) print "apps = " a[k] }
+        if (apps && !(id in every)) { m = split(use[id], a, " "); for (k = 1; k <= m; k++) print "apps = " a[k] }
       }
       id = ""; nb = 0
     }
