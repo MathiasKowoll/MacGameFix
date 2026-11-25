@@ -298,7 +298,7 @@ np_plugins_install() {
     cp -p "$l" "$live.mgf-new" && mv -f "$live.mgf-new" "$live"
   done < <(np_libraries)
   np_expected > "$NP_CONF.mgf-new" && mv -f "$NP_CONF.mgf-new" "$NP_CONF"
-  echo "  NotProton: $(np_ids | /usr/bin/grep -c .) row(s) in plugins/mgf-$NP_APPID.conf$(np_knows_apps && echo ", shown on this game's page only")"
+  [ -z "$(np_ids)" ] || echo "  NotProton: $(np_ids | /usr/bin/grep -c .) row(s) in plugins/mgf-$NP_APPID.conf$(np_knows_apps && echo ", shown on this game's page only")"
   np_shared_write || return 1
   [ -z "$NP_SHARED_USES" ] || echo "  NotProton: $(printf '%s\n' $NP_SHARED_USES | /usr/bin/grep -c .) shared row(s) used, in plugins/mgf-shared.conf: $(/usr/bin/grep -c '^\[' "$NP_SHARED_CONF") row(s) for $(np_shared_table | cut -d' ' -f1 | sort -u | /usr/bin/grep -c .) game(s)"
   np_retire

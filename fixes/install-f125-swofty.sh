@@ -438,5 +438,5 @@ echo "  *  MacGameFix's to answer for. Removing the fix gives Steam's Play back.
 echo "  ****************************************************************************"
 echo
 echo "  Steam's Play now starts F1 25 through Swofty Launcher, with Swofty's active profile."
-echo "  On the game's Compatibility page in NotProton, \"Play opens\" chooses Swofty Launcher's window instead."
+echo "  On the game's Compatibility page in NotProton, \"Play opens\" chooses the game without mods, or Swofty Launcher's window."
 echo "  The first Play shows Swofty's offline play terms in a console window and waits for your answer."

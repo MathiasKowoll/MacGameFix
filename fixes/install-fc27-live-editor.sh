@@ -335,5 +335,5 @@ echo "  ************************************************************************
 echo
 echo "  Steam's Play now starts EA SPORTS FC 27 with Live Editor; F9 shows its window in the game."
 echo "  The first Play only has Live Editor's launcher write its settings, and asks you to press Play again."
-echo "  On the game's Compatibility page in NotProton, \"Play opens\" chooses Live Editor's launcher window instead."
+echo "  On the game's Compatibility page in NotProton, \"Play opens\" chooses Live Editor's launcher window, or exception notes for a report."
 echo "  A new version of Live Editor: download and unpack it, install this again and choose the new folder."
