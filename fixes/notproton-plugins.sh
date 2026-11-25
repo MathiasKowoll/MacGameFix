@@ -5,6 +5,7 @@
 #   NP_WRAPPER=<path>     the installer's play script, when one stands before %command%
 #   NP_SHARED_TEMPLATE=<np-plugin-shared.conf> NP_SHARED_LIBRARY=<mgf-engine.dylib>
 #   NP_SHARED_USES="<id>..." NP_SHARED_GROUP=<group, or empty>   the shared rows the game uses
+#   NP_SHARED_CHOICES="<id> = <value> = <label>" lines   choices of its own for a shared row
 #   np_plugins_ready      true when NotProton keeps this prefix and its support folder is there
 #   np_plugins_preflight  what an install would refuse, before anything changes
 #   np_plugins_install    the game's descriptor, the libraries, and each row on the first time
@@ -35,7 +36,11 @@
 # rows load (mgf-engine.dylib, which arms each game's own fixes in that game alone) goes when no
 # record names it. A shared toggle's switch is one of each game's own: the same variable in the
 # game's launch options, put in and taken out with the game's other switches. A shared choice's
-# value is the game's too, as NotProton keeps every row's value per game.
+# value is the game's too, as NotProton keeps every row's value per game. A game can add choices
+# of its own to a shared choice row, such as its mod tool's profiles: its descriptor keeps them as
+# "# shared choice: <id> = <value> = <label>", and the row offers every game's, its own first, up
+# to NotProton's 16. The descriptor holds what the game has now, so a change reads as half and
+# the next install writes the row again.
 #
 # A ROW IS ON ONLY WHILE THE GAME'S LAUNCH OPTIONS CARRY <id>=<on>: NotProton has no other
 # switch. The first install puts every toggle row's variable in, with steam-launch-options.pl
@@ -66,6 +71,8 @@ NP_SHARED_TEMPLATE=""
 NP_SHARED_LIBRARY=""
 NP_SHARED_USES=""
 NP_SHARED_GROUP=""
+NP_SHARED_CHOICES=""
+NP_CHOICES_MAX=16
 
 np_plugins_setup() {
   NP_APPID="$1"; NP_PFX="${2%/}"; shift 2
@@ -114,6 +121,7 @@ np_expected() {
   np_knows_apps && apps=1
   printf '# MacGameFix writes this file for app %s and removes it with the fix; edits do not last.\n' "$NP_APPID"
   [ -z "$NP_SHARED_USES" ] || printf '%s %s\n' "$NP_SHARED_MARK" "$NP_SHARED_USES"
+  [ -z "$NP_SHARED_CHOICES" ] || printf '%s\n' "$NP_SHARED_CHOICES" | /usr/bin/grep . | /usr/bin/sed 's/^/# shared choice: /'
   for t in "${NP_TEMPLATES[@]}"; do
     /usr/bin/awk -v app="$NP_APPID" -v apps="$apps" '
       /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
@@ -156,6 +164,15 @@ np_shared_table() {
   done | sort -n -k1,1 -s
 }
 
+# "<id> = <value> = <label>" for the choices the descriptors in the folder add, each once.
+np_shared_choices() {
+  local f
+  for f in "$NP_PLUGINS"/mgf-*.conf; do
+    [ -f "$f" ] && [ "$f" != "$NP_SHARED_CONF" ] || continue
+    /usr/bin/sed -n 's/^# shared choice: //p' "$f"
+  done | /usr/bin/awk -F' = ' '!seen[$1 " = " $2]++'
+}
+
 # The shared rows' file for the table given on stdin: each record some game uses, with those
 # games as its apps; nothing when no game uses any.
 np_shared_expected() {
@@ -164,11 +181,29 @@ np_shared_expected() {
   [ -n "$table" ] || return 0
   np_knows_apps && apps=1
   printf '# MacGameFix writes this file for the games whose fixes use its rows, and removes it with the last of them; edits do not last.\n'
-  NP_TABLE="$table" np_shared_records | NP_TABLE="$table" /usr/bin/awk -v group="$NP_SHARED_GROUP" -v apps="$apps" '
-    BEGIN { n = split(ENVIRON["NP_TABLE"], rows, "\n"); for (i = 1; i <= n; i++) { split(rows[i], f, " "); use[f[2]] = use[f[2]] " " f[1] } }
-    function flush(   i, k, a, m) {
+  NP_TABLE="$table" NP_CHOICES="$(np_shared_choices)" np_shared_records | NP_TABLE="$table" NP_CHOICES="$(np_shared_choices)" \
+    /usr/bin/awk -v group="$NP_SHARED_GROUP" -v apps="$apps" -v max="$NP_CHOICES_MAX" '
+    BEGIN { n = split(ENVIRON["NP_TABLE"], rows, "\n"); for (i = 1; i <= n; i++) { split(rows[i], f, " "); use[f[2]] = use[f[2]] " " f[1] }
+            n = split(ENVIRON["NP_CHOICES"], rows, "\n")
+            for (i = 1; i <= n; i++) { p = index(rows[i], " = "); if (p) { k = substr(rows[i], 1, p - 1); extra[k] = extra[k] "\n" substr(rows[i], p + 3) } } }
+    function flush(   i, k, a, m, last, have, c, v, e, ne) {
       if (id != "" && (id in use)) {
-        for (i = 1; i <= nb; i++) { print buf[i]; if (buf[i] ~ /^label[[:space:]]*=/ && group != "") print "group = " group }
+        last = 0; have = 0
+        for (i = 1; i <= nb; i++) if (buf[i] ~ /^choice[[:space:]]*=/) { last = i; have++; v = buf[i]; sub(/^choice[[:space:]]*=[[:space:]]*/, "", v); sub(/[[:space:]]*=.*/, "", v); taken[v] = 1 }
+        for (i = 1; i <= nb; i++) {
+          print buf[i]
+          if (buf[i] ~ /^label[[:space:]]*=/ && group != "") print "group = " group
+          if (i == last && (id in extra)) {
+            ne = split(extra[id], e, "\n")
+            for (k = 1; k <= ne; k++) {
+              if (e[k] == "" || have >= max) continue
+              v = e[k]; sub(/[[:space:]]*=.*/, "", v)
+              if (v in taken) continue
+              taken[v] = 1; have++; print "choice = " e[k]
+            }
+          }
+        }
+        delete taken
         if (apps) { m = split(use[id], a, " "); for (k = 1; k <= m; k++) print "apps = " a[k] }
       }
       id = ""; nb = 0

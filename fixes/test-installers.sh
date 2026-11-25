@@ -320,6 +320,8 @@ fswitched() {
   [ "$(printf '%s' "$o" | /usr/bin/grep -o 'f125-swofty-play.sh' | /usr/bin/grep -c .)" = 1 ]
 }
 flogin="$fpfx/drive_c/Program Files (x86)/Steam/config/loginusers.vdf"
+fprof="$fpfx/drive_c/users/steamuser/AppData/Local/Swofty/profiles"; mkdir -p "$fprof"
+for n in default race-setup 'bad name' vanilla; do echo '{}' > "$fprof/$n.json"; done
 [ "$(f1st)" = absent ] && say ok "f1 25 in NotProton: absent before" || say FAIL "f1 25: absent before ($(f1st))"
 f1 > "$W/f125.install.log" 2>&1 || say FAIL "f1 25: install failed: $(tail -2 "$W/f125.install.log")"
 [ "$(f1st)" = installed ] && [ "$(cat "$fstore/launcher/bin/swofty.exe")" = launcher ] && [ -f "$fstore/launcher/loader/version.dll" ] \
@@ -328,14 +330,16 @@ f1 > "$W/f125.install.log" 2>&1 || say FAIL "f1 25: install failed: $(tail -2 "$
   && [ -L "$flogin" ] && /usr/bin/grep -q someone "$flogin" \
   && [ "$(cat "$fbridge/depotcache/3059521_44.manifest")" = list ] && [ ! -e "$fbridge/depotcache/3059522_55.manifest" ] && [ "$(cat "$fbridge/logs/content_log.txt")" = log ] \
   && fswitched NOTPROTON_MGF_MODTOOL NOTPROTON_MGF_ENGINE && /usr/bin/grep -q 'MGF_FANS=max' "$fvdf" \
-  && [ "$(/usr/bin/grep -c '^\[' "$fplug/mgf-3059520.conf")" = 0 ] && /usr/bin/grep -qx '# shared rows: NOTPROTON_MGF_ENGINE NOTPROTON_MGF_MODTOOL NOTPROTON_MGF_PLAY' "$fplug/mgf-3059520.conf" \
-  && [ "$(/usr/bin/grep -c '^\[' "$fplug/mgf-shared.conf")" = 3 ] && /usr/bin/grep -qx '\[NOTPROTON_MGF_ENGINE\]' "$fplug/mgf-shared.conf" \
+  && [ "$(/usr/bin/grep -c '^\[' "$fplug/mgf-3059520.conf")" = 0 ] && /usr/bin/grep -qx '# shared rows: NOTPROTON_MGF_ENGINE NOTPROTON_MGF_MODTOOL NOTPROTON_MGF_PLAY NOTPROTON_MGF_PROFILE' "$fplug/mgf-3059520.conf" \
+  && [ "$(/usr/bin/grep -c '^\[' "$fplug/mgf-shared.conf")" = 4 ] && /usr/bin/grep -qx '\[NOTPROTON_MGF_ENGINE\]' "$fplug/mgf-shared.conf" \
+  && /usr/bin/grep -qx 'choice = default = default' "$fplug/mgf-shared.conf" && /usr/bin/grep -qx 'choice = race-setup = race-setup' "$fplug/mgf-shared.conf" \
+  && ! /usr/bin/grep -q 'choice = bad' "$fplug/mgf-shared.conf" && [ "$(/usr/bin/grep -c '^choice = vanilla' "$fplug/mgf-shared.conf")" = 1 ] \
   && /usr/bin/grep -qx '\[NOTPROTON_MGF_MODTOOL\]' "$fplug/mgf-shared.conf" && /usr/bin/grep -qx '\[NOTPROTON_MGF_PLAY\]' "$fplug/mgf-shared.conf" \
-  && [ "$(/usr/bin/grep -c '^apps = 3059520$' "$fplug/mgf-shared.conf")" = 3 ] && [ "$(/usr/bin/grep -c '^apps' "$fplug/mgf-shared.conf")" = 3 ] \
-  && [ "$(/usr/bin/grep -c '^description = .*Played on NotProton, CrossOver Preview 41303 on Rosetta (D3DMetal 4.0b3), 2026-11-24$' "$fplug/mgf-shared.conf")" = 3 ] \
+  && [ "$(/usr/bin/grep -c '^apps = 3059520$' "$fplug/mgf-shared.conf")" = 4 ] && [ "$(/usr/bin/grep -c '^apps' "$fplug/mgf-shared.conf")" = 4 ] \
+  && [ "$(/usr/bin/grep -c '^description = .*Played on NotProton, CrossOver Preview 41303 on Rosetta (D3DMetal 4.0b3), 2026-11-24$' "$fplug/mgf-shared.conf")" = 4 ] \
   && /usr/bin/grep -qx 'requires = Library/Application Support/notproton/plugins/mgf-engine.dylib' "$fplug/mgf-shared.conf" && cmp -s "$fplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
   && ! /usr/bin/grep -q 'NOTPROTON_MGF_PLAY' "$fvdf" \
-  && say ok "f1 25 in NotProton: the player's launcher, the play script, the two values, the links, no row of its own but the three shared rows for it, each saying where it was played, the engine library, both shared switches and the script in the launch options, on a runner without patch 0038" || say FAIL "f1 25: installed ($(f1st)): $(tail -3 "$W/f125.install.log")"
+  && say ok "f1 25 in NotProton: the player's launcher, the play script, the two values, the links, no row of its own but four shared rows for it, each saying where it was played, Swofty's profiles offered by name (not one it could not carry, nor vanilla twice), the engine library, both shared switches and the script in the launch options, on a runner without patch 0038" || say FAIL "f1 25: installed ($(f1st)): $(tail -3 "$W/f125.install.log")"
 mv "$fnp/plugin-host.dylib" "$fnp/plugin-host.away"
 fout="$(f1 --status 2>&1)"   # read whole: a reader that leaves early would end the status with a broken pipe
 [ "$(f1st)" = half ] && case "$fout" in *'update NotProton'*) true ;; *) false ;; esac \
@@ -357,11 +361,17 @@ last="$(f1 --restore 2>/dev/null | tail -1)"
 [ "$last" = restored ] && [ "$(f1st)" = absent ] && [ "$(cat "$fvdf")" = "$fvdf0" ] && [ "$(cat "$fpfx/user.reg")" = "$(printf "$freg0")" ] \
   && [ ! -e "$fplug/mgf-3059520.conf" ] && [ ! -e "$fplug/mgf-shared.conf" ] && [ ! -e "$fplug/mgf-engine.dylib" ] && [ ! -e "$flogin" ] && [ ! -L "$flogin" ] && [ ! -L "$fbridge/depotcache/3059521_44.manifest" ] && [ ! -L "$fbridge/logs/content_log.txt" ] && [ ! -e "$fstore/f125-swofty-play.sh" ] && [ -f "$fstore/launcher/bin/swofty.exe" ] && [ ! -e "$fpfx/.mgf-f125-swofty" ] \
   && say ok "f1 25 in NotProton: restored, the launch options and the registry as they were, the library out, the launcher kept" || say FAIL "f1 25: restore ($last, $(f1st))"
+# A profile made in Swofty's window since: the fix reads half, and installing again offers it.
+f1 > /dev/null 2>&1; echo '{}' > "$fprof/wet.json"
+[ "$(f1st)" = half ] && f1 > /dev/null 2>&1 && [ "$(f1st)" = installed ] && /usr/bin/grep -qx 'choice = wet = wet' "$fplug/mgf-shared.conf" \
+  && rm -f "$fprof/wet.json" && [ "$(f1st)" = half ] && f1 > /dev/null 2>&1 && ! /usr/bin/grep -q 'choice = wet' "$fplug/mgf-shared.conf" \
+  && say ok "f1 25 in NotProton: a Swofty profile made or removed since reads half, and installing again offers what is there" || say FAIL "f1 25: profiles followed ($(f1st))"
+f1 --restore > /dev/null 2>&1
 # Two games on the shared engine row: its apps are both, and removing one leaves the row, its
 # library and the other game's app. A stand-in descriptor plays FC 27's part.
 printf '# MacGameFix writes this file for app 4080220 and removes it with the fix; edits do not last.\n# shared rows: NOTPROTON_MGF_ENGINE NOTPROTON_MGF_MODTOOL NOTPROTON_MGF_PLAY\n' > "$fplug/mgf-4080220.conf"
 f1 > /dev/null 2>&1
-[ "$(f1st)" = installed ] && [ "$(/usr/bin/grep -c '^apps = ' "$fplug/mgf-shared.conf")" = 6 ] && [ "$(/usr/bin/grep -c '^apps = 4080220$' "$fplug/mgf-shared.conf")" = 3 ] \
+[ "$(f1st)" = installed ] && [ "$(/usr/bin/grep -c '^apps = ' "$fplug/mgf-shared.conf")" = 7 ] && [ "$(/usr/bin/grep -c '^apps = 4080220$' "$fplug/mgf-shared.conf")" = 3 ] \
   && f1 --restore > /dev/null 2>&1 && [ "$(f1st)" = absent ] && /usr/bin/grep -qx 'apps = 4080220' "$fplug/mgf-shared.conf" && ! /usr/bin/grep -q 'apps = 3059520' "$fplug/mgf-shared.conf" \
   && cmp -s "$fplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
   && say ok "f1 25 in NotProton: two games share the rows, and removing one leaves them and the library for the other" || say FAIL "f1 25: shared engine row ($(f1st))"
@@ -396,7 +406,7 @@ f1 --restore > /dev/null 2>&1; [ "$(f1st)" = absent ] || say FAIL "f1 25: restor
 fvdf_with 'MGF_FANS=max %command%'
 # Where NotProton knows groups, the rows carry one of the game's own; where it does not, none, as it would refuse the row.
 MGVF_NOTPROTON_GROUPS=1 f1 > /dev/null 2>&1
-[ "$(/usr/bin/grep -c '^group = MacGameFix$' "$fplug/mgf-shared.conf")" = 3 ] && [ "$(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1)" = installed ] \
+[ "$(/usr/bin/grep -c '^group = MacGameFix$' "$fplug/mgf-shared.conf")" = 4 ] && [ "$(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1)" = installed ] \
   && say ok "f1 25 in NotProton: with a NotProton that knows groups, every shared row is in MacGameFix's group" || say FAIL "f1 25: grouped rows ($(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1))"
 f1 > /dev/null 2>&1; ! /usr/bin/grep -q '^group' "$fplug/mgf-shared.conf" && [ "$(f1st)" = installed ] \
   && say ok "f1 25 in NotProton: with one that does not, the rows carry no group" || say FAIL "f1 25: ungrouped rows ($(f1st))"
@@ -457,11 +467,14 @@ fout="$(fplay)"; case "$fout" in "waitforexitandrun|/lib/steamapps/common/F1/F1_
   && say ok "f1 25's play script: with the row off, Steam's own command goes through" || say FAIL "f1 25 play: row off: $fout"
 fout="$(fplay NOTPROTON_MGF_MODTOOL=1)"; case "$fout" in "waitforexitandrun|cmd.exe|/d|/c|call|"*"profile= opens=") true ;; *) false ;; esac \
   && fout="$(fplay NOTPROTON_MGF_MODTOOL=1 NOTPROTON_MGF_PLAY=game)" && case "$fout" in *"profile= opens=") true ;; *) false ;; esac \
-  && fout="$(fplay NOTPROTON_MGF_MODTOOL=1 NOTPROTON_MGF_PLAY=nomods)" && case "$fout" in *"profile=vanilla opens=") true ;; *) false ;; esac \
+  && fout="$(fplay NOTPROTON_MGF_MODTOOL=1 NOTPROTON_MGF_PROFILE=vanilla)" && case "$fout" in *"profile=vanilla opens=") true ;; *) false ;; esac \
+  && fout="$(fplay NOTPROTON_MGF_MODTOOL=1 NOTPROTON_MGF_PROFILE=race-setup)" && case "$fout" in *"profile=race-setup opens=") true ;; *) false ;; esac \
+  && fout="$(fplay NOTPROTON_MGF_MODTOOL=1 NOTPROTON_MGF_PROFILE=active)" && case "$fout" in *"profile= opens=") true ;; *) false ;; esac \
+  && fout="$(fplay NOTPROTON_MGF_MODTOOL=1 'NOTPROTON_MGF_PROFILE=a b&c')" && case "$fout" in *"profile= opens=") true ;; *) false ;; esac \
   && fout="$(fplay NOTPROTON_MGF_MODTOOL=1 NOTPROTON_MGF_PLAY=window)" && case "$fout" in *"profile= opens=window") true ;; *) false ;; esac \
   && fout="$(fplay NOTPROTON_MGF_MODTOOL=1 NOTPROTON_MGF_PLAY=notes)" && case "$fout" in *"profile= opens= debug=err+all,fixme-all,+seh,+timestamp,+pid") true ;; *) false ;; esac \
   && fout="$(fplay NOTPROTON_MGF_MODTOOL=1 'NOTPROTON_MGF_PLAY=a b&c')" && case "$fout" in *"profile= opens=") true ;; *) false ;; esac \
-  && say ok "f1 25's play script: the batch file takes the command's place; Play opens' nomods reaches Swofty as its vanilla profile, window opens its window and notes turns Wine's exception notes on; the game and anything else do none of it" || say FAIL "f1 25 play: rows: $fout"
+  && say ok "f1 25's play script: the batch file takes the command's place; Mod profile's vanilla or a profile's name reaches Swofty as its profile (active and a name it could not carry do not); Play opens' window opens its window and notes turns Wine's exception notes on" || say FAIL "f1 25 play: rows: $fout"
 touch "$fpfx/cxbottle.conf"; [ "$(f1st)" = norecipe ] && say ok "f1 25: a CrossOver bottle has no recipe" || say FAIL "f1 25: bottle ($(f1st))"; rm -f "$fpfx/cxbottle.conf"
 
 # EA SPORTS FC 27 with FC 27 Live Editor, in a NotProton prefix: the Live Editor folder the

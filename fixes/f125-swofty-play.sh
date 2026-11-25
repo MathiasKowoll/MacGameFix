@@ -15,10 +15,11 @@
 #   NOTPROTON_MGF_MODTOOL=1     "Start through the mod tool", a row MacGameFix's games share.
 #                               Without it, Steam's own command runs unchanged.
 #   NOTPROTON_MGF_PLAY=window   "Play opens": Swofty Launcher's window instead of the game.
-#   NOTPROTON_MGF_PLAY=nomods   "Play opens": the game with Swofty's profile without addons.
 #   NOTPROTON_MGF_PLAY=notes    "Play opens": the game, with Wine writing every exception it
 #                               raises to NotProton's Wine log, for a report.
-#                               Anything else, or nothing: the game with the active profile.
+#                               Anything else, or nothing: the game.
+#   NOTPROTON_MGF_PROFILE=<name>  "Mod profile": vanilla, or one of Swofty's profiles by name,
+#                               for this start. "active", or nothing: Swofty's active one.
 #
 # Anything else Steam runs through the tool, such as its install scripts, goes through unchanged.
 #
@@ -32,9 +33,9 @@ fi
 case "$game" in */EAAntiCheat.GameServiceLauncher.exe|*/F1_25.exe) ;; *) exec "$@" ;; esac
 app="${STEAM_COMPAT_APP_ID:-}"
 case "$app" in ""|*[!0-9]*) exec "$@" ;; esac
-switch="${NOTPROTON_MGF_MODTOOL:-}"; play="${NOTPROTON_MGF_PLAY:-game}"
-opens=game; profile=active; notes=off
-case "$play" in window) opens=window ;; nomods) profile=vanilla ;; notes) notes=on ;; esac
+switch="${NOTPROTON_MGF_MODTOOL:-}"; play="${NOTPROTON_MGF_PLAY:-game}"; profile="${NOTPROTON_MGF_PROFILE:-active}"
+opens=game; notes=off
+case "$play" in window) opens=window ;; notes) notes=on ;; esac
 [ "$switch" = 1 ] || exec "$@"
 # A path as the prefix sees it: the Steam library on the drive NotProton gives it there (S: so
 # far, read from the prefix's dosdevices), anything else under Z:.

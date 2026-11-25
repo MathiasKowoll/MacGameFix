@@ -169,7 +169,21 @@ np_plugins_setup "$APPID" "$PFX" "$ROWS"
 # The game's rows are MacGameFix's shared ones (np-plugin-shared.conf), in the group
 # "MacGameFix" where NotProton knows groups.
 NP_SHARED_TEMPLATE="$SHARED_ROWS"; NP_SHARED_LIBRARY="$ENGINE"
-NP_SHARED_USES="NOTPROTON_MGF_ENGINE NOTPROTON_MGF_MODTOOL NOTPROTON_MGF_PLAY"
+NP_SHARED_USES="NOTPROTON_MGF_ENGINE NOTPROTON_MGF_MODTOOL NOTPROTON_MGF_PLAY NOTPROTON_MGF_PROFILE"
+# Swofty's profiles, one file each in its folder in the prefix (profiles/<name>.json), offered in
+# "Mod profile" by name next to the row's own two. A name the launch options or Swofty's command
+# line could not carry as it is, or one of the row's own, is left out; so is any past NotProton's
+# 16 choices. The status sees a profile made or removed since as a descriptor that differs.
+swofty_profiles() {
+  local f name
+  for f in "$PFX"/drive_c/users/*/AppData/Local/Swofty/profiles/*.json; do
+    [ -f "$f" ] || continue
+    name="$(basename "$f" .json)"
+    case "$name" in active|vanilla|*[!A-Za-z0-9._-]*|"") continue ;; esac
+    printf 'NOTPROTON_MGF_PROFILE = %s = %s\n' "$name" "$name"
+  done | sort -u | head -n 14
+}
+NP_SHARED_CHOICES="$(swofty_profiles)"
 if np_knows_groups; then NP_SHARED_GROUP="MacGameFix"; fi
 NP_WRAPPER="$STORE/f125-swofty-play.sh"
 # NotProton loads a row's library through its plugin host; without it the row is not offered.
@@ -438,5 +452,5 @@ echo "  *  MacGameFix's to answer for. Removing the fix gives Steam's Play back.
 echo "  ****************************************************************************"
 echo
 echo "  Steam's Play now starts F1 25 through Swofty Launcher, with Swofty's active profile."
-echo "  On the game's Compatibility page in NotProton, \"Play opens\" chooses the game without mods, or Swofty Launcher's window."
+echo "  On the game's Compatibility page in NotProton, \"Mod profile\" chooses vanilla or one of your Swofty profiles, and \"Play opens\" Swofty Launcher's window."
 echo "  The first Play shows Swofty's offline play terms in a console window and waits for your answer."

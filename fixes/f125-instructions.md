@@ -39,7 +39,8 @@ The fix adds no row of its own. It uses three of MacGameFix's rows, in the group
 |---|---|
 | **Engine fixes** | Loads one MacGameFix library that, for F1 25, keeps the game's memory where Windows would put it. Off, the game closes about half a minute after it starts. The install switches it on; leave it on. |
 | **Start through the mod tool** | On: Play starts the game through Swofty Launcher. Off: Play starts the game's own launcher, which does not open on a Mac. The first install switches it on. |
-| **Play opens** | **The game**, with Swofty's active profile; **The game without mods**, Swofty's vanilla profile; **The game, with exception notes for a report**; or **The mod tool's window**, Swofty Launcher's. |
+| **Play opens** | **The game**; **The game, with exception notes for a report**; or **The mod tool's window**, Swofty Launcher's. |
+| **Mod profile** | Which of Swofty's profiles the game starts with: **The tool's active profile**; **Vanilla, without mods**; or one of your profiles by name. A profile you make in Swofty's window shows here once MacGameFix has looked at the fix again (its next pass, or installing the fix again). |
 
 Choose **The mod tool's window** to turn addons on or off, install mods, edit the game database or change the profile. Its own Play starts the game from there. Set the row back to **The game** to go straight into the game again.
 
@@ -54,7 +55,7 @@ Play uses Swofty's active profile. Swofty has two to begin with:
 | `default` | The one your addons and mods go into. |
 | `vanilla` | The game with no addons and no mod loader. |
 
-To play without mods, set the row **Play opens** to **The game without mods** on the game's Compatibility page in NotProton, and back to **The game** afterwards. It is the quick way to tell whether a problem comes from a mod or from the game. Which profile is the active one is chosen in Swofty Launcher's window.
+To play without mods, set the row **Mod profile** to **Vanilla, without mods** on the game's Compatibility page in NotProton, and back to **The tool's active profile** afterwards. It is the quick way to tell whether a problem comes from a mod or from the game. Which profile is the active one is chosen in Swofty Launcher's window; **Mod profile** picks one for a start without changing it.
 
 # Graphics
 
