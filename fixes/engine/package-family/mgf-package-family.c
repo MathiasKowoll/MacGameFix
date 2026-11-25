@@ -24,15 +24,15 @@
 // protection back. A kernel32.dll that already has the name (a runner with 0041) is left as
 // it is.
 //
-// FC 27's fix (install-fc27-live-editor.sh) puts the built library in NotProton's plugins
-// folder with the row that loads it, on that game's page alone. build-package-family.sh
-// builds it, and its check (check.c) is a Windows program that looks the function up and
-// calls it, run under the runner with and without this library.
+// It is part of mgf-engine.dylib (../mgf-engine.c), which arms it in FC 27 alone; FC 27's fix
+// (install-fc27-live-editor.sh) switches the engine row on for the game. build-engine.sh builds
+// it, and runs the check (check.c): a Windows program that looks the function up and calls it,
+// under the runner with and without this fix armed.
 //
 // Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../../app/notproton-plugins/notproton_plugin.h"
+#include "../mgf_hooks.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -248,13 +248,8 @@ static void arm(const struct mach_header_64 *mh, intptr_t slide, const char *ima
     api->log(TAG, "kernel32.dll gets %s when it is mapped", NAME);
 }
 
-#ifndef NP_PLUGIN_TEST
-__attribute__((constructor))
-#endif
-static void package_family_init(void) {
-    if (!(api = np_plugin_api())) {
-        fprintf(stderr, TAG ": plugin-host.dylib isn't loaded, not armed\n");
-        return;
-    }
-    api->on_first_image("ntdll.so", "-unix/", arm);
+// mgf-engine.dylib (../mgf-engine.c) arms this for the games that need it.
+void mgf_package_family_arm(const struct np_plugin_api *with, const struct mach_header_64 *mh, intptr_t slide) {
+    api = with;
+    arm(mh, slide, NULL);
 }

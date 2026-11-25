@@ -18,9 +18,8 @@
 // NtDeviceIoControlFile, so NotProton's ntdll stays as it is. NotProton's plugin host
 // (plugin-host.dylib) finds them; without it this loads and does nothing.
 //
-// F1 25's fix (install-f125-swofty.sh) puts the built library in NotProton's plugins folder
-// with the row that loads it, "Keep the game's memory low", on that game's page alone.
-// build-low-allocations.sh builds it.
+// It is part of mgf-engine.dylib (../mgf-engine.c), which arms it in F1 25 alone; F1 25's fix
+// (install-f125-swofty.sh) switches the engine row on for the game. build-engine.sh builds it.
 //
 // Played on 2026-11-24 (NotProton, CrossOver Preview 41303 on Rosetta): with 0038 switched off
 // in the runner (WINE_LOW_ALLOCATIONS_FIRST=0) and this loaded, the plugin was armed in every
@@ -30,7 +29,7 @@
 // Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "../../app/notproton-plugins/notproton_plugin.h"
+#include "../mgf_hooks.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -243,13 +242,8 @@ static void arm(const struct mach_header_64 *mh, intptr_t slide, const char *ima
     api->log(TAG, "allocations with no address are asked below 0x7ff000000000 first");
 }
 
-#ifndef NP_PLUGIN_TEST
-__attribute__((constructor))
-#endif
-static void low_allocations_init(void) {
-    if (!(api = np_plugin_api())) {
-        fprintf(stderr, TAG ": plugin-host.dylib isn't loaded, not armed\n");
-        return;
-    }
-    api->on_first_image("ntdll.so", "-unix/", arm);
+// mgf-engine.dylib (../mgf-engine.c) arms this for the games that need it.
+void mgf_low_allocations_arm(const struct np_plugin_api *with, const struct mach_header_64 *mh, intptr_t slide) {
+    api = with;
+    arm(mh, slide, NULL);
 }

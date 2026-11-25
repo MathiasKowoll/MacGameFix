@@ -265,19 +265,21 @@
         "bottles.sh",
         "fc27-le-play.sh",
         "fc27-le-run.cmd",
-        "mgf-d3dmetal-hookable.dylib",
-        "mgf-package-family.dylib",
+        "mgf-engine.dylib",
         "notproton-plugins.sh",
         "np-plugin-fc27-live-editor.conf",
+        "np-plugin-shared.conf",
         "steam-launch-options.pl"
       ],
       "builtFrom": [
         "d3dmetal-hookable/mgf-d3dmetal-hookable.c",
         "d3dmetal-hookable/check.c",
         "build-d3dmetal-hookable.sh",
-        "package-family/mgf-package-family.c",
-        "package-family/check.c",
-        "build-package-family.sh"
+        "engine/package-family/mgf-package-family.c",
+        "engine/package-family/check.c",
+        "engine/mgf-engine.c",
+        "engine/mgf_hooks.h",
+        "build-engine.sh"
       ],
       "license": "GPL-3.0-or-later",
       "credits": [
@@ -289,14 +291,14 @@
       ],
       "excerpts": [
         {
-          "file": "fixes/package-family/mgf-package-family.c",
+          "file": "fixes/engine/package-family/mgf-package-family.c",
           "symbol": null,
           "note": "Once kernel32.dll is mapped in the game's process, its export directory stays where it is and gets new arrays with one more name, in its sorted place; the function is a few instructions outside the directory, so Wine does not take it for a forward to another DLL.",
           "language": "c",
           "startLine": 136,
           "endLine": 208,
-          "commit": "f05f79fe6ea5b98e2be7aa97db9509e54e1ec624",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f05f79fe6ea5b98e2be7aa97db9509e54e1ec624/fixes/package-family/mgf-package-family.c#L136-L208",
+          "commit": "07a455932b7ac708adb32aeb6c15013e1685e43c",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/07a455932b7ac708adb32aeb6c15013e1685e43c/fixes/engine/package-family/mgf-package-family.c#L136-L208",
           "code": "static void add_name(uint8_t *base, uint32_t image_size, struct export_directory *d) {\n    const uint32_t *names = rva(base, d->address_of_names);\n    const uint16_t *ordinals = rva(base, d->address_of_name_ordinals);\n    const uint32_t *functions = rva(base, d->address_of_functions);\n    uint32_t n = d->number_of_names, f = d->number_of_functions, at = 0;\n\n    // Where the name goes in the sorted list; nothing to do when it is there already.\n    while (at < n) {\n        int c = strcmp(rva(base, names[at]), NAME);\n        if (!c) {\n            api->log(TAG, \"kernel32.dll already has %s, left as it is\", NAME);\n            return;\n        }\n        if (c > 0) break;\n        at++;\n    }\n    if (f >= 0xffff) {\n        api->log(TAG, \"kernel32.dll has %u functions, no ordinal left for one more, not added\", f);\n        return;\n    }\n\n    size_t code = (sizeof(FUNCTION) + 15) & ~(size_t)15;\n    size_t size = code + (f + 1) * 4 + (n + 1) * 4 + (n + 1) * 2 + sizeof(NAME);\n    uint8_t *room = room_near(base, image_size, size);\n    if (!room) {\n        api->log(TAG, \"no memory free within 4 GB above kernel32.dll, %s not added\", NAME);\n        return;\n    }\n    uint8_t *p = room;\n    memcpy(p, FUNCTION, sizeof(FUNCTION));\n    uint32_t *new_functions = (uint32_t *)(p += code);\n    uint32_t *new_names = (uint32_t *)(p += (f + 1) * 4);\n    uint16_t *new_ordinals = (uint16_t *)(p += (n + 1) * 4);\n    char *name = (char *)(p += (n + 1) * 2);\n    memcpy(name, NAME, sizeof(NAME));\n    #define RVA_OF(x) ((uint32_t)((uint8_t *)(x) - base))\n\n    memcpy(new_functions, functions, f * 4);\n    new_functions[f] = RVA_OF(room);\n    memcpy(new_names, names, at * 4);\n    memcpy(new_ordinals, ordinals, at * 2);\n    new_names[at] = RVA_OF(name);\n    new_ordinals[at] = (uint16_t)f;\n    memcpy(new_names + at + 1, names + at, (n - at) * 4);\n    memcpy(new_ordinals + at + 1, ordinals + at, (n - at) * 2);\n\n    // The function's page runs; the arrays on it are only read.\n    void *addr = room;\n    size_t len = size;\n    uint32_t old;\n    if (protect(CURRENT_PROCESS, &addr, &len, PAGE_EXECUTE_READ, &old)) {\n        api->log(TAG, \"the new function's memory could not be made executable, %s not added\", NAME);\n        return;\n    }\n\n    addr = d;\n    len = sizeof(*d);\n    if (protect(CURRENT_PROCESS, &addr, &len, PAGE_READWRITE, &old)) {\n        api->log(TAG, \"kernel32.dll's export directory could not be written, %s not added\", NAME);\n        return;\n    }\n    d->address_of_functions = RVA_OF(new_functions);\n    d->address_of_name_ordinals = RVA_OF(new_ordinals);\n    d->address_of_names = RVA_OF(new_names);\n    d->number_of_functions = f + 1;\n    d->number_of_names = n + 1;\n    addr = d;\n    len = sizeof(*d);\n    protect(CURRENT_PROCESS, &addr, &len, old, &old);\n    #undef RVA_OF\n    api->log(TAG, \"kernel32.dll at %p: %s added, ordinal %u, the function at %p\", (void *)base, NAME,\n             d->base + f, (void *)room);\n}"
         },
         {
@@ -304,10 +306,10 @@
           "symbol": null,
           "note": "A D3DMetal method is a 16-byte stub that jumps through the pointer behind it, which an inline hook copies wrong. The same 16 bytes become mov rax, method; jmp rax, which can be copied anywhere. Through mprotect and an ordinary store, so that Rosetta drops its translation of the old stub.",
           "language": "c",
-          "startLine": 103,
-          "endLine": 118,
-          "commit": "17b51dad34f17585063b9c16583399b835aa16ee",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/17b51dad34f17585063b9c16583399b835aa16ee/fixes/d3dmetal-hookable/mgf-d3dmetal-hookable.c#L103-L118",
+          "startLine": 104,
+          "endLine": 119,
+          "commit": "5ac18177dcf4702ee6bf84fc0793743265694863",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/5ac18177dcf4702ee6bf84fc0793743265694863/fixes/d3dmetal-hookable/mgf-d3dmetal-hookable.c#L104-L119",
           "code": "static int rewrite(uint64_t at, uint64_t method) {\n  uint8_t code[16] = { 0x48, 0xB8, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xE0, 0xCC, 0xCC, 0xCC, 0xCC };\n  memcpy(code + 2, &method, 8);\n  long page = sysconf(_SC_PAGESIZE);\n  void *start = (void *)(uintptr_t)(at & ~(uint64_t)(page - 1));\n  // Through mprotect and an ordinary store, never mach_vm_write: Rosetta has to see both, or it\n  // goes on running its translation of the old stub. What the kernel says of the page cannot\n  // be given back afterwards: Rosetta keeps a page it has translated read-only on its side to\n  // catch such stores, so a stub in use reads \"not writable\" there whatever Wine asked for.\n  // A page D3DMetal fills with code as it goes is readable, writable and executable to the\n  // program already; asking for that again changes nothing for it.\n  if (mprotect(start, page, PROT_READ | PROT_WRITE | PROT_EXEC)) return 0;\n  if (memcmp((void *)(uintptr_t)at, OLD, 8) || memcmp((void *)(uintptr_t)(at + 8), &method, 8)) return 0;\n  _mm_storeu_si128((__m128i *)(uintptr_t)at, _mm_loadu_si128((const __m128i *)code));\n  return 1;\n}"
         },
         {
@@ -315,10 +317,10 @@
           "symbol": null,
           "note": "The stubs are looked for in the memory where Wine keeps DLLs, and only those whose pointer lands inside D3DMetal are taken. A page that has run shows as read-only to the kernel under Rosetta, so writable is not asked for.",
           "language": "c",
-          "startLine": 120,
-          "endLine": 155,
-          "commit": "17b51dad34f17585063b9c16583399b835aa16ee",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/17b51dad34f17585063b9c16583399b835aa16ee/fixes/d3dmetal-hookable/mgf-d3dmetal-hookable.c#L120-L155",
+          "startLine": 121,
+          "endLine": 156,
+          "commit": "5ac18177dcf4702ee6bf84fc0793743265694863",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/5ac18177dcf4702ee6bf84fc0793743265694863/fixes/d3dmetal-hookable/mgf-d3dmetal-hookable.c#L121-L156",
           "code": "static unsigned scan(double *seconds, unsigned long *bytes) {\n  static uint8_t buf[1 << 20];\n  struct timespec a, b; clock_gettime(CLOCK_MONOTONIC, &a);\n  unsigned found = 0; *bytes = 0;\n  mach_vm_address_t addr = LOW;\n  while (addr < HIGH) {\n    mach_vm_size_t size = 0; vm_region_basic_info_data_64_t info; mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;\n    mach_port_t object = MACH_PORT_NULL;\n    if (mach_vm_region(mach_task_self(), &addr, &size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &count, &object) != KERN_SUCCESS) break;\n    if (object != MACH_PORT_NULL) mach_port_deallocate(mach_task_self(), object);\n    if (addr >= HIGH) break;\n    // The stubs are in a DLL's .data. Once one has run, the kernel shows its page as readable and\n    // executable only (Rosetta's doing, see rewrite), so that is looked at too; constants are not.\n    if ((info.protection & VM_PROT_READ) && (info.protection & (VM_PROT_WRITE | VM_PROT_EXECUTE))) {\n      for (mach_vm_size_t off = 0; off < size; off += sizeof buf) {\n        mach_vm_size_t want = size - off < sizeof buf ? size - off : sizeof buf, got = 0;\n        if (mach_vm_read_overwrite(mach_task_self(), addr + off, want, (mach_vm_address_t)(uintptr_t)buf, &got) != KERN_SUCCESS) continue;\n        *bytes += got;\n        for (mach_vm_size_t i = 0; i + 16 <= got; i += 16) {\n          if (buf[i] != 0x66 || memcmp(buf + i, OLD, 8)) continue;\n          uint64_t method; memcpy(&method, buf + i + 8, 8);\n          const char *symbol;\n          if (!in_d3dmetal(method, &symbol)) continue;\n          if (!rewrite(addr + off + i, method)) continue;\n          found++; total++;\n          if (strstr(symbol, \"SwapChain4_Present\") || strstr(symbol, \"ExecuteCommandLists\") || strstr(symbol, \"ResizeBuffers\"))\n            say(\"stub at 0x%llx -> %s (0x%llx)\", (unsigned long long)(addr + off + i), symbol, (unsigned long long)method);\n        }\n      }\n    }\n    addr += size;\n  }\n  clock_gettime(CLOCK_MONOTONIC, &b);\n  *seconds = (b.tv_sec - a.tv_sec) + (b.tv_nsec - a.tv_nsec) / 1e9;\n  return found;\n}"
         },
         {
@@ -326,10 +328,10 @@
           "symbol": null,
           "note": "Live Editor is the player's to provide: from MacGameFix's window the install asks for its folder with macOS's folder chooser, every time, which is also how a new version goes in.",
           "language": "bash",
-          "startLine": 198,
-          "endLine": 204,
-          "commit": "f05f79fe6ea5b98e2be7aa97db9509e54e1ec624",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f05f79fe6ea5b98e2be7aa97db9509e54e1ec624/fixes/install-fc27-live-editor.sh#L198-L204",
+          "startLine": 197,
+          "endLine": 203,
+          "commit": "5ac18177dcf4702ee6bf84fc0793743265694863",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/5ac18177dcf4702ee6bf84fc0793743265694863/fixes/install-fc27-live-editor.sh#L197-L203",
           "code": "ask_folder() {\n  local prompt=\"Choose your FC 27 Live Editor folder: the one that holds Launcher.exe and FCLiveEditor.DLL.\"\n  editor_ok && prompt=\"$prompt Cancel keeps the Live Editor already in use.\"\n  if [ -n \"${MGVF_CHOOSER:-}\" ]; then \"$MGVF_CHOOSER\" \"$prompt\" 2>/dev/null || true; return 0; fi\n  /usr/bin/osascript -e 'on run argv' -e 'try' -e 'return POSIX path of (choose folder with prompt (item 1 of argv))' \\\n    -e 'on error' -e 'return \"\"' -e 'end try' -e 'end run' \"$prompt\" 2>/dev/null || true\n}"
         },
         {
@@ -337,10 +339,10 @@
           "symbol": null,
           "note": "Live Editor's launcher injects 100 ms after the game appears, and at that the game hung at \"Injecting\" in 2 starts of 10. Its own setting is raised to 1000 ms; a longer one the player set is kept.",
           "language": "bash",
-          "startLine": 54,
-          "endLine": 57,
-          "commit": "064db6f558963eb0550856b1f70eb31807d6bcce",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/064db6f558963eb0550856b1f70eb31807d6bcce/fixes/fc27-le-play.sh#L54-L57",
+          "startLine": 56,
+          "endLine": 59,
+          "commit": "5ac18177dcf4702ee6bf84fc0793743265694863",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/5ac18177dcf4702ee6bf84fc0793743265694863/fixes/fc27-le-play.sh#L56-L59",
           "code": "config=\"${STEAM_COMPAT_DATA_PATH:-}/pfx/drive_c/FC 27 Live Editor/le_config.json\"\nif [ -f \"$config\" ] && [ \"$opens\" != window ]; then\n  /usr/bin/perl -0pi -e 's/(\"dll_inject_delay\"\\s*:\\s*)(\\d+)/$1 . ($2 < 1000 ? 1000 : $2)/e; s/(\"auto_inject\"\\s*:\\s*)false/${1}true/' \"$config\"\nfi"
         },
         {
@@ -357,7 +359,7 @@
       ],
       "symptom": "Steam's Play shows EA AntiCheat's launcher for some seconds and no game starts. With FC 27 Live Editor's launcher open the game starts, first with \"There is a problem with your game's setup. Please reinstall your game\", and once past that it closes right after the EA SPORTS logo, without a message.",
       "cause": "Three things. The game imports FindPackagesByPackageFamily from kernel32, which Wine 11.21 does not have. EA AntiCheat's launcher ends after 10 s with 0xE111000B under Wine; Live Editor's launcher puts a stand-in in its place, and with the stand-in alone the game ends 9 s in, so the game runs here only with Live Editor's DLL in it. And Live Editor draws its window by hooking Direct3D methods inline: D3DMetal's are 16-byte stubs, 66 90 / FF 25 00 00 00 00 / pointer, a jump through the pointer right behind it. The hook copies the first two instructions elsewhere, where the jump reads the copy's own next instruction as its target: an execute fault at 0x3C25FF (the bytes FF 25 3C 00 00 00 00 00) on the first ExecuteCommandLists after the hooks went in.",
-      "fix": "A row on the game's Compatibility page, Activation fix, has NotProton load mgf-package-family.dylib into FC 27 alone; it adds the function, answering no packages as engine patch 0041 does, to the kernel32.dll Wine maps in the game's process, so the runner need not carry 0041 for every game. The install asks for the player's Live Editor folder and copies it, puts a script before %command% in Steam's launch options that opens Live Editor's launcher, starts Steam's own command and stays until the game is gone, and has NotProton load mgf-d3dmetal-hookable.dylib into the game, which rewrites each D3DMetal stub in place to mov rax, method; jmp rax (1302 of them in FC 27's first 9 s). Three more rows on the game's Compatibility page in NotProton switch it, choose what Play opens, and turn Wine's exception notes on for a report; nothing a player may set is typed into the launch options by hand. Played on 2026-11-23 with the steps done by hand: the game to its main menu with Live Editor's window on F9, 4 min 35 s, closed by the player. The editors themselves, a match and a long session were not played.",
+      "fix": "MacGameFix's shared Engine fixes row has NotProton load mgf-engine.dylib, which arms in FC 27 alone a fix that adds the function, answering no packages as engine patch 0041 does, to the kernel32.dll Wine maps in the game's process, so the runner need not carry 0041 for every game. The install asks for the player's Live Editor folder and copies it, puts a script before %command% in Steam's launch options that opens Live Editor's launcher, starts Steam's own command and stays until the game is gone, and has the same engine library rewrite each D3DMetal stub in place to mov rax, method; jmp rax (1302 of them in FC 27's first 9 s). MacGameFix's shared rows Start through the mod tool and Play opens switch it and choose what Play opens (the game, the game without mods, the game with Wine's exception notes, or the mod tool's window); nothing a player may set is typed into the launch options by hand. Played on 2026-11-23 with the steps done by hand: the game to its main menu with Live Editor's window on F9, 4 min 35 s, closed by the player. The editors themselves, a match and a long session were not played.",
       "backend": "D3DMetal 4.",
       "crossover": "CrossOver Preview 27 (27.0.0.41303), NotProton runner on Rosetta, 2026-11-23",
       "pageUrl": null,
@@ -379,14 +381,17 @@
         "bottles.sh",
         "f125-swofty-play.sh",
         "f125-swofty-run.cmd",
-        "mgf-low-allocations.dylib",
+        "mgf-engine.dylib",
         "notproton-plugins.sh",
         "np-plugin-f125-swofty.conf",
+        "np-plugin-shared.conf",
         "steam-launch-options.pl"
       ],
       "builtFrom": [
-        "low-allocations/mgf-low-allocations.c",
-        "build-low-allocations.sh"
+        "engine/low-allocations/mgf-low-allocations.c",
+        "engine/mgf-engine.c",
+        "engine/mgf_hooks.h",
+        "build-engine.sh"
       ],
       "license": "GPL-3.0-or-later",
       "credits": [
@@ -398,25 +403,25 @@
       ],
       "excerpts": [
         {
-          "file": "fixes/low-allocations/mgf-low-allocations.c",
+          "file": "fixes/engine/low-allocations/mgf-low-allocations.c",
           "symbol": null,
           "note": "An allocation the game asks for with no address is first asked for below the area Wine 11.21 reserves near the top, with an address requirement; only when nothing is free there does the game's own request go through as it was.",
           "language": "c",
-          "startLine": 121,
-          "endLine": 138,
-          "commit": "1a2cb2ac9e2b6b09ce2a5b5b1b94bfc454ce5f94",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/1a2cb2ac9e2b6b09ce2a5b5b1b94bfc454ce5f94/fixes/low-allocations/mgf-low-allocations.c#L121-L138",
+          "startLine": 120,
+          "endLine": 137,
+          "commit": "07a455932b7ac708adb32aeb6c15013e1685e43c",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/07a455932b7ac708adb32aeb6c15013e1685e43c/fixes/engine/low-allocations/mgf-low-allocations.c#L120-L137",
           "code": "static NTSTATUS alloc_hook(HANDLE process, void **addr, uintptr_t zero_bits, size_t *size, uint32_t type,\n                           uint32_t protect) {\n    if (!zero_bits && wants_low(process, addr, type) && size) {\n        mem_extended_parameter params[1];\n        mem_address_requirements req;\n        size_t want = *size;\n        uint32_t n = with_low_limit(NULL, 0, params, 1, &req);\n        NTSTATUS status = real_alloc_ex(process, addr, size, type, protect, params, n);\n        if (status == STATUS_SUCCESS) {\n            say_low(*addr);\n            return status;\n        }\n        *addr = NULL;\n        *size = want;\n        say_fell_back();\n    }\n    return real_alloc(process, addr, zero_bits, size, type, protect);\n}"
         },
         {
-          "file": "fixes/low-allocations/mgf-low-allocations.c",
+          "file": "fixes/engine/low-allocations/mgf-low-allocations.c",
           "symbol": null,
           "note": "NotProton's ntdll stays as it is: the library swaps the syscall table's four entries, all or none, inside F1 25's process only.",
           "language": "c",
-          "startLine": 219,
-          "endLine": 244,
-          "commit": "1a2cb2ac9e2b6b09ce2a5b5b1b94bfc454ce5f94",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/1a2cb2ac9e2b6b09ce2a5b5b1b94bfc454ce5f94/fixes/low-allocations/mgf-low-allocations.c#L219-L244",
+          "startLine": 218,
+          "endLine": 243,
+          "commit": "07a455932b7ac708adb32aeb6c15013e1685e43c",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/07a455932b7ac708adb32aeb6c15013e1685e43c/fixes/engine/low-allocations/mgf-low-allocations.c#L218-L243",
           "code": "static void arm(const struct mach_header_64 *mh, intptr_t slide, const char *image) {\n    (void)image;\n    uintptr_t alloc, alloc_ex, map, map_ex;\n    uintptr_t *alloc_slot = entry(mh, slide, \"_NtAllocateVirtualMemory\", &alloc);\n    uintptr_t *alloc_ex_slot = entry(mh, slide, \"_NtAllocateVirtualMemoryEx\", &alloc_ex);\n    uintptr_t *map_slot = entry(mh, slide, \"_NtMapViewOfSection\", &map);\n    uintptr_t *map_ex_slot = entry(mh, slide, \"_NtMapViewOfSectionEx\", &map_ex);\n    if (!alloc_slot || !alloc_ex_slot || !map_slot || !map_ex_slot) return;\n    real_alloc = (alloc_fn)alloc;\n    real_alloc_ex = (alloc_ex_fn)alloc_ex;\n    real_map = (map_fn)map;\n    real_map_ex = (map_ex_fn)map_ex;\n    query_section = (query_section_fn)api->symbol(mh, slide, \"_NtQuerySection\");\n    // All four or none: the Ex calls are what the others ask through.\n    if (!api->swap_pointer(alloc_ex_slot, alloc_ex, (uintptr_t)alloc_ex_hook)) {\n        api->log(TAG, \"the syscall table could not be written, not armed\");\n        return;\n    }\n    if (!api->swap_pointer(map_ex_slot, map_ex, (uintptr_t)map_ex_hook)\n        || !api->swap_pointer(alloc_slot, alloc, (uintptr_t)alloc_hook)\n        || !api->swap_pointer(map_slot, map, (uintptr_t)map_hook)) {\n        api->log(TAG, \"only part of the syscall table could be written; what was written stays\");\n        return;\n    }\n    api->log(TAG, \"allocations with no address are asked below 0x7ff000000000 first\");\n}"
         },
         {
@@ -424,10 +429,10 @@
           "symbol": null,
           "note": "Swofty Launcher is the player's own download: the .zip, the unpacked folder or its swofty.exe. Whatever is given has to hold exactly one bin/swofty.exe with loader/ beside it, or nothing is changed.",
           "language": "bash",
-          "startLine": 285,
-          "endLine": 300,
-          "commit": "1a2cb2ac9e2b6b09ce2a5b5b1b94bfc454ce5f94",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/1a2cb2ac9e2b6b09ce2a5b5b1b94bfc454ce5f94/fixes/install-f125-swofty.sh#L285-L300",
+          "startLine": 284,
+          "endLine": 299,
+          "commit": "5ac18177dcf4702ee6bf84fc0793743265694863",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/5ac18177dcf4702ee6bf84fc0793743265694863/fixes/install-f125-swofty.sh#L284-L299",
           "code": "launcher_in() {  # <given> <work>\n  local from=\"$1\" work=\"$2\" found\n  case \"$from\" in\n  *.zip|*.ZIP)\n    mkdir -p \"$work/out\"\n    ditto -x -k \"$from\" \"$work/out\" || return 0\n    from=\"$work/out\" ;;\n  *.exe|*.EXE) from=\"$(dirname \"$(dirname \"$from\")\")\" ;;\n  esac\n  [ -d \"$from\" ] || return 0\n  found=\"$(find \"$from\" -maxdepth 3 -type f -path '*/bin/swofty.exe' 2>/dev/null)\"\n  [ \"$(printf '%s' \"$found\" | /usr/bin/grep -c .)\" = 1 ] || return 0\n  found=\"$(dirname \"$(dirname \"$found\")\")\"\n  [ -s \"$found/bin/swofty.exe\" ] && [ -d \"$found/loader\" ] && printf '%s\\n' \"$found\"\n  return 0\n}"
         },
         {
@@ -435,10 +440,10 @@
           "symbol": null,
           "note": "Swofty reads ActiveUser to see that Steam is signed in. NotProton's Steam stub does not write it, so the account comes from Steam's own loginusers.vdf.",
           "language": "bash",
-          "startLine": 190,
-          "endLine": 201,
-          "commit": "1a2cb2ac9e2b6b09ce2a5b5b1b94bfc454ce5f94",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/1a2cb2ac9e2b6b09ce2a5b5b1b94bfc454ce5f94/fixes/install-f125-swofty.sh#L190-L201",
+          "startLine": 189,
+          "endLine": 200,
+          "commit": "5ac18177dcf4702ee6bf84fc0793743265694863",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/5ac18177dcf4702ee6bf84fc0793743265694863/fixes/install-f125-swofty.sh#L189-L200",
           "code": "steam_account() {\n  [ -f \"$STEAM_LOGIN\" ] || return 1\n  /usr/bin/perl -e '\n    use strict; use warnings; local $/; my $s = <STDIN>; my (@ids, $recent);\n    while ($s =~ /\"(7656\\d{13})\"\\s*\\{([^{}]*)\\}/g) {\n      push @ids, $1; $recent = $1 if $2 =~ /\"MostRecent\"\\s+\"1\"/i;\n    }\n    $recent //= $ids[0] if @ids == 1;\n    exit 1 unless defined $recent;\n    print $recent - 76561197960265728, \"\\n\";\n  ' < \"$STEAM_LOGIN\"\n}"
         },
         {
@@ -446,22 +451,22 @@
           "symbol": null,
           "note": "NotProton keeps a row's value as a variable in the launch options, in front of the script, so the script finds the three rows in its own environment.",
           "language": "bash",
-          "startLine": 32,
-          "endLine": 35,
-          "commit": "be322debb2248002290a225d3bf78e7a697da3bf",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/be322debb2248002290a225d3bf78e7a697da3bf/fixes/f125-swofty-play.sh#L32-L35",
-          "code": "app=\"${STEAM_COMPAT_APP_ID:-}\"\ncase \"$app\" in \"\"|*[!0-9]*) exec \"$@\" ;; esac\neval \"switch=\\${NOTPROTON_MGF_F125_SWOFTY_$app:-}; opens=\\${NOTPROTON_MGF_F125_OPENS_$app:-game}; profile=\\${NOTPROTON_MGF_F125_PROFILE_$app:-active}\"\n[ \"$switch\" = 1 ] || exec \"$@\""
+          "startLine": 33,
+          "endLine": 38,
+          "commit": "5ac18177dcf4702ee6bf84fc0793743265694863",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/5ac18177dcf4702ee6bf84fc0793743265694863/fixes/f125-swofty-play.sh#L33-L38",
+          "code": "app=\"${STEAM_COMPAT_APP_ID:-}\"\ncase \"$app\" in \"\"|*[!0-9]*) exec \"$@\" ;; esac\nswitch=\"${NOTPROTON_MGF_MODTOOL:-}\"; play=\"${NOTPROTON_MGF_PLAY:-game}\"\nopens=game; profile=active; notes=off\ncase \"$play\" in window) opens=window ;; nomods) profile=vanilla ;; notes) notes=on ;; esac\n[ \"$switch\" = 1 ] || exec \"$@\""
         },
         {
           "file": "fixes/f125-swofty-play.sh",
           "symbol": null,
           "note": "Steam's Play hands NotProton EA AntiCheat's launcher; this hands it Swofty's command line instead, in the same prefix.",
           "language": "bash",
-          "startLine": 49,
-          "endLine": 63,
-          "commit": "be322debb2248002290a225d3bf78e7a697da3bf",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/be322debb2248002290a225d3bf78e7a697da3bf/fixes/f125-swofty-play.sh#L49-L63",
-          "code": "# What f125-swofty-run.cmd reads. NOTPROTON_ENV_<NAME> is how NotProton hands a variable to the\n# game however it starts it; a plain variable does not survive every route.\n# Steam's own command for the game goes to Swofty after \"--\", as Steam on Windows hands it to a\n# launch option.\nexport NOTPROTON_ENV_F125_STEAM_COMMAND=\"$(windows \"$game\")\"\nif [ \"$opens\" = window ]; then\n  # The launcher's window draws to a plain window: Wine's DirectComposition gives it nothing.\n  export NOTPROTON_ENV_F125_OPENS=window NOTPROTON_ENV_GPUI_DISABLE_DIRECT_COMPOSITION=1\nfi\n# A profile's name goes to Swofty as it is; \"active\" is the row's word for none given.\ncase \"$profile\" in \"\"|active|*[!A-Za-z0-9._-]*) ;; *) export NOTPROTON_ENV_F125_PROFILE=\"$profile\" ;; esac\n# The two settings every session played so far had (CrossOver bottle and NotProton, 2026-11-23).\nexport NOTPROTON_ENV_SWOFTY_ARM_SYNC=\"${SWOFTY_ARM_SYNC:-1}\" NOTPROTON_ENV_SWOFTY_RTAS_GUARD=\"${SWOFTY_RTAS_GUARD:-0}\"\n# NotProton's Steam stub starts a program by name or Windows path, not a .cmd by its unix path.\nexec \"$tool\" \"$verb\" cmd.exe /d /c call \"$(windows \"$here/f125-swofty-run.cmd\")\""
+          "startLine": 52,
+          "endLine": 67,
+          "commit": "5ac18177dcf4702ee6bf84fc0793743265694863",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/5ac18177dcf4702ee6bf84fc0793743265694863/fixes/f125-swofty-play.sh#L52-L67",
+          "code": "# What f125-swofty-run.cmd reads. NOTPROTON_ENV_<NAME> is how NotProton hands a variable to the\n# game however it starts it; a plain variable does not survive every route.\n# Steam's own command for the game goes to Swofty after \"--\", as Steam on Windows hands it to a\n# launch option.\nexport NOTPROTON_ENV_F125_STEAM_COMMAND=\"$(windows \"$game\")\"\nif [ \"$opens\" = window ]; then\n  # The launcher's window draws to a plain window: Wine's DirectComposition gives it nothing.\n  export NOTPROTON_ENV_F125_OPENS=window NOTPROTON_ENV_GPUI_DISABLE_DIRECT_COMPOSITION=1\nfi\n# A profile's name goes to Swofty as it is; \"active\" is the row's word for none given.\ncase \"$profile\" in \"\"|active|*[!A-Za-z0-9._-]*) ;; *) export NOTPROTON_ENV_F125_PROFILE=\"$profile\" ;; esac\n# The two settings every session played so far had (CrossOver bottle and NotProton, 2026-11-23).\nexport NOTPROTON_ENV_SWOFTY_ARM_SYNC=\"${SWOFTY_ARM_SYNC:-1}\" NOTPROTON_ENV_SWOFTY_RTAS_GUARD=\"${SWOFTY_RTAS_GUARD:-0}\"\n# NotProton's Steam stub starts a program by name or Windows path, not a .cmd by its unix path.\n[ \"$notes\" != on ] || export WINEDEBUG=\"err+all,fixme-all,+seh,+timestamp,+pid\"\nexec \"$tool\" \"$verb\" cmd.exe /d /c call \"$(windows \"$here/f125-swofty-run.cmd\")\""
         },
         {
           "file": "fixes/f125-swofty-run.cmd",
@@ -477,7 +482,7 @@
       ],
       "symptom": "Steam's Play opens EA AntiCheat's launcher, which does not run on a Mac. Through Swofty Launcher on NotProton the game closed about half a minute after it started, at the main menu, and Swofty reported that Steam was not running.",
       "cause": "Three things. Wine 11.21 searches its reserved address areas bottom-up, and a 6.5 GB image fills the low one, so the game's objects landed at 0x7ff000000000 and up, and a pointer to a low object came back with bit 47 set (crash at F1_25.exe+0x416a797, four times of four). Swofty takes NotProton's STEAM_COMPAT_TOOL_PATHS for Proton's folder and starts the game with a proton script NotProton's tool does not have. And NotProton's Steam stub writes the running Steam's process but not ActiveUser, and its Steam folder has no loginusers.vdf, which is where Swofty looks for a signed-in Steam.",
-      "fix": "A row on the game's Compatibility page, Keep the game's memory low, has NotProton load mgf-low-allocations.dylib into F1 25 alone; it asks allocations with no address below the high reserved area first, which is what engine patch 0038 does inside ntdll.so for every game, so the runner need not carry 0038. The fix copies the Swofty Launcher the player downloaded, writes the version override and ActiveUser into the prefix, links Steam's loginusers.vdf, depot manifests and content log into the prefix's Steam folder, and puts a script before %command% in Steam's launch options that starts Swofty's command line in place of EA AntiCheat's launcher, with STEAM_COMPAT_TOOL_PATHS cleared. Three more rows switch it, choose what Play opens, the game or Swofty Launcher's window, and which of Swofty's profiles a start plays; a NotProton row cannot change the program Steam starts, so those rows are the switches the script reads, and nothing a player may set is typed into the launch options by hand. Played on 2026-11-23 from a clean prefix with patch 0038: the modded profile reached the menu and a race, the game's objects at 0x4.., 0x5.. and 0x6... Played on 2026-11-24 with 0038 switched off and the library loaded: a full race without the crash.",
+      "fix": "MacGameFix's shared Engine fixes row has NotProton load mgf-engine.dylib, which arms in F1 25 alone a fix that asks allocations with no address below the high reserved area first, which is what engine patch 0038 does inside ntdll.so for every game, so the runner need not carry 0038. The fix copies the Swofty Launcher the player downloaded, writes the version override and ActiveUser into the prefix, links Steam's loginusers.vdf, depot manifests and content log into the prefix's Steam folder, and puts a script before %command% in Steam's launch options that starts Swofty's command line in place of EA AntiCheat's launcher, with STEAM_COMPAT_TOOL_PATHS cleared. MacGameFix's shared rows Start through the mod tool and Play opens switch it and choose what Play opens (the game, the game without mods, the game with Wine's exception notes, or the mod tool's window); a NotProton row cannot change the program Steam starts, so those rows are the switches the script reads, and nothing a player may set is typed into the launch options by hand. Played on 2026-11-23 from a clean prefix with patch 0038: the modded profile reached the menu and a race, the game's objects at 0x4.., 0x5.. and 0x6... Played on 2026-11-24 with 0038 switched off and the library loaded: a full race without the crash.",
       "backend": "D3DMetal. Ray tracing closed the game when it was turned on; it is left off.",
       "crossover": "CrossOver Preview 27 (27.0.0.41303), NotProton runner on Rosetta, 2026-11-23 and 2026-11-24",
       "pageUrl": null,

@@ -9,15 +9,16 @@
 # and with what NotProton gives a game: Swofty builds its active profile, starts F1_25.exe and puts
 # the game folder back when the game exits.
 #
-# Two rows on the game's Compatibility page in NotProton decide what it does. NotProton keeps a
+# Two of MacGameFix's shared rows, on the game's Compatibility page in NotProton, decide what it does. NotProton keeps a
 # row's value as a variable in the launch options, in front of this script, so the script
-# finds it in its environment (the app id is part of the name):
-#   NOTPROTON_MGF_F125_SWOFTY_<appid>=1       "Start through Swofty Launcher". Without it,
-#                                             Steam's own command runs unchanged.
-#   NOTPROTON_MGF_F125_OPENS_<appid>=window   "Play opens": Swofty Launcher's window instead
-#                                             of the game. Anything else, or nothing: the game.
-#   NOTPROTON_MGF_F125_PROFILE_<appid>=vanilla  "Profile": Swofty's profile without addons for
-#                                             this start. "active", or nothing: the active one.
+# finds it in its environment (each game's options are its own):
+#   NOTPROTON_MGF_MODTOOL=1     "Start through the mod tool", a row MacGameFix's games share.
+#                               Without it, Steam's own command runs unchanged.
+#   NOTPROTON_MGF_PLAY=window   "Play opens": Swofty Launcher's window instead of the game.
+#   NOTPROTON_MGF_PLAY=nomods   "Play opens": the game with Swofty's profile without addons.
+#   NOTPROTON_MGF_PLAY=notes    "Play opens": the game, with Wine writing every exception it
+#                               raises to NotProton's Wine log, for a report.
+#                               Anything else, or nothing: the game with the active profile.
 #
 # Anything else Steam runs through the tool, such as its install scripts, goes through unchanged.
 #
@@ -31,7 +32,9 @@ fi
 case "$game" in */EAAntiCheat.GameServiceLauncher.exe|*/F1_25.exe) ;; *) exec "$@" ;; esac
 app="${STEAM_COMPAT_APP_ID:-}"
 case "$app" in ""|*[!0-9]*) exec "$@" ;; esac
-eval "switch=\${NOTPROTON_MGF_F125_SWOFTY_$app:-}; opens=\${NOTPROTON_MGF_F125_OPENS_$app:-game}; profile=\${NOTPROTON_MGF_F125_PROFILE_$app:-active}"
+switch="${NOTPROTON_MGF_MODTOOL:-}"; play="${NOTPROTON_MGF_PLAY:-game}"
+opens=game; profile=active; notes=off
+case "$play" in window) opens=window ;; nomods) profile=vanilla ;; notes) notes=on ;; esac
 [ "$switch" = 1 ] || exec "$@"
 # A path as the prefix sees it: the Steam library on the drive NotProton gives it there (S: so
 # far, read from the prefix's dosdevices), anything else under Z:.
@@ -60,4 +63,5 @@ case "$profile" in ""|active|*[!A-Za-z0-9._-]*) ;; *) export NOTPROTON_ENV_F125_
 # The two settings every session played so far had (CrossOver bottle and NotProton, 2026-11-23).
 export NOTPROTON_ENV_SWOFTY_ARM_SYNC="${SWOFTY_ARM_SYNC:-1}" NOTPROTON_ENV_SWOFTY_RTAS_GUARD="${SWOFTY_RTAS_GUARD:-0}"
 # NotProton's Steam stub starts a program by name or Windows path, not a .cmd by its unix path.
+[ "$notes" != on ] || export WINEDEBUG="err+all,fixme-all,+seh,+timestamp,+pid"
 exec "$tool" "$verb" cmd.exe /d /c call "$(windows "$here/f125-swofty-run.cmd")"
