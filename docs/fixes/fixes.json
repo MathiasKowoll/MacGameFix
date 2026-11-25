@@ -258,7 +258,7 @@
       "executable": "FC27.exe",
       "carrierDirectory": "",
       "alsoRuns": [],
-      "summary": "The Steam copy only starts on a Mac with FC 27 Live Editor in it, a mod tool you download and provide: EA AntiCheat's launcher starts nothing here, and the game closed the moment the editor's window went in. This asks you for your Live Editor folder and copies it, loads a library that lets its Direct3D hooks work on D3DMetal and makes Steam's Play start the game with it. Offline, without EA AntiCheat or online modes. NotProton with CrossOver Preview 41303 (Rosetta) only. AT YOUR OWN RISK: MacGameFix does not answer for failures in the game, its saves, its mods or your account.",
+      "summary": "The Steam copy only starts on a Mac with FC 27 Live Editor in it, a mod tool you download and provide: EA AntiCheat's launcher starts nothing here, and the game closed the moment the editor's window went in. This asks you for your Live Editor folder and copies it, gives the game, alone, the Windows function its activation asks for, loads a library that lets its Direct3D hooks work on D3DMetal and makes Steam's Play start the game with it. Offline, without EA AntiCheat or online modes. NotProton with CrossOver Preview 41303 (Rosetta) only. AT YOUR OWN RISK: MacGameFix does not answer for failures in the game, its saves, its mods or your account.",
       "page": null,
       "testing": "Mathias Kowoll",
       "installs": [
@@ -266,6 +266,7 @@
         "fc27-le-play.sh",
         "fc27-le-run.cmd",
         "mgf-d3dmetal-hookable.dylib",
+        "mgf-package-family.dylib",
         "notproton-plugins.sh",
         "np-plugin-fc27-live-editor.conf",
         "steam-launch-options.pl"
@@ -273,7 +274,10 @@
       "builtFrom": [
         "d3dmetal-hookable/mgf-d3dmetal-hookable.c",
         "d3dmetal-hookable/check.c",
-        "build-d3dmetal-hookable.sh"
+        "build-d3dmetal-hookable.sh",
+        "package-family/mgf-package-family.c",
+        "package-family/check.c",
+        "build-package-family.sh"
       ],
       "license": "GPL-3.0-or-later",
       "credits": [
@@ -284,6 +288,17 @@
         }
       ],
       "excerpts": [
+        {
+          "file": "fixes/package-family/mgf-package-family.c",
+          "symbol": null,
+          "note": "Once kernel32.dll is mapped in the game's process, its export directory stays where it is and gets new arrays with one more name, in its sorted place; the function is a few instructions outside the directory, so Wine does not take it for a forward to another DLL.",
+          "language": "c",
+          "startLine": 136,
+          "endLine": 208,
+          "commit": "f05f79fe6ea5b98e2be7aa97db9509e54e1ec624",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f05f79fe6ea5b98e2be7aa97db9509e54e1ec624/fixes/package-family/mgf-package-family.c#L136-L208",
+          "code": "static void add_name(uint8_t *base, uint32_t image_size, struct export_directory *d) {\n    const uint32_t *names = rva(base, d->address_of_names);\n    const uint16_t *ordinals = rva(base, d->address_of_name_ordinals);\n    const uint32_t *functions = rva(base, d->address_of_functions);\n    uint32_t n = d->number_of_names, f = d->number_of_functions, at = 0;\n\n    // Where the name goes in the sorted list; nothing to do when it is there already.\n    while (at < n) {\n        int c = strcmp(rva(base, names[at]), NAME);\n        if (!c) {\n            api->log(TAG, \"kernel32.dll already has %s, left as it is\", NAME);\n            return;\n        }\n        if (c > 0) break;\n        at++;\n    }\n    if (f >= 0xffff) {\n        api->log(TAG, \"kernel32.dll has %u functions, no ordinal left for one more, not added\", f);\n        return;\n    }\n\n    size_t code = (sizeof(FUNCTION) + 15) & ~(size_t)15;\n    size_t size = code + (f + 1) * 4 + (n + 1) * 4 + (n + 1) * 2 + sizeof(NAME);\n    uint8_t *room = room_near(base, image_size, size);\n    if (!room) {\n        api->log(TAG, \"no memory free within 4 GB above kernel32.dll, %s not added\", NAME);\n        return;\n    }\n    uint8_t *p = room;\n    memcpy(p, FUNCTION, sizeof(FUNCTION));\n    uint32_t *new_functions = (uint32_t *)(p += code);\n    uint32_t *new_names = (uint32_t *)(p += (f + 1) * 4);\n    uint16_t *new_ordinals = (uint16_t *)(p += (n + 1) * 4);\n    char *name = (char *)(p += (n + 1) * 2);\n    memcpy(name, NAME, sizeof(NAME));\n    #define RVA_OF(x) ((uint32_t)((uint8_t *)(x) - base))\n\n    memcpy(new_functions, functions, f * 4);\n    new_functions[f] = RVA_OF(room);\n    memcpy(new_names, names, at * 4);\n    memcpy(new_ordinals, ordinals, at * 2);\n    new_names[at] = RVA_OF(name);\n    new_ordinals[at] = (uint16_t)f;\n    memcpy(new_names + at + 1, names + at, (n - at) * 4);\n    memcpy(new_ordinals + at + 1, ordinals + at, (n - at) * 2);\n\n    // The function's page runs; the arrays on it are only read.\n    void *addr = room;\n    size_t len = size;\n    uint32_t old;\n    if (protect(CURRENT_PROCESS, &addr, &len, PAGE_EXECUTE_READ, &old)) {\n        api->log(TAG, \"the new function's memory could not be made executable, %s not added\", NAME);\n        return;\n    }\n\n    addr = d;\n    len = sizeof(*d);\n    if (protect(CURRENT_PROCESS, &addr, &len, PAGE_READWRITE, &old)) {\n        api->log(TAG, \"kernel32.dll's export directory could not be written, %s not added\", NAME);\n        return;\n    }\n    d->address_of_functions = RVA_OF(new_functions);\n    d->address_of_name_ordinals = RVA_OF(new_ordinals);\n    d->address_of_names = RVA_OF(new_names);\n    d->number_of_functions = f + 1;\n    d->number_of_names = n + 1;\n    addr = d;\n    len = sizeof(*d);\n    protect(CURRENT_PROCESS, &addr, &len, old, &old);\n    #undef RVA_OF\n    api->log(TAG, \"kernel32.dll at %p: %s added, ordinal %u, the function at %p\", (void *)base, NAME,\n             d->base + f, (void *)room);\n}"
+        },
         {
           "file": "fixes/d3dmetal-hookable/mgf-d3dmetal-hookable.c",
           "symbol": null,
@@ -311,10 +326,10 @@
           "symbol": null,
           "note": "Live Editor is the player's to provide: from MacGameFix's window the install asks for its folder with macOS's folder chooser, every time, which is also how a new version goes in.",
           "language": "bash",
-          "startLine": 191,
-          "endLine": 197,
-          "commit": "064db6f558963eb0550856b1f70eb31807d6bcce",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/064db6f558963eb0550856b1f70eb31807d6bcce/fixes/install-fc27-live-editor.sh#L191-L197",
+          "startLine": 198,
+          "endLine": 204,
+          "commit": "f05f79fe6ea5b98e2be7aa97db9509e54e1ec624",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/f05f79fe6ea5b98e2be7aa97db9509e54e1ec624/fixes/install-fc27-live-editor.sh#L198-L204",
           "code": "ask_folder() {\n  local prompt=\"Choose your FC 27 Live Editor folder: the one that holds Launcher.exe and FCLiveEditor.DLL.\"\n  editor_ok && prompt=\"$prompt Cancel keeps the Live Editor already in use.\"\n  if [ -n \"${MGVF_CHOOSER:-}\" ]; then \"$MGVF_CHOOSER\" \"$prompt\" 2>/dev/null || true; return 0; fi\n  /usr/bin/osascript -e 'on run argv' -e 'try' -e 'return POSIX path of (choose folder with prompt (item 1 of argv))' \\\n    -e 'on error' -e 'return \"\"' -e 'end try' -e 'end run' \"$prompt\" 2>/dev/null || true\n}"
         },
         {
@@ -342,7 +357,7 @@
       ],
       "symptom": "Steam's Play shows EA AntiCheat's launcher for some seconds and no game starts. With FC 27 Live Editor's launcher open the game starts, first with \"There is a problem with your game's setup. Please reinstall your game\", and once past that it closes right after the EA SPORTS logo, without a message.",
       "cause": "Three things. The game imports FindPackagesByPackageFamily from kernel32, which Wine 11.21 does not have. EA AntiCheat's launcher ends after 10 s with 0xE111000B under Wine; Live Editor's launcher puts a stand-in in its place, and with the stand-in alone the game ends 9 s in, so the game runs here only with Live Editor's DLL in it. And Live Editor draws its window by hooking Direct3D methods inline: D3DMetal's are 16-byte stubs, 66 90 / FF 25 00 00 00 00 / pointer, a jump through the pointer right behind it. The hook copies the first two instructions elsewhere, where the jump reads the copy's own next instruction as its target: an execute fault at 0x3C25FF (the bytes FF 25 3C 00 00 00 00 00) on the first ExecuteCommandLists after the hooks went in.",
-      "fix": "Engine patch 0041, in the Wine modules' kernelbase.dll and kernel32.dll (the Rosetta improvement, CrossOver Preview 41303), adds the function; this fix checks the runner has it. The install asks for the player's Live Editor folder and copies it, puts a script before %command% in Steam's launch options that opens Live Editor's launcher, starts Steam's own command and stays until the game is gone, and has NotProton load mgf-d3dmetal-hookable.dylib into the game, which rewrites each D3DMetal stub in place to mov rax, method; jmp rax (1302 of them in FC 27's first 9 s). Three rows on the game's Compatibility page in NotProton switch it, choose what Play opens, and turn Wine's exception notes on for a report; nothing a player may set is typed into the launch options by hand. Played on 2026-11-23 with the steps done by hand: the game to its main menu with Live Editor's window on F9, 4 min 35 s, closed by the player. The editors themselves, a match and a long session were not played.",
+      "fix": "A row on the game's Compatibility page, Activation fix, has NotProton load mgf-package-family.dylib into FC 27 alone; it adds the function, answering no packages as engine patch 0041 does, to the kernel32.dll Wine maps in the game's process, so the runner need not carry 0041 for every game. The install asks for the player's Live Editor folder and copies it, puts a script before %command% in Steam's launch options that opens Live Editor's launcher, starts Steam's own command and stays until the game is gone, and has NotProton load mgf-d3dmetal-hookable.dylib into the game, which rewrites each D3DMetal stub in place to mov rax, method; jmp rax (1302 of them in FC 27's first 9 s). Three more rows on the game's Compatibility page in NotProton switch it, choose what Play opens, and turn Wine's exception notes on for a report; nothing a player may set is typed into the launch options by hand. Played on 2026-11-23 with the steps done by hand: the game to its main menu with Live Editor's window on F9, 4 min 35 s, closed by the player. The editors themselves, a match and a long session were not played.",
       "backend": "D3DMetal 4.",
       "crossover": "CrossOver Preview 27 (27.0.0.41303), NotProton runner on Rosetta, 2026-11-23",
       "pageUrl": null,

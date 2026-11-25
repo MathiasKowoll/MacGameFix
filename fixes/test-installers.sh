@@ -446,22 +446,29 @@ touch "$fpfx/cxbottle.conf"; [ "$(f1st)" = norecipe ] && say ok "f1 25: a CrossO
 # EA SPORTS FC 27 with FC 27 Live Editor, in a NotProton prefix: the Live Editor folder the
 # player names copied to the store (nothing is downloaded or looked for), the play script beside
 # it, the script before %command% in Steam's launch options, and two rows and a library in
-# NotProton's plugins. A disposable HOME, a runner whose kernel32.dll carries patch 0041's
-# function, and Live Editor folders made here.
+# NotProton's plugins. A disposable HOME with a stand-in for NotProton's plugin host, a stock
+# runner (the activation fix's library does 0041's job), and Live Editor folders made here.
 ec="$W/fc27"; ehome="$ec/home"; epfx="$ec/compatdata/4080220/pfx"; estore="$ec/store"; edl="$ec/unpacked"
 mkdir -p "$epfx/drive_c" "$ec/fixes" "$ec/game" "$ec/runner/lib/wine/x86_64-windows" "$edl"
 touch "$ec/game/FC27.exe" "$epfx/system.reg"; printf 'WINE REGISTRY Version 2\n#arch=win64\n' > "$epfx/user.reg"
 printf '27.0.0.41303-fex\nCrossOver 2026 11 11-ARM64 - Rosetta\n' > "$ec/compatdata/4080220/notproton-build"
-printf 'kernel32 with FindPackagesByPackageFamily in it\n' > "$ec/runner/lib/wine/x86_64-windows/kernel32.dll"
+echo stock > "$ec/runner/lib/wine/x86_64-windows/kernel32.dll"
 # A Live Editor folder: <where> <what its DLL holds> <its DLL's time, touch -t>.
 editor() { mkdir -p "$1/FakeEAACLauncher" "$1/lua" "$1/Logs"; echo launcher > "$1/Launcher.exe"; echo "$2" > "$1/FCLiveEditor.DLL"; echo standin > "$1/FakeEAACLauncher/EAAntiCheat.GameServiceLauncher.exe"; echo used > "$1/Logs/a.log"; touch -t "$3" "$1/FCLiveEditor.DLL"; }
-for n in install-fc27-live-editor.sh bottles.sh fc27-le-play.sh fc27-le-run.cmd steam-launch-options.pl notproton-plugins.sh np-plugin-fc27-live-editor.conf mgf-d3dmetal-hookable.dylib; do cp "$FIX/$n" "$ec/fixes/$n"; done
-mkdir -p "$ehome/Library/Application Support/notproton"; eplug="$ehome/Library/Application Support/notproton/plugins"
+for n in install-fc27-live-editor.sh bottles.sh fc27-le-play.sh fc27-le-run.cmd steam-launch-options.pl notproton-plugins.sh np-plugin-fc27-live-editor.conf mgf-d3dmetal-hookable.dylib mgf-package-family.dylib; do cp "$FIX/$n" "$ec/fixes/$n"; done
+enp="$ehome/Library/Application Support/notproton"; mkdir -p "$enp"; eplug="$enp/plugins"; echo host > "$enp/plugin-host.dylib"
 sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$ec/fixes/steam-launch-options.pl"
 evdf="$ehome/Library/Application Support/Steam/userdata/1/config/localconfig.vdf"; mkdir -p "$(dirname "$evdf")"
 printf '"UserLocalConfigStore" { "Software" { "Valve" { "Steam" { "apps" { "4080220" { "LaunchOptions" "%s" } } } } } }\n' 'MGF_FANS=max %command%' > "$evdf"; evdf0="$(cat "$evdf")"
 e1() { HOME="$ehome" MGVF_BOTTLE="$epfx" MGVF_CX="$ec/runner" MGVF_FC27_STORE="$estore" MGVF_NOTPROTON_VERSION=1.2.7 MGVF_STEAM_RUNNING=0 /bin/bash "$ec/fixes/install-fc27-live-editor.sh" "$ec/game" "$@"; }
 e1st() { e1 --status 2>/dev/null | tail -1; }
+# Each switch once, before the play script, which stands right before %command%.
+eswitched() {
+  local o; o="$(/usr/bin/sed -n 's/.*"LaunchOptions" "\(.*\)".*/\1/p' "$evdf")"
+  for k in "$@"; do case " $o " in *" ${k}_4080220=1 "*) ;; *) return 1 ;; esac; done
+  case "$o" in *"\\\"$estore/fc27-le-play.sh\\\" %command%") ;; *) return 1 ;; esac
+  [ "$(printf '%s' "$o" | /usr/bin/grep -o 'fc27-le-play.sh' | /usr/bin/grep -c .)" = 1 ]
+}
 [ "$(e1st)" = absent ] && say ok "fc 27 in NotProton: absent before" || say FAIL "fc 27: absent before ($(e1st))"
 eout="$(e1 2>&1)" && say FAIL "fc 27: installed with no Live Editor to take" || { case "$eout" in *'is not part of MacGameFix'*'MGVF_LIVE_EDITOR='*'Nothing was changed'*) true ;; *) false ;; esac \
   && [ "$(cat "$evdf")" = "$evdf0" ] && [ ! -e "$estore" ] && [ ! -e "$eplug" ] \
@@ -478,19 +485,28 @@ printf '%s/\n' "$edl" > "$ec/answer"   # the folder around it, as the chooser gi
 ewin > "$W/fc27.install.log" 2>&1 || say FAIL "fc 27: install failed: $(tail -2 "$W/fc27.install.log")"
 [ "$(e1st)" = installed ] && [ "$(cat "$estore/LiveEditor/FCLiveEditor.DLL")" = one ] && [ -f "$estore/LiveEditor/FakeEAACLauncher/EAAntiCheat.GameServiceLauncher.exe" ] && [ ! -e "$estore/LiveEditor/Logs" ] \
   && cmp -s "$estore/fc27-le-play.sh" "$FIX/fc27-le-play.sh" && [ -x "$estore/fc27-le-play.sh" ] && cmp -s "$estore/fc27-le-run.cmd" "$FIX/fc27-le-run.cmd" \
-  && /usr/bin/grep -qF "\"NOTPROTON_MGF_FC27_LE_4080220=1 MGF_FANS=max \\\"$estore/fc27-le-play.sh\\\" %command%\"" "$evdf" \
-  && /usr/bin/grep -qx '\[NOTPROTON_MGF_FC27_LE_4080220\]' "$eplug/mgf-4080220.conf" && /usr/bin/grep -qx '\[NOTPROTON_MGF_FC27_OPENS_4080220\]' "$eplug/mgf-4080220.conf" \
+  && eswitched NOTPROTON_MGF_FC27_LE NOTPROTON_MGF_FC27_PACKAGES && /usr/bin/grep -q 'MGF_FANS=max' "$evdf" \
+  && /usr/bin/grep -qx '\[NOTPROTON_MGF_FC27_LE_4080220\]' "$eplug/mgf-4080220.conf" && /usr/bin/grep -qx '\[NOTPROTON_MGF_FC27_PACKAGES_4080220\]' "$eplug/mgf-4080220.conf" \
+  && /usr/bin/grep -qx '\[NOTPROTON_MGF_FC27_OPENS_4080220\]' "$eplug/mgf-4080220.conf" \
   && /usr/bin/grep -qx '\[NOTPROTON_MGF_FC27_TRACE_4080220\]' "$eplug/mgf-4080220.conf" && ! /usr/bin/grep -q 'NOTPROTON_MGF_FC27_TRACE' "$evdf" \
-  && [ "$(/usr/bin/grep -c '^description = .*Played on NotProton, CrossOver Preview 41303 on Rosetta (D3DMetal 4.0b3), 2026-11-23$' "$eplug/mgf-4080220.conf")" = 3 ] \
-  && /usr/bin/grep -qx 'inject = 1' "$eplug/mgf-4080220.conf" && [ "$(/usr/bin/grep -c '^apps = 4080220$' "$eplug/mgf-4080220.conf")" = 3 ] \
-  && cmp -s "$eplug/mgf-d3dmetal-hookable.dylib" "$FIX/mgf-d3dmetal-hookable.dylib" && [ ! -e "$ec/game/EAAntiCheat.GameServiceLauncher.exe" ] \
+  && [ "$(/usr/bin/grep -c '^description = .*Played on NotProton, CrossOver Preview 41303 on Rosetta (D3DMetal 4.0b3), 2026-11-2[34]$' "$eplug/mgf-4080220.conf")" = 4 ] \
+  && [ "$(/usr/bin/grep -c '^inject = 1$' "$eplug/mgf-4080220.conf")" = 2 ] && [ "$(/usr/bin/grep -c '^apps = 4080220$' "$eplug/mgf-4080220.conf")" = 4 ] \
+  && cmp -s "$eplug/mgf-d3dmetal-hookable.dylib" "$FIX/mgf-d3dmetal-hookable.dylib" && cmp -s "$eplug/mgf-package-family.dylib" "$FIX/mgf-package-family.dylib" \
+  && [ ! -e "$ec/game/EAAntiCheat.GameServiceLauncher.exe" ] \
   && case "$(cat "$W/fc27.install.log")" in *'AT YOUR OWN RISK'*'Offline only'*) true ;; *) false ;; esac \
-  && say ok "fc 27 in NotProton: the folder the player chose (the one around Live Editor's) copied without its logs, the play script, three rows that each say where they were played and the library for this game, the switch alone and the script in the launch options, nothing in the game folder, and the warning" || say FAIL "fc 27: installed ($(e1st)): $(tail -3 "$W/fc27.install.log")"
-echo stock > "$ec/runner/lib/wine/x86_64-windows/kernel32.dll"
+  && say ok "fc 27 in NotProton: the folder the player chose (the one around Live Editor's) copied without its logs, the play script, four rows that each say where they were played and the two libraries for this game, the two switches and the script in the launch options, on a runner without patch 0041, nothing in the game folder, and the warning" || say FAIL "fc 27: installed ($(e1st)): $(tail -3 "$W/fc27.install.log")"
+mv "$enp/plugin-host.dylib" "$enp/plugin-host.away"
 eout="$(e1 --status 2>&1)"
-[ "$(e1st)" = half ] && case "$eout" in *'update the Rosetta improvement'*) true ;; *) false ;; esac \
-  && say ok "fc 27 in NotProton: a runner without the function the game asks for is half, and says which improvement" || say FAIL "fc 27: stock kernel32 ($(e1st))"
-printf 'kernel32 with FindPackagesByPackageFamily in it\n' > "$ec/runner/lib/wine/x86_64-windows/kernel32.dll"
+[ "$(e1st)" = half ] && case "$eout" in *'update NotProton'*) true ;; *) false ;; esac \
+  && ! e1 > "$W/fc27.nohost.log" 2>&1 && /usr/bin/grep -q 'plugin host' "$W/fc27.nohost.log" \
+  && say ok "fc 27 in NotProton: without NotProton's plugin host it is half and says to update NotProton, and an install stops" || say FAIL "fc 27: no plugin host ($(e1st))"
+mv "$enp/plugin-host.away" "$enp/plugin-host.dylib"
+# An install from before the activation row: its switch was never put in. It reads half, and the
+# install that brings the row switches it on, once, with the play script already in the options.
+esw="$ec/compatdata/4080220/.mgf-notproton-plugins-switched"
+/usr/bin/sed -i '' '/^NOTPROTON_MGF_FC27_PACKAGES_4080220=/d' "$esw"; sed -i '' 's/NOTPROTON_MGF_FC27_PACKAGES_4080220=1 //' "$evdf"
+[ "$(e1st)" = half ] && e1 > "$W/fc27.newrow.log" 2>&1 && [ "$(e1st)" = installed ] && eswitched NOTPROTON_MGF_FC27_LE NOTPROTON_MGF_FC27_PACKAGES \
+  && say ok "fc 27 in NotProton: over an install from before the activation row, the row is switched on once and the script stays once" || say FAIL "fc 27: new row ($(e1st)): $(tail -2 "$W/fc27.newrow.log")"
 # A new version by hand: installing again asks again. Cancel keeps the copy in use, the same
 # folder is not copied twice, and a new one is taken with the copy that was in use kept once.
 echo mine > "$estore/LiveEditor/lua/mine.lua"
@@ -532,13 +548,13 @@ case "$eout" in "waitforexitandrun|/some/installer.exe|"*) true ;; *) false ;; e
 # Groups, where NotProton knows them: both rows carry the game's own, and the library still goes in.
 e1 --restore > /dev/null 2>&1
 MGVF_NOTPROTON_GROUPS=1 e1 > /dev/null 2>&1
-[ "$(MGVF_NOTPROTON_GROUPS=1 e1st)" = installed ] && [ "$(/usr/bin/grep -c '^group = MacGameFix · FC 27$' "$eplug/mgf-4080220.conf")" = 3 ] && cmp -s "$eplug/mgf-d3dmetal-hookable.dylib" "$FIX/mgf-d3dmetal-hookable.dylib" \
+[ "$(MGVF_NOTPROTON_GROUPS=1 e1st)" = installed ] && [ "$(/usr/bin/grep -c '^group = MacGameFix · FC 27$' "$eplug/mgf-4080220.conf")" = 4 ] && cmp -s "$eplug/mgf-d3dmetal-hookable.dylib" "$FIX/mgf-d3dmetal-hookable.dylib" && cmp -s "$eplug/mgf-package-family.dylib" "$FIX/mgf-package-family.dylib" \
   && say ok "fc 27 in NotProton: where NotProton knows groups the rows carry the game's own, and the library is found all the same" || say FAIL "fc 27: groups ($(MGVF_NOTPROTON_GROUPS=1 e1st))"
 # Removing: the options and NotProton as they were, the player's Live Editor kept, and the game's
 # own EA AntiCheat launcher back where a cut-short session left the stand-in.
 echo standin > "$ec/game/EAAntiCheat.GameServiceLauncher.exe"; echo theirs > "$ec/game/EAAntiCheat.GameServiceLauncher.exe.backup"
 MGVF_NOTPROTON_GROUPS=1 e1 --restore > "$W/fc27.restore.log" 2>&1
-[ "$(e1st)" = absent ] && [ "$(cat "$evdf")" = "$evdf0" ] && [ ! -e "$eplug/mgf-4080220.conf" ] && [ ! -e "$eplug/mgf-d3dmetal-hookable.dylib" ] \
+[ "$(e1st)" = absent ] && [ "$(cat "$evdf")" = "$evdf0" ] && [ ! -e "$eplug/mgf-4080220.conf" ] && [ ! -e "$eplug/mgf-d3dmetal-hookable.dylib" ] && [ ! -e "$eplug/mgf-package-family.dylib" ] \
   && [ ! -e "$estore/fc27-le-play.sh" ] && [ "$(cat "$estore/LiveEditor/FCLiveEditor.DLL")" = two ] \
   && [ "$(cat "$ec/game/EAAntiCheat.GameServiceLauncher.exe")" = theirs ] && [ ! -e "$ec/game/EAAntiCheat.GameServiceLauncher.exe.backup" ] \
   && say ok "fc 27 in NotProton: removed, the launch options and NotProton are as before, the player's Live Editor stays, and the game's own EA AntiCheat launcher is back" || say FAIL "fc 27: restore ($(e1st)): $(tail -3 "$W/fc27.restore.log")"
