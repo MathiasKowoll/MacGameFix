@@ -19,6 +19,13 @@ BASELINE_PE="$(fh6sha "$NT_DLL")"
 BASELINE_UNIX=""
 [ "$FH6_BUILD" = 27.0.0.41073 ] && BASELINE_UNIX=dd6ef76ff8d51da5e2d246bdb7432a6c0b110668d742b1937e82ffcbb05d3ea0
 fh6_pe_ok() { [ -f "$1" ] && [ -n "$BASELINE_PE" ] && [ "$(fh6sha "$1")" = "$BASELINE_PE" ]; }
+# On 41303 the exception chain is the proxy's (fh6-d3d12/exception_chain.h), hooked into the ntdll.dll
+# NotProton ships, and played as well as MacGameFix's own (2026-11-25): the fix no longer puts an
+# ntdll.dll anywhere, and the Wine modules leave the runner's to NotProton (engine-modules.sh). The
+# copies an earlier install put in the game's runner copy and its prefix are taken out again. On 41073
+# the pair stays as it was.
+FH6_OWN_PE=1
+[ "$FH6_BUILD" = 27.0.0.41303 ] && FH6_OWN_PE=0
 # ntdll.dll builds MacGameFix shipped before for 41303, which an update may replace like its own:
 # 6664770a is 0023 + 0024, before 0025 put the chain's switches in the DLL; 0e5f9579 is 0025, before
 # 0031 took the diagnostics' 40 MB out of the file for 2XKO (#117); fe379ae0 is that one, with 0031
@@ -41,26 +48,42 @@ fh6_unix_ok() {
 }
 fh6_runtime_ok() {
   local root="${CLONE:-$RUNNER}"
+  if [ "$FH6_OWN_PE" = 0 ]; then
+    # The modules' ntdll.so, and no ntdll.dll of ours left where the game runs.
+    fh6_unix_ok "$root/lib/wine/x86_64-unix/ntdll.so" && ! fh6_pe_known "$root/lib/wine/x86_64-windows/ntdll.dll" \
+      && ! fh6_pe_known "$SYS/ntdll.dll"
+    return
+  fi
   fh6_pe_ok "$root/lib/wine/x86_64-windows/ntdll.dll" && fh6_unix_ok "$root/lib/wine/x86_64-unix/ntdll.so" && fh6_pe_ok "$SYS/ntdll.dll"
+}
+# Where an earlier install put an ntdll.dll of ours, the runner's own goes back: the one kept beside it,
+# or, for the game's runner copy, the runner's (by then NotProton's: the modules retire theirs first).
+fh6_pe_out() {  # <live file> <the runner's own file>
+  local live="$1" own="$2"
+  fh6_pe_known "$live" || { rm -f "$live.mgf-fh6-original"; return 0; }
+  if [ -f "$live.mgf-fh6-original" ] && ! fh6_pe_known "$live.mgf-fh6-original"; then mv -f "$live.mgf-fh6-original" "$live"
+  elif [ -f "$own" ] && ! fh6_pe_known "$own"; then cp -p "$own" "$live.mgf-new" && mv -f "$live.mgf-new" "$live"
+  else echo "error: no ntdll.dll of the runner's own to put back in place of $live" >&2; return 1; fi
 }
 fh6_options() { MGF_FH6_CHAIN_IN_NTDLL="$(fh6_chain_in_ntdll)" /usr/bin/perl "$HERE/fh6-launch-options.pl" "$1" "$PFX"; }
 fh6_preflight() {
   [ -n "$FH6_BUILD" ] || {
     echo 'error: FH6 requires the standard NotProton runner for CrossOver Preview 27.0.0.41073 or 27.0.0.41303, using Rosetta.' >&2; return 1; }
   [ "$(fh6sha "$GAME/forzahorizon6.exe")" = "$GAME_SHA" ] || { echo 'error: this FH6 executable has not been validated for this runtime. Nothing changed.' >&2; return 1; }
-  fh6_pe_ok "$NT_DLL" && [ -f "$NT_UNIX" ] || { echo 'error: download this prerelease’s Wine modules in Improvements first.' >&2; return 1; }
+  [ -f "$NT_UNIX" ] && { [ "$FH6_OWN_PE" = 0 ] || fh6_pe_ok "$NT_DLL"; } || { echo 'error: download this prerelease’s Wine modules in Improvements first.' >&2; return 1; }
   # All runtime copies must be backed up before an update. Unknown copies are not overwritten.
   local root f live stock
   for root in "$RUNNER" ${CLONE:+"$CLONE"}; do
     for f in x86_64-windows/ntdll.dll x86_64-unix/ntdll.so; do
       live="$root/lib/wine/$f"; stock="$live.mgf-fh6-original"
       [ -f "$live" ] || return 1
+      [ "$FH6_OWN_PE" = 0 ] && [ "$f" = x86_64-windows/ntdll.dll ] && continue
       if [ -f "$stock" ]; then
         case "$f" in *dll) fh6_pe_known "$live" ;; *) fh6_unix_ok "$live" ;; esac || { echo "error: $live changed outside MacGameFix; it stays." >&2; return 1; }
       fi
     done
   done
-  if [ -f "$SYS/ntdll.dll.mgf-fh6-original" ]; then fh6_pe_known "$SYS/ntdll.dll" || return 1; fi
+  if [ "$FH6_OWN_PE" = 1 ] && [ -f "$SYS/ntdll.dll.mgf-fh6-original" ]; then fh6_pe_known "$SYS/ntdll.dll" || return 1; fi
   fh6_options preflight
 }
 fh6_put() {
@@ -76,11 +99,19 @@ fh6_install_runtime() {
   # Stage the matching pair via the existing Rosetta installer; prefixes and per-game
   # launch clones are coordinated here because the generic installer does not own them.
   /bin/bash "$MODULES/engine-modules.sh" "$RUNNER" --part=rosetta
-  if [ -n "$CLONE" ]; then
-    fh6_put "$NT_DLL" "$CLONE/lib/wine/x86_64-windows/ntdll.dll"
-    fh6_put "$NT_UNIX" "$CLONE/lib/wine/x86_64-unix/ntdll.so"
+  if [ "$FH6_OWN_PE" = 0 ]; then
+    if [ -n "$CLONE" ]; then
+      fh6_pe_out "$CLONE/lib/wine/x86_64-windows/ntdll.dll" "$RUNNER/lib/wine/x86_64-windows/ntdll.dll" || return 1
+      fh6_put "$NT_UNIX" "$CLONE/lib/wine/x86_64-unix/ntdll.so"
+    fi
+    fh6_pe_out "$SYS/ntdll.dll" "$RUNNER/lib/wine/x86_64-windows/ntdll.dll" || return 1
+  else
+    if [ -n "$CLONE" ]; then
+      fh6_put "$NT_DLL" "$CLONE/lib/wine/x86_64-windows/ntdll.dll"
+      fh6_put "$NT_UNIX" "$CLONE/lib/wine/x86_64-unix/ntdll.so"
+    fi
+    fh6_put "$NT_DLL" "$SYS/ntdll.dll"
   fi
-  fh6_put "$NT_DLL" "$SYS/ntdll.dll"
   local plugins="$HOME/Library/Application Support/notproton/plugins"
   mkdir -p "$plugins"
   # Keep an existing user plugin; our descriptor is only needed on a fresh installation. An
@@ -112,11 +143,12 @@ fh6_restore_runtime() {
   for root in ${CLONE:+"$CLONE"}; do
     for f in x86_64-windows/ntdll.dll x86_64-unix/ntdll.so; do
       live="$root/lib/wine/$f"
+      [ "$FH6_OWN_PE" = 0 ] && [ "$f" = x86_64-windows/ntdll.dll ] && continue   # none of ours there
       if [ -f "$live.mgf-fh6-original" ]; then
         case "$f" in *dll) fh6_pe_ok "$live" ;; *) fh6_unix_ok "$live" ;; esac || return 1
         mv -f "$live.mgf-fh6-original" "$live"
       fi
     done
   done
-  if [ -f "$SYS/ntdll.dll.mgf-fh6-original" ]; then fh6_pe_ok "$SYS/ntdll.dll" || return 1; mv -f "$SYS/ntdll.dll.mgf-fh6-original" "$SYS/ntdll.dll"; fi
+  if [ "$FH6_OWN_PE" = 1 ] && [ -f "$SYS/ntdll.dll.mgf-fh6-original" ]; then fh6_pe_ok "$SYS/ntdll.dll" || return 1; mv -f "$SYS/ntdll.dll.mgf-fh6-original" "$SYS/ntdll.dll"; fi
 }

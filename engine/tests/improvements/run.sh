@@ -158,5 +158,35 @@ E --restore --part=rosetta >/dev/null
 check 'cw x86_64-windows/kernel32.dll && cw aarch64-windows/kernel32.dll && cw x86_64-windows/kernelbase.dll && ours x86_64-windows/winebus.sys && [ "$(st --part=rosetta)" = absent ]' "taking Rosetta's out puts CrossOver's kernel32.dll and kernelbase.dll back and leaves the controls"
 E --restore >/dev/null
 check 'cw x86_64-windows/kernel32.dll && ! [ -d "$MGVF_ENGINE_BACKUP/crossover-$B-fex" ]' "and a plain restore leaves nothing behind"
+
+# 41303: a NotProton runner leaves ntdll.dll to NotProton (FH6's exception chain is its proxy's now),
+# a CrossOver app keeps it. One the modules put in before is retired: NotProton's own comes back from
+# the backup, and the improvement reads outdated until an install does it.
+B3=27.0.0.41303
+F3="x86_64-unix/ntdll.so x86_64-windows/ntdll.dll x86_64-unix/winecoreaudio.so"
+for f in $F3; do printf 'ours %s wine-11.21\n' "$f" >"$CAT/engine-$B3-$(printf '%s' "$f" | tr / -)"; done
+printf '{"builds": [{"build": "%s", "crossover": "Preview", "wine": "11.21", "files": {}}]}\n' "$B3" >"$CAT/engine-modules.json"
+R3="$T/notproton/runners/crossover-$B3-fex/CrossOver"; A3="$T/CrossOver Preview.app"; X3="$A3/Contents/SharedSupport/CrossOver"
+mkdir -p "$R3/lib/wine/x86_64-unix" "$R3/lib/wine/x86_64-windows" "$X3/lib/wine/x86_64-unix" "$X3/lib/wine/x86_64-windows" "$A3/Contents"
+for root in "$R3" "$X3"; do for f in x86_64-unix/ntdll.so x86_64-unix/winecoreaudio.so; do printf "CodeWeavers' %s wine-11.21\n" "$f" >"$root/lib/wine/$f"; done; done
+printf "NotProton's x86_64-windows/ntdll.dll\n" >"$R3/lib/wine/x86_64-windows/ntdll.dll"
+printf "CodeWeavers' x86_64-windows/ntdll.dll\n" >"$X3/lib/wine/x86_64-windows/ntdll.dll"
+/usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $B3" "$A3/Contents/Info.plist" >/dev/null
+E3() { /bin/bash "$CAT/engine-modules.sh" "$1" "${@:2}" 2>&1; }
+st3() { E3 "$@" --status | tail -1; }
+ours3() { cmp -s "$1/lib/wine/$2" "$CAT/engine-$B3-$(printf '%s' "$2" | tr / -)"; }
+E3 "$R3" --part=rosetta >/dev/null; E3 "$X3" --part=rosetta >/dev/null
+check 'ours3 "$R3" x86_64-unix/ntdll.so && [ "$(cat "$R3/lib/wine/x86_64-windows/ntdll.dll")" = "NotProton'"'"'s x86_64-windows/ntdll.dll" ] && [ "$(st3 "$R3" --part=rosetta)" = installed ]' "41303, a NotProton runner: ntdll.so goes in, NotProton's ntdll.dll stays, and it reads installed"
+check 'ours3 "$X3" x86_64-unix/ntdll.so && ours3 "$X3" x86_64-windows/ntdll.dll && [ "$(st3 "$X3" --part=rosetta)" = installed ]' "41303, a CrossOver app: both go in, as before"
+# A runner the modules gave ntdll.dll before this: ours in place and on the list, NotProton's kept.
+S3="$MGVF_ENGINE_BACKUP/crossover-$B3-fex"
+cp "$CAT/engine-$B3-x86_64-windows-ntdll.dll" "$R3/lib/wine/x86_64-windows/ntdll.dll"
+mkdir -p "$S3/x86_64-windows"; printf "NotProton's x86_64-windows/ntdll.dll\n" >"$S3/x86_64-windows/ntdll.dll"
+printf '%s  x86_64-windows/ntdll.dll\n' "$(shasum -a 256 "$CAT/engine-$B3-x86_64-windows-ntdll.dll" | cut -d' ' -f1)" >>"$S3/installed.list"
+check '[ "$(st3 "$R3" --part=rosetta)" = outdated ]' "41303, a runner that still has the modules' ntdll.dll: outdated"
+E3 "$R3" --part=rosetta >/dev/null
+check '[ "$(cat "$R3/lib/wine/x86_64-windows/ntdll.dll")" = "NotProton'"'"'s x86_64-windows/ntdll.dll" ] && ! grep -q ntdll.dll "$S3/installed.list" && ours3 "$R3" x86_64-unix/ntdll.so && [ "$(st3 "$R3" --part=rosetta)" = installed ]' "an install puts NotProton's back, drops it from the list and reads installed"
+E3 "$R3" --restore --part=rosetta >/dev/null
+check '[ "$(cat "$R3/lib/wine/x86_64-unix/ntdll.so")" = "CodeWeavers'"'"' x86_64-unix/ntdll.so wine-11.21" ] && [ "$(cat "$R3/lib/wine/x86_64-windows/ntdll.dll")" = "NotProton'"'"'s x86_64-windows/ntdll.dll" ]' "and a restore leaves NotProton's ntdll.dll as it is"
 echo "==> $fails failed"
 exit $((fails > 0))
