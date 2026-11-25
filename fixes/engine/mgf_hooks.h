@@ -87,4 +87,10 @@ typedef int (*mgf_signal_fn)(int sig, siginfo_t *info, ucontext_t *context);
 int mgf_signal_first(const struct np_plugin_api *api, const struct mach_header_64 *mh, intptr_t slide, int sig,
                      mgf_signal_fn fn);
 
+// Called once Wine's handler for `sig` has returned to it, with the context as it is then and
+// the instruction pointer the thread had when the signal came. Same conditions as above.
+typedef void (*mgf_signal_after_fn)(int sig, siginfo_t *info, ucontext_t *context, uintptr_t pc);
+int mgf_signal_after(const struct np_plugin_api *api, const struct mach_header_64 *mh, intptr_t slide, int sig,
+                     mgf_signal_after_fn fn);
+
 #endif

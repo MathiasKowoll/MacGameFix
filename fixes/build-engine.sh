@@ -23,7 +23,11 @@
 #     and 200 from both IP_TTL and IPV6_UNICAST_HOPS with it;
 #   - rosetta-cpu/check.c reads CPUID leaf 7 and runs CLWB, RDPID and a non-canonical read: the
 #     leaf lacks the bits without the fix; with it they are there, both instructions run and the
-#     read faults at -1 as on Windows.
+#     read faults at -1 as on Windows;
+#   - direct-syscall runs engine/tests/direct-syscall-suspend/suspend.c (built with llvm-mingw,
+#     LLVM_MINGW): threads making system calls with a syscall instruction of their own and threads
+#     raising exceptions, while another suspends them. Without the fix a look at a thread never
+#     returns, a call comes back with its own number, or Wine ends a thread; with it, none.
 # Each runs without the library, where it has to fail (a check that passes either way tests
 # nothing), and with it, the fix named by MGF_ENGINE_FIXES. low-allocations has no check of its
 # own: it was played (see its source). d3dmetal-hookable's check (d3dmetal-hookable/check.c, an
@@ -48,7 +52,7 @@ trap cleanup EXIT
   -dynamiclib -O2 -Wall -Wextra -Werror -install_name @rpath/mgf-engine.dylib -o "$WORK/mgf-engine.dylib" \
   "$SRC/mgf-engine.c" "$SRC/low-allocations/mgf-low-allocations.c" "$SRC/package-family/mgf-package-family.c" \
   "$SRC/timer-overflow/mgf-timer-overflow.c" "$SRC/dualstack-ipv4/mgf-dualstack-ipv4.c" \
-  "$SRC/rosetta-cpu/mgf-rosetta-cpu.c" "$SRC/mgf-signals.c" -DMGF_ENGINE "$HERE/d3dmetal-hookable/mgf-d3dmetal-hookable.c"
+  "$SRC/rosetta-cpu/mgf-rosetta-cpu.c" "$SRC/direct-syscall/mgf-direct-syscall.c" "$SRC/mgf-signals.c" -DMGF_ENGINE "$HERE/d3dmetal-hookable/mgf-d3dmetal-hookable.c"
 /usr/bin/codesign -f -s - "$WORK/mgf-engine.dylib" 2>/dev/null
 
 RUNNER="${MGVF_CHECK_RUNNER:-$HOME/Library/Application Support/notproton/runners/crossover-27.0.0.41303-fex/CrossOver}"
@@ -87,6 +91,29 @@ else
   check timer-overflow 3
   check dualstack-ipv4 2 -lws2_32
   check rosetta-cpu 2
+  # suspend.c can hang for good without the fix: a watchdog ends it, and that is its failure.
+  LLVM_MINGW="${LLVM_MINGW:-$HOME/.local/cxge/toolchains/llvm-mingw}"
+  if [ -x "$LLVM_MINGW/bin/x86_64-w64-mingw32-clang" ]; then
+    "$LLVM_MINGW/bin/x86_64-w64-mingw32-clang" -O2 -Wall -Wextra -Werror -o "$WORK/suspend.exe" "$HERE/../engine/tests/direct-syscall-suspend/suspend.c"
+    suspend_run() {  # <environment...>: the exit code, 9 when the watchdog ended it
+      local pid dog rc=0
+      env "$@" WINEMSYNC=1 "$WINE" "$WORK/suspend.exe" 8 >"$WORK/suspend.log" 2>&1 & pid=$!
+      ( sleep 60; kill -9 $pid ) 2>/dev/null & dog=$!
+      wait $pid || rc=$?
+      kill $dog 2>/dev/null || true; wait $dog 2>/dev/null || true
+      "$SERVER" -k 2>/dev/null || true; "$SERVER" -w 2>/dev/null || true
+      [ "$rc" -lt 128 ] || rc=9
+      echo "$rc"
+    }
+    echo "== direct-syscall, without the library: it has to fail"
+    rc="$(suspend_run MGF_ENGINE_FIXES=none)"; tail -3 "$WORK/suspend.log"
+    [ "$rc" != 0 ] || { echo "direct-syscall: without the library suspend.exe passed: the runner may carry 0028, so the check would test nothing" >&2; exit 1; }
+    echo "== direct-syscall, with it"
+    rc="$(suspend_run MGF_ENGINE_FIXES=direct-syscall DYLD_INSERT_LIBRARIES="$WORK/mgf-engine.dylib")"; tail -3 "$WORK/suspend.log"
+    [ "$rc" = 0 ] || { echo "direct-syscall: with the library suspend.exe ended with $rc" >&2; exit 1; }
+  else
+    echo "note: no llvm-mingw at $LLVM_MINGW (LLVM_MINGW), the direct-syscall check is skipped"
+  fi
 fi
 echo "== d3dmetal-hookable, with the library"
 /usr/bin/clang -arch x86_64 -O1 -mmacosx-version-min=14.0 -Wall -Wextra -Werror "$HERE/d3dmetal-hookable/check.c" -o "$WORK/hookable-check"
