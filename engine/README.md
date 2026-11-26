@@ -708,8 +708,8 @@ NotProton's creator's `tcp-noopt.dylib` that MacGameFix carries
 from outside `ntdll`, leaving loopback connections alone. Checked on 2026-11-26 with
 `run.sh <runner> --plugin <tcp-noopt.dylib>` on that runner, with NotProton's `ntdll.so`
 (`13b6d0b2`), to this Mac's own network address: timestamps, SACK and window scale and an
-MSS of 4024 without the library; none and 536 with it. Red Dead Online has not been played
-with the row yet.
+MSS of 4024 without the library; none and 536 with it. Red Dead Online was played with the
+row on 2026-11-26 and reached its online world.
 
 ## Allocations with no address stay low
 
