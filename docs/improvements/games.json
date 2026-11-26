@@ -4,7 +4,7 @@
   "improvements": {
     "rosetta-copy-protection": {
       "name": "Copy protection under Rosetta",
-      "summary": "The Intel side's ntdll.so (engine patches 0017 to 0020): Rosetta's x86 CPU made to look more like a real one to copy protection such as Denuvo. With CrossOver 41303 also ntdll.dll shaped as copy protection expects (0031) and NotProton's creator's kernelbase.dll, user32.dll and win32u.so (0032 to 0035) for 2XKO. The game's code is not touched.",
+      "summary": "The Intel side's ntdll.so (engine patches 0017 to 0020): Rosetta's x86 CPU made to look more like a real one to copy protection such as Denuvo. With CrossOver 41303 also ntdll.dll shaped as copy protection expects (0031) and NotProton's creator's kernelbase.dll, user32.dll and win32u.so (0032 to 0035) for 2XKO. The game's code is not touched. In NotProton's runner for 41303 on Rosetta the Intel side keeps NotProton's own files: there a game gets 0017 to 0020 from the Engine fixes row on its Compatibility page instead (switched on by hand for a game with no fix, such as Persona 4 Golden or STAR WARS: Galactic Racer, both played that way on 2026-11-25), and 2XKO's 0031 to 0035 are not there.",
       "page": "engine/README.md#rosettas-cpu-for-copy-protection"
     },
     "dualsense": {
