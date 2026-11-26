@@ -1,6 +1,6 @@
 --- a/dlls/winebus.sys/bus_iohid.c
 +++ b/dlls/winebus.sys/bus_iohid.c
-@@ -2365,7 +2365,11 @@
+@@ -2083,7 +2083,11 @@
          return;
      }
  

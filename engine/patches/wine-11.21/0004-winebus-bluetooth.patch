@@ -25,7 +25,7 @@
  #undef ULONG
  #undef E_INVALIDARG
  #undef E_OUTOFMEMORY
-@@ -136,8 +147,634 @@
+@@ -136,8 +147,562 @@
      struct unix_device unix_device;
      IOHIDDeviceRef device;
      uint8_t *buffer;
@@ -34,9 +34,6 @@
 +    BOOL edge;          /* a DualSense Edge, whatever the game is shown */
 +    BOOL as_standard;   /* an Edge the game is shown as the standard pad */
 +    const char *model;
-+    UINT32 powers_told[8], features_told[8];
-+    UINT32 shapes_told[64];
-+    unsigned int shapes;
 +    BOOL told_motors, told_triggers, told_power;
  };
  
@@ -64,9 +61,7 @@
 + * calls into this file. On only while ~/Library/Application Support/MacGameFix/
 + * pad.conf has the line "bluetooth=wired". */
 +
-+#define SONY_VID       0x054c
-+#define DUALSENSE_PID  0x0ce6
-+#define DS_EDGE_PID    0x0df2
++#include "wine/mgf_pad.h"
 +
 +/* The standard pad's, as published at github.com/nondebug/dualsense. */
 +static const BYTE ds_usb_descriptor[] =
@@ -155,7 +150,8 @@
 +    UInt64 input_at, audio_at, nonzero_at;
 +};
 +
-+static void pad_game(char *id, size_t size);
++/* winebus.so runs in winedevice.exe, which is no game: the game is the one Steam names. */
++#define pad_game mgf_pad_steam_game
 +
 +/* What this file has to say goes to /tmp/macgamefix-<uid>/pad.log, beside the
 + * pads' sockets: a game's own stderr often reaches no log at all. Each line
@@ -163,51 +159,14 @@
 +static void pad_log(const char *format, ...) __attribute__((format(printf, 1, 2)));
 +static void pad_log(const char *format, ...)
 +{
-+    char path[64], stamp[32], game[24];
-+    struct tm tm;
-+    time_t now = time(NULL);
++    char game[24];
 +    va_list args;
-+    FILE *f;
 +
-+    snprintf(path, sizeof(path), "/tmp/macgamefix-%u", (unsigned int)getuid());
-+    mkdir(path, 0700);
-+    snprintf(path + strlen(path), sizeof(path) - strlen(path), "/pad.log");
-+    if (!(f = fopen(path, "a"))) return;
-+    localtime_r(&now, &tm);
-+    strftime(stamp, sizeof(stamp), "%H:%M:%S", &tm);
 +    pad_game(game, sizeof(game));
-+    fprintf(f, "%s [%d] game=%s ", stamp, (int)getpid(), game[0] ? game : "-");
 +    va_start(args, format);
-+    vfprintf(f, format, args);
++    mgf_pad_vlog(game, format, args);
 +    va_end(args);
-+    fclose(f);
 +}
-+
-+/* The game this process runs for: the Steam app id Steam and NotProton give a
-+ * game (SteamAppId, SteamGameId, STEAM_COMPAT_APP_ID), else the one in a Steam
-+ * Play prefix's path, compatdata/<id>/pfx. Empty in a CrossOver bottle. */
-+static void pad_game(char *id, size_t size)
-+{
-+    static const char *const names[] = {"SteamAppId", "SteamGameId", "STEAM_COMPAT_APP_ID"};
-+    const char *v;
-+    size_t n;
-+    unsigned int i;
-+
-+    id[0] = 0;
-+    for (i = 0; i < ARRAY_SIZE(names); i++)
-+    {
-+        if (!(v = getenv(names[i])) || !*v || strspn(v, "0123456789") != strlen(v) || !strcmp(v, "0")) continue;
-+        snprintf(id, size, "%s", v);
-+        return;
-+    }
-+    if ((v = getenv("WINEPREFIX")) && (v = strstr(v, "/compatdata/")))
-+    {
-+        v += strlen("/compatdata/");
-+        n = strspn(v, "0123456789");
-+        if (n && n < size && !strncmp(v + n, "/pfx", 4)) snprintf(id, size, "%.*s", (int)n, v);
-+    }
-+}
-+
 +/* MacGameFix's settings for the pad, which its Game Feel tab writes, read
 + * once: ~/Library/Application Support/MacGameFix/pad.d/<app id>.conf for this
 + * game, then pad.conf for every game; the first line with a key wins. A line
@@ -235,12 +194,7 @@
 +        {
 +            for (pass = 0; pass < 2; pass++)
 +            {
-+                if (pass == 0 && !game[0]) continue;
-+                if (pass == 0)
-+                    snprintf(path, sizeof(path), "%s/Library/Application Support/MacGameFix/pad.d/%s.conf", home, game);
-+                else
-+                    snprintf(path, sizeof(path), "%s/Library/Application Support/MacGameFix/pad.conf", home);
-+                if (!(f = fopen(path, "r"))) continue;
++                if (!mgf_pad_conf(game, pass, path, sizeof(path)) || !(f = fopen(path, "r"))) continue;
 +                if (pass == 0) from_game = TRUE;
 +                while (count < 32 && fgets(line, sizeof(line), f))
 +                {
@@ -273,15 +227,6 @@
 +static BOOL bluetooth_as_wired(void)
 +{
 +    return pad_option("bluetooth=wired");
-+}
-+
-+/* Says a value once per device: bit i of the set is value i. */
-+static BOOL first_time(UINT32 set[8], BYTE value)
-+{
-+    UINT32 bit = 1u << (value & 31);
-+    if (set[value >> 5] & bit) return FALSE;
-+    set[value >> 5] |= bit;
-+    return TRUE;
 +}
 +
 +static BOOL is_bluetooth_dualsense(IOHIDDeviceRef device, DWORD vid, DWORD pid)
@@ -325,22 +270,13 @@
 +    {1, 0x40, 36,  1},  /* motor power */
 +};
 +
-+static mach_timebase_info_data_t bt_timebase;
-+
-+static UInt64 bt_ticks(double seconds)
-+{
-+    if (!bt_timebase.denom) mach_timebase_info(&bt_timebase);
-+    return (UInt64)(seconds * 1e9 * bt_timebase.denom / bt_timebase.numer);
-+}
-+
 +/* Waits for new output or haptics, or until the deadline. */
 +static void bt_wait_until(struct bt_pad *pad, UInt64 deadline)
 +{
 +    UInt64 now = mach_absolute_time(), nanos;
 +
 +    if (deadline <= now) return;
-+    if (!bt_timebase.denom) mach_timebase_info(&bt_timebase);
-+    nanos = (deadline - now) * bt_timebase.numer / bt_timebase.denom;
++    nanos = mgf_pad_seconds(deadline - now) * 1e9;
 +    semaphore_timedwait(pad->wake, (mach_timespec_t){(unsigned int)(nanos / 1000000000), (clock_res_t)(nanos % 1000000000)});
 +}
 +
@@ -400,7 +336,6 @@
 +        report[3] = 7;
 +        report[4] = 0xfe;
 +        memset(report + 5, 48, 5);
-+        report[10] = index * 2;
 +        report[11] = 0xd2;
 +        report[12] = 64;
 +        offset = 13;
@@ -424,7 +359,7 @@
 +static void *bt_receiver(void *arg)
 +{
 +    struct bt_pad *pad = arg;
-+    struct { char magic[4]; signed char samples[2 * 256]; } packet;
++    struct mgf_pad_packet packet;
 +    ssize_t got;
 +    unsigned int i, n;
 +    BOOL nonzero;
@@ -461,33 +396,27 @@
 +{
 +    struct bt_pad *pad = arg;
 +    const double pcm_period = 64.0 / 3000, streaming_gap = 1.0 / (65 - 3000.0 / 64);
-+    thread_time_constraint_policy_data_t policy;
 +    BYTE payload[47];
 +    signed char samples[128];
 +    BOOL streaming = FALSE, audio, control;
 +    unsigned int index = 0, i, n;
 +    UInt64 now, next_pcm = 0, next_control = 0, wake_at;
 +
-+    policy.period = (uint32_t)bt_ticks(pcm_period);
-+    policy.computation = (uint32_t)bt_ticks(0.001);
-+    policy.constraint = (uint32_t)bt_ticks(0.005);
-+    policy.preemptible = TRUE;
-+    thread_policy_set(pthread_mach_thread_np(pthread_self()), THREAD_TIME_CONSTRAINT_POLICY,
-+                      (thread_policy_t)&policy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
++    mgf_pad_realtime(pcm_period, 0.005);
 +
 +    while (!pad->quit)
 +    {
 +        now = mach_absolute_time();
 +        pthread_mutex_lock(&pad->lock);
-+        if (now - pad->input_at > bt_ticks(0.5))
++        if (now - pad->input_at > mgf_pad_ticks(0.5))
 +        {
 +            pthread_mutex_unlock(&pad->lock);
 +            streaming = FALSE;
-+            bt_wait_until(pad, now + bt_ticks(0.020));
++            bt_wait_until(pad, now + mgf_pad_ticks(0.020));
 +            continue;
 +        }
-+        audio = pad->nonzero_at && now - pad->nonzero_at < bt_ticks(0.15) &&
-+                (pad->fifo_count || now - pad->audio_at < bt_ticks(0.15));
++        audio = pad->nonzero_at && now - pad->nonzero_at < mgf_pad_ticks(0.15) &&
++                (pad->fifo_count || now - pad->audio_at < mgf_pad_ticks(0.15));
 +        if (!audio && !streaming) pad->fifo_head = pad->fifo_count = 0;
 +        if ((control = pad->dirty && now >= next_control))
 +        {
@@ -499,19 +428,19 @@
 +        if (control)
 +        {
 +            bt_control(pad, payload, audio || streaming);
-+            next_control = mach_absolute_time() + bt_ticks(audio || streaming ? streaming_gap : 0.016);
++            next_control = mach_absolute_time() + mgf_pad_ticks(audio || streaming ? streaming_gap : 0.016);
 +        }
 +        if (audio && !streaming)
 +        {
 +            bt_control(pad, NULL, TRUE);
 +            streaming = TRUE;
 +            index = 0;
-+            next_pcm = mach_absolute_time() + bt_ticks(0.030);
++            next_pcm = mach_absolute_time() + mgf_pad_ticks(0.030);
 +        }
 +        if (streaming && mach_absolute_time() >= next_pcm)
 +        {
 +            /* After a stall, start the clock again rather than send a burst. */
-+            if (mach_absolute_time() > next_pcm + bt_ticks(0.040)) next_pcm = mach_absolute_time();
++            if (mach_absolute_time() > next_pcm + mgf_pad_ticks(0.040)) next_pcm = mach_absolute_time();
 +            memset(samples, 0, sizeof(samples));
 +            pthread_mutex_lock(&pad->lock);
 +            n = min(pad->fifo_count, 64);
@@ -523,11 +452,11 @@
 +            }
 +            pthread_mutex_unlock(&pad->lock);
 +            bt_pcm(pad, index++, samples);
-+            next_pcm += bt_ticks(pcm_period);
++            next_pcm += mgf_pad_ticks(pcm_period);
 +            if (!audio)
 +            {
 +                /* Let the silent tail reach the actuators, then rumble again. */
-+                mach_wait_until(mach_absolute_time() + bt_ticks(0.030));
++                mach_wait_until(mach_absolute_time() + mgf_pad_ticks(0.030));
 +                pthread_mutex_lock(&pad->lock);
 +                memcpy(payload, pad->pending, sizeof(payload));
 +                pthread_mutex_unlock(&pad->lock);
@@ -537,7 +466,7 @@
 +        }
 +
 +        now = mach_absolute_time();
-+        wake_at = now + bt_ticks(0.050);
++        wake_at = now + mgf_pad_ticks(0.050);
 +        if (streaming && next_pcm < wake_at) wake_at = next_pcm;
 +        pthread_mutex_lock(&pad->lock);
 +        if (pad->dirty && next_control < wake_at) wake_at = next_control;
@@ -605,9 +534,8 @@
 +    struct timeval timeout = {0, 200000};
 +    char dir[64];
 +
-+    snprintf(dir, sizeof(dir), "/tmp/macgamefix-%u", (unsigned int)getuid());
-+    mkdir(dir, 0700);
-+    snprintf(pad->path, sizeof(pad->path), "%s/pad-%08x-%04x-%04x.sock", dir, (unsigned int)pad->location,
++    mgf_pad_dir(dir, sizeof(dir));
++    snprintf(pad->path, sizeof(pad->path), "%s/" MGF_PAD_SOCKET, dir, (unsigned int)pad->location,
 +             pad->edge ? DS_EDGE_PID : DUALSENSE_PID, pad->physical_edge ? DS_EDGE_PID : DUALSENSE_PID);
 +    if ((pad->sock = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0) return;
 +    unlink(pad->path);
@@ -660,7 +588,7 @@
  static inline struct iohid_device *impl_from_unix_device(struct unix_device *iface)
  {
      return CONTAINING_RECORD(iface, struct iohid_device, unix_device);
-@@ -173,6 +810,24 @@
+@@ -173,6 +738,24 @@
          uint32_t reportID, uint8_t *report, CFIndex report_length)
  {
      struct unix_device *iface = (struct unix_device *)context;
@@ -685,7 +613,7 @@
      bus_event_queue_input_report(&event_queue, iface, report, report_length);
  }
  
-@@ -191,6 +846,7 @@
+@@ -191,6 +774,7 @@
      impl->buffer = malloc(length);
  
      IOHIDDeviceRegisterInputReportCallback(impl->device, impl->buffer, length, handle_IOHIDDeviceIOHIDReportCallback, iface);
@@ -693,7 +621,7 @@
      return STATUS_SUCCESS;
  }
  
-@@ -199,6 +855,7 @@
+@@ -199,6 +783,7 @@
      struct iohid_device *impl = impl_from_unix_device(iface);
  
      IOHIDDeviceRegisterInputReportCallback(impl->device, NULL, 0, NULL, NULL);
@@ -701,7 +629,7 @@
  
      pthread_mutex_lock(&iohid_cs);
      list_remove(&impl->unix_device.entry);
-@@ -213,6 +870,18 @@
+@@ -213,6 +798,18 @@
      int data_length = CFDataGetLength(data);
      const UInt8 *ptr;
  
@@ -720,7 +648,7 @@
      *out_length = data_length;
      if (length < data_length)
          return STATUS_BUFFER_TOO_SMALL;
-@@ -226,8 +895,87 @@
+@@ -226,8 +823,66 @@
  {
      IOReturn result;
      struct iohid_device *impl = impl_from_unix_device(iface);
@@ -752,25 +680,6 @@
 +            pad_log("observed: the game claims the %s's motor power (0x%02x)\n", impl->model, report[37]);
 +        }
 +    }
-+    /* Each shape of what a game writes, once: the flag bytes, the motors, the
-+     * audio fields and the power, but not the trigger effects or the LEDs. */
-+    if (output && pad_option("diagnostics=on"))
-+    {
-+        static const BYTE at[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 37, 38, 39};
-+        UINT32 shape = 2166136261u;
-+        unsigned int i;
-+
-+        for (i = 0; i < ARRAY_SIZE(at); i++) shape = (shape ^ report[at[i]]) * 16777619u;
-+        for (i = 0; i < impl->shapes && impl->shapes_told[i] != shape; i++);
-+        if (i == impl->shapes && impl->shapes < ARRAY_SIZE(impl->shapes_told))
-+        {
-+            char hex[3 * 48 + 1] = "";
-+
-+            impl->shapes_told[impl->shapes++] = shape;
-+            for (i = 0; i < 48; i++) snprintf(hex + 3 * i, 4, " %02x", report[i]);
-+            pad_log("the game writes the %s:%s\n", impl->model, hex);
-+        }
-+    }
 +    if (output && length <= sizeof(copy))
 +    {
 +        /* An Edge shown as the standard pad on a cable: the game writes the
@@ -791,8 +700,6 @@
 +         * every report it sends), and a lower value a game writes is replaced. */
 +        if (pad_option("motor_power=full") && (impl->edge || (report[2] & 0x40)))
 +        {
-+            if (pad_option("diagnostics=on") && (report[2] & 0x40) && first_time(impl->powers_told, report[37]))
-+                pad_log("the game sets the %s's motor power to 0x%02x, written as 0x00\n", impl->model, report[37]);
 +            if (report != copy) memcpy(copy, report, length);
 +            if (impl->edge && !impl->bt) copy[2] |= 0x40;
 +            copy[37] = 0;
@@ -810,25 +717,7 @@
      if (result == kIOReturnSuccess)
      {
          io->Information = packet->reportBufferLen;
-@@ -248,6 +996,17 @@
- 
-     ret = IOHIDDeviceGetReport(impl->device, kIOHIDReportTypeFeature, packet->reportId,
-                                packet->reportBuffer, &report_length);
-+    /* Which of the pad's stored settings a game reads, once per report. */
-+    if (impl->sony && pad_option("diagnostics=on") && first_time(impl->features_told, packet->reportId))
-+    {
-+        char hex[3 * 24 + 1] = "";
-+        CFIndex i;
-+
-+        for (i = 0; ret == kIOReturnSuccess && i < report_length && i < 24; i++)
-+            snprintf(hex + 3 * i, 4, " %02x", packet->reportBuffer[i]);
-+        pad_log("the game read the %s's feature report 0x%02x: %s%s\n", impl->model,
-+                packet->reportId, ret == kIOReturnSuccess ? "" : "refused", hex);
-+    }
-     if (ret == kIOReturnSuccess)
-     {
-         io->Information = report_length;
-@@ -265,6 +1024,20 @@
+@@ -265,6 +920,20 @@
      IOReturn result;
      struct iohid_device *impl = impl_from_unix_device(iface);
  
@@ -849,7 +738,7 @@
      result = IOHIDDeviceSetReport(impl->device, kIOHIDReportTypeFeature, packet->reportId,
                                    packet->reportBuffer, packet->reportBufferLen);
      if (result == kIOReturnSuccess)
-@@ -391,6 +1164,7 @@
+@@ -391,6 +1060,7 @@
      struct iohid_device *impl;
      USAGE_AND_PAGE usages;
      CFStringRef str;
@@ -857,7 +746,7 @@
  
      usages.UsagePage = CFNumberToDWORD(IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDPrimaryUsagePageKey)));
      usages.Usage = CFNumberToDWORD(IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDPrimaryUsageKey)));
-@@ -408,6 +1182,8 @@
+@@ -408,6 +1078,8 @@
          else if (!CFStringCompare(str, CFSTR(kIOHIDTransportUSBValue), 0))
              desc.bus_type = BUS_TYPE_USB;
      }
@@ -866,7 +755,7 @@
  
      if (usages.UsagePage != HID_USAGE_PAGE_GENERIC ||
          !(usages.Usage == HID_USAGE_GENERIC_JOYSTICK || usages.Usage == HID_USAGE_GENERIC_GAMEPAD))
-@@ -436,6 +1212,20 @@
+@@ -436,6 +1108,20 @@
      str = IOHIDDeviceGetProperty(IOHIDDevice, CFSTR(kIOHIDSerialNumberKey));
      if (str) CFStringToWSTR(str, desc.serialnumber, ARRAY_SIZE(desc.serialnumber));
  
@@ -887,7 +776,7 @@
      if (IOHIDDeviceConformsTo(IOHIDDevice, kHIDPage_GenericDesktop, kHIDUsage_GD_GamePad) ||
         IOHIDDeviceConformsTo(IOHIDDevice, kHIDPage_GenericDesktop, kHIDUsage_GD_Joystick))
      {
-@@ -449,6 +1239,13 @@
+@@ -449,6 +1135,13 @@
      list_add_tail(&device_list, &impl->unix_device.entry);
      impl->device = IOHIDDevice;
      impl->buffer = NULL;
@@ -901,3 +790,172 @@
  
      bus_event_queue_device_created(&event_queue, &impl->unix_device, &desc);
  }
+--- a/include/Makefile.in
++++ b/include/Makefile.in
+@@ -1134,6 +1134,7 @@
+ 	wine/list.h \
+ 	wine/lsass.idl \
+ 	wine/mfinternal.idl \
++	wine/mgf_pad.h \
+ 	wine/mmsystem16.h \
+ 	wine/mscvpdb.h \
+ 	wine/mssign.h \
+--- /dev/null
++++ b/include/wine/mgf_pad.h
+@@ -0,0 +1,156 @@
++/*
++ * MacGameFix: what winebus.so and winecoreaudio.so share about the DualSense.
++ *
++ * Both write pad.log, read Game Feel's settings, name the game they run for,
++ * keep a real-time thread and meet at a socket per Bluetooth pad, so each of
++ * those is written once, here.
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ */
++
++#ifndef __WINE_MGF_PAD_H
++#define __WINE_MGF_PAD_H
++
++#include <stdarg.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <time.h>
++#include <unistd.h>
++#include <pthread.h>
++#include <sys/stat.h>
++#include <mach/mach.h>
++#include <mach/mach_time.h>
++#include <mach/thread_policy.h>
++
++#define MGF_UNUSED __attribute__((unused))
++
++#define SONY_VID       0x054c
++#define DUALSENSE_PID  0x0ce6
++#define DS_EDGE_PID    0x0df2
++
++/* A Bluetooth pad's socket, in mgf_pad_dir: pad-<location>-<product shown to
++ * the game>-<product it is>.sock. winebus.so binds it, winecoreaudio.so finds
++ * the pad by it and sends it the haptics as mgf_pad_packet. */
++#define MGF_PAD_SOCKET      "pad-%08x-%04x-%04x.sock"
++#define MGF_PAD_SOCKET_SCAN "pad-%8x-%4x-%4x.sock"
++
++/* Haptics at the pad's 3 kHz, signed 8-bit, channels 3 and 4 interleaved. */
++struct mgf_pad_packet
++{
++    char magic[4];  /* "MGFH" */
++    signed char samples[2 * 256];
++};
++
++/* /tmp/macgamefix-<uid>, made if it is not there: the pads' sockets and pad.log. */
++static MGF_UNUSED void mgf_pad_dir(char *dir, size_t size)
++{
++    snprintf(dir, size, "/tmp/macgamefix-%u", (unsigned int)getuid());
++    mkdir(dir, 0700);
++}
++
++/* The game this process runs for: the Steam app id Steam and NotProton give a
++ * game (SteamAppId, SteamGameId, STEAM_COMPAT_APP_ID), else the one in a Steam
++ * Play prefix's path, compatdata/<id>/pfx. Empty in a CrossOver bottle. */
++static MGF_UNUSED void mgf_pad_steam_game(char *id, size_t size)
++{
++    static const char *const names[] = {"SteamAppId", "SteamGameId", "STEAM_COMPAT_APP_ID"};
++    const char *v;
++    size_t n;
++    unsigned int i;
++
++    id[0] = 0;
++    for (i = 0; i < sizeof(names) / sizeof(names[0]); i++)
++    {
++        if (!(v = getenv(names[i])) || !*v || strspn(v, "0123456789") != strlen(v) || !strcmp(v, "0")) continue;
++        snprintf(id, size, "%s", v);
++        return;
++    }
++    if ((v = getenv("WINEPREFIX")) && (v = strstr(v, "/compatdata/")))
++    {
++        v += strlen("/compatdata/");
++        n = strspn(v, "0123456789");
++        if (n && n < size && !strncmp(v + n, "/pfx", 4)) snprintf(id, size, "%.*s", (int)n, v);
++    }
++}
++
++/* A line of pad.log: a game's own stderr often reaches no log at all. Each line
++ * names the game, which MacGameFix reads back for what it learns of each one. */
++static MGF_UNUSED void mgf_pad_vlog(const char *game, const char *format, va_list args)
++{
++    char path[64], stamp[32];
++    struct tm tm;
++    time_t now = time(NULL);
++    FILE *f;
++
++    mgf_pad_dir(path, sizeof(path));
++    snprintf(path + strlen(path), sizeof(path) - strlen(path), "/pad.log");
++    if (!(f = fopen(path, "a"))) return;
++    localtime_r(&now, &tm);
++    strftime(stamp, sizeof(stamp), "%H:%M:%S", &tm);
++    fprintf(f, "%s [%d] game=%s ", stamp, (int)getpid(), game[0] ? game : "-");
++    vfprintf(f, format, args);
++    fclose(f);
++}
++
++/* Game Feel's settings files, the game's first: pass 0 is
++ * pad.d/<app id>.conf (none without a game id), pass 1 pad.conf, both in
++ * ~/Library/Application Support/MacGameFix. FALSE when there is no such file to look for. */
++static MGF_UNUSED BOOL mgf_pad_conf(const char *game, int pass, char *path, size_t size)
++{
++    const char *home = getenv("HOME");
++
++    path[0] = 0;
++    if (!home || (pass == 0 && !game[0])) return FALSE;
++    if (pass == 0) snprintf(path, size, "%s/Library/Application Support/MacGameFix/pad.d/%s.conf", home, game);
++    else snprintf(path, size, "%s/Library/Application Support/MacGameFix/pad.conf", home);
++    return TRUE;
++}
++
++/* A number as MacGameFix writes it, "2.50", read digit by digit: strtof follows
++ * the locale and stops at a point where a decimal comma is expected. A comma is
++ * taken too. NAN without a digit. */
++static MGF_UNUSED float mgf_pad_number(const char *s)
++{
++    double v = 0, scale = 1;
++    int digits = 0;
++
++    for (; *s >= '0' && *s <= '9'; s++, digits++) v = v * 10 + (*s - '0');
++    if (*s == '.' || *s == ',')
++        for (s++; *s >= '0' && *s <= '9'; s++, digits++) v += (*s - '0') * (scale /= 10);
++    return digits ? (float)v : __builtin_nanf("");
++}
++
++static mach_timebase_info_data_t mgf_pad_timebase;
++
++/* mach_absolute_time's ticks in a span of seconds, and the other way round. */
++static MGF_UNUSED UInt64 mgf_pad_ticks(double seconds)
++{
++    if (!mgf_pad_timebase.denom) mach_timebase_info(&mgf_pad_timebase);
++    return (UInt64)(seconds * 1e9 * mgf_pad_timebase.denom / mgf_pad_timebase.numer);
++}
++
++static MGF_UNUSED double mgf_pad_seconds(UInt64 ticks)
++{
++    if (!mgf_pad_timebase.denom) mach_timebase_info(&mgf_pad_timebase);
++    return (double)ticks * mgf_pad_timebase.numer / mgf_pad_timebase.denom / 1e9;
++}
++
++/* The calling thread gets an audio deadline: a plain sleep is coalesced by up
++ * to 100 ms while another app holds Game Mode. */
++static MGF_UNUSED void mgf_pad_realtime(double period, double constraint)
++{
++    thread_time_constraint_policy_data_t policy;
++
++    policy.period = (uint32_t)mgf_pad_ticks(period);
++    policy.computation = (uint32_t)mgf_pad_ticks(0.001);
++    policy.constraint = (uint32_t)mgf_pad_ticks(constraint);
++    policy.preemptible = TRUE;
++    thread_policy_set(pthread_mach_thread_np(pthread_self()), THREAD_TIME_CONSTRAINT_POLICY,
++                      (thread_policy_t)&policy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
++}
++
++#endif /* __WINE_MGF_PAD_H */

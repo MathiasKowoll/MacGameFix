@@ -1,0 +1,530 @@
+--- a/dlls/winebus.sys/bus_iohid.c
++++ b/dlls/winebus.sys/bus_iohid.c
+@@ -144,8 +144,23 @@
+     long long settings_stamp;  /* their modification times then */
+     UInt64 trigger_at[2];
+     const char *model;
++    UINT32 powers_told[8], features_told[8];
++    UINT32 shapes_told[64];
++    unsigned int shapes;
+     BOOL told_motors, told_triggers, told_power, told_xinput;
++    /* diagnostics=on: how often the pad's input reaches winebus; see pad_input_rate */
++    BOOL input_diagnostics;
++    /* diagnostics=on: when the game's motor values rise to 4 or more and fall back; see pad_motors_told */
++    BOOL motors_on;
+     BOOL rumble_improved;  /* the pad takes the improved rumble emulation; see pad_rumble_improved */
++    BOOL told_rumble_improved;
++    UInt64 motors_since;
++    BYTE motors_peak[2], motors_last[2];
++    UInt64 input_since, input_last, input_gap;
++    unsigned int input_count;
++    UInt64 minute_since, minute_gap;          /* pad_input_rate's summary */
++    unsigned int minute_count, minute_low, minute_high;
++    BOOL rate_told;
+     /* pad_as=dualshock4: the DualShock 4's report counter, the motors it keeps,
+      * and the pad's own calibration (feature 0x05) and address (0x09), read once,
+      * that its feature reports are answered from */
+@@ -153,6 +168,7 @@
+     struct ds4_output_state ds4_output;
+     BYTE ds4_calibration[64], ds4_pairing[64];
+     CFIndex ds4_calibration_length, ds4_pairing_length;
++    UINT32 ds4_sets_told[8];
+     BOOL told_ds4_output, told_ds4_blink;
+ };
+ 
+@@ -271,11 +287,15 @@
+     BOOL synth;                /* rumble=haptics: see bt_synth */
+     BOOL rumble_improved;      /* the rumble with the improved emulation: see pad_rumble_improved */
+     float synth_gain;          /* its strength: the haptics' over Bluetooth for this pad */
++    BOOL diagnostics;          /* the haptics' delay and queue, in pad.log */
++    UInt64 sound_since, queue_since;
++    UInt32 queue_max, queue_sum, queue_count;
+     double synth_phase[2];
+     float synth_level[2];
+     UInt64 synth_at;
+     BYTE control_last[78];     /* the last report 0x31 written, to skip its copies */
+     BOOL control_known;
++    UInt32 pcm_sent, control_sent, control_skipped, frames_dropped; /* per 2 s, for diagnostics */
+ };
+ 
+ /* The most haptics the queue holds: 192 frames, 64 ms. A link that cannot carry
+@@ -424,6 +444,15 @@
+     return pad_option("bluetooth=wired");
+ }
+ 
++/* Says a value once per device: bit i of the set is value i. */
++static BOOL first_time(UINT32 set[8], BYTE value)
++{
++    UINT32 bit = 1u << (value & 31);
++    if (set[value >> 5] & bit) return FALSE;
++    set[value >> 5] |= bit;
++    return TRUE;
++}
++
+ static BOOL is_bluetooth_dualsense(IOHIDDeviceRef device, DWORD vid, DWORD pid)
+ {
+     CFStringRef str = IOHIDDeviceGetProperty(device, CFSTR(kIOHIDTransportKey));
+@@ -527,9 +556,14 @@
+      * time: its copies took up to 18 of the link's ~65 reports a second, and the
+      * haptics, which need 46.875, got about 40. The sequence number and the CRC
+      * are not compared. */
+-    if (audio && pad->control_known && !memcmp(report + 2, pad->control_last + 2, sizeof(report) - 6)) return;
++    if (audio && pad->control_known && !memcmp(report + 2, pad->control_last + 2, sizeof(report) - 6))
++    {
++        pad->control_skipped++;
++        return;
++    }
+     memcpy(pad->control_last, report, sizeof(report));
+     pad->control_known = TRUE;
++    pad->control_sent++;
+     bt_write(pad, report, sizeof(report));
+ }
+ 
+@@ -588,11 +622,15 @@
+             {
+                 pad->fifo_head = (pad->fifo_head + 1) % ARRAY_SIZE(pad->fifo);
+                 pad->fifo_count--;
++                pad->frames_dropped++;
+             }
+             memcpy(pad->fifo[(pad->fifo_head + pad->fifo_count++) % ARRAY_SIZE(pad->fifo)], packet.samples + 2 * i, 2);
+             nonzero |= packet.samples[2 * i] || packet.samples[2 * i + 1];
+         }
+         pad->audio_at = mach_absolute_time();
++        /* The first sound after a silence, to say how long the writer takes to play it. */
++        if (nonzero && (!pad->nonzero_at || pad->audio_at - pad->nonzero_at > mgf_pad_ticks(0.15)))
++            pad->sound_since = pad->audio_at;
+         if (nonzero) pad->nonzero_at = pad->audio_at;
+         pthread_mutex_unlock(&pad->lock);
+         semaphore_signal(pad->wake);
+@@ -690,6 +728,9 @@
+             streaming = TRUE;
+             index = 0;
+             next_pcm = mach_absolute_time() + mgf_pad_ticks(0.030);
++            if (pad->diagnostics && audio && pad->sound_since)
++                pad_log("Bluetooth haptics start %u ms after the game's sound reached winebus\n",
++                        (unsigned int)(mgf_pad_seconds(next_pcm - pad->sound_since) * 1000));
+         }
+         if (streaming && mach_absolute_time() >= next_pcm)
+         {
+@@ -697,6 +738,23 @@
+             if (mach_absolute_time() > next_pcm + mgf_pad_ticks(0.040)) next_pcm = mach_absolute_time();
+             memset(samples, 0, sizeof(samples));
+             pthread_mutex_lock(&pad->lock);
++            if (pad->diagnostics)
++            {
++                if (!pad->queue_since) pad->queue_since = mach_absolute_time();
++                pad->queue_max = max(pad->queue_max, pad->fifo_count);
++                pad->queue_sum += pad->fifo_count;
++                pad->queue_count++;
++                if (mach_absolute_time() - pad->queue_since > mgf_pad_ticks(2.0))
++                {
++                    pad_log("the Bluetooth haptics queue holds %u ms on average, %u ms at most; in 2 s %u haptics "
++                            "and %u control reports written, %u control copies skipped, %u ms of haptics dropped\n",
++                            pad->queue_sum / pad->queue_count * 1000 / 3000, pad->queue_max * 1000 / 3000,
++                            pad->pcm_sent, pad->control_sent, pad->control_skipped, pad->frames_dropped * 1000 / 3000);
++                    pad->queue_max = pad->queue_sum = pad->queue_count = 0;
++                    pad->pcm_sent = pad->control_sent = pad->control_skipped = pad->frames_dropped = 0;
++                    pad->queue_since = mach_absolute_time();
++                }
++            }
+             /* The link cannot always carry the 46.875 reports a second the haptics
+              * need, and a stream that no longer stops on silence has nothing else
+              * to empty the queue: it filled to its 170 ms in Uncharted. Past 96
+@@ -730,6 +788,7 @@
+             pthread_mutex_unlock(&pad->lock);
+             if (!n && synth) bt_synth(pad, heavy, light, samples);
+             bt_pcm(pad, index++, samples);
++            pad->pcm_sent++;
+             next_pcm += mgf_pad_ticks(pcm_period);
+             if (!audio && !synth)
+             {
+@@ -818,6 +877,7 @@
+     pad->device = device;
+     pad->edge = pid == DS_EDGE_PID;
+     pad->physical_edge = physical_edge;
++    pad->diagnostics = pad_option("diagnostics=on");
+     pad->synth_gain = pad_gain_bluetooth(physical_edge);
+     if ((pad->synth = pad_option("rumble=haptics")))
+         pad_log("the game's rumble plays on the actuators over Bluetooth, at %.2f\n", pad->synth_gain);
+@@ -928,6 +988,87 @@
+ static void pad_settings_follow(struct iohid_device *impl);
+ static BOOL trigger_chosen(const struct iohid_device *impl, unsigned int side);
+ 
++/* With diagnostics=on: how many input reports the pad sent and the longest gap
++ * between two, as they reach winebus, which is the most a game can read of the
++ * pad. On a cable and over Bluetooth alike, for comparing the two and Game Mode
++ * on and off. Counted in windows of 2 s, but said once a minute (the reports, the
++ * average rate, the lowest and highest window and the longest gap), and at once
++ * for the first window, which also names the connection the app reads a
++ * session's from, and for one with a gap of 100 ms or more: a line every 2 s
++ * was most of the log, 9,589 lines of 21,889 on 2026-10-23. */
++static void pad_input_rate(struct iohid_device *impl)
++{
++    UInt64 now = mach_absolute_time();
++    unsigned int gap, rate;
++
++    if (!impl->input_diagnostics) return;
++    if (impl->input_last && now - impl->input_last > impl->input_gap) impl->input_gap = now - impl->input_last;
++    impl->input_last = now;
++    impl->input_count++;
++    if (!impl->input_since) impl->input_since = impl->minute_since = now;
++    if (now - impl->input_since < mgf_pad_ticks(2.0)) return;
++    gap = (unsigned int)(mgf_pad_seconds(impl->input_gap) * 10000);
++    rate = (unsigned int)(impl->input_count / mgf_pad_seconds(now - impl->input_since));
++    if (gap >= 1000 || !impl->rate_told)
++        pad_log("the %s %s sent %u input reports in 2 s, %u a second; the longest gap between two was %u.%u ms\n",
++                impl->bt ? "Bluetooth" : "wired", impl->model, impl->input_count, rate, gap / 10, gap % 10);
++    impl->rate_told = TRUE;
++    impl->minute_count += impl->input_count;
++    if (impl->input_gap > impl->minute_gap) impl->minute_gap = impl->input_gap;
++    if (!impl->minute_low || rate < impl->minute_low) impl->minute_low = rate;
++    if (rate > impl->minute_high) impl->minute_high = rate;
++    impl->input_since = now;
++    impl->input_count = 0;
++    impl->input_gap = 0;
++    if (now - impl->minute_since < mgf_pad_ticks(60.0)) return;
++    gap = (unsigned int)(mgf_pad_seconds(impl->minute_gap) * 10000);
++    pad_log("the %s %s sent %u input reports in %u s, %u a second (2 s windows from %u to %u); the longest gap "
++            "between two was %u.%u ms\n", impl->bt ? "Bluetooth" : "wired", impl->model, impl->minute_count,
++            (unsigned int)(mgf_pad_seconds(now - impl->minute_since)),
++            (unsigned int)(impl->minute_count / mgf_pad_seconds(now - impl->minute_since)),
++            impl->minute_low, impl->minute_high, gap / 10, gap % 10);
++    impl->minute_since = now;
++    impl->minute_count = impl->minute_low = impl->minute_high = 0;
++    impl->minute_gap = 0;
++}
++
++/* With diagnostics=on: each time the game's motor values rise to 4 or more (what
++ * rumble=haptics plays and the motors' own deadband lets through) and each time
++ * they fall back, with how long they stayed up, the strongest and the last
++ * values, heavy then light. A game that never lets them fall shows it here. */
++static void pad_motors_told(struct iohid_device *impl, BYTE heavy, BYTE light)
++{
++    UInt64 now = mach_absolute_time();
++    BOOL on = heavy >= 4 || light >= 4;
++
++    if (!impl->input_diagnostics) return;
++    if (on && !impl->motors_on)
++    {
++        impl->motors_on = TRUE;
++        impl->motors_since = now;
++        impl->motors_peak[0] = heavy;
++        impl->motors_peak[1] = light;
++        pad_log("the game's motors rise: heavy 0x%02x, light 0x%02x\n", heavy, light);
++    }
++    else if (on)
++    {
++        impl->motors_peak[0] = max(impl->motors_peak[0], heavy);
++        impl->motors_peak[1] = max(impl->motors_peak[1], light);
++    }
++    else if (impl->motors_on)
++    {
++        impl->motors_on = FALSE;
++        pad_log("the game's motors fall after %u ms: the strongest heavy 0x%02x, light 0x%02x; the last before 0x%02x, 0x%02x\n",
++                (unsigned int)(mgf_pad_seconds(now - impl->motors_since) * 1000),
++                impl->motors_peak[0], impl->motors_peak[1], impl->motors_last[0], impl->motors_last[1]);
++    }
++    if (on)
++    {
++        impl->motors_last[0] = heavy;
++        impl->motors_last[1] = light;
++    }
++}
++
+ static void handle_IOHIDDeviceIOHIDReportCallback(void *context,
+         IOReturn result, void *sender, IOHIDReportType type,
+         uint32_t reportID, uint8_t *report, CFIndex report_length)
+@@ -945,6 +1086,7 @@
+         if (reportID == 0x31 && report_length >= 66)
+         {
+             impl->bt->input_at = mach_absolute_time();
++            pad_input_rate(impl);
+             usb[0] = 0x01;
+             memcpy(usb + 1, report + 2, 63);
+             pad_triggers_follow(impl, usb, sizeof(usb));
+@@ -962,6 +1104,7 @@
+     }
+     if (impl->sony && result == kIOReturnSuccess)
+     {
++        pad_input_rate(impl);
+         pad_triggers_follow(impl, report, report_length);
+     }
+     /* Shown as a DualShock 4, the pad's full report becomes that pad's, after
+@@ -1002,8 +1145,14 @@
+     {
+         UINT firmware = impl->edge ? 0 : pad_firmware(impl->device);
+ 
++        impl->input_diagnostics = pad_option("diagnostics=on");
+         impl->rumble_improved = impl->edge || firmware >= 0x0224;
+         if (impl->bt) impl->bt->rumble_improved = impl->rumble_improved;
++        if (impl->input_diagnostics)
++            pad_log("the %s's rumble: %s\n", impl->model,
++                    impl->edge ? "the improved emulation, as every Edge's"
++                    : impl->rumble_improved ? "the improved emulation, firmware 2.24 or newer"
++                    : "the old emulation, firmware older than 2.24 or not read");
+     }
+     /* What the DualShock 4's feature reports 0x02, 0x12 and 0x81 are answered
+      * from, read once from the pad itself: its calibration (0x05, 41 bytes) and
+@@ -1632,6 +1781,13 @@
+      * a game shown a DualShock 4 sees none. */
+     if (from_game && impl->edge && !impl->as_standard && !impl->ds4)
+         for (i = 3; i <= 4; i++) copy[i] = copy[i] >= 0x80 ? 0xff : copy[i] * 2;
++    if (!impl->told_rumble_improved && pad_option("diagnostics=on"))
++    {
++        impl->told_rumble_improved = TRUE;
++        pad_log("observed: %s asks the %s for the old rumble emulation; it gets the improved one%s\n",
++                from_game ? "the game" : "XInput", impl->model,
++                from_game && impl->edge && !impl->as_standard && !impl->ds4 ? ", at twice what it wrote" : "");
++    }
+     return copy;
+ }
+ 
+@@ -1711,6 +1867,16 @@
+     /* Said before any copy is made: whether the game wrote it, or XInput did. */
+     from_game = report != motors;
+ 
++    /* The motors' values, whenever the game writes: with 0x01 (or the improved
++     * emulation's bit) they are its motors, with 0x02 alone they stay as they were,
++     * and with neither the emulated rumble is off (see bt_queue_output). */
++    if (output)
++    {
++        BOOL rumble = (report[1] & 0x01) || (length > 39 && (report[39] & 0x04));
++        if (rumble) pad_motors_told(impl, report[4], report[3]);
++        else if (!(report[1] & 0x02)) pad_motors_told(impl, 0, 0);
++    }
++
+     /* How the game drives the pad, said once each, for MacGameFix's list of what
+      * each game does: the rumble motors, trigger effects, the motor power. */
+     if (output)
+@@ -1732,6 +1898,25 @@
+             pad_log("observed: the game claims the %s's motor power (0x%02x)\n", impl->model, report[37]);
+         }
+     }
++    /* Each shape of what a game writes, once: the flag bytes, the motors, the
++     * audio fields and the power, but not the trigger effects or the LEDs. */
++    if (output && pad_option("diagnostics=on"))
++    {
++        static const BYTE at[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 37, 38, 39};
++        UINT32 shape = 2166136261u;
++        unsigned int i;
++
++        for (i = 0; i < ARRAY_SIZE(at); i++) shape = (shape ^ report[at[i]]) * 16777619u;
++        for (i = 0; i < impl->shapes && impl->shapes_told[i] != shape; i++);
++        if (i == impl->shapes && impl->shapes < ARRAY_SIZE(impl->shapes_told))
++        {
++            char hex[3 * 48 + 1] = "";
++
++            impl->shapes_told[impl->shapes++] = shape;
++            for (i = 0; i < 48; i++) snprintf(hex + 3 * i, 4, " %02x", report[i]);
++            pad_log("the game writes the %s:%s\n", impl->model, hex);
++        }
++    }
+     if (output && length <= sizeof(copy))
+     {
+         /* An Edge shown as the standard pad on a cable: the game writes the
+@@ -1756,6 +1941,8 @@
+          * cable. */
+         if (pad_option("motor_power=full") && (impl->edge || impl->ds4 || (report[2] & 0x40)))
+         {
++            if (pad_option("diagnostics=on") && (report[2] & 0x40) && first_time(impl->powers_told, report[37]))
++                pad_log("the game sets the %s's motor power to 0x%02x, written as 0x00\n", impl->model, report[37]);
+             if (report != copy) memcpy(copy, report, length);
+             if ((impl->edge || impl->ds4) && !impl->bt) copy[2] |= 0x40;
+             copy[37] = 0;
+@@ -1802,6 +1989,15 @@
+         UINT size = ds4_feature_reply(packet->reportId, impl->ds4_calibration, impl->ds4_calibration_length,
+                                       impl->ds4_pairing, impl->ds4_pairing_length, reply, sizeof(reply));
+ 
++        if (pad_option("diagnostics=on") && first_time(impl->features_told, packet->reportId))
++        {
++            char hex[3 * 24 + 1] = "";
++            UINT i;
++
++            for (i = 0; size <= sizeof(reply) && i < size && i < 24; i++) snprintf(hex + 3 * i, 4, " %02x", reply[i]);
++            pad_log("the game read the %s's feature report 0x%02x, answered as a DualShock 4's:%s%s\n", impl->model,
++                    packet->reportId, size ? "" : " refused, not declared", hex);
++        }
+         if (!size || size > sizeof(reply))
+         {
+             io->Information = 0;
+@@ -1852,6 +2048,17 @@
+ 
+     ret = IOHIDDeviceGetReport(impl->device, kIOHIDReportTypeFeature, packet->reportId,
+                                packet->reportBuffer, &report_length);
++    /* Which of the pad's stored settings a game reads, once per report. */
++    if (impl->sony && pad_option("diagnostics=on") && first_time(impl->features_told, packet->reportId))
++    {
++        char hex[3 * 24 + 1] = "";
++        CFIndex i;
++
++        for (i = 0; ret == kIOReturnSuccess && i < report_length && i < 24; i++)
++            snprintf(hex + 3 * i, 4, " %02x", packet->reportBuffer[i]);
++        pad_log("the game read the %s's feature report 0x%02x: %s%s\n", impl->model,
++                packet->reportId, ret == kIOReturnSuccess ? "" : "refused", hex);
++    }
+     if (ret == kIOReturnSuccess)
+     {
+         io->Information = report_length;
+@@ -1875,6 +2082,16 @@
+      * turned off. */
+     if (impl->ds4 && !(impl->xinput && packet->reportId == XINPUT_FEATURE_ID_DS4))
+     {
++        if (pad_option("diagnostics=on") && first_time(impl->ds4_sets_told, packet->reportId))
++        {
++            char hex[3 * 24 + 1] = "";
++            UINT i;
++
++            for (i = 0; i < packet->reportBufferLen && i < 24; i++)
++                snprintf(hex + 3 * i, 4, " %02x", packet->reportBuffer[i]);
++            pad_log("the game set the %s's feature report 0x%02x, kept from the pad as a DualShock 4's:%s\n",
++                    impl->model, packet->reportId, hex);
++        }
+         io->Information = packet->reportBufferLen;
+         io->Status = STATUS_SUCCESS;
+         return;
+--- a/dlls/winecoreaudio.drv/coreaudio.c
++++ b/dlls/winecoreaudio.drv/coreaudio.c
+@@ -764,6 +764,8 @@
+     stream->bufsize_frames = muldiv(params->duration, stream->fmt->nSamplesPerSec, 10000000);
+     if(params->share == AUDCLNT_SHAREMODE_EXCLUSIVE)
+         stream->bufsize_frames -= stream->bufsize_frames % stream->period_frames;
++    if (stream->flow == eRender) /* MacGameFix: see dualsense_bt.h */
++        mgf_stream_opened(stream->dev_id, stream->bufsize_frames, stream->period_frames, stream->fmt->nSamplesPerSec);
+ 
+     if(!(stream->unit = get_audiounit(stream->flow, stream->dev_id))){
+         params->result = AUDCLNT_E_DEVICE_INVALIDATED;
+@@ -1382,6 +1384,7 @@
+     os_unfair_lock_lock(&stream->lock);
+     *params->padding = get_current_padding_nolock(stream);
+     os_unfair_lock_unlock(&stream->lock);
++    if (stream->flow == eRender) mgf_stream_padding(stream->dev_id, *params->padding); /* MacGameFix */
+     params->result = S_OK;
+     return STATUS_SUCCESS;
+ }
+--- a/dlls/winecoreaudio.drv/dualsense_bt.h
++++ b/dlls/winecoreaudio.drv/dualsense_bt.h
+@@ -531,6 +531,15 @@
+     return isfinite(gain) ? fmaxf(1, fminf(4, gain)) : 1;
+ }
+ 
++/* diagnostics=on: a level meter in pad.log while haptics play. */
++static BOOL mgf_diagnostics(void)
++{
++    char value[16];
++
++    mgf_value("diagnostics", value, sizeof(value));
++    return !strcmp(value, "on");
++}
++
+ /* Gain with a soft limit: up to 0.8 it is linear, above it a curve that never
+  * passes 1.0, so the strongest hits are not cut flat. */
+ static float mgf_amplify(float x, float gain)
+@@ -554,15 +563,21 @@
+     struct mgf_pad_packet packet = {{'M', 'G', 'F', 'H'}};
+     AudioBufferList list;
+     AudioTimeStamp stamp = {0};
+-    UInt64 deadline;
++    UInt64 deadline, window;
+     BYTE *buffer;
+     UInt32 i;
+-    float gain = mgf_gain(pad->physical == DS_EDGE_PID, TRUE);
++    /* A level meter: what the game plays on channels 3 and 4 before any gain of
++     * ours, and what goes to the pad, said every two seconds while there is any. */
++    float peak[2] = {0, 0}, gain = mgf_gain(pad->physical == DS_EDGE_PID, TRUE);
++    BOOL diagnostics = mgf_diagnostics();
++    double square[2] = {0, 0};
++    unsigned long frames_seen = 0;
++    int sent = 0;
+ 
+     if (!(buffer = calloc(frames, stride))) return NULL;
+     mgf_pad_realtime(seconds, seconds / 2);
+     stamp.mFlags = kAudioTimeStampSampleTimeValid | kAudioTimeStampHostTimeValid;
+-    deadline = mach_absolute_time();
++    deadline = window = mach_absolute_time();
+     while (!u->quit)
+     {
+         AudioUnitRenderActionFlags flags = 0;
+@@ -585,11 +600,33 @@
+                 const BYTE *frame = buffer + i * stride;
+                 float left = mgf_sample(u, frame, 2), right = mgf_sample(u, frame, 3);
+ 
++                if (fabsf(left) > peak[0]) peak[0] = fabsf(left);
++                if (fabsf(right) > peak[1]) peak[1] = fabsf(right);
++                square[0] += (double)left * left;
++                square[1] += (double)right * right;
++                frames_seen++;
+                 if (mgf_resample(u, mgf_amplify(left * gain3, gain), mgf_amplify(right * gain4, gain),
+                                  packet.samples + 2 * count))
++                {
++                    if (abs(packet.samples[2 * count]) > sent) sent = abs(packet.samples[2 * count]);
++                    if (abs(packet.samples[2 * count + 1]) > sent) sent = abs(packet.samples[2 * count + 1]);
+                     count++;
++                }
+             }
+             if (count && u->fd >= 0) send(u->fd, &packet, 4 + 2 * count, MSG_DONTWAIT);
++            if (mach_absolute_time() - window >= mgf_pad_ticks(2.0))
++            {
++                if (diagnostics && (peak[0] > 0.001f || peak[1] > 0.001f))
++                    pad_log("haptics over 2 s: peak %.3f / %.3f, rms %.3f / %.3f, sent peak %d of 127, "
++                            "volume %.2f x %.2f / %.2f, gain %.2f\n", peak[0], peak[1],
++                            sqrt(square[0] / frames_seen), sqrt(square[1] / frames_seen), sent,
++                            pad->volume[0], pad->volume[3], pad->volume[4], gain);
++                peak[0] = peak[1] = 0;
++                square[0] = square[1] = 0;
++                frames_seen = 0;
++                sent = 0;
++                window = mach_absolute_time();
++            }
+         }
+ 
+         deadline += mgf_pad_ticks(seconds);
+@@ -824,6 +861,49 @@
+  * it, and how much it keeps waiting in Wine's buffer, said every two seconds:
+  * the game's own share of the haptics' latency, the same measure on a cable and
+  * over Bluetooth. coreaudio.c calls these. */
++#define MGF_WATCHED 8
++static struct { AudioDeviceID device; UInt32 rate, low, high; UInt64 since; } mgf_watched[MGF_WATCHED];
++
++static void mgf_stream_opened(AudioDeviceID device, UInt32 buffer, UInt32 period, UInt32 rate)
++{
++    struct mgf_pad *pad = mgf_pad_of(device);
++    unsigned int i, slot = MGF_WATCHED;
++    BOOL edge;
++
++    if (!rate || !mgf_diagnostics() || (!pad && !mgf_wired_pad(device, &edge))) return;
++    pad_log("the game opens the %s haptics output: a buffer of %u ms, a period of %u ms, %u Hz\n",
++            pad ? "Bluetooth" : "wired", buffer * 1000 / rate, period * 1000 / rate, rate);
++    for (i = 0; i < MGF_WATCHED; i++)
++    {
++        if (mgf_watched[i].device == device) { slot = i; break; }
++        if (!mgf_watched[i].device && slot == MGF_WATCHED) slot = i;
++    }
++    if (slot == MGF_WATCHED) return;
++    mgf_watched[slot].device = device;
++    mgf_watched[slot].rate = rate;
++    mgf_watched[slot].low = ~0u;
++    mgf_watched[slot].high = 0;
++    mgf_watched[slot].since = mach_absolute_time();
++}
++
++static void mgf_stream_padding(AudioDeviceID device, UInt32 held)
++{
++    unsigned int i;
++
++    for (i = 0; i < MGF_WATCHED && mgf_watched[i].device != device; i++);
++    if (i == MGF_WATCHED || !device) return;
++    if (held < mgf_watched[i].low) mgf_watched[i].low = held;
++    if (held > mgf_watched[i].high) mgf_watched[i].high = held;
++    if (mach_absolute_time() - mgf_watched[i].since < mgf_pad_ticks(2.0)) return;
++    if (mgf_watched[i].high)
++        pad_log("the game keeps %u to %u ms waiting in the %s haptics output\n",
++                mgf_watched[i].low * 1000 / mgf_watched[i].rate, mgf_watched[i].high * 1000 / mgf_watched[i].rate,
++                mgf_pad_of(device) ? "Bluetooth" : "wired");
++    mgf_watched[i].low = ~0u;
++    mgf_watched[i].high = 0;
++    mgf_watched[i].since = mach_absolute_time();
++}
++
+ #define AudioObjectGetPropertyDataSize mgf_AudioObjectGetPropertyDataSize
+ #define AudioObjectGetPropertyData mgf_AudioObjectGetPropertyData
+ #define AudioObjectSetPropertyData mgf_AudioObjectSetPropertyData
