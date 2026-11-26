@@ -53,8 +53,8 @@ enum EnginePart: String, CaseIterable, Identifiable {
     /// What it does, in one line under its title.
     var summary: String {
         switch self {
-        case .controls: return "Haptics, adaptive triggers, Bluetooth as a cable, and XInput's vibration."
-        case .rosetta: return "CPU compatibility under Rosetta, plus corrected timers and guarded exception acceleration for FH6 on Preview 41073."
+        case .controls: return "Haptics, adaptive triggers, Bluetooth as a cable and XInput vibration."
+        case .rosetta: return "Rosetta's CPU as copy protection expects it."
         }
     }
 
@@ -62,17 +62,10 @@ enum EnginePart: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .controls:
-            return "Patched winebus, hidclass, xinput, mmdevapi, setupapi, xaudio2 and winecoreaudio, on both sides. "
-                + "Games find the pad's haptic output, set its trigger effects and rumble it as on Windows; "
-                + "Game Feel sets the options per game."
+            return "Patched Wine modules for the DualSense. Game Feel sets the options per game."
         case .rosetta:
-            return "Paired ntdll.so and ntdll.dll on Preview 41073's Intel side; ntdll.so on older supported builds. It runs a cpuid Rosetta skips after self-modifying code, "
-                + "emulates CLWB, RDPID and hardware breakpoints, and reports faults as Windows does. "
-                + "On Preview 41073 it also keeps the threadpool's timer thread from waking in a loop, on both sides, and on the FEX side "
-                + "it stores async I/O status wherever a game puts it. "
-                + "FH6 exception acceleration remains opt-in and game-build guarded; its fix applies the options. Other builds retain their existing CPU fixes. "
-                + "In NotProton's runner for Preview 41303 the Intel side keeps CodeWeavers' and NotProton's own files: "
-                + "a game gets the same fixes from NotProton's Engine fixes row, on its Compatibility page."
+            return "A patched ntdll for CrossOver apps and older runners. "
+                + "On NotProton's 41303 runner each game gets it from its Engine fixes row instead."
         }
     }
 
@@ -87,8 +80,8 @@ enum EnginePart: String, CaseIterable, Identifiable {
     /// The one thing to know under its switches.
     var footer: String {
         switch self {
-        case .controls: return "Game Feel sets its options per game. Quit a CrossOver's games before changing it."
-        case .rosetta: return "The CPU changes are for the Intel side only. The CPUID bits a game asks for come with that game's fix."
+        case .controls: return "Quit a CrossOver's games before changing it."
+        case .rosetta: return "Intel side only."
         }
     }
 
