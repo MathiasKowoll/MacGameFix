@@ -1162,9 +1162,9 @@ rm -f "$NPP/someone-else.conf" "$NPR"
 for i in $(seq 1 32); do printf '[NOTPROTON_FULL_%s]\nlabel = Row %s\n' "$i" "$i"; done > "$NPP/full.conf"
 check 'has "$(MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep)" "32 rows are taken" && [ ! -e "$NPR" ]' "with NotProton's 32 rows taken, it adds none"
 rm -f "$NPP/full.conf"
-echo "== NotProton's frame rate cap and ray tracing rows"
-NPF="$NPP/mgf-fps.conf"; NPD="$NPP/mgf-dxr.conf"
-rm -f "$NPF" "$NPD"
+echo "== NotProton's frame rate cap, ray tracing and NVIDIA driver rows"
+NPF="$NPP/mgf-fps.conf"; NPD="$NPP/mgf-dxr.conf"; NPV="$NPP/mgf-nvidia-driver.conf"
+rm -f "$NPF" "$NPD" "$NPV"
 OUT=$(MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep)
 check 'has "$OUT" "frame rate cap row: written for a 120 Hz display" && has "$OUT" "ray tracing row: written"' "the agent's rows for every game are written beside the processors row"
 F=$(cat "$NPF")
@@ -1177,9 +1177,17 @@ check 'has "$(cat "$NPF")" "choice = 0 = No limit (60 Hz)" && has "$(cat "$NPF")
 check 'has "$(MACGAMEFIX_DISPLAY=0,0 "$BIN" --rows-keep)" "frame rate cap row: this Mac'"'"'s display could not be read"' "with no display read, the cap row is not touched"
 D=$(cat "$NPD")
 check 'has "$D" "[NOTPROTON_MGF_DXR_OFF]" && has "$D" "on = 1" && has "$D" "env = D3DM_SUPPORT_DXR=0" && has "$D" "group = MacGameFix · D3DMetal"' "the ray tracing row, switched on, gives the game D3DM_SUPPORT_DXR=0"
+V=$(cat "$NPV")
+check 'has "$OUT" "NVIDIA driver row: written" && has "$V" "[NOTPROTON_MGF_NVIDIA_DRIVER]" && has "$V" "on = 1" && has "$V" "group = MacGameFix · D3DMetal" && has "$V" "tools = notproton-fex-rosetta*"' "the NVIDIA driver row is written for every game, for the Rosetta tools it was played on"
+check '[ "$(/usr/bin/grep -c "^patch = D3DMetal/x86_64: " "$NPV")" = 2 ] && [ "$(/usr/bin/grep -o "=9f [a-f0-9]*=86 00=01 00 48 b8" "$NPV" | /usr/bin/grep -c .)" = 4 ] && [ "$(/usr/bin/grep -c "72 36 31 36 5f 34 31 | .* 72 35 36 30 5f 38 38$" "$NPV")" = 2 ]' "its two patches write 99999 over D3DMetal's driver version, one form for D3DMetal 4 and one for D3DMetal 3"
 MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep >/dev/null
 check '[ "$(MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep)" = "rows: nothing to do" ]' "rows already right are left as they are"
-rm -f "$NPF" "$NPD" "$NPR"
+cp "$CT/notproton-a/run" "$T/run-with-patch"
+printf '      split("label description section on off type choice default apps group", f, " ")\n' > "$CT/notproton-a/run"
+check 'has "$(MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep)" "NVIDIA driver row: taken out, the NotProton in Steam does not read patch" && [ ! -e "$NPV" ]' "a NotProton that does not read patch loses the NVIDIA driver row"
+check '[ "$(MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep)" = "rows: nothing to do" ]' "and is not given it again"
+cp "$T/run-with-patch" "$CT/notproton-a/run"
+rm -f "$NPF" "$NPD" "$NPV" "$NPR"
 rm -rf "$CT"
 echo "== The NotProton plugins MacGameFix carries"
 NPU="$NPP/40-unreal-video.conf"; NPZ="$NPP/50-d3dmetal-freeze.conf"; NPN="$NPP/55-d3dmetal-notifier.conf"; NPT="$NPP/60-red-dead-online.conf"
@@ -1220,7 +1228,7 @@ printf '      split("label description section on off depends requires inject en
 printf '[NOTPROTON_D3DMETAL_NODEGUARD]\nlabel = Written by hand\non = 1\n' > "$NPZ"
 OUT=$("$BIN" --rows-keep)
 check 'has "$OUT" "Unreal video row: taken out, the NotProton in Steam does not read patch" && [ ! -e "$NPU" ] && [ -f "$NPZ" ]' "a NotProton that does not read patch loses the Unreal row; a file MacGameFix did not write stays"
-rm -f "$NPZ" "$NPP"/*.dylib "$NPF" "$NPD" "$NPR"
+rm -f "$NPZ" "$NPP"/*.dylib "$NPF" "$NPD" "$NPV" "$NPR"
 rm -rf "$CT"
 unset MACGAMEFIX_CPUS MACGAMEFIX_DISPLAY
 

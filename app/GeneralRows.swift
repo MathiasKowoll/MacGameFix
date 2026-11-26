@@ -4,6 +4,7 @@
 //   ProcessorsRow  "Processors the game sees"   (ProcessorsRow.swift)
 //   FrameCapRow    "Frame rate cap"              D3DM_MAX_FPS, in the rates this Mac's display holds
 //   RayTracingRow  "Ray tracing off"             D3DM_SUPPORT_DXR=0
+//   DriverVersionRow "NVIDIA driver version"     D3DMetal's driver version, patched in memory
 //
 // and the plugins NotProton's creator ported from MacGameFix's fixes (NotProtonPlugins.swift).
 //
@@ -83,7 +84,7 @@ enum NotProtonRow {
 
     /// Every row MacGameFix keeps, in the agent's pass and the window's scan.
     static func keepAll() -> [String] {
-        [ProcessorsRow.keep(), FrameCapRow.keep(), RayTracingRow.keep()].compactMap { $0 }
+        [ProcessorsRow.keep(), FrameCapRow.keep(), RayTracingRow.keep(), DriverVersionRow.keep()].compactMap { $0 }
             + NotProtonPlugins.keep()
     }
 }
@@ -179,5 +180,45 @@ enum RayTracingRow {
     @discardableResult
     static func keep() -> String? {
         NotProtonRow.keep(name: "ray tracing", id: id, file: file, written: "written") { .success(text(grouped: $0)) }
+    }
+}
+
+/// D3DMetal answers a game's question for the NVIDIA driver (NvAPI) with a version of its own:
+/// 576.02 in D3DMetal 4 (CrossOver Preview 41303), 561.09 in D3DMetal 3 and in CrossOver 26.3's
+/// D3DMetal 4. A game that wants a newer one asks for a driver update at every start: EA SPORTS
+/// FC 27 1.0.143 wants 610.62. The version is a constant in two instructions, each followed by
+/// the driver's branch ("r616_41", "r560_88"), and the row writes 99999 (999.99) over both, in
+/// memory: one form per version, each found once in the builds named above. A D3DMetal that
+/// reports another version needs a form of its own (NotProton reads four in a patch).
+///
+/// With the row on, FC 27 started with no dialog and reached its menu (NotProton 41303 under
+/// Rosetta, 2026-11-26). Wine's own driver version, in the registry, is not this one.
+enum DriverVersionRow {
+    static let id = "NOTPROTON_MGF_NVIDIA_DRIVER"
+    static let file = "mgf-nvidia-driver.conf"
+
+    static func text(grouped: Bool) -> String {
+        var lines = ["[\(id)]", "label = NVIDIA driver version"]
+        if grouped { lines.append("group = MacGameFix · D3DMetal") }
+        lines += [
+            "description = D3DMetal tells the game a newer NVIDIA driver (999.99). For a game that asks for a driver update at every start. Played with EA SPORTS FC 27 on NotProton 41303 (Rosetta), 2026-11-26 (MacGameFix)",
+            "on = 1",
+            "tools = notproton-fex-rosetta*",
+            "patch = D3DMetal/x86_64: 48 c7 42 04 02=9f e1=86 00=01 00 48 b8 72 36 31 36 5f 34 31 | 48 c7 42 04 2d=9f db=86 00=01 00 48 b8 72 35 36 30 5f 38 38",
+            "patch = D3DMetal/x86_64: c7 01 02=9f e1=86 00=01 00 48 b8 72 36 31 36 5f 34 31 | c7 01 2d=9f db=86 00=01 00 48 b8 72 35 36 30 5f 38 38",
+        ]
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    @discardableResult
+    static func keep() -> String? {
+        // An older NotProton refuses a row with a field it does not know: it gets none.
+        guard NotProtonRow.knows("patch") else {
+            let path = NotProtonRow.folder.appendingPathComponent(file)
+            guard FileManager.default.fileExists(atPath: path.path) else { return nil }
+            try? FileManager.default.removeItem(at: path)
+            return "NVIDIA driver row: taken out, the NotProton in Steam does not read patch"
+        }
+        return NotProtonRow.keep(name: "NVIDIA driver", id: id, file: file, written: "written") { .success(text(grouped: $0)) }
     }
 }
