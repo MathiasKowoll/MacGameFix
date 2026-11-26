@@ -35,7 +35,9 @@ final class NativePort: ObservableObject {
         let sourcesKey: String
         /// The folder name of the sources, tried in ~/Development, in ~ and in the downloads.
         let sourcesFolder: String
-        let repositories: [(folder: String, url: String, branch: String?)]
+        /// `commit` pins sources MacGameFix's author does not publish himself: Get Sources takes that
+        /// commit, the one that was read, and no later one, since their scripts are run on this Mac.
+        let repositories: [(folder: String, url: String, branch: String?, commit: String?)]
         /// Files the sources' top folder has when it is the port's.
         let sourceFiles: [String]
         /// What the build leaves, relative to the sources.
@@ -61,9 +63,9 @@ final class NativePort: ObservableObject {
         sourcesKey: "nativePort.batman.sources",
         sourcesFolder: "BMAA-Recomp",
         repositories: [
-            ("BMAA-Recomp", "https://github.com/MathiasKowoll/BMAA-Recomp.git", nil),
-            ("Recomp-Framework", "https://github.com/MathiasKowoll/Recomp-Framework.git", "mac32-ports"),
-            ("DecompRecomp", "https://github.com/MathiasKowoll/DecompRecomp.git", nil),
+            ("BMAA-Recomp", "https://github.com/MathiasKowoll/BMAA-Recomp.git", nil, nil),
+            ("Recomp-Framework", "https://github.com/MathiasKowoll/Recomp-Framework.git", "mac32-ports", nil),
+            ("DecompRecomp", "https://github.com/MathiasKowoll/DecompRecomp.git", nil, nil),
         ],
         sourceFiles: ["build.sh", "play.sh"],
         builtPath: "build/dr-bmaa",
@@ -84,7 +86,10 @@ final class NativePort: ObservableObject {
         sourcesKey: "nativePort.bioshock.sources",
         sourcesFolder: "bioshock-infinite-recomp",
         repositories: [
-            ("bioshock-infinite-recomp", "https://github.com/bmbowdish/bioshock-infinite-recomp.git", nil),
+            // Read on 2026-11-26: its scripts write inside their own folder only, and download nothing
+            // but the two Python packages of requirements.txt, into a .venv there.
+            ("bioshock-infinite-recomp", "https://github.com/bmbowdish/bioshock-infinite-recomp.git", nil,
+             "315d149730a7a520a472d97ba8789700abaecd8e"),
         ],
         sourceFiles: ["setup.sh", "build_app.sh"],
         builtPath: "build/BioShockInfiniteRecomp.app",
@@ -130,7 +135,10 @@ final class NativePort: ObservableObject {
         candidates.append(Paths.home.appendingPathComponent(config.sourcesFolder))
         candidates.append(Self.downloads.appendingPathComponent(config.sourcesFolder))
         sources = candidates.first { isSources($0) }
-        built = sources.map { fm.fileExists(atPath: $0.appendingPathComponent(config.builtPath).path) } ?? false
+        built = sources.map {
+            let path = $0.appendingPathComponent(config.builtPath).path
+            return config.builtPath.hasSuffix(".app") ? fm.fileExists(atPath: path) : fm.isExecutableFile(atPath: path)
+        } ?? false
     }
 
     func isSources(_ folder: URL) -> Bool {
@@ -155,7 +163,7 @@ final class NativePort: ObservableObject {
     /// Where Get Sources puts them: the port and the two projects it is built with, side by side.
     static var downloads: URL { Paths.home.appendingPathComponent("Library/Application Support/MacGameFix/NativePorts") }
 
-    /// Clones the three repositories, or brings the ones already there up to date. Sources the
+    /// Clones the port's repositories, or brings the ones already there up to date. Sources the
     /// user chose or keeps elsewhere are left alone: this only ever writes under `downloads`.
     func getSources() {
         guard !building else { return }
@@ -169,16 +177,25 @@ final class NativePort: ObservableObject {
                 step = "Getting " + repo.folder
                 progress = Double(i) / Double(config.repositories.count)
                 let dest = Self.downloads.appendingPathComponent(repo.folder)
-                var args: [String]
-                if FileManager.default.fileExists(atPath: dest.appendingPathComponent(".git").path) {
-                    args = ["-C", dest.path, "pull", "--ff-only", "--quiet"]
+                let cloned = FileManager.default.fileExists(atPath: dest.appendingPathComponent(".git").path)
+                var commands: [[String]]
+                if let commit = repo.commit {
+                    // A pinned commit: fetched by its hash and checked out, whatever the branch has since.
+                    commands = cloned ? [] : [["init", "--quiet", dest.path]]
+                    commands.append(["-C", dest.path, "fetch", "--quiet", "--depth", "1", repo.url, commit])
+                    commands.append(["-C", dest.path, "checkout", "--quiet", "--detach", commit])
+                } else if cloned {
+                    commands = [["-C", dest.path, "pull", "--ff-only", "--quiet"]]
                 } else {
-                    args = ["clone", "--quiet", "--depth", "1"]
+                    var args = ["clone", "--quiet", "--depth", "1"]
                     if let branch = repo.branch { args += ["--branch", branch] }
-                    args += [repo.url, dest.path]
+                    commands = [args + [repo.url, dest.path]]
                 }
-                let status = await runStreaming("/usr/bin/git", args,
+                var status: Int32 = 0
+                for args in commands where status == 0 {
+                    status = await runStreaming("/usr/bin/git", args,
                                                 environment: ["PATH": Self.toolPath, "GIT_TERMINAL_PROMPT": "0"]) { _ in }
+                }
                 if status != 0 {
                     ok = false
                     failure = repo.folder + " could not be downloaded from " + repo.url + " (git status \(status))."
@@ -225,7 +242,7 @@ final class NativePort: ObservableObject {
         // version check or a failed build. The last such line is what the window shows.
         if config.stepPrefix.isEmpty {
             let t = line.trimmingCharacters(in: .whitespaces)
-            if t.hasPrefix("MISSING ") || t.contains("FAILED") || t.hasSuffix("failed") || t.hasPrefix("build failed")
+            if t.hasPrefix("MISSING ") || t.hasPrefix("version check FAILED") || t.hasPrefix("build failed")
                 || t.hasPrefix("translation failed") || t.hasPrefix("the app was not produced") {
                 failure = t
                 return
@@ -280,7 +297,7 @@ final class NativePort: ObservableObject {
     }
 }
 
-/// The port's section in Improvements: where the game and the sources are, the build, and Play.
+/// The port's section in the Native tab: where the game and the sources are, the build, and Play.
 struct NativePortSection: View {
     @ObservedObject var port: NativePort
     let extra: [URL]
@@ -343,5 +360,24 @@ struct NativePortSection: View {
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .onAppear { if !port.building { port.look(extra: extra) } }
+    }
+}
+
+/// Native: the games MacGameFix builds for this Mac from the owner's own copy, one section each.
+/// They need no CrossOver, which is why they are not in Improvements.
+struct NativeBuildsView: View {
+    @ObservedObject var model: Model
+
+    var body: some View {
+        Form {
+            Section {
+                Text("Games built for Apple silicon on this Mac, from the copy you own. They run without CrossOver. "
+                     + "MacGameFix carries nothing of any game: it gets the port's sources, builds, and starts what it built.")
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            NativePortSection(port: NativePort.batman, extra: model.extraFolders)
+            NativePortSection(port: NativePort.bioshock, extra: model.extraFolders)
+        }
+        .formStyle(.grouped)
     }
 }
