@@ -16,7 +16,8 @@
 #             GPUI finds its fonts and opens its window (0039 and 0040), and kernel32.dll,
 #             which forwards to kernelbase.dll the function EA SPORTS FC 27's activation
 #             looks up (0041); and on 41073's Intel side, and in CrossOver apps, ntdll.dll (a
-#             NotProton runner of 41303 keeps NotProton's own: see LEAVE below)
+#             NotProton runner of 41303 keeps NotProton's own ntdll.dll, and CodeWeavers' ntdll.so,
+#             kernel32.dll, kernelbase.dll, user32.dll and win32u.so on its Intel side: see LEAVE below)
 # Without --part every improvement the build carries is meant, as before there were two.
 # An improvement is in when the list in the backup folder names one of its modules. One
 # that was never installed, or was taken out with --part, is absent whatever the other is.
@@ -118,10 +119,19 @@ done
 # What a NotProton runner leaves to NotProton. From 41303 on, its own patched ntdll.dll (CodeWeavers'
 # with NotProton's Steam bridge) stays: what MacGameFix's ntdll.dll brought, Forza Horizon 6's exception
 # chain (0023-0025), now comes from that game's own proxy (fixes/fh6-d3d12/exception_chain.h), which
-# hooks it into this ntdll.dll, and played as well as the file (2026-11-25). A CrossOver app keeps
-# the module. One put in before is retired: the kept file goes back, while ours is still there.
+# hooks it into this ntdll.dll, and played as well as the file (2026-11-25). The Intel side's ntdll.so,
+# kernel32.dll, kernelbase.dll, user32.dll and win32u.so go back to CodeWeavers' as well: what they
+# carried for a game now comes to that game alone, from NotProton's Engine fixes row
+# (fixes/engine/mgf-engine.c: 0017 to 0021, 0026 to 0029, 0038 and 0041), and F1 25, EA SPORTS FC 27,
+# Forza Horizon 6, Phantom Blade Zero, STAR WARS: Galactic Racer and Persona 4 Golden were played on
+# NotProton's ntdll with CodeWeavers' kernel32 and kernelbase (2026-11-25). Left out: 2XKO's 0032 to
+# 0036, which never made that game start, and Red Dead Online's 0037. dwrite.dll and
+# directmanipulation.dll (0039, 0040, Swofty Launcher's window) stay until they reach F1 25 alone.
+# A CrossOver app keeps every module, and so does the FEX side. One put in before is retired: the
+# kept file goes back, while ours is still there.
 LEAVE=""
-if [ -z "$APP" ]; then case "$BUILD" in 27.0.0.41303) LEAVE="x86_64-windows/ntdll.dll" ;; esac; fi
+if [ -z "$APP" ]; then case "$BUILD" in 27.0.0.41303)
+  LEAVE="x86_64-windows/ntdll.dll x86_64-unix/ntdll.so x86_64-windows/kernel32.dll x86_64-windows/kernelbase.dll x86_64-windows/user32.dll x86_64-unix/win32u.so" ;; esac; fi
 leaves() { case " $LEAVE " in *" $1 "*) return 0 ;; esac; return 1; }
 # The improvement asked for alone.
 KEEP=""
@@ -168,7 +178,7 @@ state() {
 }
 
 if [ "$MODE" = --status ]; then
-  [ -n "$FILES" ] || { say "There is nothing of this improvement for CrossOver $BUILD yet."; say nomodules; exit 0; }
+  [ -n "$FILES" ] || [ -n "$(retired)" ] || { say "There is nothing of this improvement for CrossOver $BUILD yet."; say nomodules; exit 0; }
   s="$(state)"
   if [ "$s" = absent ]; then
     for f in $FILES; do
@@ -227,7 +237,7 @@ resign() {
 
 case "$MODE" in
 install)
-  [ -n "$FILES" ] || { say "Nothing to install for CrossOver $BUILD."; exit 1; }
+  [ -n "$FILES" ] || [ -n "$(retired)" ] || { say "Nothing to install for CrossOver $BUILD."; exit 1; }
   mkdir -p "$SAVE" || exit 1
   # What another improvement put in stays on the list.
   : >"$SAVE/installed.list.new"

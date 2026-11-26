@@ -1106,6 +1106,24 @@ elif [ "$(f6n_run /x/runners/crossover-27.0.0.41303-fex/CrossOver fh6_chain_in_n
 else
   say FAIL "fh6 on 41303: chain-in-ntdll detection or the previous build's acceptance"
 fi
+# 41303: the game's runner copy loses an ntdll.so of ours an earlier install put in, the kept one back,
+# or, with none kept, the runner's own; one that is not ours stays. The fix asks for none.
+f6u="$W/fh6-unix"; mkdir -p "$f6u/clone" "$f6u/runner"
+printf 'ours\n' > "$f6n/m/engine-27.0.0.41303-x86_64-unix-ntdll.so"
+cp "$f6n/m/engine-27.0.0.41303-x86_64-unix-ntdll.so" "$f6u/clone/ntdll.so"; printf 'kept\n' > "$f6u/clone/ntdll.so.mgf-fh6-original"
+printf 'runner own\n' > "$f6u/runner/ntdll.so"
+cp "$f6n/m/engine-27.0.0.41303-x86_64-unix-ntdll.so" "$f6u/clone/second.so"
+printf 'someone else\n' > "$f6u/clone/other.so"
+f6u_run() { f6n_run /x/runners/crossover-27.0.0.41303-fex/CrossOver "$1"; }
+if [ "$(f6u_run 'echo $FH6_OWN_UNIX')" = 0 ] \
+   && f6u_run "fh6_unix_out '$f6u/clone/ntdll.so' '$f6u/runner/ntdll.so'" && [ "$(cat "$f6u/clone/ntdll.so")" = kept ] && [ ! -e "$f6u/clone/ntdll.so.mgf-fh6-original" ] \
+   && f6u_run "fh6_unix_out '$f6u/clone/second.so' '$f6u/runner/ntdll.so'" && [ "$(cat "$f6u/clone/second.so")" = "runner own" ] \
+   && f6u_run "fh6_unix_out '$f6u/clone/other.so' '$f6u/runner/ntdll.so'" && [ "$(cat "$f6u/clone/other.so")" = "someone else" ] \
+   && [ "$(f6n_run /x/runners/crossover-27.0.0.41073-fex/CrossOver 'echo $FH6_OWN_UNIX')" = 1 ]; then
+  say ok "fh6 on 41303: an ntdll.so of ours in the game's runner copy goes, the kept or the runner's own back; 41073 keeps its pair"
+else
+  say FAIL "fh6 on 41303: the runner copy's ntdll.so ($(cat "$f6u/clone/ntdll.so" "$f6u/clone/second.so" "$f6u/clone/other.so" 2>&1 | tr '\n' ' '))"
+fi
 
 # 41303 on Rosetta, with NotProton's plugin host: FH6 also takes the shared "Engine fixes" row
 # (0021 and 0026 from mgf-engine.dylib), its switch going into the launch options after FH6's
@@ -1116,7 +1134,8 @@ f6r="$W/fh6-rows"; f6rhome="$f6r/home"; f6rnp="$f6rhome/Library/Application Supp
 f6rrun="$f6rnp/runners/crossover-27.0.0.41303-fex/CrossOver"; f6rpfx="$f6r/pfx"; f6rfix="$f6r/fixes"
 mkdir -p "$f6rrun" "$f6rfix" "$f6r/game"
 cp -R "$f6run/" "$f6rrun/"; cp -R "$f6pfx" "$f6rpfx"; cp "$f6game/forzahorizon6.exe" "$f6r/game/"
-cp "$f6modules/engine-27.0.0.41303-x86_64-unix-ntdll.so" "$f6rrun/lib/wine/x86_64-unix/ntdll.so"
+# On 41303 the runner's ntdll.so is CodeWeavers' (the Wine modules leave it): FH6's part comes from the row.
+printf "CodeWeavers' x86_64-unix/ntdll.so wine-11.21\n" > "$f6rrun/lib/wine/x86_64-unix/ntdll.so"
 echo host > "$f6rnp/plugin-host.dylib"
 printf '27.0.0.41303-fex\nCrossOver 2026 11 11-ARM64 - Rosetta\n' > "$f6r/notproton-build"
 for n in install-fh6-fix.sh fh6-runtime.sh fh6-launch-options.pl bottles.sh pe.pl d3d12-fh6.dll fh5-THIRD-PARTY-LICENCES.md notproton-rosetta-trap-boost.dylib fh6-signin.sh advapi32-fh6-26.3.0.39832.dll advapi32-fh6-27.0.0.41073.dll advapi32-fh6-27.0.0.41303.dll notproton-plugins.sh np-plugin-fh6.conf np-plugin-shared.conf mgf-engine.dylib steam-launch-options.pl; do cp "$FIX/$n" "$f6rfix/$n"; done
