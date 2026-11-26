@@ -164,12 +164,12 @@ check 'cw x86_64-windows/kernel32.dll && ! [ -d "$MGVF_ENGINE_BACKUP/crossover-$
 # CrossOver app keeps both. Ones the modules put in before are retired: the kept files come back
 # from the backup, and the improvement reads outdated until an install does it.
 B3=27.0.0.41303
-F3="x86_64-unix/ntdll.so x86_64-windows/ntdll.dll x86_64-unix/winecoreaudio.so"
+F3="x86_64-unix/ntdll.so x86_64-windows/ntdll.dll x86_64-windows/dwrite.dll x86_64-unix/winecoreaudio.so"
 for f in $F3; do printf 'ours %s wine-11.21\n' "$f" >"$CAT/engine-$B3-$(printf '%s' "$f" | tr / -)"; done
 printf '{"builds": [{"build": "%s", "crossover": "Preview", "wine": "11.21", "files": {}}]}\n' "$B3" >"$CAT/engine-modules.json"
 R3="$T/notproton/runners/crossover-$B3-fex/CrossOver"; A3="$T/CrossOver Preview.app"; X3="$A3/Contents/SharedSupport/CrossOver"
 mkdir -p "$R3/lib/wine/x86_64-unix" "$R3/lib/wine/x86_64-windows" "$X3/lib/wine/x86_64-unix" "$X3/lib/wine/x86_64-windows" "$A3/Contents"
-for root in "$R3" "$X3"; do for f in x86_64-unix/ntdll.so x86_64-unix/winecoreaudio.so; do printf "CodeWeavers' %s wine-11.21\n" "$f" >"$root/lib/wine/$f"; done; done
+for root in "$R3" "$X3"; do for f in x86_64-unix/ntdll.so x86_64-windows/dwrite.dll x86_64-unix/winecoreaudio.so; do printf "CodeWeavers' %s wine-11.21\n" "$f" >"$root/lib/wine/$f"; done; done
 printf "NotProton's x86_64-windows/ntdll.dll\n" >"$R3/lib/wine/x86_64-windows/ntdll.dll"
 printf "CodeWeavers' x86_64-windows/ntdll.dll\n" >"$X3/lib/wine/x86_64-windows/ntdll.dll"
 /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $B3" "$A3/Contents/Info.plist" >/dev/null
@@ -178,19 +178,20 @@ st3() { E3 "$@" --status | tail -1; }
 ours3() { cmp -s "$1/lib/wine/$2" "$CAT/engine-$B3-$(printf '%s' "$2" | tr / -)"; }
 cwso3() { [ "$(cat "$1/lib/wine/x86_64-unix/ntdll.so")" = "CodeWeavers' x86_64-unix/ntdll.so wine-11.21" ]; }
 npdll3() { [ "$(cat "$R3/lib/wine/x86_64-windows/ntdll.dll")" = "NotProton's x86_64-windows/ntdll.dll" ]; }
+cwdw3() { [ "$(cat "$1/lib/wine/x86_64-windows/dwrite.dll")" = "CodeWeavers' x86_64-windows/dwrite.dll wine-11.21" ]; }
 E3 "$R3" --part=rosetta >/dev/null; E3 "$X3" --part=rosetta >/dev/null
-check 'cwso3 "$R3" && npdll3 && [ "$(st3 "$R3" --part=rosetta)" = nomodules ]' "41303, a NotProton runner: its Intel side keeps CodeWeavers' ntdll.so and NotProton's ntdll.dll"
-check 'ours3 "$X3" x86_64-unix/ntdll.so && ours3 "$X3" x86_64-windows/ntdll.dll && [ "$(st3 "$X3" --part=rosetta)" = installed ]' "41303, a CrossOver app: both go in, as before"
+check 'cwso3 "$R3" && npdll3 && cwdw3 "$R3" && [ "$(st3 "$R3" --part=rosetta)" = nomodules ]' "41303, a NotProton runner: its Intel side keeps CodeWeavers' ntdll.so and dwrite.dll (F1 25 gets ours as a variant) and NotProton's ntdll.dll"
+check 'ours3 "$X3" x86_64-unix/ntdll.so && ours3 "$X3" x86_64-windows/ntdll.dll && ours3 "$X3" x86_64-windows/dwrite.dll && [ "$(st3 "$X3" --part=rosetta)" = installed ]' "41303, a CrossOver app: all go in, as before"
 # A runner the modules gave both before this: ours in place and on the list, the runner's own kept.
 S3="$MGVF_ENGINE_BACKUP/crossover-$B3-fex"
 mkdir -p "$S3/x86_64-windows" "$S3/x86_64-unix"
-for f in x86_64-windows/ntdll.dll x86_64-unix/ntdll.so; do
+for f in x86_64-windows/ntdll.dll x86_64-unix/ntdll.so x86_64-windows/dwrite.dll; do
   cp "$R3/lib/wine/$f" "$S3/$f"; cp "$CAT/engine-$B3-$(printf '%s' "$f" | tr / -)" "$R3/lib/wine/$f"
   printf '%s  %s\n' "$(shasum -a 256 "$R3/lib/wine/$f" | cut -d' ' -f1)" "$f" >>"$S3/installed.list"
 done
 check '[ "$(st3 "$R3" --part=rosetta)" = outdated ]' "41303, a runner that still has the modules' ntdll pair: outdated"
 E3 "$R3" --part=rosetta >/dev/null
-check 'npdll3 && cwso3 "$R3" && ! grep -q ntdll "$S3/installed.list" && [ "$(st3 "$R3" --part=rosetta)" = nomodules ]' "an install puts NotProton's ntdll.dll and CodeWeavers' ntdll.so back, and takes them off the list"
+check 'npdll3 && cwso3 "$R3" && cwdw3 "$R3" && ! grep -q "ntdll\|dwrite" "$S3/installed.list" && [ "$(st3 "$R3" --part=rosetta)" = nomodules ]' "an install puts NotProton's ntdll.dll and CodeWeavers' ntdll.so and dwrite.dll back, and takes them off the list"
 E3 "$R3" --restore --part=rosetta >/dev/null
 check 'cwso3 "$R3" && npdll3' "and a restore leaves both as they are"
 echo "==> $fails failed"

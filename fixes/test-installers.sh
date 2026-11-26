@@ -325,6 +325,8 @@ echo stock > "$fc/runner/lib/wine/x86_64-unix/ntdll.so"
 echo launcher > "$fc/rel/swofty-launcher-v9.9.9-windows-x86_64/bin/swofty.exe"; echo core > "$fc/rel/swofty-launcher-v9.9.9-windows-x86_64/loader/version.dll"
 (cd "$fc/rel" && ditto -c -k --keepParent swofty-launcher-v9.9.9-windows-x86_64 "$fc/sw.zip")
 for n in install-f125-swofty.sh bottles.sh f125-swofty-play.sh f125-swofty-run.cmd steam-launch-options.pl notproton-plugins.sh np-plugin-f125-swofty.conf mgf-engine.dylib np-plugin-shared.conf; do cp "$FIX/$n" "$fc/fixes/$n"; done
+# Swofty Launcher's window modules, as the Wine modules catalog names them (MGVF_MODULES unset: beside the installer).
+for n in dwrite.dll directmanipulation.dll; do echo "ours $n" > "$fc/fixes/engine-27.0.0.41303-x86_64-windows-$n"; done
 fnp="$fhome/Library/Application Support/notproton"; mkdir -p "$fnp"; fplug="$fnp/plugins"; echo host > "$fnp/plugin-host.dylib"
 sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$fc/fixes/steam-launch-options.pl"
 fsteam="$fhome/Library/Application Support/Steam"; fvdf="$fsteam/userdata/1/config/localconfig.vdf"; mkdir -p "$(dirname "$fvdf")" "$fsteam/config"
@@ -364,7 +366,11 @@ f1 > "$W/f125.install.log" 2>&1 || say FAIL "f1 25: install failed: $(tail -2 "$
   && [ "$(/usr/bin/grep -c '^description = .*Played on NotProton 41303 (Rosetta), 2026-11-24$' "$fplug/mgf-shared.conf")" = 4 ] \
   && /usr/bin/grep -qx 'requires = Library/Application Support/notproton/plugins/mgf-engine.dylib' "$fplug/mgf-shared.conf" && cmp -s "$fplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
   && ! /usr/bin/grep -q 'NOTPROTON_MGF_PLAY' "$fvdf" \
-  && say ok "f1 25 in NotProton: the player's launcher, the play script, the two values, the links, no row of its own but four shared rows for it, each saying where it was played, Swofty's profiles offered by name (not one it could not carry, nor vanilla twice), the engine library, both shared switches and the script in the launch options, on a runner without patch 0038" || say FAIL "f1 25: installed ($(f1st)): $(tail -3 "$W/f125.install.log")"
+  && cmp -s "$fstore/window/x86_64-windows/dwrite.dll" "$fc/fixes/engine-27.0.0.41303-x86_64-windows-dwrite.dll" \
+  && cmp -s "$fstore/window/x86_64-windows/directmanipulation.dll" "$fc/fixes/engine-27.0.0.41303-x86_64-windows-directmanipulation.dll" \
+  && /usr/bin/grep -qx '\[mgf-f125-swofty-window\]' "$fnp/variants/mgf-f125-swofty.conf" && /usr/bin/grep -qx "src = $fstore/window" "$fnp/variants/mgf-f125-swofty.conf" \
+  && /usr/bin/grep -qx 'build = 27.0.0.41303-fex' "$fnp/variants/mgf-f125-swofty.conf" && /usr/bin/grep -qx 'apps = 3059520' "$fnp/variants/mgf-f125-swofty.conf" \
+  && say ok "f1 25 in NotProton: Swofty Launcher's window gets the two Wine modules as a runner variant for 41303; the player's launcher, the play script, the two values, the links, no row of its own but four shared rows for it, each saying where it was played, Swofty's profiles offered by name (not one it could not carry, nor vanilla twice), the engine library, both shared switches and the script in the launch options, on a runner without patch 0038" || say FAIL "f1 25: installed ($(f1st)): $(tail -3 "$W/f125.install.log")"
 mv "$fnp/plugin-host.dylib" "$fnp/plugin-host.away"
 fout="$(f1 --status 2>&1)"   # read whole: a reader that leaves early would end the status with a broken pipe
 [ "$(f1st)" = half ] && case "$fout" in *'update NotProton'*) true ;; *) false ;; esac \
@@ -382,10 +388,16 @@ rm -f "$fbridge/depotcache/3059521_44.manifest"
 rm -f "$fplug/mgf-engine.dylib"
 [ "$(f1st)" = half ] && f1 > /dev/null 2>&1 && [ "$(f1st)" = installed ] && cmp -s "$fplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
   && say ok "f1 25 in NotProton: the library taken out is half, and installing again puts it back" || say FAIL "f1 25: library repair ($(f1st))"
+echo "ours dwrite.dll, a newer build" > "$fc/fixes/engine-27.0.0.41303-x86_64-windows-dwrite.dll"
+[ "$(f1st)" = half ] && f1 > /dev/null 2>&1 && [ "$(f1st)" = installed ] && cmp -s "$fstore/window/x86_64-windows/dwrite.dll" "$fc/fixes/engine-27.0.0.41303-x86_64-windows-dwrite.dll" \
+  && mv "$fc/fixes/engine-27.0.0.41303-x86_64-windows-dwrite.dll" "$fc/dwrite.away" && ! f1 > "$W/f125.nowindow.log" 2>&1 && /usr/bin/grep -q 'update MacGameFix' "$W/f125.nowindow.log" \
+  && say ok "f1 25 in NotProton: a newer window module in the catalog is half and installing again brings it; a catalog without one is refused" || say FAIL "f1 25: window modules ($(f1st)): $(tail -2 "$W/f125.nowindow.log" 2>/dev/null)"
+[ -f "$fc/dwrite.away" ] && mv "$fc/dwrite.away" "$fc/fixes/engine-27.0.0.41303-x86_64-windows-dwrite.dll"
 last="$(f1 --restore 2>/dev/null | tail -1)"
 [ "$last" = restored ] && [ "$(f1st)" = absent ] && [ "$(cat "$fvdf")" = "$fvdf0" ] && [ "$(cat "$fpfx/user.reg")" = "$(printf "$freg0")" ] \
   && [ ! -e "$fplug/mgf-3059520.conf" ] && [ ! -e "$fplug/mgf-shared.conf" ] && [ ! -e "$fplug/mgf-engine.dylib" ] && [ ! -e "$flogin" ] && [ ! -L "$flogin" ] && [ ! -L "$fbridge/depotcache/3059521_44.manifest" ] && [ ! -L "$fbridge/logs/content_log.txt" ] && [ ! -e "$fstore/f125-swofty-play.sh" ] && [ -f "$fstore/launcher/bin/swofty.exe" ] && [ ! -e "$fpfx/.mgf-f125-swofty" ] \
-  && say ok "f1 25 in NotProton: restored, the launch options and the registry as they were, the library out, the launcher kept" || say FAIL "f1 25: restore ($last, $(f1st))"
+  && [ ! -e "$fnp/variants/mgf-f125-swofty.conf" ] && [ ! -e "$fstore/window" ] \
+  && say ok "f1 25 in NotProton: restored, the launch options and the registry as they were, the library and the window's variant out, the launcher kept" || say FAIL "f1 25: restore ($last, $(f1st))"
 # A profile made in Swofty's window since: the fix reads half, and installing again offers it.
 f1 > /dev/null 2>&1; echo '{}' > "$fprof/wet.json"
 [ "$(f1st)" = half ] && f1 > /dev/null 2>&1 && [ "$(f1st)" = installed ] && /usr/bin/grep -qx 'choice = wet = wet' "$fplug/mgf-shared.conf" \
@@ -486,7 +498,7 @@ printf '27.0.0.41303-fex\nCrossOver 2026 11 11-ARM64 - FEX\n' > "$fc/compatdata/
 printf '27.0.0.41303-fex\nCrossOver 2026 11 11-ARM64 - Rosetta\n' > "$fc/compatdata/3059520/notproton-build"
 # The play script, with a tool that only says what it was given: the rows are variables in its
 # environment, and the profile row's choice reaches Swofty as its --profile.
-printf '#!/bin/sh\nprintf "%%s|" "$@"; printf "\\nprofile=%%s opens=%%s%%s\\n" "${NOTPROTON_ENV_F125_PROFILE:-}" "${NOTPROTON_ENV_F125_OPENS:-}" "${WINEDEBUG:+ debug=$WINEDEBUG}"\n' > "$fc/tool"; chmod +x "$fc/tool"
+printf '#!/bin/sh\nprintf "%%s|" "$@"; printf "\\nprofile=%%s opens=%%s%%s%%s\\n" "${NOTPROTON_ENV_F125_PROFILE:-}" "${NOTPROTON_ENV_F125_OPENS:-}" "${WINEDEBUG:+ debug=$WINEDEBUG}" "${NOTPROTON_RUNNER_VARIANT:+ variant=$NOTPROTON_RUNNER_VARIANT}"\n' > "$fc/tool"; chmod +x "$fc/tool"
 mkdir -p "$fc/play/launcher/bin" "$fc/playpfx/pfx/dosdevices"; cp "$FIX/f125-swofty-play.sh" "$FIX/f125-swofty-run.cmd" "$fc/play/"; touch "$fc/play/launcher/bin/swofty.exe"
 fplay() { env -i HOME="$fhome" PATH=/usr/bin:/bin STEAM_COMPAT_APP_ID=3059520 STEAM_COMPAT_DATA_PATH="$fc/playpfx" "$@" "$fc/play/f125-swofty-play.sh" "$fc/tool" waitforexitandrun /lib/steamapps/common/F1/F1_25.exe; }
 fout="$(fplay)"; case "$fout" in "waitforexitandrun|/lib/steamapps/common/F1/F1_25.exe|"*) true ;; *) false ;; esac \
@@ -500,7 +512,11 @@ fout="$(fplay NOTPROTON_MGF_MODTOOL=1)"; case "$fout" in "waitforexitandrun|cmd.
   && fout="$(fplay NOTPROTON_MGF_MODTOOL=1 NOTPROTON_MGF_PLAY=window)" && case "$fout" in *"profile= opens=window") true ;; *) false ;; esac \
   && fout="$(fplay NOTPROTON_MGF_MODTOOL=1 NOTPROTON_MGF_PLAY=notes)" && case "$fout" in *"profile= opens= debug=err+all,fixme-all,+seh,+timestamp,+pid") true ;; *) false ;; esac \
   && fout="$(fplay NOTPROTON_MGF_MODTOOL=1 'NOTPROTON_MGF_PLAY=a b&c')" && case "$fout" in *"profile= opens=") true ;; *) false ;; esac \
-  && say ok "f1 25's play script: the batch file takes the command's place; Mod profile's vanilla or a profile's name reaches Swofty as its profile (active and a name it could not carry do not); Play opens' window opens its window and notes turns Wine's exception notes on" || say FAIL "f1 25 play: rows: $fout"
+  && mkdir -p "$fnp/variants" && touch "$fnp/variants/mgf-f125-swofty.conf" \
+  && fout="$(fplay NOTPROTON_MGF_MODTOOL=1)" && case "$fout" in *"profile= opens= variant=mgf-f125-swofty-window") true ;; *) false ;; esac \
+  && fout="$(fplay NOTPROTON_MGF_MODTOOL=1 NOTPROTON_RUNNER_VARIANT=other)" && case "$fout" in *" variant=other+mgf-f125-swofty-window") true ;; *) false ;; esac \
+  && fout="$(fplay)" && case "$fout" in *variant=*) false ;; *) true ;; esac && rm -f "$fnp/variants/mgf-f125-swofty.conf" \
+  && say ok "f1 25's play script: the batch file takes the command's place; with the window's variant written, NotProton is asked for it, after any other; Mod profile's vanilla or a profile's name reaches Swofty as its profile (active and a name it could not carry do not); Play opens' window opens its window and notes turns Wine's exception notes on" || say FAIL "f1 25 play: rows: $fout"
 touch "$fpfx/cxbottle.conf"; [ "$(f1st)" = norecipe ] && say ok "f1 25: a CrossOver bottle has no recipe" || say FAIL "f1 25: bottle ($(f1st))"; rm -f "$fpfx/cxbottle.conf"
 
 # EA SPORTS FC 27 with FC 27 Live Editor, in a NotProton prefix: the Live Editor folder the

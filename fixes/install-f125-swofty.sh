@@ -58,6 +58,11 @@
 #   - The Swofty Launcher the player gave, copied into
 #     ~/Library/Application Support/MacGameFix/swofty/launcher.
 #   - f125-swofty-play.sh and f125-swofty-run.cmd beside it.
+#   - Swofty Launcher's window: MacGameFix's dwrite.dll and directmanipulation.dll (engine patches
+#     0039 and 0040: fonts found by family, a viewport set up), from the Wine modules catalog, in
+#     window/ beside it, and NotProton's runner variant of them (notproton/variants/mgf-f125-swofty.conf).
+#     The shared runner keeps CodeWeavers' two; the play script asks for the variant, so only F1 25's
+#     starts through Swofty run on a runner copy that has these.
 #   - In the prefix's user.reg: the version override for F1_25.exe, and ActiveUser.
 #   - In the prefix's Steam folder, links to Steam's own files: config/loginusers.vdf, the
 #     manifests of the game's installed depots in depotcache/, and logs/content_log.txt.
@@ -193,6 +198,34 @@ NP_WRAPPER="$STORE/f125-swofty-play.sh"
 # NotProton loads a row's library through its plugin host; without it the row is not offered.
 host_ok() { [ -f "$NP_SUPPORT/plugin-host.dylib" ]; }
 JOURNAL="$PFX/.mgf-f125-launch-options.json"
+# Swofty Launcher's window: the two modules from the Wine modules catalog (MGVF_MODULES, the app's),
+# and the runner variant that brings them to this game alone. The play script names the variant.
+MODULES="${MGVF_MODULES:-$HERE}"
+WINDOW="$STORE/window"
+WINDOW_DLLS="dwrite.dll directmanipulation.dll"
+VARIANT="$NP_SUPPORT/variants/mgf-f125-swofty.conf"
+window_src() { printf '%s/engine-27.0.0.41303-x86_64-windows-%s' "$MODULES" "$1"; }
+window_conf() {
+  printf '# MacGameFix writes this file for app %s and removes it with the fix; edits do not last.\n' "$APPID"
+  printf '[mgf-f125-swofty-window]\nlabel = Swofty Launcher window (MacGameFix)\nvariant = Swofty Launcher window\n'
+  printf 'src = %s\ndst = lib/wine\nbuild = 27.0.0.41303-fex\nbuild = 27.0.0.41303\napps = %s\n' "$WINDOW" "$APPID"
+}
+window_have() { local d; for d in $WINDOW_DLLS; do [ -f "$(window_src "$d")" ] || return 1; done; }
+window_ok() {
+  local d
+  for d in $WINDOW_DLLS; do cmp -s "$(window_src "$d")" "$WINDOW/x86_64-windows/$d" || return 1; done
+  [ "$(window_conf)" = "$(cat "$VARIANT" 2>/dev/null)" ]
+}
+# Each file renamed into place: NotProton rebuilds a variant when its files' stat changes.
+window_install() {
+  local d
+  mkdir -p "$WINDOW/x86_64-windows" "$(dirname "$VARIANT")" || return 1
+  for d in $WINDOW_DLLS; do
+    cp "$(window_src "$d")" "$WINDOW/x86_64-windows/$d.new" && mv -f "$WINDOW/x86_64-windows/$d.new" "$WINDOW/x86_64-windows/$d" || return 1
+  done
+  window_conf > "$VARIANT.new" && mv -f "$VARIANT.new" "$VARIANT"
+}
+window_remove() { rm -f "$VARIANT"; rm -rf "$WINDOW"; }
 STATE="$PFX/.mgf-f125-swofty"          # what this script added, one word a line
 BRIDGE="$PFX/drive_c/Program Files (x86)/Steam"
 LOGIN="$BRIDGE/config/loginusers.vdf"
@@ -328,10 +361,11 @@ case "$MODE" in
 --status)
   right_runner || norecipe "the game runs on NotProton's runner for CrossOver $BUILD${SIDE:+ ($SIDE)}; this needs CrossOver Preview 41303's, on Rosetta"
   echo "looking at $PFX, $STORE and Steam's launch options"
-  have=0; of=8; why=""
+  have=0; of=9; why=""
   miss() { why="${why:+$why; }$1"; }
   launcher_ok && have=$((have+1)) || miss "Swofty Launcher is not in $LAUNCHER: install again and choose your Swofty download"
   scripts_ok && have=$((have+1)) || { scripts_any && old_scripts=1; miss "the play script is not in place"; }
+  window_ok && have=$((have+1)) || miss "Swofty Launcher's window lacks MacGameFix's dwrite.dll and directmanipulation.dll (NotProton's runner variant)"
   o=0; reg_has "$OVERRIDE_KEY" version || o=$?
   [ "$o" = 1 ] && miss "F1_25.exe has no version override" || have=$((have+1))
   a=0; reg_has "$ACTIVE_KEY" ActiveUser || a=$?
@@ -344,7 +378,7 @@ case "$MODE" in
   [ "$rows" = installed ] && have=$((have+1)) || miss "the game's rows are not in NotProton's plugins folder"
   # Absent is judged by what is only ever this script's: the play script, the launch option, the
   # rows and its own list. The launcher stays after a restore, and a value the user had is not ours.
-  if [ "$wrapped" = 0 ] && ! scripts_any && [ ! -f "$STATE" ] && [ "$rows" = absent ]; then echo absent
+  if [ "$wrapped" = 0 ] && ! scripts_any && [ ! -f "$STATE" ] && [ ! -f "$VARIANT" ] && [ "$rows" = absent ]; then echo absent
   elif [ "$have" -eq "$of" ] && host_ok; then echo installed
   elif [ "$have" -eq "$of" ]; then
     echo "Why: everything is in place, but NotProton's plugin host is not, so the row that keeps the game's memory low is not offered: update NotProton, or the game closes half a minute in" >&2
@@ -368,6 +402,7 @@ case "$MODE" in
   # After the play script is out of the launch options: the rows' switches are plain variables.
   np_plugins_restore || exit 1
   rm -f "$STORE/f125-swofty-play.sh" "$STORE/f125-swofty-run.cmd" "$STATE"
+  window_remove
   echo "restored -- Steam's Play starts F1 25's own launcher again"
   echo "  Swofty Launcher stays in $LAUNCHER, and its data and saves in the prefix; remove them by hand if you want them gone"
   echo restored
@@ -379,6 +414,7 @@ ACCOUNT="$(steam_account)" || refuse "cannot tell which account Steam is signed 
 np_plugins_ready || refuse "NotProton's support folder ($NP_SUPPORT) is not there: open NotProton once, then install again."
 host_ok || refuse "NotProton's plugin host ($NP_SUPPORT/plugin-host.dylib) is not there, and the row that keeps the game's memory low needs it: update NotProton, then install again."
 [ -f "$ENGINE" ] && [ -f "$SHARED_ROWS" ] || refuse "mgf-engine.dylib and np-plugin-shared.conf are not beside the installer."
+window_have || refuse "the Wine modules catalog ($MODULES) has no dwrite.dll and directmanipulation.dll for CrossOver 27.0.0.41303, which Swofty Launcher's window needs: update MacGameFix, then install again."
 stopped || exit 1
 # Everything that can refuse does so before anything is written.
 mkdir -p "$STORE"
@@ -421,6 +457,7 @@ launcher_ok || refuse "Swofty Launcher is not usable in $LAUNCHER."
 echo "[2/4] the play script"
 cp "$PLAY" "$STORE/f125-swofty-play.sh.new" && chmod 755 "$STORE/f125-swofty-play.sh.new" && mv -f "$STORE/f125-swofty-play.sh.new" "$STORE/f125-swofty-play.sh"
 cp "$RUN" "$STORE/f125-swofty-run.cmd.new" && mv -f "$STORE/f125-swofty-run.cmd.new" "$STORE/f125-swofty-run.cmd"
+window_install || { echo "error: could not put Swofty Launcher's window modules in $WINDOW and $VARIANT" >&2; exit 1; }
 
 echo "[3/4] the game's prefix"
 o=0; reg_has "$OVERRIDE_KEY" version || o=$?
