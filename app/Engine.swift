@@ -204,9 +204,12 @@ enum Engine {
             }
         }
         let runners = notproton.appendingPathComponent("runners")
+        // A runner variant (crossover-<build>+<variants>@<hash>) is NotProton's copy of a runner with
+        // a variant's files over it, which NotProton remakes from the runner when the runner changes:
+        // it is never one the modules go into.
         for runner in ((try? fm.contentsOfDirectory(at: runners, includingPropertiesForKeys: nil)) ?? [])
             .sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
-        where runner.lastPathComponent.hasPrefix("crossover-") {
+        where runner.lastPathComponent.hasPrefix("crossover-") && !runner.lastPathComponent.contains("+") {
             let root = runner.appendingPathComponent("CrossOver")
             guard wine(root) else { continue }
             let build = String(runner.lastPathComponent.dropFirst("crossover-".count).split(separator: "-").first ?? "")

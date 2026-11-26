@@ -867,6 +867,10 @@ for f in $MODS; do echo "CodeWeavers' updated $f" > "$R1/lib/wine/$f"; done
 check 'has "$(modagent)" "put back in" && ours "$R1"' "after a CrossOver update they are put back"
 R2="$(runner crossover-27.0.0.41069 20261007)"
 check 'has "$(modagent)" "installed in the new NotProton runner · CrossOver Preview 20261007" && ours "$R2"' "a runner for a new CrossOver build gets them, since a runner has them"
+RV="$(runner 'crossover-27.0.0.41069-fex+mgf-test-window@0123456789ab' 20261006)"
+OUT="$(modagent)"
+check '! ours "$RV" && ! has "$OUT" "mgf-test-window" && ! has "$("$BIN" --engine-report 2>&1)" "mgf-test-window"' "a NotProton runner variant (a copy NotProton remakes) is neither listed nor given the modules"
+rm -rf "$SUPPORT/notproton/runners/crossover-27.0.0.41069-fex+mgf-test-window@0123456789ab"
 printf '{"kept":[],"updates":false,"modulesUpdates":true,"modulesAskFirst":false,"modulesKept":["%s"],"modulesDeclined":[],"modulesNewBuilds":false}' "$R1" \
   > "$SUPPORT/MacGameFix/automatic.json"
 R3="$(runner crossover-27.0.0.41069-other 20261008)"
