@@ -361,7 +361,7 @@ f1 > "$W/f125.install.log" 2>&1 || say FAIL "f1 25: install failed: $(tail -2 "$
   && ! /usr/bin/grep -q 'choice = bad' "$fplug/mgf-shared.conf" && [ "$(/usr/bin/grep -c '^choice = vanilla' "$fplug/mgf-shared.conf")" = 1 ] \
   && /usr/bin/grep -qx '\[NOTPROTON_MGF_MODTOOL\]' "$fplug/mgf-shared.conf" && /usr/bin/grep -qx '\[NOTPROTON_MGF_PLAY\]' "$fplug/mgf-shared.conf" \
   && [ "$(/usr/bin/grep -c '^apps = 3059520$' "$fplug/mgf-shared.conf")" = 3 ] && [ "$(/usr/bin/grep -c '^apps' "$fplug/mgf-shared.conf")" = 3 ] \
-  && [ "$(/usr/bin/grep -c '^description = .*Played on NotProton, CrossOver Preview 41303 on Rosetta (D3DMetal 4.0b3), 2026-11-24$' "$fplug/mgf-shared.conf")" = 4 ] \
+  && [ "$(/usr/bin/grep -c '^description = .*Played on NotProton 41303 (Rosetta), 2026-11-24$' "$fplug/mgf-shared.conf")" = 4 ] \
   && /usr/bin/grep -qx 'requires = Library/Application Support/notproton/plugins/mgf-engine.dylib' "$fplug/mgf-shared.conf" && cmp -s "$fplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
   && ! /usr/bin/grep -q 'NOTPROTON_MGF_PLAY' "$fvdf" \
   && say ok "f1 25 in NotProton: the player's launcher, the play script, the two values, the links, no row of its own but four shared rows for it, each saying where it was played, Swofty's profiles offered by name (not one it could not carry, nor vanilla twice), the engine library, both shared switches and the script in the launch options, on a runner without patch 0038" || say FAIL "f1 25: installed ($(f1st)): $(tail -3 "$W/f125.install.log")"
