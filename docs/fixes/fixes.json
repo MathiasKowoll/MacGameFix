@@ -1745,11 +1745,11 @@
           "symbol": null,
           "note": "The fix is NOTPROTON_TCP_NOOPT=1 in the game's launch options; it needs NotProton's Red Dead Online fix row and the library it names.",
           "language": "bash",
-          "startLine": 91,
-          "endLine": 102,
-          "commit": "48ef994ccc7f968e36a83458ca31b7d76212a97b",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/48ef994ccc7f968e36a83458ca31b7d76212a97b/fixes/install-rdo-tcp.sh#L91-L102",
-          "code": "options() { /usr/bin/perl \"$HERE/steam-launch-options.pl\" \"$1\" \"$APPID\" \"$JOURNAL\" \"$ID=1\"; }\n# The row MacGameFix keeps in NotProton's plugins folder (NotProtonPlugins.swift), or one\n# NotProton ships under the same id, with the library it names.\nrow_ok() {\n  local conf lib\n  [ -f \"$NP_SUPPORT/plugin-host.dylib\" ] || return 1\n  conf=\"$(/usr/bin/grep -lx \"\\[$ID\\]\" \"$PLUGINS\"/*.conf 2>/dev/null | head -1)\"\n  [ -n \"$conf\" ] || return 1\n  lib=\"$(/usr/bin/sed -n \"/^\\[$ID\\]/,/^\\[/s|^requires = ||p\" \"$conf\" | head -1)\"\n  [ -n \"$lib\" ] && [ -f \"$HOME/$lib\" ]\n}\nNOROW=\"NotProton's Red Dead Online fix row is not in its plugins folder: it needs NotProton's plugin host (NotProton's Update), and MacGameFix puts the row in place (Improvements, Put in Place)\""
+          "startLine": 122,
+          "endLine": 133,
+          "commit": "af377c9d72fb5472fb830517fa6510475dfa5ca3",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/af377c9d72fb5472fb830517fa6510475dfa5ca3/fixes/install-rdo-tcp.sh#L122-L133",
+          "code": "options() { /usr/bin/perl \"$HERE/steam-launch-options.pl\" \"$1\" \"$APPID\" \"$JOURNAL\" \"$ID=1\" \"NOTPROTON_RUNNER_VARIANT=$VARIANT_ID\"; }\n# The row MacGameFix keeps in NotProton's plugins folder (NotProtonPlugins.swift), or one\n# NotProton ships under the same id, with the library it names.\nrow_ok() {\n  local conf lib\n  [ -f \"$NP_SUPPORT/plugin-host.dylib\" ] || return 1\n  conf=\"$(/usr/bin/grep -lx \"\\[$ID\\]\" \"$PLUGINS\"/*.conf 2>/dev/null | head -1)\"\n  [ -n \"$conf\" ] || return 1\n  lib=\"$(/usr/bin/sed -n \"/^\\[$ID\\]/,/^\\[/s|^requires = ||p\" \"$conf\" | head -1)\"\n  [ -n \"$lib\" ] && [ -f \"$HOME/$lib\" ]\n}\nNOROW=\"NotProton's Red Dead Online fix row is not in its plugins folder: it needs NotProton's plugin host (NotProton's Update), and MacGameFix puts the row in place (Improvements, Put in Place)\""
         }
       ],
       "symptom": "Red Dead Online never connects to its servers; the story mode plays.",

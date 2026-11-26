@@ -290,7 +290,10 @@ CodeWeavers' `ntdll.so`, `kernel32.dll`, `kernelbase.dll`, `user32.dll`,
 kept files back on its next update. What they carried comes per game from the
 Engine fixes row (`0017` to `0021`, `0026` to `0029`, `0038`, `0041`), and `0039`
 and `0040` reach F1 25 alone as a runner variant (see "A GPUI program's fonts and
-window"). Left behind: 2XKO's `0032` to `0036`, which never made it start. Red Dead
+window"). Left behind: 2XKO's `0032` to `0036`, which never made it start; `0033`'s
+`win32u.so` reaches Red Dead Redemption 2 alone as a runner variant, since without it the
+Rockstar Games Launcher never shows Social Club's window and gives up after 30 s (twice
+with CodeWeavers' `win32u.so`, then signed in with `0033`'s, 2026-11-26). Red Dead
 Online's `0037` comes from NotProton's **Red Dead Online fix** row, which Red Dead
 Redemption 2's fix switches on (see below). A CrossOver app and the FEX side keep every
 module. `engine-modules.sh <runner> --retire` takes out only what a build retired, putting

@@ -181,11 +181,14 @@ last="$(ng3 --restore 2>/dev/null | tail -1)"
   && say ok "ng3 in a Steam Play prefix: restored, the overrides gone" || say FAIL "ng3 prefix: restore ($last, $(ng3st))"
 
 # Red Dead Online's fix switches on NotProton's Red Dead Online fix row (NOTPROTON_TCP_NOOPT=1 in
-# the game's launch options), on 41303's runner on Rosetta, where MacGameFix keeps that row.
+# the game's launch options), on 41303's runner on Rosetta, where MacGameFix keeps that row, and
+# gives the Rockstar Games Launcher's window 0033's win32u.so as a runner variant the options ask for.
 rh="$W/rdohome"; rc="$W/rdo/compatdata/1174180"; rp="$rc/pfx"; rg="$W/rdo/game"; rfix="$W/rdo/fixes"
 rnp="$rh/Library/Application Support/notproton"; rvdf="$rh/Library/Application Support/Steam/userdata/1/config/localconfig.vdf"
 mkdir -p "$rp/drive_c" "$rg" "$rnp/plugins" "$rfix" "$(dirname "$rvdf")"; : > "$rp/system.reg"; : > "$rp/user.reg"; : > "$rg/RDR2.exe"
 for n in install-rdo-tcp.sh bottles.sh steam-launch-options.pl; do cp "$FIX/$n" "$rfix/$n"; done
+rw32="$rfix/engine-27.0.0.41303-x86_64-unix-win32u.so"; echo "ours win32u.so" > "$rw32"   # as the modules catalog names it
+rwin="$rh/Library/Application Support/MacGameFix/rdr2/launcher-window"; rvar="$rnp/variants/mgf-rdr2-launcher.conf"
 sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$rfix/steam-launch-options.pl"
 printf '27.0.0.41303-fex\nCrossOver Preview 27.0.0.41303 - Rosetta\n' > "$rc/notproton-build"
 printf '"UserLocalConfigStore"\n{\n\t"Software" { "Valve" { "Steam" { "apps" {\n\t\t"1174180"\n\t\t{\n\t\t\t"LaunchOptions"\t\t"NOTPROTON_ENV_WINE_TCP_NOOPT=1 %%command%%"\n\t\t}\n\t} } } }\n}\n' > "$rvdf"
@@ -202,14 +205,24 @@ printf '[NOTPROTON_TCP_NOOPT]\nlabel = Red Dead Online fix\ninject = 1\nrequires
 MGVF_STATUS_ONLY=1 rdo > /dev/null 2>&1; [ "$(cat "$rvdf")" = "$rvdf0" ] \
   && say ok "rdo: MGVF_STATUS_ONLY never installs" || say FAIL "rdo: MGVF_STATUS_ONLY wrote the launch options"
 rdo > "$W/rdo2.log" 2>&1 && [ "$(rdost)" = installed ] && [ ! -e "$rc/notproton-tcp-noopt" ] \
-  && /usr/bin/grep -q 'NOTPROTON_TCP_NOOPT=1 NOTPROTON_ENV_WINE_TCP_NOOPT=1 %command%' "$rvdf" \
+  && /usr/bin/grep -q 'NOTPROTON_TCP_NOOPT=1 ' "$rvdf" && /usr/bin/grep -q 'NOTPROTON_RUNNER_VARIANT=mgf-rdr2-launcher-window ' "$rvdf" \
+  && /usr/bin/grep -q 'NOTPROTON_ENV_WINE_TCP_NOOPT=1 %command%' "$rvdf" \
+  && cmp -s "$rwin/x86_64-unix/win32u.so" "$rw32" && /usr/bin/grep -qx '\[mgf-rdr2-launcher-window\]' "$rvar" \
+  && /usr/bin/grep -qx "src = $rwin" "$rvar" && /usr/bin/grep -qx 'build = 27.0.0.41303-fex' "$rvar" && /usr/bin/grep -qx 'apps = 1174180' "$rvar" \
   && [ -z "$(ls -A "$rg" | /usr/bin/grep -v '^RDR2.exe$')" ] \
-  && say ok "rdo: installed, the row on in the launch options, the old switch gone, nothing in the game folder" || say FAIL "rdo: install ($(rdost), $(tail -1 "$W/rdo2.log"))"
+  && say ok "rdo: installed, the row and the Launcher window's variant on in the launch options, the variant with 0033's win32u.so, the old switch gone, nothing in the game folder" || say FAIL "rdo: install ($(rdost), $(tail -1 "$W/rdo2.log"))"
+rm -rf "$rwin"
+[ "$(rdost)" = half ] && rdo > /dev/null 2>&1 && [ "$(rdost)" = installed ] && cmp -s "$rwin/x86_64-unix/win32u.so" "$rw32" \
+  && say ok "rdo: the Launcher window's module gone is half, and installing again brings it" || say FAIL "rdo: window repair ($(rdost))"
 rm "$rnp/plugins/tcp-noopt.dylib"
 [ "$(rdost)" = half ] && say ok "rdo: half when the row's library is gone" || say FAIL "rdo: half ($(rdost))"
 : > "$rnp/plugins/tcp-noopt.dylib"
-rdo --restore > /dev/null 2>&1 && [ "$(rdost)" = absent ] && [ "$(cat "$rvdf")" = "$rvdf0" ] \
-  && say ok "rdo: restore gives the launch options back as they were" || say FAIL "rdo: restore ($(rdost))"
+rdo --restore > /dev/null 2>&1 && [ "$(rdost)" = absent ] && [ "$(cat "$rvdf")" = "$rvdf0" ] && [ ! -e "$rvar" ] && [ ! -e "$rwin" ] \
+  && say ok "rdo: restore gives the launch options back as they were, and takes the variant out" || say FAIL "rdo: restore ($(rdost))"
+mv "$rw32" "$rw32.away"
+! rdo > "$W/rdo3.log" 2>&1 && /usr/bin/grep -q 'update MacGameFix' "$W/rdo3.log" && [ "$(cat "$rvdf")" = "$rvdf0" ] && [ ! -e "$rvar" ] \
+  && say ok "rdo: a modules catalog without win32u.so is refused, nothing written" || say FAIL "rdo: no win32u ($(tail -1 "$W/rdo3.log"))"
+mv "$rw32.away" "$rw32"
 printf '27.0.0.41303-fex\nCrossOver Preview 27.0.0.41303 - FEX\n' > "$rc/notproton-build"
 [ "$(rdost)" = norecipe ] && ! rdo > /dev/null 2>&1 && [ "$(cat "$rvdf")" = "$rvdf0" ] \
   && say ok "rdo: the FEX side is norecipe, and refused" || say FAIL "rdo: FEX ($(rdost))"

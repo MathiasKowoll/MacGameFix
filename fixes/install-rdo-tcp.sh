@@ -10,7 +10,8 @@
 #   .../steamapps/compatdata/1174180/pfx
 #
 # NOTHING IN THE GAME FOLDER IS TOUCHED. The fix is NOTPROTON_TCP_NOOPT=1 in front of the
-# game's Steam launch options, which switches on NotProton's "Red Dead Online fix" row for it.
+# game's Steam launch options, which switches on NotProton's "Red Dead Online fix" row for it,
+# and the Rockstar Games Launcher's window (below).
 #
 # WHAT THIS FIXES. Red Dead Online never connected to its servers on a Mac: its TCP
 # connections have to be made without TCP options (macOS's TCP_NOOPT: no MSS, window
@@ -25,15 +26,25 @@
 # is for this game alone.
 #
 # Played on 2026-11-20 with 0037 on NotProton's 41303 runner (Rosetta): Red Dead Online
-# reached its online world. The row's library was checked on 2026-11-26 on that runner with
-# NotProton's ntdll.so (engine/tests/tcp-noopt/run.sh --plugin); the game has not been played
-# with it yet.
+# reached its online world. Played again on 2026-11-26 on that runner with NotProton's ntdll.so,
+# the row and the Launcher's window below: Red Dead Online reached its online world.
+#
+# THE LAUNCHER'S WINDOW. The Rockstar Games Launcher draws Social Club's page in another
+# process (SocialClubHelper.exe, Chromium) into its own window. CodeWeavers' win32u.so never
+# shows that window, and the Launcher gives up after 30 s: "timed out loading both its online
+# and offline content". Engine patch 0033 (win32u.so: a window surface flushed to a top-level
+# window of another process) fixes it; NotProton's shared runner keeps CodeWeavers' win32u.so
+# (engine-modules.sh), so this copies the Wine modules' win32u.so into rdr2/launcher-window
+# and writes a NotProton runner variant of it (notproton/variants/mgf-rdr2-launcher.conf),
+# which NOTPROTON_RUNNER_VARIANT in the launch options asks for: the game alone runs on a
+# runner copy that has it. On 2026-11-26, with CodeWeavers' win32u.so the Launcher timed out
+# twice; with 0033's it signed in, and Red Dead Online was played.
 #
 # A CrossOver bottle is not done here: NotProton's plugins do not load in one.
 #
 # MGVF-SCOPE: prefix
 # MGVF-GAME: Red Dead Redemption 2 | RDR2.exe |
-# MGVF-WHY: Red Dead Online never connects to its servers on a Mac: its TCP connections have to be made without TCP options. This switches on NotProton's Red Dead Online fix row for the game, whose library does that for this game alone. Quit Steam before installing. NotProton with CrossOver Preview 41303 (Rosetta) only; not yet played with the row.
+# MGVF-WHY: Red Dead Online never connects to its servers on a Mac, and on NotProton's runner the Rockstar Games Launcher times out before its window shows. This switches on NotProton's Red Dead Online fix row for the game and gives it the Launcher's window fix, for this game alone. Quit Steam before installing. NotProton with CrossOver Preview 41303 (Rosetta) only.
 # MGVF-CREDIT: NotProton's creator, who found the cause and wrote the fix | https://github.com/NotProtonNot/NotProton
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
@@ -77,6 +88,26 @@ ID=NOTPROTON_TCP_NOOPT
 NP_SUPPORT="$HOME/Library/Application Support/notproton"
 PLUGINS="$NP_SUPPORT/plugins"
 JOURNAL="$PFX/.mgf-rdo-launch-options.json"
+# The Launcher's window: 0033's win32u.so from the Wine modules catalog (MGVF_MODULES, the
+# app's), as a runner variant the launch options ask for.
+MODULES="${MGVF_MODULES:-$HERE}"
+WINDOW="${MGVF_RDR2_STORE:-$HOME/Library/Application Support/MacGameFix/rdr2}/launcher-window"
+VARIANT_ID=mgf-rdr2-launcher-window
+VARIANT="$NP_SUPPORT/variants/mgf-rdr2-launcher.conf"
+WIN32U="$MODULES/engine-27.0.0.41303-x86_64-unix-win32u.so"
+window_conf() {
+  printf '# MacGameFix writes this file for app %s and removes it with the fix; edits do not last.\n' "$APPID"
+  printf '[%s]\nlabel = Rockstar Games Launcher window (MacGameFix)\nvariant = Rockstar Games Launcher window\n' "$VARIANT_ID"
+  printf 'src = %s\ndst = lib/wine\nbuild = 27.0.0.41303-fex\nbuild = 27.0.0.41303\napps = %s\n' "$WINDOW" "$APPID"
+}
+window_ok() { cmp -s "$WIN32U" "$WINDOW/x86_64-unix/win32u.so" && [ "$(window_conf)" = "$(cat "$VARIANT" 2>/dev/null)" ]; }
+# Renamed into place: NotProton remakes a variant when its files' stat changes.
+window_install() {
+  mkdir -p "$WINDOW/x86_64-unix" "$(dirname "$VARIANT")" || return 1
+  cp "$WIN32U" "$WINDOW/x86_64-unix/win32u.so.new" && mv -f "$WINDOW/x86_64-unix/win32u.so.new" "$WINDOW/x86_64-unix/win32u.so" || return 1
+  window_conf > "$VARIANT.new" && mv -f "$VARIANT.new" "$VARIANT"
+}
+window_remove() { rm -f "$VARIANT"; rm -rf "$WINDOW"; }
 # The switch file engine patch 0037 read, which earlier versions of this fix wrote.
 SWITCH="$(dirname "$PFX")/notproton-tcp-noopt"
 # notproton-build: the runner's build on the first line (27.0.0.41303-fex), and on the second
@@ -88,7 +119,7 @@ right_runner() {
   case "$SIDE" in *Rosetta*) return 0 ;; esac
   return 1
 }
-options() { /usr/bin/perl "$HERE/steam-launch-options.pl" "$1" "$APPID" "$JOURNAL" "$ID=1"; }
+options() { /usr/bin/perl "$HERE/steam-launch-options.pl" "$1" "$APPID" "$JOURNAL" "$ID=1" "NOTPROTON_RUNNER_VARIANT=$VARIANT_ID"; }
 # The row MacGameFix keeps in NotProton's plugins folder (NotProtonPlugins.swift), or one
 # NotProton ships under the same id, with the library it names.
 row_ok() {
@@ -105,8 +136,11 @@ case "$MODE" in
 --status)
   right_runner || norecipe "the game runs on NotProton's runner for CrossOver $BUILD${SIDE:+ ($SIDE)}; the fix needs CrossOver Preview 41303's, on Rosetta"
   echo "looking at $PFX"
-  if options status >/dev/null 2>&1 && row_ok; then echo installed
-  elif options status >/dev/null 2>&1; then echo "Why: $NOROW" >&2; echo half
+  if options status >/dev/null 2>&1 && row_ok && window_ok; then echo installed
+  elif options status >/dev/null 2>&1 && ! row_ok; then echo "Why: $NOROW" >&2; echo half
+  elif options status >/dev/null 2>&1 || [ -f "$VARIANT" ] || [ -f "$JOURNAL" ]; then
+    echo "Why: the Rockstar Games Launcher's window, or its switch in the launch options, is not in place: install it again" >&2
+    echo half
   elif [ -f "$SWITCH" ]; then
     echo "Why: an earlier version of the fix, for the Wine modules' ntdll: install it again" >&2
     echo half
@@ -115,6 +149,7 @@ case "$MODE" in
 --restore)
   if [ -f "$JOURNAL" ]; then options preflight >/dev/null || exit 1; options restore >/dev/null || exit 1; fi
   rm -f "$SWITCH"
+  window_remove
   echo "restored -- Red Dead Redemption 2's connections use TCP options again"
   echo restored
   exit 0 ;;
@@ -122,9 +157,12 @@ esac
 
 right_runner || refuse "the game runs on NotProton's runner for CrossOver $BUILD${SIDE:+ ($SIDE)}; the fix needs CrossOver Preview 41303's, on Rosetta."
 row_ok || refuse "$NOROW."
+[ -f "$WIN32U" ] || refuse "the Wine modules catalog ($MODULES) has no win32u.so for CrossOver 27.0.0.41303, which the Rockstar Games Launcher's window needs: update MacGameFix, then install again."
 # Steam closed and no wrapper in the game's options, before anything changes.
 options preflight >/dev/null || exit 1
+window_install || { echo "error: could not put the Launcher's window module in $WINDOW and $VARIANT" >&2; exit 1; }
 options install >/dev/null || exit 1
 rm -f "$SWITCH"
 echo "installed"
 echo "  $ID=1 is in the game's launch options: NotProton's Red Dead Online fix row is on for it"
+echo "  NOTPROTON_RUNNER_VARIANT=$VARIANT_ID: the Rockstar Games Launcher's window, on a runner copy for this game"
