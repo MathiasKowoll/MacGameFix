@@ -328,10 +328,10 @@
           "symbol": null,
           "note": "Live Editor is the player's to provide: from MacGameFix's window the install asks for its folder with macOS's folder chooser, every time, which is also how a new version goes in.",
           "language": "bash",
-          "startLine": 197,
-          "endLine": 203,
-          "commit": "ecf77ae995a3fcc933f74d17a8542ad42ce83e7e",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/ecf77ae995a3fcc933f74d17a8542ad42ce83e7e/fixes/install-fc27-live-editor.sh#L197-L203",
+          "startLine": 196,
+          "endLine": 202,
+          "commit": "48ef994ccc7f968e36a83458ca31b7d76212a97b",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/48ef994ccc7f968e36a83458ca31b7d76212a97b/fixes/install-fc27-live-editor.sh#L196-L202",
           "code": "ask_folder() {\n  local prompt=\"Choose your FC 27 Live Editor folder: the one that holds Launcher.exe and FCLiveEditor.DLL.\"\n  editor_ok && prompt=\"$prompt Cancel keeps the Live Editor already in use.\"\n  if [ -n \"${MGVF_CHOOSER:-}\" ]; then \"$MGVF_CHOOSER\" \"$prompt\" 2>/dev/null || true; return 0; fi\n  /usr/bin/osascript -e 'on run argv' -e 'try' -e 'return POSIX path of (choose folder with prompt (item 1 of argv))' \\\n    -e 'on error' -e 'return \"\"' -e 'end try' -e 'end run' \"$prompt\" 2>/dev/null || true\n}"
         },
         {
@@ -429,10 +429,10 @@
           "symbol": null,
           "note": "Swofty Launcher is the player's own download: the .zip, the unpacked folder or its swofty.exe. Whatever is given has to hold exactly one bin/swofty.exe with loader/ beside it, or nothing is changed.",
           "language": "bash",
-          "startLine": 335,
-          "endLine": 350,
-          "commit": "18042792441fc03c1605fcfd04e154747f310e74",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/18042792441fc03c1605fcfd04e154747f310e74/fixes/install-f125-swofty.sh#L335-L350",
+          "startLine": 334,
+          "endLine": 349,
+          "commit": "48ef994ccc7f968e36a83458ca31b7d76212a97b",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/48ef994ccc7f968e36a83458ca31b7d76212a97b/fixes/install-f125-swofty.sh#L334-L349",
           "code": "launcher_in() {  # <given> <work>\n  local from=\"$1\" work=\"$2\" found\n  case \"$from\" in\n  *.zip|*.ZIP)\n    mkdir -p \"$work/out\"\n    ditto -x -k \"$from\" \"$work/out\" || return 0\n    from=\"$work/out\" ;;\n  *.exe|*.EXE) from=\"$(dirname \"$(dirname \"$from\")\")\" ;;\n  esac\n  [ -d \"$from\" ] || return 0\n  found=\"$(find \"$from\" -maxdepth 3 -type f -path '*/bin/swofty.exe' 2>/dev/null)\"\n  [ \"$(printf '%s' \"$found\" | /usr/bin/grep -c .)\" = 1 ] || return 0\n  found=\"$(dirname \"$(dirname \"$found\")\")\"\n  [ -s \"$found/bin/swofty.exe\" ] && [ -d \"$found/loader\" ] && printf '%s\\n' \"$found\"\n  return 0\n}"
         },
         {
@@ -440,10 +440,10 @@
           "symbol": null,
           "note": "Swofty reads ActiveUser to see that Steam is signed in. NotProton's Steam stub does not write it, so the account comes from Steam's own loginusers.vdf.",
           "language": "bash",
-          "startLine": 240,
-          "endLine": 251,
-          "commit": "18042792441fc03c1605fcfd04e154747f310e74",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/18042792441fc03c1605fcfd04e154747f310e74/fixes/install-f125-swofty.sh#L240-L251",
+          "startLine": 239,
+          "endLine": 250,
+          "commit": "48ef994ccc7f968e36a83458ca31b7d76212a97b",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/48ef994ccc7f968e36a83458ca31b7d76212a97b/fixes/install-f125-swofty.sh#L239-L250",
           "code": "steam_account() {\n  [ -f \"$STEAM_LOGIN\" ] || return 1\n  /usr/bin/perl -e '\n    use strict; use warnings; local $/; my $s = <STDIN>; my (@ids, $recent);\n    while ($s =~ /\"(7656\\d{13})\"\\s*\\{([^{}]*)\\}/g) {\n      push @ids, $1; $recent = $1 if $2 =~ /\"MostRecent\"\\s+\"1\"/i;\n    }\n    $recent //= $ids[0] if @ids == 1;\n    exit 1 unless defined $recent;\n    print $recent - 76561197960265728, \"\\n\";\n  ' < \"$STEAM_LOGIN\"\n}"
         },
         {
@@ -1635,7 +1635,7 @@
       "executable": "PBZ.exe",
       "carrierDirectory": "platform/steam",
       "alsoRuns": [],
-      "summary": "Never opens a window under Rosetta: its Denuvo checks the CPU for instructions Rosetta does not have. The Wine modules' ntdll shows them to this executable alone, it loads Microsoft's Visual C++ runtime first, and an H.264 decoder that offers NV12 brings back the black menu video. In NotProton it also turns on a pipeline cache, so the shaders Metal's own cache has no room for are not compiled again at every start.",
+      "summary": "Never opens a window under Rosetta: its Denuvo checks the CPU for instructions Rosetta does not have. The Rosetta improvement's ntdll shows them to this executable alone, it loads Microsoft's Visual C++ runtime first, and an H.264 decoder that offers NV12 brings back the black menu video. In NotProton it also turns on a pipeline cache, so the shaders Metal's own cache has no room for are not compiled again at every start. On NotProton's 41303 runner on Rosetta the improvement is not needed: the fix switches on the shared Engine fixes row for the game (NOTPROTON_MGF_ENGINE=1), whose library shows the protection that CPU, on NotProton's own ntdll; played that way on 2026-11-25.",
       "page": null,
       "installs": [
         "bottles.sh",
@@ -1665,12 +1665,12 @@
         {
           "file": "fixes/install-pbz-fix.sh",
           "symbol": null,
-          "note": "Ten values, for PBZ.exe only: the CPUID bits the Wine modules' ntdll adds when asked, Microsoft's Visual C++ runtime loaded before Wine's, and the H.264 decoder below loaded native.",
+          "note": "Ten values, for PBZ.exe only: the CPUID bits the Rosetta improvement's ntdll adds when asked, Microsoft's Visual C++ runtime loaded before Wine's, and the H.264 decoder below loaded native.",
           "language": "bash",
           "startLine": 230,
           "endLine": 236,
-          "commit": "7c8f2724b4f42697b667de86d24bf48df83dcb3b",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/7c8f2724b4f42697b667de86d24bf48df83dcb3b/fixes/install-pbz-fix.sh#L230-L236",
+          "commit": "48ef994ccc7f968e36a83458ca31b7d76212a97b",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/48ef994ccc7f968e36a83458ca31b7d76212a97b/fixes/install-pbz-fix.sh#L230-L236",
           "code": "values() {\n  printf '%s|%s|%s\\n' \"$ENV_KEY\" \"$CPUID_NAME\" \"$CPUID_DATA\"\n  local d\n  for d in $DLLS; do printf '%s|*%s|native,builtin\\n' \"$DLL_KEY\" \"$d\"; done\n  # native,builtin: should the prefix lose our file, CrossOver's decoder loads.\n  printf '%s|*msmpeg2vdec|native,builtin\\n' \"$DLL_KEY\"\n}"
         },
         {
@@ -1702,14 +1702,14 @@
           "language": "bash",
           "startLine": 289,
           "endLine": 314,
-          "commit": "7c8f2724b4f42697b667de86d24bf48df83dcb3b",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/7c8f2724b4f42697b667de86d24bf48df83dcb3b/fixes/install-pbz-fix.sh#L289-L314",
+          "commit": "48ef994ccc7f968e36a83458ca31b7d76212a97b",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/48ef994ccc7f968e36a83458ca31b7d76212a97b/fixes/install-pbz-fix.sh#L289-L314",
           "code": "cache_install() {\n  mkdir -p \"$PLUGINS\"\n  # The library is renamed into place, so a game still running keeps the one it loaded.\n  if ! cmp -s \"$CACHE_LIVE\" \"$CACHE_LIB\"; then\n    if [ -f \"$CACHE_LIVE\" ] && ! cache_lib_ours; then\n      echo \"error: $CACHE_LIVE is a different library; it was not touched.\" >&2\n      return 1\n    fi\n    cp -p \"$CACHE_LIB\" \"$CACHE_LIVE.mgf-new\" && mv -f \"$CACHE_LIVE.mgf-new\" \"$CACHE_LIVE\"\n  fi\n  # One the user wrote stays: NotProton refuses a second descriptor for the same id.\n  if ! /usr/bin/grep -lqx \"\\[$CACHE_ID\\]\" \"$PLUGINS\"/*.conf 2>/dev/null; then\n    cat > \"$CACHE_CONF.mgf-new\" <<CONF\n[$CACHE_ID]\nlabel = Rosetta pipeline cache\ndescription = Keeps the GPU code of the pipelines D3DMetal compiles in a Rosetta game, beyond Metal's 1.1 GB cache\nsection = dev\non = 1\ninject = 1\nrequires = Library/Application Support/notproton/plugins/notproton-rosetta-pipeline-cache.dylib\nCONF\n    mv -f \"$CACHE_CONF.mgf-new\" \"$CACHE_CONF\"\n  fi\n  cache_options install >/dev/null\n  echo \"  pipeline cache: plugin in NotProton's plugins folder, $CACHE_ID=1 in PBZ's launch options\"\n}"
         }
       ],
       "symptom": "Under Rosetta one core runs at 100% and no window ever opens. Once it starts, the menu video is black. Every start compiles shaders again for minutes.",
       "cause": "Its Denuvo checks the CPU for CLFLUSHOPT, CLWB and RDPID, which Rosetta does not have, and expects x86 answers for debug registers and non-canonical addresses. The game also quits on Wine's builtin Visual C++ runtime. Its menu video goes through Unreal's Electra, which takes NV12 only, and CrossOver's H.264 decoder offers no NV12 on macOS while saying it is D3D aware. It compiles about 66,000 Metal pipelines as it loads, about 8 GB of GPU code, and Metal's system cache stops at about 1.11 GB a file, so some 40% of them are compiled again at every start.",
-      "fix": "The Wine modules' ntdll.so (engine patches 0017 and 0018) shows those bits to a process that asks and emulates the instructions; this fix asks for PBZ.exe in the prefix's registry, and loads its Visual C++ runtime native first. A decoder DLL of ours, loaded for PBZ.exe from the prefix's system32, serves Microsoft's H.264 decoder class over CrossOver's and offers NV12 without D3D, as winevideo's patch 0006 does inside Wine. With DLSS available, D3DMetal's NVAPI offers NVIDIA opacity micromaps it cannot build, and the game closes as it loads a level, whatever upscaler is chosen. TSR is recommended, as it ran better than DLSS in play (not measured): turn DLSS off for the game (D3DM_ENABLE_METALFX=0 in NotProton's launch options, or CrossOver's DLSS switch for the bottle) and choose TSR in the game. For DLSS, set D3DM_SUPPORT_DXR=0 (NotProton: the game's launch options; a CrossOver bottle: [EnvironmentVariables] in its cxbottle.conf). In a NotProton prefix it also copies a pipeline cache plugin into NotProton's plugins folder and puts NOTPROTON_ROSETTA_PIPELINE_CACHE=1 in front of the game's Steam launch options (with Steam closed): the plugin keeps every pipeline D3DMetal compiles in a cache of its own, up to 10 GB. Measured on 2026-11-20 with the 41303 runner: the first start with it compiled 65,685 pipelines and wrote 7.9 GB, the next one compiled 113.",
+      "fix": "On NotProton's 41303 runner on Rosetta, MacGameFix's shared Engine fixes row, which this fix switches on, shows those bits to the game and emulates the instructions and Denuvo's execution breakpoints, on NotProton's own ntdll (played on 2026-11-25). Elsewhere the Rosetta improvement's ntdll.so (engine patch 0017) does it for a process that asks, and this fix asks for PBZ.exe in the prefix's registry. It also loads the game's Visual C++ runtime native first. A decoder DLL of ours, loaded for PBZ.exe from the prefix's system32, serves Microsoft's H.264 decoder class over CrossOver's and offers NV12 without D3D, as winevideo's patch 0006 does inside Wine. With DLSS available, D3DMetal's NVAPI offers NVIDIA opacity micromaps it cannot build, and the game closes as it loads a level, whatever upscaler is chosen. TSR is recommended, as it ran better than DLSS in play (not measured): turn DLSS off for the game (D3DM_ENABLE_METALFX=0 in NotProton's launch options, or CrossOver's DLSS switch for the bottle) and choose TSR in the game. For DLSS, set D3DM_SUPPORT_DXR=0 (NotProton: the game's launch options; a CrossOver bottle: [EnvironmentVariables] in its cxbottle.conf). In a NotProton prefix it also copies a pipeline cache plugin into NotProton's plugins folder and puts NOTPROTON_ROSETTA_PIPELINE_CACHE=1 in front of the game's Steam launch options (with Steam closed): the plugin keeps every pipeline D3DMetal compiles in a cache of its own, up to 10 GB. Measured on 2026-11-20 with the 41303 runner: the first start with it compiled 65,685 pipelines and wrote 7.9 GB, the next one compiled 113.",
       "backend": "D3DMetal 4 on the Intel side (Rosetta): CrossOver Preview 27, or 26.3 with D3DMetal 4.",
       "crossover": "CrossOver Preview 27 (27.0.0.41073), NotProton runner, 2026-11-01",
       "pageUrl": null,
@@ -1724,10 +1724,11 @@
       "executable": "RDR2.exe",
       "carrierDirectory": "",
       "alsoRuns": [],
-      "summary": "Red Dead Online never connects to its servers on a Mac: its TCP connections have to be made without TCP options. The Wine modules' ntdll does that for this game's prefix alone, with NotProton's own switch. NotProton with CrossOver Preview 41303 only.",
+      "summary": "Red Dead Online never connects to its servers on a Mac: its TCP connections have to be made without TCP options. This switches on NotProton's Red Dead Online fix row for the game, whose library does that for this game alone. Quit Steam before installing. NotProton with CrossOver Preview 41303 (Rosetta) only; not yet played with the row.",
       "page": null,
       "installs": [
-        "bottles.sh"
+        "bottles.sh",
+        "steam-launch-options.pl"
       ],
       "builtFrom": [],
       "license": "GPL-3.0-or-later",
@@ -1735,27 +1736,27 @@
         {
           "name": "NotProton's creator",
           "url": "https://github.com/NotProtonNot/NotProton",
-          "note": "Found that Red Dead Online needs its TCP connections made without TCP options, and handed us the fix, which set macOS's TCP_NOOPT in wineserver; engine patch 0037 sets it from ntdll."
+          "note": "Found that Red Dead Online needs its TCP connections made without TCP options and wrote the fix: first for wineserver (engine patch 0037 set it from ntdll), then as the NotProton plugin tcp-noopt.dylib, which MacGameFix carries and this fix switches on."
         }
       ],
       "excerpts": [
         {
           "file": "fixes/install-rdo-tcp.sh",
           "symbol": null,
-          "note": "The switch is one empty file beside the prefix, NotProton's own; the runner's ntdll.so must carry engine patch 0037, which names that file.",
+          "note": "The fix is NOTPROTON_TCP_NOOPT=1 in the game's launch options; it needs NotProton's Red Dead Online fix row and the library it names.",
           "language": "bash",
-          "startLine": 73,
-          "endLine": 81,
-          "commit": "24783c72a93d6d537a04cc7ce2a1c1dcfd21ecd0",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/24783c72a93d6d537a04cc7ce2a1c1dcfd21ecd0/fixes/install-rdo-tcp.sh#L73-L81",
-          "code": "SWITCH=\"$(dirname \"$PFX\")/notproton-tcp-noopt\"\n# notproton-build's first line names the runner: 27.0.0.41303 or 27.0.0.41303-fex; MGVF_CX, when\n# the app passes it, is that runner's CrossOver folder.\nBUILD=\"\"; IFS= read -r BUILD < \"$(dirname \"$PFX\")/notproton-build\" || true\nRUNNER=\"${MGVF_CX:-$HOME/Library/Application Support/notproton/runners/crossover-$BUILD/CrossOver}\"\nRUNNER=\"${RUNNER%/}\"\nNTDLL=\"$RUNNER/lib/wine/x86_64-unix/ntdll.so\"\n# 0037 carries the switch's file name; CrossOver's own ntdll.so and ours before it do not.\ncarries_fix() { [ -f \"$NTDLL\" ] && LC_ALL=C /usr/bin/grep -qa 'notproton-tcp-noopt' \"$NTDLL\"; }"
+          "startLine": 91,
+          "endLine": 102,
+          "commit": "48ef994ccc7f968e36a83458ca31b7d76212a97b",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/48ef994ccc7f968e36a83458ca31b7d76212a97b/fixes/install-rdo-tcp.sh#L91-L102",
+          "code": "options() { /usr/bin/perl \"$HERE/steam-launch-options.pl\" \"$1\" \"$APPID\" \"$JOURNAL\" \"$ID=1\"; }\n# The row MacGameFix keeps in NotProton's plugins folder (NotProtonPlugins.swift), or one\n# NotProton ships under the same id, with the library it names.\nrow_ok() {\n  local conf lib\n  [ -f \"$NP_SUPPORT/plugin-host.dylib\" ] || return 1\n  conf=\"$(/usr/bin/grep -lx \"\\[$ID\\]\" \"$PLUGINS\"/*.conf 2>/dev/null | head -1)\"\n  [ -n \"$conf\" ] || return 1\n  lib=\"$(/usr/bin/sed -n \"/^\\[$ID\\]/,/^\\[/s|^requires = ||p\" \"$conf\" | head -1)\"\n  [ -n \"$lib\" ] && [ -f \"$HOME/$lib\" ]\n}\nNOROW=\"NotProton's Red Dead Online fix row is not in its plugins folder: it needs NotProton's plugin host (NotProton's Update), and MacGameFix puts the row in place (Improvements, Put in Place)\""
         }
       ],
       "symptom": "Red Dead Online never connects to its servers; the story mode plays.",
       "cause": "Its TCP connections to Rockstar's servers have to be made without TCP options, which macOS sends by default (MSS, window scale, SACK, timestamps).",
-      "fix": "Engine patch 0037, in the Wine modules' ntdll.so (the Rosetta improvement, CrossOver Preview 41303), makes a process's TCP connections with macOS's TCP_NOOPT when NotProton's file notproton-tcp-noopt is beside its prefix, or when WINE_TCP_NOOPT=1 is in its environment. This fix writes that file for the game's prefix. Without window scaling a connection keeps at most 64 KB in flight, so it is only for this game. Played on 2026-11-20: Red Dead Online, which never connected on that Mac, reached its online world.",
+      "fix": "NotProton's Red Dead Online fix row, whose library tcp-noopt.dylib (NotProton's creator's, carried by MacGameFix) sets macOS's TCP_NOOPT on the game's sockets before they connect, from outside ntdll. This fix switches the row on for the game with NOTPROTON_TCP_NOOPT=1 in its launch options. Without window scaling a connection keeps at most 64 KB in flight, so it is only for this game. Played on 2026-11-20 with engine patch 0037, which did the same inside ntdll.so: Red Dead Online, which never connected on that Mac, reached its online world. The row's library was checked on 2026-11-26 on NotProton's 41303 runner with NotProton's ntdll.so; not yet played with it.",
       "backend": "Any: the fix is in the network, not the graphics.",
-      "crossover": "CrossOver Preview 27 (27.0.0.41303), NotProton runner, 2026-11-20",
+      "crossover": "CrossOver Preview 27 (27.0.0.41303), NotProton runner on Rosetta, 2026-11-20 (0037); row checked 2026-11-26",
       "pageUrl": null,
       "graphicsBackend": "d3dmetal",
       "gptk": null,

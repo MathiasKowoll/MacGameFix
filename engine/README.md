@@ -290,8 +290,9 @@ CodeWeavers' `ntdll.so`, `kernel32.dll`, `kernelbase.dll`, `user32.dll`,
 kept files back on its next update. What they carried comes per game from the
 Engine fixes row (`0017` to `0021`, `0026` to `0029`, `0038`, `0041`), and `0039`
 and `0040` reach F1 25 alone as a runner variant (see "A GPUI program's fonts and
-window"). Left behind: 2XKO's `0032` to `0036`, which never made it
-start, and Red Dead Online's `0037`. A CrossOver app and the FEX side keep every
+window"). Left behind: 2XKO's `0032` to `0036`, which never made it start. Red Dead
+Online's `0037` comes from NotProton's **Red Dead Online fix** row, which Red Dead
+Redemption 2's fix switches on (see below). A CrossOver app and the FEX side keep every
 module. Played on 2026-11-25 on NotProton's `ntdll` with CodeWeavers' `kernel32`
 and `kernelbase`: F1 25, EA SPORTS FC 27, Forza Horizon 6, Phantom Blade Zero,
 STAR WARS: Galactic Racer and Persona 4 Golden.
@@ -662,8 +663,8 @@ explained; the protection decrypting code on first use is the suspect.
 option, and the connection uses none.
 
 - **Asked for with** NotProton's own switch, the file `notproton-tcp-noopt` beside the prefix
-  (`compatdata/<app id>/notproton-tcp-noopt`), which Red Dead Redemption 2's fix
-  (`fixes/install-rdo-tcp.sh`) writes, or with `WINE_TCP_NOOPT=1` in the process's environment.
+  (`compatdata/<app id>/notproton-tcp-noopt`), which earlier versions of Red Dead Redemption
+  2's fix (`fixes/install-rdo-tcp.sh`) wrote, or with `WINE_TCP_NOOPT=1` in the process's environment.
   NotProton does not always hand a launch option's `WINE_*` variable to the game (a launch
   through `open` keeps only `NOTPROTON_ENV_*`), so in its launch options that is
   `NOTPROTON_ENV_WINE_TCP_NOOPT=1 %command%`.
@@ -693,6 +694,17 @@ runner, both sides (a Winsock `connect()` to a listener on 127.0.0.1, which read
 | with `0037` | the file and `WINE_TCP_NOOPT=0` | timestamps, SACK, window scale | 4024 |
 
 The FEX side gives the same rows.
+
+In NotProton's 41303 runner on Rosetta the Intel side keeps NotProton's own `ntdll.so`,
+without `0037`. There Red Dead Redemption 2's fix switches on NotProton's **Red Dead Online
+fix** row instead (`NOTPROTON_TCP_NOOPT=1` in the game's launch options), whose library,
+NotProton's creator's `tcp-noopt.dylib` that MacGameFix carries
+(`app/notproton-plugins/plugins/tcp-noopt.c`), sets the same option on the game's sockets
+from outside `ntdll`, leaving loopback connections alone. Checked on 2026-11-26 with
+`run.sh <runner> --plugin <tcp-noopt.dylib>` on that runner, with NotProton's `ntdll.so`
+(`13b6d0b2`), to this Mac's own network address: timestamps, SACK and window scale and an
+MSS of 4024 without the library; none and 536 with it. Red Dead Online has not been played
+with the row yet.
 
 ## Allocations with no address stay low
 

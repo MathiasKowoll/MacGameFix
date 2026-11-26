@@ -9,10 +9,9 @@
 #   MGVF_BOTTLE=/path/to/pfx install-fh6-fix.sh <game folder> --restore
 #
 # MGVF-SCOPE: prefix
-# MGVF-NEEDS: rosetta
 # MGVF-INSTRUCTIONS: fh6-instructions.md
 # MGVF-GAME: Forza Horizon 6 | forzahorizon6.exe |
-# MGVF-WHY: Played at a steady 60 frames a second on a MacBook Pro M4 Max, open world, races and online, with the launch options in its instructions. Sign-in and driving validated on Rosetta with the paired ntdll, timers and exception acceleration. Other hardware remains unvalidated. The game starts on D3DMetal 4, but its shaders hit unsupported SV_ShadingRate paths and several pipelines use D3D12 layouts D3DMetal translates incorrectly; a source-built game-specific proxy fixes those paths without FH5's descriptor-stride translation. Xbox sign-in persists across starts: a fixed advapi32 in the prefix, for forzahorizon6.exe alone; in a CrossOver bottle that is the only part installed. Tested on NotProton only; CrossOver bottles are untested. It also needs NOTPROTON_ROSETTA_TRAP_BOOST=1 in FH6's Steam launch options (on the 41073 runner, three more): the improvement writes it itself when Steam is closed and keeps your own options, so quit Steam before installing and leave it in place. On 41303 the exception chain comes from this game's D3D12 proxy, hooked into NotProton's own ntdll.dll, and the fix no longer replaces ntdll.dll; played as well as the replaced file. On 41303 on Rosetta it also switches on NotProton's shared Engine fixes row for FH6 (NOTPROTON_MGF_ENGINE=1), whose library arms the timer-thread and online-socket fixes from outside ntdll; checked with test programs, not yet played with the row.
+# MGVF-WHY: Played at a steady 60 frames a second on a MacBook Pro M4 Max, open world, races and online, with the launch options in its instructions. Sign-in and driving validated on Rosetta with the paired ntdll, timers and exception acceleration. Other hardware remains unvalidated. The game starts on D3DMetal 4, but its shaders hit unsupported SV_ShadingRate paths and several pipelines use D3D12 layouts D3DMetal translates incorrectly; a source-built game-specific proxy fixes those paths without FH5's descriptor-stride translation. Xbox sign-in persists across starts: a fixed advapi32 in the prefix, for forzahorizon6.exe alone; in a CrossOver bottle that is the only part installed. Tested on NotProton only; CrossOver bottles are untested. It also needs NOTPROTON_ROSETTA_TRAP_BOOST=1 in FH6's Steam launch options (on the 41073 runner, three more): the improvement writes it itself when Steam is closed and keeps your own options, so quit Steam before installing and leave it in place. On 41303 the exception chain comes from this game's D3D12 proxy, hooked into NotProton's own ntdll.dll, and the fix no longer replaces ntdll.dll; played as well as the replaced file. On 41303 on Rosetta the timer-thread, online-socket and suspend fixes come from NotProton's shared Engine fixes row, which it switches on for FH6 (NOTPROTON_MGF_ENGINE=1), on NotProton's own ntdll; played that way online on 2026-11-25.
 # MGVF-CREDIT: Gauthier Piarrette (Highball tsshim and FH6 measurements) | https://github.com/gauthierpiarrette/highball
 # MGVF-CREDIT: xvferxedd, FH6 D3DMetal extensions preserved with fh5-d3dmetal-fix (repository no longer online) | https://github.com/Andytizer/fh5-crossover-steam-fix/tree/main/upstream/source
 #
@@ -224,10 +223,9 @@ fi
 # thread kept from spinning) and 0026 (IPv4 options on the dual-stack socket of its online
 # sessions), from outside ntdll (engine/mgf-engine.c). FH6 has no row of its own: the record is
 # the one F1 25 and EA SPORTS FC 27 use (np-plugin-shared.conf, plugins/mgf-shared.conf), and
-# this game is added to its apps. On 41303 on Rosetta, with NotProton's plugin host, only: that
-# is where it was checked; elsewhere the row is not part of the fix. While FH6's own ntdll pair
-# above still carries 0021 and 0026, the row changes nothing the game sees; it is what lets that
-# pair, and NotProton's runner, go without them.
+# this game is added to its apps. On 41303 on Rosetta, with NotProton's plugin host, only: there
+# the runner keeps NotProton's own ntdll, so the row is what carries them (played online on
+# 2026-11-25); elsewhere the row is not part of the fix, and 41073's ntdll pair carries them.
 . "$HERE/notproton-plugins.sh"
 # Bundled dependency used by notproton-plugins.sh: $HERE/steam-launch-options.pl
 FH6_STEAM="${MGVF_STEAM_ROOT:-$HOME/Library/Application Support/Steam}"

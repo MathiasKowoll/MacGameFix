@@ -1,7 +1,7 @@
-# Accepts one TCP connection on 127.0.0.1, prints the TCP options it uses (macOS's
+# Accepts one TCP connection on 127.0.0.1, or on the address given as its argument, prints the TCP options it uses (macOS's
 # TCP_CONNECTION_INFO: ts, sack, wscale) and its MSS, then closes it. Prints the port first.
 import socket, struct, sys
-s = socket.socket(); s.bind(("127.0.0.1", 0)); s.listen(1); s.settimeout(60)
+s = socket.socket(); s.bind((sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1", 0)); s.listen(1); s.settimeout(60)
 print(s.getsockname()[1], flush=True)
 c, _ = s.accept()
 info = c.getsockopt(socket.IPPROTO_TCP, 0x106, 128)

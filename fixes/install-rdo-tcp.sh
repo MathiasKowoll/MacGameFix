@@ -9,29 +9,31 @@
 # The prefix is MGVF_BOTTLE: the Steam Play prefix NotProton keeps for the game,
 #   .../steamapps/compatdata/1174180/pfx
 #
-# NOTHING IN THE GAME FOLDER IS TOUCHED. The fix is one empty file beside the prefix,
-# compatdata/1174180/notproton-tcp-noopt, NotProton's own switch for it.
+# NOTHING IN THE GAME FOLDER IS TOUCHED. The fix is NOTPROTON_TCP_NOOPT=1 in front of the
+# game's Steam launch options, which switches on NotProton's "Red Dead Online fix" row for it.
 #
 # WHAT THIS FIXES. Red Dead Online never connected to its servers on a Mac: its TCP
 # connections have to be made without TCP options (macOS's TCP_NOOPT: no MSS, window
-# scale, SACK or timestamps). NotProton's creator found it and handed MacGameFix the
-# fix; engine patch 0037 (CrossOver Preview 41303, both sides' ntdll.so, part of the
-# Rosetta improvement) makes the connections that way for a process whose prefix has
-# that file beside it, or whose environment has WINE_TCP_NOOPT=1. NotProton does not
-# always hand a launch option's WINE_* variable to the game (a launch through `open`
-# keeps only NOTPROTON_ENV_*), so the file is what this writes. Without window scaling a
-# connection keeps at most 64 KB in flight, so it is only for this game's prefix.
+# scale, SACK or timestamps). NotProton's creator found it and wrote the fix. The row's
+# library, tcp-noopt.dylib (app/notproton-plugins/plugins/tcp-noopt.c, which MacGameFix
+# puts in NotProton's plugins folder), sets the option on the game's sockets before they
+# connect, from outside ntdll. Engine patch 0037 did the same inside the Wine modules'
+# ntdll.so, switched on by NotProton's file notproton-tcp-noopt beside the prefix, which
+# earlier versions of this fix wrote; since NotProton's runner for CrossOver Preview 41303
+# keeps NotProton's own ntdll.so on Rosetta, the row is what does it, and an install takes
+# that file away. Without window scaling a connection keeps at most 64 KB in flight, so it
+# is for this game alone.
 #
-# Played on 2026-11-20 on NotProton's 41303 runner (Rosetta): Red Dead Online reached
-# its online world and held its connections to Rockstar's servers.
+# Played on 2026-11-20 with 0037 on NotProton's 41303 runner (Rosetta): Red Dead Online
+# reached its online world. The row's library was checked on 2026-11-26 on that runner with
+# NotProton's ntdll.so (engine/tests/tcp-noopt/run.sh --plugin); the game has not been played
+# with it yet.
 #
-# A CrossOver bottle is not done here: the file would sit in the Bottles folder, beside
-# every bottle, and a bottle's own environment would reach Steam's downloads too.
+# A CrossOver bottle is not done here: NotProton's plugins do not load in one.
 #
 # MGVF-SCOPE: prefix
-# MGVF-NEEDS: rosetta
 # MGVF-GAME: Red Dead Redemption 2 | RDR2.exe |
-# MGVF-WHY: Red Dead Online never connects to its servers on a Mac: its TCP connections have to be made without TCP options. The Wine modules' ntdll does that for this game's prefix alone, with NotProton's own switch. NotProton with CrossOver Preview 41303 only.
+# MGVF-WHY: Red Dead Online never connects to its servers on a Mac: its TCP connections have to be made without TCP options. This switches on NotProton's Red Dead Online fix row for the game, whose library does that for this game alone. Quit Steam before installing. NotProton with CrossOver Preview 41303 (Rosetta) only; not yet played with the row.
 # MGVF-CREDIT: NotProton's creator, who found the cause and wrote the fix | https://github.com/NotProtonNot/NotProton
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
@@ -70,39 +72,59 @@ if [ -f "$PFX/cxbottle.conf" ] || [ ! -f "$(dirname "$PFX")/notproton-build" ]; 
   refuse "$PFX is not a prefix NotProton keeps; the fix is for NotProton only."
 fi
 
+APPID=1174180
+ID=NOTPROTON_TCP_NOOPT
+NP_SUPPORT="$HOME/Library/Application Support/notproton"
+PLUGINS="$NP_SUPPORT/plugins"
+JOURNAL="$PFX/.mgf-rdo-launch-options.json"
+# The switch file engine patch 0037 read, which earlier versions of this fix wrote.
 SWITCH="$(dirname "$PFX")/notproton-tcp-noopt"
-# notproton-build's first line names the runner: 27.0.0.41303 or 27.0.0.41303-fex; MGVF_CX, when
-# the app passes it, is that runner's CrossOver folder.
-BUILD=""; IFS= read -r BUILD < "$(dirname "$PFX")/notproton-build" || true
-RUNNER="${MGVF_CX:-$HOME/Library/Application Support/notproton/runners/crossover-$BUILD/CrossOver}"
-RUNNER="${RUNNER%/}"
-NTDLL="$RUNNER/lib/wine/x86_64-unix/ntdll.so"
-# 0037 carries the switch's file name; CrossOver's own ntdll.so and ours before it do not.
-carries_fix() { [ -f "$NTDLL" ] && LC_ALL=C /usr/bin/grep -qa 'notproton-tcp-noopt' "$NTDLL"; }
+# notproton-build: the runner's build on the first line (27.0.0.41303-fex), and on the second
+# what it runs on ("... - Rosetta" or "... - FEX").
+BUILD=""; SIDE=""
+{ IFS= read -r BUILD || true; IFS= read -r SIDE || true; } < "$(dirname "$PFX")/notproton-build"
+right_runner() {
+  case "$BUILD" in 27.0.0.41303|27.0.0.41303-fex) ;; *) return 1 ;; esac
+  case "$SIDE" in *Rosetta*) return 0 ;; esac
+  return 1
+}
+options() { /usr/bin/perl "$HERE/steam-launch-options.pl" "$1" "$APPID" "$JOURNAL" "$ID=1"; }
+# The row MacGameFix keeps in NotProton's plugins folder (NotProtonPlugins.swift), or one
+# NotProton ships under the same id, with the library it names.
+row_ok() {
+  local conf lib
+  [ -f "$NP_SUPPORT/plugin-host.dylib" ] || return 1
+  conf="$(/usr/bin/grep -lx "\[$ID\]" "$PLUGINS"/*.conf 2>/dev/null | head -1)"
+  [ -n "$conf" ] || return 1
+  lib="$(/usr/bin/sed -n "/^\[$ID\]/,/^\[/s|^requires = ||p" "$conf" | head -1)"
+  [ -n "$lib" ] && [ -f "$HOME/$lib" ]
+}
+NOROW="NotProton's Red Dead Online fix row is not in its plugins folder: it needs NotProton's plugin host (NotProton's Update), and MacGameFix puts the row in place (Improvements, Put in Place)"
 
 case "$MODE" in
 --status)
-  case "$BUILD" in 27.0.0.41303|27.0.0.41303-fex) ;; *)
-    norecipe "the game runs on NotProton's runner for CrossOver $BUILD; the fix needs CrossOver Preview 41303's" ;;
-  esac
-  echo "looking at $PFX and $RUNNER"
-  if [ -f "$SWITCH" ] && carries_fix; then echo installed
+  right_runner || norecipe "the game runs on NotProton's runner for CrossOver $BUILD${SIDE:+ ($SIDE)}; the fix needs CrossOver Preview 41303's, on Rosetta"
+  echo "looking at $PFX"
+  if options status >/dev/null 2>&1 && row_ok; then echo installed
+  elif options status >/dev/null 2>&1; then echo "Why: $NOROW" >&2; echo half
   elif [ -f "$SWITCH" ]; then
-    echo "Why: the switch is in place, but the runner's ntdll.so does not have the fix: update the Rosetta improvement" >&2
+    echo "Why: an earlier version of the fix, for the Wine modules' ntdll: install it again" >&2
     echo half
   else echo absent; fi
   exit 0 ;;
 --restore)
+  if [ -f "$JOURNAL" ]; then options preflight >/dev/null || exit 1; options restore >/dev/null || exit 1; fi
   rm -f "$SWITCH"
   echo "restored -- Red Dead Redemption 2's connections use TCP options again"
   echo restored
   exit 0 ;;
 esac
 
-case "$BUILD" in 27.0.0.41303|27.0.0.41303-fex) ;; *)
-  refuse "the game runs on NotProton's runner for CrossOver $BUILD; the fix needs CrossOver Preview 41303's." ;;
-esac
-carries_fix || refuse "the runner's ntdll.so ($NTDLL) does not have the fix: put in or update the Rosetta improvement for CrossOver Preview 41303 first."
-: > "$SWITCH" || refuse "could not write $SWITCH"
+right_runner || refuse "the game runs on NotProton's runner for CrossOver $BUILD${SIDE:+ ($SIDE)}; the fix needs CrossOver Preview 41303's, on Rosetta."
+row_ok || refuse "$NOROW."
+# Steam closed and no wrapper in the game's options, before anything changes.
+options preflight >/dev/null || exit 1
+options install >/dev/null || exit 1
+rm -f "$SWITCH"
 echo "installed"
-echo "  $SWITCH is in place: the game's TCP connections are made without TCP options"
+echo "  $ID=1 is in the game's launch options: NotProton's Red Dead Online fix row is on for it"
