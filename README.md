@@ -311,8 +311,8 @@ only counts below the Mac's own (with its performance cores named), so a game
 is never shown processors that are not there. Picking a count for one game in
 its NotProton options sets `NOTPROTON_ENV_WINENCPU` for that game alone.
 
-Two more rows MacGameFix keeps for every game, each off until it is picked for
-one:
+Three more rows MacGameFix keeps for every game, each off until it is picked
+for one:
 
 - **Frame rate cap** (`mgf-fps.conf`, the Preview tools only: `D3DM_MAX_FPS`
   exists in D3DMetal 4 alone). D3DMetal 4 presents each frame no sooner than
@@ -326,6 +326,11 @@ one:
 - **Ray tracing off** (`mgf-dxr.conf`): `D3DM_SUPPORT_DXR=0`, so D3DMetal says
   it has no ray tracing. For a game that closes as a level loads where D3DMetal
   offers ray tracing it cannot do, as Phantom Blade Zero does with DLSS on.
+- **NVIDIA driver version** (`mgf-nvidia-driver.conf`, the Rosetta tools):
+  D3DMetal tells a game its NVIDIA driver is 576.02 (561.09 in D3DMetal 3), and
+  a game that wants a newer one asks for a driver update at every start. The
+  row patches that version to 999.99 in memory. EA SPORTS FC 27 1.0.143, which
+  wants 610.62, started with no dialog (2026-11-26).
 
 MacGameFix also carries four of its fixes as NotProton plugins, which
 NotProton's creator ported and NotProton has not released yet
