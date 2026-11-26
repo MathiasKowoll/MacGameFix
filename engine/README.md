@@ -281,6 +281,16 @@ or a fault through a non-canonical address.
 On NotProton, `rosetta-cpu` in `fixes/engine` (the **Engine fixes** row) does what
 `0017`, `0019` and `0020` do from outside `ntdll.so`, execution breakpoints
 included, so a runner with CodeWeavers' own `ntdll.so` needs none of the three.
+In NotProton's runner for CrossOver Preview 41303 the Intel side now keeps
+CodeWeavers' `ntdll.so`, `kernel32.dll`, `kernelbase.dll`, `user32.dll` and
+`win32u.so` and NotProton's `ntdll.dll` (`LEAVE` in `engine-modules.sh`); a runner
+the modules gave them before gets the kept files back on its next update. What
+they carried comes per game from the Engine fixes row (`0017` to `0021`, `0026` to
+`0029`, `0038`, `0041`). Left behind: 2XKO's `0032` to `0036`, which never made it
+start, and Red Dead Online's `0037`. A CrossOver app and the FEX side keep every
+module. Played on 2026-11-25 on NotProton's `ntdll` with CodeWeavers' `kernel32`
+and `kernelbase`: F1 25, EA SPORTS FC 27, Forza Horizon 6, Phantom Blade Zero,
+STAR WARS: Galactic Racer and Persona 4 Golden.
 Measured on 2026-11-25 with Phantom Blade Zero on CrossOver Preview 41303's
 runner: with NotProton's `ntdll.so` and `rosetta-cpu` without the breakpoints,
 Denuvo spun for minutes, twice; with CodeWeavers' `ntdll.so` plus `0017` alone it

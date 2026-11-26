@@ -70,7 +70,9 @@ enum EnginePart: String, CaseIterable, Identifiable {
                 + "emulates CLWB, RDPID and hardware breakpoints, and reports faults as Windows does. "
                 + "On Preview 41073 it also keeps the threadpool's timer thread from waking in a loop, on both sides, and on the FEX side "
                 + "it stores async I/O status wherever a game puts it. "
-                + "FH6 exception acceleration remains opt-in and game-build guarded; its fix applies the options. Other builds retain their existing CPU fixes."
+                + "FH6 exception acceleration remains opt-in and game-build guarded; its fix applies the options. Other builds retain their existing CPU fixes. "
+                + "In NotProton's runner for Preview 41303 the Intel side keeps CodeWeavers' and NotProton's own files: "
+                + "a game gets the same fixes from NotProton's Engine fixes row, on its Compatibility page."
         }
     }
 
