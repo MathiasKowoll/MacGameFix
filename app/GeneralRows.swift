@@ -24,6 +24,12 @@ enum NotProtonRow {
     /// field it does not know.
     static func knowsGroups() -> Bool { knows("group") }
 
+    /// A row's label line. A row in one of MacGameFix's groups does not name MacGameFix again;
+    /// with no group to say whose it is, the label does.
+    static func label(_ name: String, grouped: Bool) -> String {
+        grouped ? "label = \(name)" : "label = \(name) (MacGameFix)"
+    }
+
     /// Whether every NotProton Steam runs knows a field: its run script lists the fields it reads.
     static func knows(_ field: String) -> Bool {
         let tools = Paths.home.appendingPathComponent("Library/Application Support/Steam/compatibilitytools.d")
@@ -131,10 +137,10 @@ enum FrameCapRow {
     }
 
     static func text(fastest: Int, steps: Double, grouped: Bool) -> String {
-        var lines = ["[\(id)]", "label = Frame rate cap"]
+        var lines = ["[\(id)]", NotProtonRow.label("Frame rate cap", grouped: grouped)]
         if grouped { lines.append("group = MacGameFix · Performance") }
         lines += [
-            "description = D3DMetal 4 (the Preview tools). Holds the game to a rate this Mac's display (\(fastest) Hz) can show: each one writes the cap that keeps it, as a cap of exactly 60 ends at 48 fps. Measured at 60 (it writes 70) on a 120 Hz MacBook Pro; the other rates follow the same rule (MacGameFix)",
+            "description = Holds the game to a rate this display (\(fastest) Hz) can keep. Preview tools only",
             "section = dev",
             "type = choice",
             "default = 0",
@@ -160,16 +166,17 @@ enum FrameCapRow {
 
 /// D3DM_SUPPORT_DXR=0 makes D3DMetal say it has no ray tracing. A game that closes, or crashes
 /// as it loads a level, where D3DMetal offers ray tracing it cannot do then starts without it:
-/// Phantom Blade Zero with DLSS on (D3DMetal's NVAPI offers opacity micromaps it cannot build).
+/// Phantom Blade Zero with DLSS on (D3DMetal's NVAPI offers opacity micromaps it cannot build),
+/// played on Preview 41073. The game's own ray tracing settings go away with it.
 enum RayTracingRow {
     static let id = "NOTPROTON_MGF_DXR_OFF"
     static let file = "mgf-dxr.conf"
 
     static func text(grouped: Bool) -> String {
-        var lines = ["[\(id)]", "label = Ray tracing off"]
+        var lines = ["[\(id)]", NotProtonRow.label("Ray tracing off", grouped: grouped)]
         if grouped { lines.append("group = MacGameFix · D3DMetal") }
         lines += [
-            "description = D3DMetal tells the game it has no ray tracing (D3DM_SUPPORT_DXR=0). For a game that closes as a level loads where D3DMetal offers ray tracing it cannot do: Phantom Blade Zero with DLSS on, played on Preview 41073. The game's own ray tracing settings go away (MacGameFix)",
+            "description = The game sees no ray tracing. For a game that closes as a level loads: Phantom Blade Zero with DLSS on",
             "section = dev",
             "on = 1",
             "env = D3DM_SUPPORT_DXR=0",
@@ -198,10 +205,10 @@ enum DriverVersionRow {
     static let file = "mgf-nvidia-driver.conf"
 
     static func text(grouped: Bool) -> String {
-        var lines = ["[\(id)]", "label = NVIDIA driver version"]
+        var lines = ["[\(id)]", NotProtonRow.label("NVIDIA driver version", grouped: grouped)]
         if grouped { lines.append("group = MacGameFix · D3DMetal") }
         lines += [
-            "description = D3DMetal tells the game a newer NVIDIA driver (999.99). For a game that asks for a driver update at every start. Played with EA SPORTS FC 27 on NotProton 41303 (Rosetta), 2026-11-26 (MacGameFix)",
+            "description = The game sees a newer NVIDIA driver and stops asking for a driver update. Played with EA SPORTS FC 27",
             "on = 1",
             "tools = notproton-fex-rosetta*",
             "patch = D3DMetal/x86_64: 48 c7 42 04 02=9f e1=86 00=01 00 48 b8 72 36 31 36 5f 34 31 | 48 c7 42 04 2d=9f db=86 00=01 00 48 b8 72 35 36 30 5f 38 38",

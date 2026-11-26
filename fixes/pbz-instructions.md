@@ -15,7 +15,7 @@ If you would rather not use DLSS, `D3DM_ENABLE_METALFX=0` in its place turns DLS
 
 # Engine fixes row
 
-On NotProton's runner for CrossOver Preview 41303, on Rosetta, the fix also adds the game to MacGameFix's shared row **Engine fixes (MacGameFix)**, on its Compatibility page in NotProton, and switches it on the first time: `NOTPROTON_MGF_ENGINE=1` goes in front of the launch options, so quit Steam before installing. The row's library makes Rosetta look to this game alone like the CPU its copy protection checks for: CPUID shows CLFLUSHOPT, CLWB and RDPID, the last two are emulated, an access through a non-canonical address faults as on Windows, a CPUID Rosetta skips after self-modifying code is run, and x86 execution breakpoints work. That runner keeps NotProton's own `ntdll`, so the row is what gets the game past Denuvo there, and the Rosetta improvement is not needed; played that way on 2026-11-25. Leave it on.
+On NotProton's runner for CrossOver Preview 41303, on Rosetta, the fix also adds the game to MacGameFix's shared row **Engine fixes**, on its Compatibility page in NotProton, and switches it on the first time: `NOTPROTON_MGF_ENGINE=1` goes in front of the launch options, so quit Steam before installing. The row's library makes Rosetta look to this game alone like the CPU its copy protection checks for: CPUID shows CLFLUSHOPT, CLWB and RDPID, the last two are emulated, an access through a non-canonical address faults as on Windows, a CPUID Rosetta skips after self-modifying code is run, and x86 execution breakpoints work. That runner keeps NotProton's own `ntdll`, so the row is what gets the game past Denuvo there, and the Rosetta improvement is not needed; played that way on 2026-11-25. Leave it on.
 
 # Shaders
 

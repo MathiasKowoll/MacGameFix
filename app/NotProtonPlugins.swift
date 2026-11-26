@@ -36,17 +36,28 @@ enum NotProtonPlugins {
         let rest: [String]
     }
 
-    /// Every row MacGameFix writes says so at the end of its description.
-    static let mark = "(MacGameFix)"
+    /// Every row MacGameFix writes names it: in its group, or in its label where there is none.
+    static let mark = "MacGameFix"
     static var host: URL { Engine.notproton.appendingPathComponent("plugin-host.dylib") }
     /// The libraries this app carries.
     static var bundled: URL? { Bundle.main.resourceURL?.appendingPathComponent("notproton-plugins") }
 
+    /// The descriptions say what a row is for and no more; how each one works:
+    /// - Unreal video: CrossOver's winegstreamer hides the NV12 output Unreal's player
+    ///   (Electra) asks for, and the patches offer it. x86_64 games, CrossOver 26.3 and
+    ///   Preview 41303. Town to City crashes on a menu video with real NV12.
+    /// - D3DMetal freeze: answers a D3D12 video memory question about a GPU node other than
+    ///   the first with an error, where D3DMetal froze. Acts on D3DMetal 3.0 and 4.0b2; on
+    ///   Preview 41303's 4.0b3 it loads and does nothing.
+    /// - D3DMetal video crash: gives D3D12 devices the ID3DDestructionNotifier interface older
+    ///   D3DMetal lacked; 4.0b3 has it.
+    /// - Red Dead Online: sets TCP_NOOPT on the game's sockets before they connect, from
+    ///   NotProton's creator's fix. Played online with the row on 2026-11-26.
     static let all: [Plugin] = [
         Plugin(
             name: "Unreal video", file: "40-unreal-video.conf", id: "NOTPROTON_UNREAL_VIDEO",
             group: "MacGameFix · Video", label: "Unreal video fix",
-            description: "Unreal Engine videos that stay black: CrossOver's winegstreamer hides the NV12 output Unreal's player (Electra) asks for, and this patches winegstreamer.dll in memory to offer it. x86_64 games, CrossOver 26.3 and Preview 41303. Not for every game: Town to City crashes on a menu video with real NV12. Turn it on per game",
+            description: "For Unreal Engine videos that stay black. Not for every game: Town to City crashes with it",
             library: nil, fields: ["patch"],
             rest: [
                 "on = 1",
@@ -56,25 +67,25 @@ enum NotProtonPlugins {
         Plugin(
             name: "D3DMetal freeze", file: "50-d3dmetal-freeze.conf", id: "NOTPROTON_D3DMETAL_NODEGUARD",
             group: "MacGameFix · D3DMetal", label: "D3DMetal freeze fix",
-            description: "Answers a D3D12 video memory question about a GPU node other than the first with an error, where D3DMetal froze (Town to City, Life is Strange, FATAL FURY). Acts on D3DMetal 3.0 and 4.0b2 only: on Preview 41303's D3DMetal 4.0b3 it loads and does nothing",
+            description: "For a game that freezes on an older D3DMetal: Town to City, Life is Strange, FATAL FURY. Does nothing on Preview 41303",
             library: "d3dmetal-freeze.dylib", fields: [], rest: ["on = 1", "inject = 1"]),
         Plugin(
             name: "D3DMetal video crash", file: "55-d3dmetal-notifier.conf", id: "NOTPROTON_D3DMETAL_NOTIFIER",
             group: "MacGameFix · D3DMetal", label: "D3DMetal video crash fix",
-            description: "Gives D3D12 devices the ID3DDestructionNotifier interface older D3DMetal lacked, where some games crashed playing a video. Not needed on Preview 41303: its D3DMetal 4.0b3 has the interface itself",
+            description: "For a game that crashes playing a video on an older D3DMetal. Not needed on Preview 41303",
             library: "d3dmetal-notifier.dylib", fields: [], rest: ["on = 1", "inject = 1"]),
         Plugin(
             name: "Red Dead Online", file: "60-red-dead-online.conf", id: "NOTPROTON_TCP_NOOPT",
             group: "MacGameFix · Per game", label: "Red Dead Online fix",
-            description: "Red Dead Online's connection: sets TCP_NOOPT on the game's sockets before they connect, from NotProton's creator's fix. Only Red Dead Redemption 2 and Red Dead Online. Any runner; not yet confirmed in play",
+            description: "Lets Red Dead Online connect. Played online on NotProton 41303",
             library: "tcp-noopt.dylib", fields: ["apps"],
             rest: ["on = 1", "inject = 1", "apps = 1174180", "apps = 1404210"]),
     ]
 
     static func text(_ p: Plugin, grouped: Bool) -> String {
-        var lines = ["[\(p.id)]", "label = \(p.label)"]
+        var lines = ["[\(p.id)]", NotProtonRow.label(p.label, grouped: grouped)]
         if grouped { lines.append("group = \(p.group)") }
-        lines.append("description = \(p.description) \(mark)")
+        lines.append("description = \(p.description)")
         lines += p.rest
         if let library = p.library {
             lines.append("requires = Library/Application Support/notproton/plugins/\(library)")

@@ -1,4 +1,4 @@
-// MacGameFix's engine fixes, one library for NotProton and one row: "Engine fixes (MacGameFix)".
+// MacGameFix's engine fixes, one library for NotProton and one row: "Engine fixes".
 //
 // Wine fixes that used to be engine patches in the runner's ntdll.so or kernel32.dll, for every
 // game, made again from outside those files, for the games that need them. NotProton loads this
