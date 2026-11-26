@@ -26,6 +26,9 @@
 #     read faults at -1 as on Windows. With it, it also arms execution breakpoints (Dr0, Dr7) as
 #     Denuvo does, on a ud2 from that fault's handler and on a function through SetThreadContext,
 #     and each has to stop the thread with the debug exception;
+#   - enumerator-name/check.c asks a device's enumerator name (CM_DRP_ENUMERATOR_NAME), as
+#     EA SPORTS FC 27 1.0.143 does at start: not answered without the fix, and the first
+#     component of the device's instance id with it, narrow and wide;
 #   - direct-syscall runs engine/tests/direct-syscall-suspend/suspend.c (built with llvm-mingw,
 #     LLVM_MINGW): threads making system calls with a syscall instruction of their own and threads
 #     raising exceptions, while another suspends them. Without the fix a look at a thread never
@@ -54,7 +57,8 @@ trap cleanup EXIT
   -dynamiclib -O2 -Wall -Wextra -Werror -install_name @rpath/mgf-engine.dylib -o "$WORK/mgf-engine.dylib" \
   "$SRC/mgf-engine.c" "$SRC/low-allocations/mgf-low-allocations.c" "$SRC/package-family/mgf-package-family.c" \
   "$SRC/timer-overflow/mgf-timer-overflow.c" "$SRC/dualstack-ipv4/mgf-dualstack-ipv4.c" \
-  "$SRC/rosetta-cpu/mgf-rosetta-cpu.c" "$SRC/direct-syscall/mgf-direct-syscall.c" "$SRC/once-reentry/mgf-once-reentry.c" "$SRC/mgf-signals.c" -DMGF_ENGINE "$HERE/d3dmetal-hookable/mgf-d3dmetal-hookable.c"
+  "$SRC/rosetta-cpu/mgf-rosetta-cpu.c" "$SRC/direct-syscall/mgf-direct-syscall.c" "$SRC/once-reentry/mgf-once-reentry.c" \
+  "$SRC/enumerator-name/mgf-enumerator-name.c" "$SRC/mgf-signals.c" -DMGF_ENGINE "$HERE/d3dmetal-hookable/mgf-d3dmetal-hookable.c"
 /usr/bin/codesign -f -s - "$WORK/mgf-engine.dylib" 2>/dev/null
 
 RUNNER="${MGVF_CHECK_RUNNER:-$HOME/Library/Application Support/notproton/runners/crossover-27.0.0.41303-fex/CrossOver}"
@@ -93,6 +97,7 @@ else
   check timer-overflow 3
   check dualstack-ipv4 2 -lws2_32
   check rosetta-cpu 2
+  check enumerator-name 2 -lsetupapi -lcfgmgr32
   # suspend.c can hang for good without the fix: a watchdog ends it, and that is its failure.
   LLVM_MINGW="${LLVM_MINGW:-$HOME/.local/cxge/toolchains/llvm-mingw}"
   if [ -x "$LLVM_MINGW/bin/x86_64-w64-mingw32-clang" ]; then

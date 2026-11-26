@@ -20,6 +20,9 @@
 //   rosetta-cpu      engine patches     every game the row is on for  Rosetta's CPUID leaf 7, CLWB,
 //                    0017, 0019, 0020                     RDPID, faults and execution breakpoints
 //                                                         (Dr0-3) as copy protection expects them
+//   enumerator-name  -                  EA SPORTS FC 27 (4080220)  a device's enumerator name, which
+//                                       Wine 11.21 cannot answer and FC 27 1.0.143 asks at start
+//                                       (enumerator-name/)
 //   once-reentry     -                  every game the row is on for  a pthread_once a thread
 //                                       enters again from a suspend returns instead of ending the
 //                                       process (F1 25 under Swofty's offline play; once-reentry/)
@@ -55,6 +58,7 @@ void mgf_dualstack_ipv4_arm(const struct np_plugin_api *, const struct mach_head
 void mgf_rosetta_cpu_arm(const struct np_plugin_api *, const struct mach_header_64 *, intptr_t);
 void mgf_direct_syscall_arm(const struct np_plugin_api *, const struct mach_header_64 *, intptr_t);
 void mgf_once_reentry_arm(const struct np_plugin_api *, const struct mach_header_64 *, intptr_t);
+void mgf_enumerator_name_arm(const struct np_plugin_api *, const struct mach_header_64 *, intptr_t);
 void mgf_d3dmetal_hookable_start(void);
 
 // A fix either arms through ntdll.so (arm, when the host sees it) or starts by itself (start).
@@ -71,6 +75,7 @@ static const struct fix {
     {"rosetta-cpu", mgf_rosetta_cpu_arm, NULL, 0},  // every game: what engine patch 0020 did
     {"direct-syscall", mgf_direct_syscall_arm, NULL, 2483190},
     {"once-reentry", mgf_once_reentry_arm, NULL, 0},  // every game
+    {"enumerator-name", mgf_enumerator_name_arm, NULL, 4080220},
     {"d3dmetal-hookable", NULL, mgf_d3dmetal_hookable_start, 4080220},
 };
 #define COUNT (sizeof(FIXES) / sizeof(FIXES[0]))

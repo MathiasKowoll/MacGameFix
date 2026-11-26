@@ -328,10 +328,10 @@
           "symbol": null,
           "note": "Live Editor is the player's to provide: from MacGameFix's window the install asks for its folder with macOS's folder chooser, every time, which is also how a new version goes in.",
           "language": "bash",
-          "startLine": 196,
-          "endLine": 202,
-          "commit": "48ef994ccc7f968e36a83458ca31b7d76212a97b",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/48ef994ccc7f968e36a83458ca31b7d76212a97b/fixes/install-fc27-live-editor.sh#L196-L202",
+          "startLine": 202,
+          "endLine": 208,
+          "commit": "eedec1b39ee7f272d13a862e87ff44fade1267dc",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/eedec1b39ee7f272d13a862e87ff44fade1267dc/fixes/install-fc27-live-editor.sh#L202-L208",
           "code": "ask_folder() {\n  local prompt=\"Choose your FC 27 Live Editor folder: the one that holds Launcher.exe and FCLiveEditor.DLL.\"\n  editor_ok && prompt=\"$prompt Cancel keeps the Live Editor already in use.\"\n  if [ -n \"${MGVF_CHOOSER:-}\" ]; then \"$MGVF_CHOOSER\" \"$prompt\" 2>/dev/null || true; return 0; fi\n  /usr/bin/osascript -e 'on run argv' -e 'try' -e 'return POSIX path of (choose folder with prompt (item 1 of argv))' \\\n    -e 'on error' -e 'return \"\"' -e 'end try' -e 'end run' \"$prompt\" 2>/dev/null || true\n}"
         },
         {

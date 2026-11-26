@@ -20,7 +20,8 @@
 # the licence and starts EA AntiCheat's launcher. On a Mac with NotProton (2026-11-23, the
 # runner for CrossOver Preview 41303, Rosetta) the EA app and the licence work, and three
 # things were in the way of the game with Live Editor (github.com/xAranaktu/FC-27-Live-Editor,
-# an editor of players, teams and the career database that runs inside the game, offline):
+# an editor of players, teams and the career database that runs inside the game, offline),
+# and the title update of 2026-11-26 (1.0.143) brought a fourth:
 #
 #   1. The game imports FindPackagesByPackageFamily from kernel32, which Wine 11.21 lacks:
 #      "There is a problem with your game's setup. Please reinstall your game."
@@ -41,6 +42,11 @@
 #      hooks went in. MacGameFix's engine library, which NotProton loads into the game through
 #      the shared "Engine fixes" row, rewrites those starts in FC 27 alone
 #      (d3dmetal-hookable/mgf-d3dmetal-hookable.c).
+#   4. From 1.0.143 the game asks Windows the enumerator name of each input device's parent
+#      (CM_DRP_ENUMERATOR_NAME) when it sets its controllers up. Wine 11.21 cannot answer it
+#      and gives a length of 0, which the game takes for good: it wipes its own memory and
+#      stays at a black window, in its crash handler. The engine library answers the name in
+#      FC 27's process (engine/enumerator-name/mgf-enumerator-name.c).
 #
 # LIVE EDITOR IS THE PLAYER'S TO PROVIDE. It is not part of MacGameFix and nothing here
 # downloads it or looks for it: its author distributes it, and each version is made for one
