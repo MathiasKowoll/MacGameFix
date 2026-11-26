@@ -429,10 +429,10 @@
           "symbol": null,
           "note": "Swofty Launcher is the player's own download: the .zip, the unpacked folder or its swofty.exe. Whatever is given has to hold exactly one bin/swofty.exe with loader/ beside it, or nothing is changed.",
           "language": "bash",
-          "startLine": 298,
-          "endLine": 313,
-          "commit": "86a10f99f8baa601f1a2b8fd40a949dfd6525b8c",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/86a10f99f8baa601f1a2b8fd40a949dfd6525b8c/fixes/install-f125-swofty.sh#L298-L313",
+          "startLine": 335,
+          "endLine": 350,
+          "commit": "18042792441fc03c1605fcfd04e154747f310e74",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/18042792441fc03c1605fcfd04e154747f310e74/fixes/install-f125-swofty.sh#L335-L350",
           "code": "launcher_in() {  # <given> <work>\n  local from=\"$1\" work=\"$2\" found\n  case \"$from\" in\n  *.zip|*.ZIP)\n    mkdir -p \"$work/out\"\n    ditto -x -k \"$from\" \"$work/out\" || return 0\n    from=\"$work/out\" ;;\n  *.exe|*.EXE) from=\"$(dirname \"$(dirname \"$from\")\")\" ;;\n  esac\n  [ -d \"$from\" ] || return 0\n  found=\"$(find \"$from\" -maxdepth 3 -type f -path '*/bin/swofty.exe' 2>/dev/null)\"\n  [ \"$(printf '%s' \"$found\" | /usr/bin/grep -c .)\" = 1 ] || return 0\n  found=\"$(dirname \"$(dirname \"$found\")\")\"\n  [ -s \"$found/bin/swofty.exe\" ] && [ -d \"$found/loader\" ] && printf '%s\\n' \"$found\"\n  return 0\n}"
         },
         {
@@ -440,10 +440,10 @@
           "symbol": null,
           "note": "Swofty reads ActiveUser to see that Steam is signed in. NotProton's Steam stub does not write it, so the account comes from Steam's own loginusers.vdf.",
           "language": "bash",
-          "startLine": 203,
-          "endLine": 214,
-          "commit": "86a10f99f8baa601f1a2b8fd40a949dfd6525b8c",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/86a10f99f8baa601f1a2b8fd40a949dfd6525b8c/fixes/install-f125-swofty.sh#L203-L214",
+          "startLine": 240,
+          "endLine": 251,
+          "commit": "18042792441fc03c1605fcfd04e154747f310e74",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/18042792441fc03c1605fcfd04e154747f310e74/fixes/install-f125-swofty.sh#L240-L251",
           "code": "steam_account() {\n  [ -f \"$STEAM_LOGIN\" ] || return 1\n  /usr/bin/perl -e '\n    use strict; use warnings; local $/; my $s = <STDIN>; my (@ids, $recent);\n    while ($s =~ /\"(7656\\d{13})\"\\s*\\{([^{}]*)\\}/g) {\n      push @ids, $1; $recent = $1 if $2 =~ /\"MostRecent\"\\s+\"1\"/i;\n    }\n    $recent //= $ids[0] if @ids == 1;\n    exit 1 unless defined $recent;\n    print $recent - 76561197960265728, \"\\n\";\n  ' < \"$STEAM_LOGIN\"\n}"
         },
         {
@@ -453,8 +453,8 @@
           "language": "bash",
           "startLine": 34,
           "endLine": 39,
-          "commit": "86a10f99f8baa601f1a2b8fd40a949dfd6525b8c",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/86a10f99f8baa601f1a2b8fd40a949dfd6525b8c/fixes/f125-swofty-play.sh#L34-L39",
+          "commit": "18042792441fc03c1605fcfd04e154747f310e74",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/18042792441fc03c1605fcfd04e154747f310e74/fixes/f125-swofty-play.sh#L34-L39",
           "code": "app=\"${STEAM_COMPAT_APP_ID:-}\"\ncase \"$app\" in \"\"|*[!0-9]*) exec \"$@\" ;; esac\nswitch=\"${NOTPROTON_MGF_MODTOOL:-}\"; play=\"${NOTPROTON_MGF_PLAY:-game}\"; profile=\"${NOTPROTON_MGF_PROFILE:-active}\"\nopens=game; notes=off\ncase \"$play\" in window) opens=window ;; notes) notes=on ;; esac\n[ \"$switch\" = 1 ] || exec \"$@\""
         },
         {
@@ -462,10 +462,10 @@
           "symbol": null,
           "note": "Steam's Play hands NotProton EA AntiCheat's launcher; this hands it Swofty's command line instead, in the same prefix.",
           "language": "bash",
-          "startLine": 53,
-          "endLine": 68,
-          "commit": "86a10f99f8baa601f1a2b8fd40a949dfd6525b8c",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/86a10f99f8baa601f1a2b8fd40a949dfd6525b8c/fixes/f125-swofty-play.sh#L53-L68",
+          "startLine": 59,
+          "endLine": 74,
+          "commit": "18042792441fc03c1605fcfd04e154747f310e74",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/18042792441fc03c1605fcfd04e154747f310e74/fixes/f125-swofty-play.sh#L59-L74",
           "code": "# What f125-swofty-run.cmd reads. NOTPROTON_ENV_<NAME> is how NotProton hands a variable to the\n# game however it starts it; a plain variable does not survive every route.\n# Steam's own command for the game goes to Swofty after \"--\", as Steam on Windows hands it to a\n# launch option.\nexport NOTPROTON_ENV_F125_STEAM_COMMAND=\"$(windows \"$game\")\"\nif [ \"$opens\" = window ]; then\n  # The launcher's window draws to a plain window: Wine's DirectComposition gives it nothing.\n  export NOTPROTON_ENV_F125_OPENS=window NOTPROTON_ENV_GPUI_DISABLE_DIRECT_COMPOSITION=1\nfi\n# A profile's name goes to Swofty as it is; \"active\" is the row's word for none given.\ncase \"$profile\" in \"\"|active|*[!A-Za-z0-9._-]*) ;; *) export NOTPROTON_ENV_F125_PROFILE=\"$profile\" ;; esac\n# The two settings every session played so far had (CrossOver bottle and NotProton, 2026-11-23).\nexport NOTPROTON_ENV_SWOFTY_ARM_SYNC=\"${SWOFTY_ARM_SYNC:-1}\" NOTPROTON_ENV_SWOFTY_RTAS_GUARD=\"${SWOFTY_RTAS_GUARD:-0}\"\n# NotProton's Steam stub starts a program by name or Windows path, not a .cmd by its unix path.\n[ \"$notes\" != on ] || export WINEDEBUG=\"err+all,fixme-all,+seh,+timestamp,+pid\"\nexec \"$tool\" \"$verb\" cmd.exe /d /c call \"$(windows \"$here/f125-swofty-run.cmd\")\""
         },
         {
@@ -1667,10 +1667,10 @@
           "symbol": null,
           "note": "Ten values, for PBZ.exe only: the CPUID bits the Wine modules' ntdll adds when asked, Microsoft's Visual C++ runtime loaded before Wine's, and the H.264 decoder below loaded native.",
           "language": "bash",
-          "startLine": 201,
-          "endLine": 207,
-          "commit": "582b7db5448f2081e94c31484be614199428d8eb",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/582b7db5448f2081e94c31484be614199428d8eb/fixes/install-pbz-fix.sh#L201-L207",
+          "startLine": 230,
+          "endLine": 236,
+          "commit": "7c8f2724b4f42697b667de86d24bf48df83dcb3b",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/7c8f2724b4f42697b667de86d24bf48df83dcb3b/fixes/install-pbz-fix.sh#L230-L236",
           "code": "values() {\n  printf '%s|%s|%s\\n' \"$ENV_KEY\" \"$CPUID_NAME\" \"$CPUID_DATA\"\n  local d\n  for d in $DLLS; do printf '%s|*%s|native,builtin\\n' \"$DLL_KEY\" \"$d\"; done\n  # native,builtin: should the prefix lose our file, CrossOver's decoder loads.\n  printf '%s|*msmpeg2vdec|native,builtin\\n' \"$DLL_KEY\"\n}"
         },
         {
@@ -1700,10 +1700,10 @@
           "symbol": null,
           "note": "In a NotProton prefix: the signed plugin renamed into NotProton's plugins folder, a descriptor only when none names its id, and the switch in front of PBZ's own launch options.",
           "language": "bash",
-          "startLine": 260,
-          "endLine": 285,
-          "commit": "582b7db5448f2081e94c31484be614199428d8eb",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/582b7db5448f2081e94c31484be614199428d8eb/fixes/install-pbz-fix.sh#L260-L285",
+          "startLine": 289,
+          "endLine": 314,
+          "commit": "7c8f2724b4f42697b667de86d24bf48df83dcb3b",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/7c8f2724b4f42697b667de86d24bf48df83dcb3b/fixes/install-pbz-fix.sh#L289-L314",
           "code": "cache_install() {\n  mkdir -p \"$PLUGINS\"\n  # The library is renamed into place, so a game still running keeps the one it loaded.\n  if ! cmp -s \"$CACHE_LIVE\" \"$CACHE_LIB\"; then\n    if [ -f \"$CACHE_LIVE\" ] && ! cache_lib_ours; then\n      echo \"error: $CACHE_LIVE is a different library; it was not touched.\" >&2\n      return 1\n    fi\n    cp -p \"$CACHE_LIB\" \"$CACHE_LIVE.mgf-new\" && mv -f \"$CACHE_LIVE.mgf-new\" \"$CACHE_LIVE\"\n  fi\n  # One the user wrote stays: NotProton refuses a second descriptor for the same id.\n  if ! /usr/bin/grep -lqx \"\\[$CACHE_ID\\]\" \"$PLUGINS\"/*.conf 2>/dev/null; then\n    cat > \"$CACHE_CONF.mgf-new\" <<CONF\n[$CACHE_ID]\nlabel = Rosetta pipeline cache\ndescription = Keeps the GPU code of the pipelines D3DMetal compiles in a Rosetta game, beyond Metal's 1.1 GB cache\nsection = dev\non = 1\ninject = 1\nrequires = Library/Application Support/notproton/plugins/notproton-rosetta-pipeline-cache.dylib\nCONF\n    mv -f \"$CACHE_CONF.mgf-new\" \"$CACHE_CONF\"\n  fi\n  cache_options install >/dev/null\n  echo \"  pipeline cache: plugin in NotProton's plugins folder, $CACHE_ID=1 in PBZ's launch options\"\n}"
         }
       ],
