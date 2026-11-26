@@ -82,14 +82,6 @@ changes reach a game that is running:
 |---|---|---|
 | `0014-winebus-trigger-replace-and-live-settings.patch` | `winebus.so` | With `trigger_r2_replace=on` or `trigger_l2_replace=on` and an effect chosen for that trigger, the game's effects on it are rewritten: an effect the game turns on becomes the chosen one (or its second, while the other trigger is held), and one it turns off stays off; a `rumble` or `recoil` effect follows the motors while the game's is on. Until the game writes an effect on that trigger the chosen one applies as without the option, so a game that sets none is not changed. While a pad sends input, `pad.d/<game>.conf` and `pad.conf` are looked at once a second (their modification times), and when either changed every line is read again: the trigger effects are put on the pad at once, a trigger whose effect was ours and is now off is released, a trigger the game had taken follows the new choice until the game writes again, and the marker file follows. |
 
-With `diagnostics=on` the input rate filled most of the log: a line every 2 s
-for each pad, 9,589 of 21,889 lines on 2026-10-23. One more patch says it once a
-minute:
-
-| Patch | Module | Change |
-|---|---|---|
-| `0015-winebus-input-rate-once-a-minute.patch` | `winebus.so` | The pad's input reports are still counted in windows of 2 s, but said once a minute: the reports, the average rate, the lowest and highest window, and the longest gap between two. A window is still said at once when it is the pad's first (the app reads a session's connection from it) or when it has a gap of 100 ms or more. |
-
 Over Bluetooth the writer took the motors from any game report with a rumble flag,
 and a report with 0x02 alone (stay in the rumble mode) carries no motor values.
 One more patch reads the flags the way the pad does on a cable:
@@ -97,6 +89,16 @@ One more patch reads the flags the way the pad does on a cable:
 | Patch | Module | Change |
 |---|---|---|
 | `0016-winebus-rumble-flag-0x02-keeps-the-motors.patch` | `winebus.so` | A game report sets the motors over Bluetooth only with 0x01 of the first flag byte (or the improved emulation's 0x04 of byte 39); with 0x02 alone the pad keeps rumbling with the values it has; with neither the emulated rumble ends, as before. Grand Theft Auto V Enhanced rumbles with 0x03 and updates its lights and triggers with 0x02 and the motors at 0: on a cable it vibrates, and over Bluetooth every rumble stopped within a few milliseconds (2026-10-26). The log's motor rises and falls, and the trigger effects that follow the motors, read the flags the same way. |
+
+`winebus.so` and `winecoreaudio.so` share one header, `include/wine/mgf_pad.h`
+(added by `0004`): the log, Game Feel's settings files, the game id, the clock,
+the real-time thread and the Bluetooth pads' socket. What only `diagnostics=on`
+says is in a patch of its own, the series' last, so the patches before it hold
+only what a game needs:
+
+| Patch | Module | Change |
+|---|---|---|
+| `0042-controls-diagnostics.patch` | `winebus.so`, `winecoreaudio.so` | With `diagnostics=on`: the pad's input rate (in 2 s windows, said once a minute and at once for a gap of 100 ms or more), when the game's motors rise and fall, each shape of what a game writes, the feature reports it reads and sets, the motor power it sets, the Bluetooth haptics' queue and delay, the haptics' level, and what a game asks of the haptics output and keeps waiting in it. The `observed:` lines MacGameFix reads back are not part of it. |
 
 With `xinput=pad`, `0006` puts the two haptics collections inside the pad's own
 top-level collection instead, so `0007` offers the pad itself to `xinput`, which
@@ -238,7 +240,7 @@ read from their code, not played).
 | `rumble=haptics` | Over Bluetooth, the game's motor values played on the actuators while it plays no haptics of its own: the heavy motor a 65 Hz tone on the left, the light one 160 Hz on the right, ramped per 64-frame block, at the haptics' strength over Bluetooth (`haptics_gain_bluetooth`, `edge_haptics_gain_bluetooth`) up to full scale; at 1× NotProton's bridge synthesizer, sample for sample in a host test. On a cable the pad's own rumble plays. Off (`motors`) by default. |
 | `trigger_r2_with_l2=<effect>[@1-8]`, `trigger_l2_with_r2=<effect>[@1-8]` | A second effect for a trigger while the other is pressed (from 40 of 255, released under 20, read from the pad's input): a weapon on R2 while L2 aims. `off`, the default, keeps the first. |
 | `trigger_r2_replace=on`, `trigger_l2_replace=on` | The chosen effect in place of the game's own, on the game's timing: on while the game's is on, off while it is off (`0014`). Without an effect chosen for that trigger the game's own goes through. `off`, the default, leaves a trigger to a game that sets an effect. |
-| `diagnostics=on` | What a game writes to the pad and reads from it, and a level meter of its haptics, in the log; the pad's input rate once a minute, and at once for a gap of 100 ms or more (`0015`). |
+| `diagnostics=on` | What a game writes to the pad and reads from it, and a level meter of its haptics, in the log; the pad's input rate once a minute, and at once for a gap of 100 ms or more (`0042`). |
 
 The modules log to `/tmp/macgamefix-<uid>/pad.log`, each line naming its game;
 what a game was seen to do (haptics, motors, trigger effects, motor power,

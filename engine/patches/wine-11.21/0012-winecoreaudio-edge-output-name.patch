@@ -1,37 +1,6 @@
 --- a/dlls/winecoreaudio.drv/dualsense_bt.h
 +++ b/dlls/winecoreaudio.drv/dualsense_bt.h
-@@ -116,12 +116,10 @@
-     pthread_mutex_unlock(&lock);
- }
- 
--/* The game this process runs for: the Steam app id Steam and NotProton give a
-+/* The game as winebus.so knows it: the Steam app id Steam and NotProton give a
-  * game (SteamAppId, SteamGameId, STEAM_COMPAT_APP_ID), else the one in a Steam
-- * Play prefix's path, compatdata/<id>/pfx, else in a CrossOver bottle the one
-- * of its exe. winebus.so's has the first two; it runs in winedevice.exe, which
-- * is no game. */
--static void pad_game(char *id, size_t size)
-+ * Play prefix's path, compatdata/<id>/pfx. Empty in a CrossOver bottle. */
-+static void pad_game_as_winebus(char *id, size_t size)
- {
-     static const char *const names[] = {"SteamAppId", "SteamGameId", "STEAM_COMPAT_APP_ID"};
-     const char *v;
-@@ -141,6 +139,14 @@
-         n = strspn(v, "0123456789");
-         if (n && n < size && !strncmp(v + n, "/pfx", 4)) snprintf(id, size, "%.*s", (int)n, v);
-     }
-+}
-+
-+/* The game this process runs for: as winebus.so knows it, else in a CrossOver
-+ * bottle the one of its exe. winebus.so has no exe to go by: it runs in
-+ * winedevice.exe, which is no game. */
-+static void pad_game(char *id, size_t size)
-+{
-+    pad_game_as_winebus(id, size);
-     if (!id[0]) pad_game_by_exe(id, size);
- }
- 
-@@ -174,9 +180,9 @@
+@@ -144,15 +144,14 @@
   * applies from the next one: pad.d/<app id>.conf for this game, then pad.conf
   * for every game, in ~/Library/Application Support/MacGameFix; the first line
   * with the key wins. Copies the value into value; empty when no line has it. */
@@ -40,18 +9,16 @@
  {
 -    char path[1024], line[128], game[24];
 +    char path[1024], line[128];
-     const char *home = getenv("HOME");
      size_t length = strlen(key);
      int pass;
-@@ -184,7 +190,6 @@
+     FILE *f;
  
      value[0] = 0;
-     if (!home) return;
 -    pad_game(game, sizeof(game));
      for (pass = 0; pass < 2; pass++)
      {
-         if (pass == 0 && !game[0]) continue;
-@@ -205,6 +210,14 @@
+         if (!mgf_pad_conf(game, pass, path, sizeof(path)) || !(f = fopen(path, "r"))) continue;
+@@ -168,6 +167,14 @@
      }
  }
  
@@ -63,10 +30,10 @@
 +    mgf_value_for(game, key, value, size);
 +}
 +
- static void mgf_dir(char *dir, size_t size)
- {
-     snprintf(dir, size, "/tmp/macgamefix-%u", (unsigned int)getuid());
-@@ -358,6 +371,34 @@
+ /* A socket is live when winebus.so is bound to it: connecting to one left by a
+  * process that is gone is refused. */
+ static BOOL mgf_socket_live(const char *path)
+@@ -316,6 +323,34 @@
      return kAudioHardwareUnknownPropertyError;
  }
  
@@ -90,7 +57,7 @@
 +    BOOL edge;
 +
 +    if (!mgf_wired_pad(id, &edge) || !edge) return FALSE;
-+    pad_game_as_winebus(game, sizeof(game));
++    mgf_pad_steam_game(game, sizeof(game));
 +    mgf_value_for(game, "edge", value, sizeof(value));
 +    if (strcmp(value, "dualsense")) return FALSE;
 +    if (!__atomic_exchange_n(&logged, 1, __ATOMIC_RELAXED))
@@ -101,7 +68,7 @@
  static OSStatus mgf_AudioObjectGetPropertyDataSize(AudioObjectID id, const AudioObjectPropertyAddress *addr,
                                                     UInt32 qsize, const void *q, UInt32 *size)
  {
-@@ -419,6 +460,16 @@
+@@ -377,6 +412,16 @@
          *size = sizeof(UInt32);
          return noErr;
      }
