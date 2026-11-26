@@ -127,8 +127,10 @@ done
 # (fixes/engine/mgf-engine.c: 0017 to 0021, 0026 to 0029, 0038 and 0041), and F1 25, EA SPORTS FC 27,
 # Forza Horizon 6, Phantom Blade Zero, STAR WARS: Galactic Racer and Persona 4 Golden were played on
 # NotProton's ntdll with CodeWeavers' kernel32 and kernelbase (2026-11-25). Left out: 2XKO's 0032 to
-# 0036, which never made that game start. Red Dead Online's 0037 comes from NotProton's Red Dead Online
-# fix row (app/notproton-plugins/plugins/tcp-noopt.c), which RDR2's fix switches on. dwrite.dll and
+# 0036, which never made that game start; 0033's win32u.so goes to Red Dead Redemption 2 alone, for the
+# Rockstar Games Launcher's window, as a runner variant its fix writes. Red Dead Online's 0037 comes
+# from NotProton's Red Dead Online fix row (app/notproton-plugins/plugins/tcp-noopt.c), which RDR2's
+# fix switches on. dwrite.dll and
 # directmanipulation.dll (0039, 0040, Swofty Launcher's window) go to F1 25 alone, as a NotProton
 # runner variant its fix writes (fixes/install-f125-swofty.sh).
 # A CrossOver app keeps every module, and so does the FEX side. One put in before is retired: the
