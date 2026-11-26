@@ -1,0 +1,866 @@
+// The winecoreaudio part: CodeWeavers' own winecoreaudio.so, the DualSense's audio as engine
+// patches 0002, 0005 and 0012 made it, from outside the file.
+//
+// On a cable, macOS shows a DualSense as a 4-channel USB audio output, and games play the pad's
+// haptics on its channels 3 and 4. On Bluetooth there is no such output. The winebus part, which
+// shows the Bluetooth pad to games as the wired one, opens a socket for each such pad in
+// /tmp/macgamefix-<uid>/, named pad-<location>-<product shown>-<product it is>.sock. For each live
+// socket, this part adds an output to the devices CoreAudio lists, with the UID the wired pad's
+// output would have, "AppleUSBAudioEngine:Sony Interactive Entertainment:<product>:<location>:1",
+// so that it gets the pad's container. It plays that output itself: a thread pulls the stream
+// through Wine's own render callback at the device period, takes channels 3 and 4, filters them
+// down to the pad's 3 kHz and sends them to the writer in the winebus part, which carries them to
+// the pad.
+//
+// A gain reaches a DualSense on a cable too (haptics_gain_cable in pad.conf): its real output's
+// render callback is wrapped, and channels 3 and 4 are amplified in the buffer before CoreAudio
+// plays it.
+//
+// winecoreaudio.so's CoreAudio imports are taken (the hook_ functions below); a call about anything
+// other than these outputs goes to CoreAudio unchanged. The container of a USB audio endpoint
+// (0002) is answered by taking the entry of get_prop_value in the library's Unix call table.
+//
+// Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <dirent.h>
+#include <dlfcn.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <mach-o/loader.h>
+#include <CoreAudio/CoreAudio.h>
+#include <AudioToolbox/AudioToolbox.h>
+#include "pad.h"
+#include "../../app/notproton-plugins/notproton_plugin.h"
+
+#define COUNT_OF(a) (sizeof(a) / sizeof((a)[0]))
+
+#define MGF_MAX_PADS     4
+#define MGF_DEVICE_BASE  0x4d470100u
+#define MGF_STREAM_BASE  0x4d470200u
+#define MGF_TAPS         257
+#define MGF_PAD_RATE     3000
+
+struct mgf_pad
+{
+    unsigned int location, pid, physical;  /* the product shown to the game, and the pad's own */
+    char uid[160], name[64], model[80], socket[104];
+    UInt32 period;
+    Float32 volume[9];  /* element 0 is the master */
+    bool live;
+};
+
+struct mgf_unit
+{
+    struct mgf_unit *next;
+    AudioComponentInstance unit;
+    int pad;
+    bool wired;  /* a DualSense's real output on a cable, played by CoreAudio */
+    float gain;
+    AURenderCallbackStruct callback;
+    AudioStreamBasicDescription format;
+    bool have_format, running, quit;
+    pthread_t thread;
+    int fd;
+    /* A 257-tap windowed-sinc filter, cut at 1.2 kHz, for the pad's 3 kHz. */
+    float taps[MGF_TAPS], history[MGF_TAPS][2];
+    unsigned int at;
+    double phase;
+};
+
+static pthread_mutex_t mgf_lock = PTHREAD_MUTEX_INITIALIZER;
+static struct mgf_pad mgf_pads[MGF_MAX_PADS];
+static struct mgf_unit *mgf_units;
+/* MacGameFix's settings for the pad, read each time a stream starts, so a change
+ * applies from the next one: pad.d/<app id>.conf for this game, then pad.conf
+ * for every game, in ~/Library/Application Support/MacGameFix; the first line
+ * with the key wins. Copies the value into value; empty when no line has it. */
+static void mgf_value_for(const char *game, const char *key, char *value, size_t size)
+{
+    char path[1024], line[128];
+    size_t length = strlen(key);
+    int pass;
+    FILE *f;
+
+    value[0] = 0;
+    for (pass = 0; pass < 2; pass++)
+    {
+        if (!pad_conf(game, pass, path, sizeof(path)) || !(f = fopen(path, "r"))) continue;
+        while (fgets(line, sizeof(line), f))
+        {
+            line[strcspn(line, "\r\n")] = 0;
+            if (strncmp(line, key, length) || line[length] != '=') continue;
+            snprintf(value, size, "%s", line + length + 1);
+            fclose(f);
+            return;
+        }
+        fclose(f);
+    }
+}
+
+static void mgf_value(const char *key, char *value, size_t size)
+{
+    char game[24];
+
+    pad_game(game, sizeof(game));
+    mgf_value_for(game, key, value, size);
+}
+
+/* A socket is live when winebus.so is bound to it: connecting to one left by a
+ * process that is gone is refused. */
+static bool mgf_socket_live(const char *path)
+{
+    struct sockaddr_un addr = {.sun_family = AF_UNIX};
+    int fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+    bool live;
+
+    if (fd < 0) return false;
+    snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", path);
+    live = !connect(fd, (struct sockaddr *)&addr, sizeof(addr));
+    close(fd);
+    return live;
+}
+
+/* Looks at the sockets again. A pad keeps its slot, and so its object ID, for
+ * as long as this process lives. */
+static void mgf_scan(void)
+{
+    char dir[64], path[104];
+    struct dirent *entry;
+    unsigned int location, pid, physical, i;
+    DIR *d;
+
+    pthread_mutex_lock(&mgf_lock);
+    for (i = 0; i < MGF_MAX_PADS; i++) mgf_pads[i].live = false;
+    pad_dir(dir, sizeof(dir));
+    if ((d = opendir(dir)))
+    {
+        while ((entry = readdir(d)))
+        {
+            struct mgf_pad *pad = NULL;
+            const char *product;
+
+            if (sscanf(entry->d_name, PAD_SOCKET_SCAN, &location, &pid, &physical) != 3) continue;
+            snprintf(path, sizeof(path), "%s/%s", dir, entry->d_name);
+            if (!mgf_socket_live(path)) continue;
+            for (i = 0; i < MGF_MAX_PADS && !pad; i++)
+                if (mgf_pads[i].location == location && mgf_pads[i].pid == pid) pad = &mgf_pads[i];
+            for (i = 0; i < MGF_MAX_PADS && !pad; i++)
+                if (!mgf_pads[i].location) pad = &mgf_pads[i];
+            if (!pad) continue;
+            product = pid == DS_EDGE_PID ? "DualSense Edge Wireless Controller" : "DualSense Wireless Controller";
+            if (!pad->location)
+            {
+                pad->location = location;
+                pad->pid = pid;
+                pad->physical = physical;
+                pad->period = 480;
+                for (i = 0; i < 9; i++) pad->volume[i] = 1.0f;
+            }
+            snprintf(pad->uid, sizeof(pad->uid), "AppleUSBAudioEngine:Sony Interactive Entertainment:%s:%x:1",
+                     product, location);
+            snprintf(pad->name, sizeof(pad->name), "%s", product);
+            snprintf(pad->model, sizeof(pad->model), "%s:054C:%04X", product, pid);
+            snprintf(pad->socket, sizeof(pad->socket), "%s", path);
+            pad->live = true;
+        }
+        closedir(d);
+    }
+    pthread_mutex_unlock(&mgf_lock);
+}
+
+static struct mgf_pad *mgf_pad_of(AudioObjectID id)
+{
+    if (id < MGF_DEVICE_BASE || id >= MGF_DEVICE_BASE + MGF_MAX_PADS) return NULL;
+    return &mgf_pads[id - MGF_DEVICE_BASE];
+}
+
+static bool mgf_is_stream(AudioObjectID id)
+{
+    return id >= MGF_STREAM_BASE && id < MGF_STREAM_BASE + MGF_MAX_PADS;
+}
+
+static unsigned int mgf_live_count(void)
+{
+    unsigned int i, n = 0;
+    for (i = 0; i < MGF_MAX_PADS; i++) if (mgf_pads[i].live) n++;
+    return n;
+}
+
+static OSStatus mgf_device_property(struct mgf_pad *pad, const AudioObjectPropertyAddress *addr,
+                                    UInt32 *size, void *data)
+{
+    bool output = addr->mScope != kAudioDevicePropertyScopeInput;
+    unsigned int index = pad - mgf_pads;
+
+    switch (addr->mSelector)
+    {
+    case kAudioDevicePropertyStreamConfiguration:
+        if (!data) { *size = sizeof(AudioBufferList); return noErr; }
+        if (*size < sizeof(AudioBufferList)) return kAudioHardwareBadPropertySizeError;
+        {
+            AudioBufferList *list = data;
+            list->mNumberBuffers = output ? 1 : 0;
+            list->mBuffers[0].mNumberChannels = 4;
+            list->mBuffers[0].mDataByteSize = 0;
+            list->mBuffers[0].mData = NULL;
+        }
+        *size = sizeof(AudioBufferList);
+        return noErr;
+    case kAudioObjectPropertyName:
+    case kAudioDevicePropertyDeviceUID:
+    case kAudioDevicePropertyModelUID:
+        if (!data) { *size = sizeof(CFStringRef); return noErr; }
+        if (*size < sizeof(CFStringRef)) return kAudioHardwareBadPropertySizeError;
+        *(CFStringRef *)data = CFStringCreateWithCString(NULL,
+            addr->mSelector == kAudioObjectPropertyName ? pad->name :
+            addr->mSelector == kAudioDevicePropertyDeviceUID ? pad->uid : pad->model, kCFStringEncodingUTF8);
+        *size = sizeof(CFStringRef);
+        return noErr;
+    case kAudioDevicePropertyTransportType:
+        if (!data) { *size = sizeof(UInt32); return noErr; }
+        *(UInt32 *)data = kAudioDeviceTransportTypeUSB;
+        *size = sizeof(UInt32);
+        return noErr;
+    case kAudioDevicePropertyBufferFrameSizeRange:
+        if (!data) { *size = sizeof(AudioValueRange); return noErr; }
+        ((AudioValueRange *)data)->mMinimum = 32;
+        ((AudioValueRange *)data)->mMaximum = 4096;
+        *size = sizeof(AudioValueRange);
+        return noErr;
+    case kAudioDevicePropertyBufferFrameSize:
+        if (!data) { *size = sizeof(UInt32); return noErr; }
+        *(UInt32 *)data = pad->period;
+        *size = sizeof(UInt32);
+        return noErr;
+    case kAudioDevicePropertyNominalSampleRate:
+        if (!data) { *size = sizeof(Float64); return noErr; }
+        *(Float64 *)data = 48000;
+        *size = sizeof(Float64);
+        return noErr;
+    case kAudioDevicePropertyStreams:
+        if (!data) { *size = output ? sizeof(AudioStreamID) : 0; return noErr; }
+        if (output) *(AudioStreamID *)data = MGF_STREAM_BASE + index;
+        *size = output ? sizeof(AudioStreamID) : 0;
+        return noErr;
+    case kAudioDevicePropertyLatency:
+        if (!data) { *size = sizeof(UInt32); return noErr; }
+        *(UInt32 *)data = 0;
+        *size = sizeof(UInt32);
+        return noErr;
+    }
+    /* No preferred layout, so Wine counts the four channels and calls them quad,
+     * as Windows has the wired pad. */
+    return kAudioHardwareUnknownPropertyError;
+}
+
+static bool mgf_wired_pad(AudioDeviceID device, bool *edge);
+
+/* An Edge shown to the game as a standard DualSense (edge=dualsense) is one on a
+ * cable as well: its audio device, output and microphone, has the DualSense's
+ * name and product id there too, as a Bluetooth pad's output has from mgf_scan.
+ * A game can look for the pad's output by its name: under NotProton's bridge
+ * NINJA GAIDEN 4 read every output's name and vibrated, the bridge's output
+ * being "DualSense Wireless Controller (Bluetooth Bridge)", a text the macOS
+ * name of an Edge's, "DualSense Edge Wireless Controller", does not hold.
+ * The setting is read for the game as winebus.so knows it, so that both show
+ * the same pad and every process of a prefix writes mmdevapi the same name; it
+ * is read when a process lists its audio devices, winebus.so's when
+ * winedevice.exe starts. */
+static bool mgf_edge_as_dualsense(AudioObjectID id)
+{
+    static int logged;
+    char value[16], game[24];
+    bool edge;
+
+    if (!mgf_wired_pad(id, &edge) || !edge) return false;
+    pad_game(game, sizeof(game));
+    mgf_value_for(game, "edge", value, sizeof(value));
+    if (strcmp(value, "dualsense")) return false;
+    if (!__atomic_exchange_n(&logged, 1, __ATOMIC_RELAXED))
+        pad_log("the wired DualSense Edge's audio device is named as a DualSense's (edge=dualsense)\n");
+    return true;
+}
+
+static OSStatus hook_AudioObjectGetPropertyDataSize(AudioObjectID id, const AudioObjectPropertyAddress *addr,
+                                                   UInt32 qsize, const void *q, UInt32 *size)
+{
+    struct mgf_pad *pad;
+    OSStatus sc;
+
+    if (id == kAudioObjectSystemObject && addr->mSelector == kAudioHardwarePropertyDevices)
+    {
+        mgf_scan();
+        if ((sc = AudioObjectGetPropertyDataSize(id, addr, qsize, q, size))) return sc;
+        *size += mgf_live_count() * sizeof(AudioObjectID);
+        return noErr;
+    }
+    if ((pad = mgf_pad_of(id))) return mgf_device_property(pad, addr, size, NULL);
+    if (mgf_is_stream(id)) { *size = sizeof(UInt32); return noErr; }
+    return AudioObjectGetPropertyDataSize(id, addr, qsize, q, size);
+}
+
+static OSStatus hook_AudioObjectGetPropertyData(AudioObjectID id, const AudioObjectPropertyAddress *addr,
+                                               UInt32 qsize, const void *q, UInt32 *size, void *data)
+{
+    struct mgf_pad *pad;
+    unsigned int i;
+    OSStatus sc;
+
+    if (id == kAudioObjectSystemObject && addr->mSelector == kAudioHardwarePropertyDevices)
+    {
+        UInt32 room = *size;
+
+        if ((sc = AudioObjectGetPropertyData(id, addr, qsize, q, size, data))) return sc;
+        for (i = 0; i < MGF_MAX_PADS; i++)
+        {
+            if (!mgf_pads[i].live || *size + sizeof(AudioObjectID) > room) continue;
+            ((AudioObjectID *)data)[*size / sizeof(AudioObjectID)] = MGF_DEVICE_BASE + i;
+            *size += sizeof(AudioObjectID);
+        }
+        return noErr;
+    }
+    if (id == kAudioObjectSystemObject && addr->mSelector == kAudioHardwarePropertyTranslateUIDToDevice &&
+        q && qsize == sizeof(CFStringRef))
+    {
+        char uid[160];
+
+        if (CFStringGetCString(*(CFStringRef *)q, uid, sizeof(uid), kCFStringEncodingUTF8))
+        {
+            for (i = 0; i < MGF_MAX_PADS; i++)
+            {
+                if (!mgf_pads[i].location || strcmp(uid, mgf_pads[i].uid)) continue;
+                *(AudioObjectID *)data = MGF_DEVICE_BASE + i;
+                *size = sizeof(AudioObjectID);
+                return noErr;
+            }
+        }
+    }
+    if ((pad = mgf_pad_of(id))) return mgf_device_property(pad, addr, size, data);
+    if (mgf_is_stream(id))
+    {
+        *(UInt32 *)data = 0;  /* kAudioStreamPropertyLatency, the only one asked */
+        *size = sizeof(UInt32);
+        return noErr;
+    }
+    if ((addr->mSelector == kAudioObjectPropertyName || addr->mSelector == kAudioDevicePropertyModelUID) &&
+        *size >= sizeof(CFStringRef) && mgf_edge_as_dualsense(id))
+    {
+        /* The caller releases it, as it would CoreAudio's. The model's ids make
+         * the endpoint's instance id, as for a Bluetooth pad's output. */
+        *(CFStringRef *)data = CFStringCreateWithCString(NULL, addr->mSelector == kAudioObjectPropertyName ?
+                "DualSense Wireless Controller" : "DualSense Wireless Controller:054C:0CE6", kCFStringEncodingUTF8);
+        *size = sizeof(CFStringRef);
+        return noErr;
+    }
+    return AudioObjectGetPropertyData(id, addr, qsize, q, size, data);
+}
+
+static OSStatus hook_AudioObjectSetPropertyData(AudioObjectID id, const AudioObjectPropertyAddress *addr,
+                                               UInt32 qsize, const void *q, UInt32 size, const void *data)
+{
+    struct mgf_pad *pad;
+
+    if (!(pad = mgf_pad_of(id))) return AudioObjectSetPropertyData(id, addr, qsize, q, size, data);
+    if (addr->mSelector == kAudioDevicePropertyBufferFrameSize && size == sizeof(UInt32))
+    {
+        pad->period = *(const UInt32 *)data;
+        return noErr;
+    }
+    if (addr->mSelector == kAudioDevicePropertyVolumeScalar && size == sizeof(Float32) && addr->mElement < 9)
+    {
+        pad->volume[addr->mElement] = *(const Float32 *)data;
+        return noErr;
+    }
+    return kAudioHardwareUnknownPropertyError;
+}
+
+static struct mgf_unit *mgf_unit_of(AudioComponentInstance unit)
+{
+    struct mgf_unit *u;
+
+    pthread_mutex_lock(&mgf_lock);
+    for (u = mgf_units; u && u->unit != unit; u = u->next);
+    pthread_mutex_unlock(&mgf_lock);
+    return u;
+}
+
+static float mgf_sample(const struct mgf_unit *u, const uint8_t *frame, unsigned int channel)
+{
+    const AudioStreamBasicDescription *f = &u->format;
+    unsigned int bytes = f->mBitsPerChannel / 8;
+    const uint8_t *p = frame + channel * bytes;
+
+    if (f->mFormatFlags & kAudioFormatFlagIsFloat) return bytes == 8 ? *(const double *)p : *(const float *)p;
+    switch (bytes)
+    {
+    case 2: return *(const int16_t *)p / 32768.0f;
+    case 3: return (int32_t)((uint32_t)p[0] << 8 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 24) / 2147483648.0f;
+    case 4: return *(const int32_t *)p / 2147483648.0f;
+    }
+    return 0;
+}
+
+/* One input frame of channels 3 and 4 into the filter; a 3 kHz frame out when
+ * one is due. */
+static bool mgf_resample(struct mgf_unit *u, float left, float right, signed char out[2])
+{
+    double a = 0, b = 0;
+    unsigned int k, at;
+
+    u->history[u->at][0] = isfinite(left) ? left : 0;
+    u->history[u->at][1] = isfinite(right) ? right : 0;
+    u->at = (u->at + 1) % MGF_TAPS;
+    u->phase += MGF_PAD_RATE;
+    if (u->phase + 1e-6 < u->format.mSampleRate) return false;
+    u->phase -= u->format.mSampleRate;
+    for (k = 0, at = u->at; k < MGF_TAPS; k++)
+    {
+        at = (at + MGF_TAPS - 1) % MGF_TAPS;
+        a += u->taps[k] * u->history[at][0];
+        b += u->taps[k] * u->history[at][1];
+    }
+    out[0] = (signed char)lrint(fmax(-128, fmin(127, a * 127)));
+    out[1] = (signed char)lrint(fmax(-128, fmin(127, b * 127)));
+    return true;
+}
+
+static void mgf_filter_init(struct mgf_unit *u)
+{
+    double sum = 0, cut = 1200 / u->format.mSampleRate;
+    unsigned int i;
+
+    for (i = 0; i < MGF_TAPS; i++)
+    {
+        double x = (double)i - (MGF_TAPS - 1) / 2;
+        u->taps[i] = (x ? sin(2 * M_PI * cut * x) / (M_PI * x) : 2 * cut) *
+                     (0.5 - 0.5 * cos(2 * M_PI * i / (MGF_TAPS - 1)));
+        sum += u->taps[i];
+    }
+    for (i = 0; i < MGF_TAPS; i++) u->taps[i] /= sum;
+    memset(u->history, 0, sizeof(u->history));
+    u->at = 0;
+    u->phase = 0;
+}
+
+/* The gain on the haptics, per pad and per connection, 1 to 4:
+ * haptics_gain_cable and haptics_gain_bluetooth for a DualSense,
+ * edge_haptics_gain_cable and edge_haptics_gain_bluetooth for a DualSense Edge.
+ * An older file's haptics_gain or edge_haptics_gain counts for both. Measured:
+ * an Edge left at its own power needed 2 to feel like a DualSense in Spider-Man
+ * 2; a DualSense over Bluetooth felt the same as on a cable at 1 in Spider-Man 2,
+ * and needed 2 in F1 23 to feel as steady as at 1 on a cable. */
+static float mgf_gain(bool edge, bool bluetooth)
+{
+    char key[32], value[32];
+    float gain;
+
+    snprintf(key, sizeof(key), "%shaptics_gain_%s", edge ? "edge_" : "", bluetooth ? "bluetooth" : "cable");
+    mgf_value(key, value, sizeof(value));
+    if (!value[0]) mgf_value(edge ? "edge_haptics_gain" : "haptics_gain", value, sizeof(value));
+    gain = value[0] ? pad_number(value) : 1;
+    return isfinite(gain) ? fmaxf(1, fminf(4, gain)) : 1;
+}
+
+/* Gain with a soft limit: up to 0.8 it is linear, above it a curve that never
+ * passes 1.0, so the strongest hits are not cut flat. */
+static float mgf_amplify(float x, float gain)
+{
+    float y = x * gain, a = fabsf(y);
+
+    if (gain == 1 || a <= 0.8f) return y;
+    return copysignf(0.8f + 0.2f * tanhf((a - 0.8f) / 0.2f), y);
+}
+
+/* The output's clock: Wine's render callback at the device period, on a
+ * thread with an audio deadline (a plain sleep is coalesced by up to 100 ms
+ * while another app holds Game Mode). */
+static void *mgf_render(void *arg)
+{
+    struct mgf_unit *u = arg;
+    struct mgf_pad *pad = &mgf_pads[u->pad];
+    UInt32 frames = pad->period ? pad->period : 480;
+    UInt32 channels = u->format.mChannelsPerFrame, stride = u->format.mBytesPerFrame;
+    double seconds = (double)frames / u->format.mSampleRate;
+    struct pad_packet packet = {.magic = {'M', 'G', 'F', 'H'}};
+    AudioBufferList list;
+    AudioTimeStamp stamp = {0};
+    uint64_t deadline;
+    uint8_t *buffer;
+    UInt32 i;
+    float gain = mgf_gain(pad->physical == DS_EDGE_PID, true);
+
+    if (!(buffer = calloc(frames, stride))) return NULL;
+    pad_realtime(seconds, seconds / 2);
+    stamp.mFlags = kAudioTimeStampSampleTimeValid | kAudioTimeStampHostTimeValid;
+    deadline = mach_absolute_time();
+    while (!u->quit)
+    {
+        AudioUnitRenderActionFlags flags = 0;
+        unsigned int count = 0;
+
+        list.mNumberBuffers = 1;
+        list.mBuffers[0].mNumberChannels = channels;
+        list.mBuffers[0].mDataByteSize = frames * stride;
+        list.mBuffers[0].mData = buffer;
+        stamp.mHostTime = deadline;
+        u->callback.inputProc(u->callback.inputProcRefCon, &flags, &stamp, 0, frames, &list);
+        stamp.mSampleTime += frames;
+
+        if (channels >= 4)
+        {
+            float gain3 = pad->volume[0] * pad->volume[3], gain4 = pad->volume[0] * pad->volume[4];
+
+            for (i = 0; i < frames && count < 256; i++)
+            {
+                const uint8_t *frame = buffer + i * stride;
+                float left = mgf_sample(u, frame, 2), right = mgf_sample(u, frame, 3);
+
+                if (mgf_resample(u, mgf_amplify(left * gain3, gain), mgf_amplify(right * gain4, gain),
+                                 packet.samples + 2 * count))
+                    count++;
+            }
+            if (count && u->fd >= 0) send(u->fd, &packet, 4 + 2 * count, MSG_DONTWAIT);
+        }
+
+        deadline += pad_ticks(seconds);
+        /* After a stall longer than a few periods, start the clock again rather
+         * than pull a burst. */
+        if (mach_absolute_time() > deadline + pad_ticks(4 * seconds)) deadline = mach_absolute_time();
+        mach_wait_until(deadline);
+    }
+    free(buffer);
+    return NULL;
+}
+
+/* Whether a real output is a DualSense's on a cable: Apple's USB audio driver
+ * names it by the pad. *edge says whether it is an Edge. */
+static bool mgf_wired_pad(AudioDeviceID device, bool *edge)
+{
+    static const char prefix[] = "AppleUSBAudioEngine:Sony Interactive Entertainment:DualSense";
+    AudioObjectPropertyAddress addr = {kAudioDevicePropertyDeviceUID, kAudioObjectPropertyScopeGlobal,
+                                       kAudioObjectPropertyElementMain};
+    CFStringRef uid = NULL;
+    UInt32 size = sizeof(uid);
+    char text[160];
+    bool wired;
+
+    if (AudioObjectGetPropertyData(device, &addr, 0, NULL, &size, &uid) || !uid) return false;
+    wired = CFStringGetCString(uid, text, sizeof(text), kCFStringEncodingUTF8) &&
+            !strncmp(text, prefix, sizeof(prefix) - 1);
+    *edge = wired && !strncmp(text + sizeof(prefix) - 1, " Edge", 5);
+    CFRelease(uid);
+    return wired;
+}
+
+/* The wired pad's render callback: Wine's, then the gain on channels 3 and 4. */
+static OSStatus mgf_wired_render(void *ref, AudioUnitRenderActionFlags *flags, const AudioTimeStamp *stamp,
+                                 UInt32 bus, UInt32 frames, AudioBufferList *data)
+{
+    struct mgf_unit *u = ref;
+    OSStatus sc = u->callback.inputProc(u->callback.inputProcRefCon, flags, stamp, bus, frames, data);
+    UInt32 channels = u->format.mChannelsPerFrame, i;
+    float *samples;
+
+    if (sc || data->mNumberBuffers != 1 || channels < 4) return sc;
+    samples = data->mBuffers[0].mData;
+    for (i = 0; i < frames; i++)
+    {
+        samples[i * channels + 2] = mgf_amplify(samples[i * channels + 2], u->gain);
+        samples[i * channels + 3] = mgf_amplify(samples[i * channels + 3], u->gain);
+    }
+    return sc;
+}
+
+static OSStatus hook_AudioUnitSetProperty(AudioUnit unit, AudioUnitPropertyID prop, AudioUnitScope scope,
+                                         AudioUnitElement element, const void *data, UInt32 size)
+{
+    struct mgf_unit *u;
+    float gain;
+    bool edge;
+    static bool told_wired;
+
+    if (prop == kAudioOutputUnitProperty_CurrentDevice && size == sizeof(AudioDeviceID) && !told_wired &&
+        !mgf_pad_of(*(const AudioDeviceID *)data) && mgf_wired_pad(*(const AudioDeviceID *)data, &edge))
+    {
+        told_wired = true;
+        pad_log("observed: the game opens the wired %s's haptics output\n", edge ? "DualSense Edge" : "DualSense");
+    }
+    /* A wired pad's output, when its haptics are to be amplified: CoreAudio
+     * still plays it, through a render callback of ours. */
+    if (prop == kAudioOutputUnitProperty_CurrentDevice && size == sizeof(AudioDeviceID) &&
+        !mgf_pad_of(*(const AudioDeviceID *)data) && mgf_wired_pad(*(const AudioDeviceID *)data, &edge) &&
+        (gain = mgf_gain(edge, false)) > 1)
+    {
+        if (!(u = mgf_unit_of(unit)) && (u = calloc(1, sizeof(*u))))
+        {
+            u->unit = unit;
+            u->fd = -1;
+            pthread_mutex_lock(&mgf_lock);
+            u->next = mgf_units;
+            mgf_units = u;
+            pthread_mutex_unlock(&mgf_lock);
+        }
+        if (u)
+        {
+            u->wired = true;
+            u->pad = -1;
+            u->gain = gain;
+        }
+        return AudioUnitSetProperty(unit, prop, scope, element, data, size);
+    }
+    if ((u = mgf_unit_of(unit)) && u->wired)
+    {
+        if (prop == kAudioUnitProperty_StreamFormat && size >= sizeof(AudioStreamBasicDescription))
+        {
+            const AudioStreamBasicDescription *f = data;
+            /* Wine plays the mix format, 32-bit float; anything else is left alone. */
+            u->have_format = f->mFormatID == kAudioFormatLinearPCM && (f->mFormatFlags & kAudioFormatFlagIsFloat) &&
+                             !(f->mFormatFlags & kAudioFormatFlagIsNonInterleaved) && f->mBitsPerChannel == 32;
+            u->format = *f;
+        }
+        if (prop == kAudioUnitProperty_SetRenderCallback && size >= sizeof(AURenderCallbackStruct) && u->have_format)
+        {
+            AURenderCallbackStruct mine = {mgf_wired_render, u};
+
+            u->callback = *(const AURenderCallbackStruct *)data;
+            pad_log("amplifying the wired pad's haptics by %.2f\n", u->gain);
+            return AudioUnitSetProperty(unit, prop, scope, element, &mine, sizeof(mine));
+        }
+        return AudioUnitSetProperty(unit, prop, scope, element, data, size);
+    }
+
+    if (prop == kAudioOutputUnitProperty_CurrentDevice && size == sizeof(AudioDeviceID) &&
+        mgf_pad_of(*(const AudioDeviceID *)data))
+    {
+        if (!(u = mgf_unit_of(unit)) && (u = calloc(1, sizeof(*u))))
+        {
+            u->unit = unit;
+            u->fd = -1;
+            pthread_mutex_lock(&mgf_lock);
+            u->next = mgf_units;
+            mgf_units = u;
+            pthread_mutex_unlock(&mgf_lock);
+        }
+        if (!u) return kAudio_MemFullError;
+        u->pad = *(const AudioDeviceID *)data - MGF_DEVICE_BASE;
+        return noErr;
+    }
+    if (!(u = mgf_unit_of(unit))) return AudioUnitSetProperty(unit, prop, scope, element, data, size);
+
+    switch (prop)
+    {
+    case kAudioUnitProperty_StreamFormat:
+    {
+        const AudioStreamBasicDescription *f = data;
+        UInt32 bits = f->mBitsPerChannel;
+
+        if (size < sizeof(*f) || f->mFormatID != kAudioFormatLinearPCM ||
+            (f->mFormatFlags & kAudioFormatFlagIsNonInterleaved) ||
+            !f->mChannelsPerFrame || f->mChannelsPerFrame > 8 ||
+            f->mSampleRate < 8000 || f->mSampleRate > 192000 ||
+            f->mBytesPerFrame != f->mChannelsPerFrame * bits / 8 ||
+            ((f->mFormatFlags & kAudioFormatFlagIsFloat) ? bits != 32 && bits != 64
+                                                         : bits != 16 && bits != 24 && bits != 32))
+            return kAudioUnitErr_FormatNotSupported;
+        u->format = *f;
+        u->have_format = true;
+        return noErr;
+    }
+    case kAudioUnitProperty_SetRenderCallback:
+        if (size < sizeof(AURenderCallbackStruct)) return kAudioUnitErr_InvalidPropertyValue;
+        u->callback = *(const AURenderCallbackStruct *)data;
+        return noErr;
+    }
+    return noErr;
+}
+
+static OSStatus hook_AudioUnitGetProperty(AudioUnit unit, AudioUnitPropertyID prop, AudioUnitScope scope,
+                                         AudioUnitElement element, void *data, UInt32 *size)
+{
+    struct mgf_unit *u = mgf_unit_of(unit);
+
+    if (!u || u->wired) return AudioUnitGetProperty(unit, prop, scope, element, data, size);
+    if (prop == kAudioUnitProperty_StreamFormat && u->have_format && *size >= sizeof(u->format))
+    {
+        *(AudioStreamBasicDescription *)data = u->format;
+        *size = sizeof(u->format);
+        return noErr;
+    }
+    return kAudioUnitErr_InvalidProperty;
+}
+
+static OSStatus hook_AudioUnitInitialize(AudioUnit unit)
+{
+    struct mgf_unit *u = mgf_unit_of(unit);
+
+    if (!u || u->wired) return AudioUnitInitialize(unit);
+    return u->have_format && u->callback.inputProc ? noErr : kAudioUnitErr_Uninitialized;
+}
+
+static OSStatus hook_AudioOutputUnitStart(AudioUnit unit)
+{
+    struct mgf_unit *u = mgf_unit_of(unit);
+    struct sockaddr_un addr = {.sun_family = AF_UNIX};
+
+    if (!u || u->wired) return AudioOutputUnitStart(unit);
+    if (u->running) return noErr;
+    mgf_filter_init(u);
+    if (u->fd < 0 && (u->fd = socket(AF_UNIX, SOCK_DGRAM, 0)) >= 0)
+    {
+        snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", mgf_pads[u->pad].socket);
+        if (connect(u->fd, (struct sockaddr *)&addr, sizeof(addr)))
+            pad_log("the DualSense's Bluetooth writer is not listening at %s\n", addr.sun_path);
+    }
+    u->quit = false;
+    if (pthread_create(&u->thread, NULL, mgf_render, u)) return kAudioHardwareUnspecifiedError;
+    u->running = true;
+    pad_log("observed: the game plays haptics on the Bluetooth %s's output%s\n",
+            mgf_pads[u->pad].physical == DS_EDGE_PID ? "DualSense Edge" : "DualSense",
+            mgf_pads[u->pad].physical != mgf_pads[u->pad].pid ? " (shown as a DualSense)" : "");
+    return noErr;
+}
+
+static OSStatus hook_AudioOutputUnitStop(AudioUnit unit)
+{
+    struct mgf_unit *u = mgf_unit_of(unit);
+
+    if (!u || u->wired) return AudioOutputUnitStop(unit);
+    if (!u->running) return noErr;
+    u->quit = true;
+    pthread_join(u->thread, NULL);
+    u->running = false;
+    return noErr;
+}
+
+static OSStatus hook_AudioComponentInstanceDispose(AudioComponentInstance unit)
+{
+    struct mgf_unit *u = mgf_unit_of(unit), **p;
+
+    if (u)
+    {
+        if (u->wired) AudioOutputUnitStop(unit);
+        else hook_AudioOutputUnitStop(unit);
+        pthread_mutex_lock(&mgf_lock);
+        for (p = &mgf_units; *p; p = &(*p)->next)
+            if (*p == u) { *p = u->next; break; }
+        pthread_mutex_unlock(&mgf_lock);
+        if (u->fd >= 0) close(u->fd);
+        free(u);
+    }
+    return AudioComponentInstanceDispose(unit);
+}
+
+// Engine patch 0002: Apple's USB audio driver puts the device's location ID in the endpoint's
+// UID, "AppleUSBAudioEngine:<manufacturer>:<product>:<location ID in hex>:<interface>".
+// winebus.sys builds the same container from that location ID for the device's HID functions, so
+// that games can pair a controller with its audio output: the endpoint's DEVPKEY_Device_ContainerId
+// is answered with it. Wine's own get_prop_value does not know that key.
+typedef struct { uint32_t Data1; uint16_t Data2, Data3; uint8_t Data4[8]; } wine_guid;
+struct property_key { wine_guid fmtid; uint32_t pid; };
+struct prop_variant { uint16_t vt, reserved[3]; wine_guid *puuid; };
+// mmdevapi's unixlib.h, Wine 11.0 and 11.21 alike.
+struct get_prop_value_params {
+    const char *device;
+    int flow;
+    const wine_guid *guid;
+    const struct property_key *prop;
+    int32_t result;
+    struct prop_variant *value;
+    void *buffer;
+    unsigned *buffer_size;
+};
+#define UNIX_GET_PROP_VALUE 29  // its index in winecoreaudio.so's __wine_unix_call_funcs
+#define VT_CLSID 72
+#define E_NOT_SUFFICIENT_BUFFER ((int32_t)0x8007007a)
+
+static const struct property_key container_key = {{0x8c7ed206, 0x3f8a, 0x4827, {0xb3, 0xab, 0xae, 0x9e, 0x1f, 0xae, 0xfc, 0x6c}}, 2};
+
+static bool usb_container(const char *device, wine_guid *guid) {
+    static const wine_guid base = {0, 0x27f2, 0x4948, {0x96, 0x54, 0x15, 0x28, 0x04, 0xaf, 0x63, 0x78}};
+    static const char prefix[] = "AppleUSBAudioEngine:";
+    const char *start, *end;
+    unsigned long location;
+    char *parsed;
+
+    if (!device || strncmp(device, prefix, strlen(prefix)) || !(end = strrchr(device, ':'))) return false;
+    for (start = end; start > device && start[-1] != ':'; start--);
+    location = strtoul(start, &parsed, 16);
+    if (parsed != end || !location || location > 0xffffffff) return false;
+    *guid = base;
+    guid->Data1 = (uint32_t)location;
+    return true;
+}
+
+static uint32_t (*real_get_prop_value)(void *);
+
+static uint32_t get_prop_value(void *args) {
+    struct get_prop_value_params *params = args;
+    wine_guid container;
+
+    if (!memcmp(params->prop, &container_key, sizeof(container_key)) && usb_container(params->device, &container)) {
+        if (*params->buffer_size < sizeof(container)) {
+            params->result = E_NOT_SUFFICIENT_BUFFER;
+            *params->buffer_size = sizeof(container);
+            return 0;
+        }
+        params->value->vt = VT_CLSID;
+        params->value->puuid = params->buffer;
+        *params->value->puuid = container;
+        params->result = 0;
+        return 0;
+    }
+    return real_get_prop_value(args);
+}
+
+struct hook {
+    const char *name;
+    void *replacement;
+};
+
+static const struct hook hooks[] = {
+    {"AudioObjectGetPropertyDataSize", hook_AudioObjectGetPropertyDataSize},
+    {"AudioObjectGetPropertyData", hook_AudioObjectGetPropertyData},
+    {"AudioObjectSetPropertyData", hook_AudioObjectSetPropertyData},
+    {"AudioUnitSetProperty", hook_AudioUnitSetProperty},
+    {"AudioUnitGetProperty", hook_AudioUnitGetProperty},
+    {"AudioUnitInitialize", hook_AudioUnitInitialize},
+    {"AudioOutputUnitStart", hook_AudioOutputUnitStart},
+    {"AudioOutputUnitStop", hook_AudioOutputUnitStop},
+    {"AudioComponentInstanceDispose", hook_AudioComponentInstanceDispose},
+};
+
+void mgf_controls_audio_arm(const struct np_plugin_api *api, const struct mach_header_64 *mh, intptr_t slide) {
+    enum { COUNT = COUNT_OF(hooks) };
+    uintptr_t fns[COUNT], *slots[COUNT], *table;
+
+    // All of them or none, and the call table's entry with them: an output listed but not played
+    // would take the game's haptics and give the pad nothing.
+    table = (uintptr_t *)api->symbol(mh, slide, "___wine_unix_call_funcs");
+    if (!table) {
+        pad_log("controls: winecoreaudio.so has no __wine_unix_call_funcs, nothing is taken\n");
+        return;
+    }
+    for (unsigned i = 0; i < COUNT; i++) {
+        int n;
+        fns[i] = (uintptr_t)dlsym(RTLD_DEFAULT, hooks[i].name);
+        slots[i] = NULL;
+        if (!fns[i] || (n = api->count_pointers(mh, slide, fns[i], &slots[i])) != 1) {
+            pad_log("controls: winecoreaudio.so's %s cannot be taken (%d pointers to it), so none is\n",
+                    hooks[i].name, fns[i] ? n : -1);
+            return;
+        }
+    }
+    real_get_prop_value = (uint32_t (*)(void *))table[UNIX_GET_PROP_VALUE];
+    if (!api->swap_pointer(&table[UNIX_GET_PROP_VALUE], (uintptr_t)real_get_prop_value, (uintptr_t)get_prop_value)) {
+        pad_log("controls: winecoreaudio.so's get_prop_value could not be taken, nothing is\n");
+        return;
+    }
+    for (unsigned i = 0; i < COUNT; i++)
+        if (!api->swap_pointer(slots[i], fns[i], (uintptr_t)hooks[i].replacement)) {
+            pad_log("controls: winecoreaudio.so's %s could not be written, %u of %u taken\n", hooks[i].name, i,
+                    (unsigned)COUNT);
+            return;
+        }
+    pad_log("controls: winecoreaudio.so's %u CoreAudio calls and get_prop_value taken\n", (unsigned)COUNT);
+}
