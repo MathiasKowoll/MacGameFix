@@ -4,6 +4,7 @@
 #   engine-modules.sh <CrossOver folder> --status    installed, outdated, half, absent or nomodules
 #   engine-modules.sh <CrossOver folder>             install
 #   engine-modules.sh <CrossOver folder> --restore   put CrossOver's own files back
+#   engine-modules.sh <CrossOver folder> --retire    only put back what this build retired (LEAVE)
 #   ... --part=controls|rosetta                      the same for one improvement only
 #
 # The modules are two improvements, each installed and removed on its own:
@@ -180,6 +181,14 @@ state() {
   else echo absent; fi
 }
 
+# --retire: a fix that needs nothing of the improvement on this build has the files it retired
+# taken out, CrossOver's own back, and puts nothing in (Forza Horizon 6 on 41303's runner).
+RETIRE=0
+if [ "$MODE" = --retire ]; then
+  [ -n "$(retired)" ] || { say "Nothing retired is left in $ROOT."; exit 0; }
+  RETIRE=1; FILES=""; MODE=install
+fi
+
 if [ "$MODE" = --status ]; then
   [ -n "$FILES" ] || [ -n "$(retired)" ] || { say "There is nothing of this improvement for CrossOver $BUILD yet."; say nomodules; exit 0; }
   s="$(state)"
@@ -278,7 +287,8 @@ install)
   rm -f "$SAVE/off.list"      # a note older scripts kept; the list alone says what is in
   refresh_prefixes
   resign
-  say "Installed the modules for CrossOver $BUILD into $ROOT." ;;
+  if [ "$RETIRE" = 1 ]; then say "Took the retired modules out of $ROOT."
+  else say "Installed the modules for CrossOver $BUILD into $ROOT."; fi ;;
 --restore)
   [ -d "$SAVE" ] || { say "Nothing of MacGameFix's is in $ROOT."; exit 0; }
   for f in x86_64-windows/winebus.sys x86_64-windows/mmdevapi.dll x86_64-windows/hidclass.sys \

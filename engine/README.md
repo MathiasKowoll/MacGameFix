@@ -291,7 +291,9 @@ and `0040` reach F1 25 alone as a runner variant (see "A GPUI program's fonts an
 window"). Left behind: 2XKO's `0032` to `0036`, which never made it start. Red Dead
 Online's `0037` comes from NotProton's **Red Dead Online fix** row, which Red Dead
 Redemption 2's fix switches on (see below). A CrossOver app and the FEX side keep every
-module. Played on 2026-11-25 on NotProton's `ntdll` with CodeWeavers' `kernel32`
+module. `engine-modules.sh <runner> --retire` takes out only what a build retired, putting
+nothing in: Forza Horizon 6's fix runs that on 41303, where it needs nothing of the
+improvement. Played on 2026-11-25 on NotProton's `ntdll` with CodeWeavers' `kernel32`
 and `kernelbase`: F1 25, EA SPORTS FC 27, Forza Horizon 6, Phantom Blade Zero,
 STAR WARS: Galactic Racer and Persona 4 Golden.
 Measured on 2026-11-25 with Phantom Blade Zero on CrossOver Preview 41303's

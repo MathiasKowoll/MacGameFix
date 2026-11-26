@@ -194,5 +194,18 @@ E3 "$R3" --part=rosetta >/dev/null
 check 'npdll3 && cwso3 "$R3" && cwdw3 "$R3" && ! grep -q "ntdll\|dwrite" "$S3/installed.list" && [ "$(st3 "$R3" --part=rosetta)" = nomodules ]' "an install puts NotProton's ntdll.dll and CodeWeavers' ntdll.so and dwrite.dll back, and takes them off the list"
 E3 "$R3" --restore --part=rosetta >/dev/null
 check 'cwso3 "$R3" && npdll3' "and a restore leaves both as they are"
+# --retire (Forza Horizon 6's fix on 41303): what was retired comes back, and nothing is put in,
+# on the FEX side either.
+printf 'ours aarch64-unix/ntdll.so wine-11.21\n' >"$CAT/engine-$B3-aarch64-unix-ntdll.so"
+R4="$T/notproton/runners/crossover-$B3/CrossOver"; S4="$MGVF_ENGINE_BACKUP/crossover-$B3"
+mkdir -p "$R4/lib/wine/x86_64-unix" "$R4/lib/wine/aarch64-unix" "$R4/lib/wine/x86_64-windows" "$S4/x86_64-unix"
+printf "CodeWeavers' x86_64-unix/ntdll.so wine-11.21\n" >"$S4/x86_64-unix/ntdll.so"
+cp "$CAT/engine-$B3-x86_64-unix-ntdll.so" "$R4/lib/wine/x86_64-unix/ntdll.so"
+printf '%s  %s\n' "$(shasum -a 256 "$R4/lib/wine/x86_64-unix/ntdll.so" | cut -d' ' -f1)" x86_64-unix/ntdll.so >"$S4/installed.list"
+for f in aarch64-unix/ntdll.so x86_64-unix/winecoreaudio.so; do printf "CodeWeavers' %s wine-11.21\n" "$f" >"$R4/lib/wine/$f"; done
+cwfex4() { [ "$(cat "$R4/lib/wine/aarch64-unix/ntdll.so")" = "CodeWeavers' aarch64-unix/ntdll.so wine-11.21" ]; }
+E3 "$R4" --part=rosetta --retire >/dev/null
+check 'cwso3 "$R4" && cwfex4 && ! grep -q ntdll "$S4/installed.list"' "--retire puts CodeWeavers' ntdll.so back and leaves the FEX side's alone"
+check '[ "$(E3 "$R4" --part=rosetta --retire | tail -1)" = "Nothing retired is left in $R4." ] && cwfex4' "--retire again changes nothing"
 echo "==> $fails failed"
 exit $((fails > 0))
