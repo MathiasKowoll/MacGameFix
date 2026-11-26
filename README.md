@@ -57,9 +57,11 @@ time (see [Reporting a problem](#reporting-a-problem));
 itself, one section each: *DualSense controllers* (patched Wine modules for a DualSense's haptics on a
 cable and over Bluetooth, the pad on Bluetooth as if on a cable, XInput, trigger effects for a game
 that sets none, the pad's audio output through SetupAPI and XAudio2, and the Edge or the pad shown to a
-game as another pad) and *Copy protection under Rosetta* (the Intel side's `ntdll.so`, for
-Denuvo-protected games such as Phantom Blade Zero, Persona 4 Golden and
-STAR WARS: Galactic Racer; the games played, reported or in progress are in
+game as another pad) and *Copy protection under Rosetta* (`ntdll`, and on the latest Preview six more
+modules: CPU compatibility for Denuvo-protected games such as Phantom Blade Zero,
+Persona 4 Golden and STAR WARS: Galactic Racer, and the fixes particular games need,
+such as FH6, F1 25, FC 27 and Red Dead Online; every game in a runner it is on gets
+all of it; the games played, reported or in progress are in
 [`docs/improvements`](docs/improvements)), see
 [`engine/README.md`](engine/README.md), each with a switch and an Update button for every CrossOver
 app and NotProton runner (the stable CrossOver and the latest Preview are maintained; an older
