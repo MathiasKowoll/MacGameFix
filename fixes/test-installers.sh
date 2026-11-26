@@ -1164,6 +1164,9 @@ mkdir -p "$f6rrun" "$f6rfix" "$f6r/game"
 cp -R "$f6run/" "$f6rrun/"; cp -R "$f6pfx" "$f6rpfx"; cp "$f6game/forzahorizon6.exe" "$f6r/game/"
 # On 41303 the runner's ntdll.so is CodeWeavers' (the Wine modules leave it): FH6's part comes from the row.
 printf "CodeWeavers' x86_64-unix/ntdll.so wine-11.21\n" > "$f6rrun/lib/wine/x86_64-unix/ntdll.so"
+# Its FEX side too, which FH6 has no use for: the install puts none of the improvement's modules there.
+mkdir -p "$f6rrun/lib/wine/aarch64-unix" "$f6rrun/lib/wine/aarch64-windows"
+printf "CodeWeavers' aarch64-unix/ntdll.so wine-11.21\n" > "$f6rrun/lib/wine/aarch64-unix/ntdll.so"
 echo host > "$f6rnp/plugin-host.dylib"
 printf '27.0.0.41303-fex\nCrossOver 2026 11 11-ARM64 - Rosetta\n' > "$f6r/notproton-build"
 for n in install-fh6-fix.sh fh6-runtime.sh fh6-launch-options.pl bottles.sh pe.pl d3d12-fh6.dll fh5-THIRD-PARTY-LICENCES.md notproton-rosetta-trap-boost.dylib fh6-signin.sh advapi32-fh6-26.3.0.39832.dll advapi32-fh6-27.0.0.41073.dll advapi32-fh6-27.0.0.41303.dll notproton-plugins.sh np-plugin-fh6.conf np-plugin-shared.conf mgf-engine.dylib steam-launch-options.pl; do cp "$FIX/$n" "$f6rfix/$n"; done
@@ -1186,6 +1189,10 @@ f6rdo --install > "$f6r/install.log" 2>&1 && [ "$(f6rst)" = installed ] \
   && f6ropts | /usr/bin/grep -q '^NOTPROTON_MGF_ENGINE=1 .*NOTPROTON_ROSETTA_TRAP_BOOST=1 .*PERSONAL=keep %command%$' \
   && say ok "fh6 on 41303 with the plugin host: the shared Engine fixes row, its library and its switch go in with the fix" \
   || say FAIL "fh6 rows: install ($(f6rst), $(f6ropts), $(tail -3 "$f6r/install.log" | tr '\n' ' '))"
+[ "$(cat "$f6rrun/lib/wine/aarch64-unix/ntdll.so")" = "CodeWeavers' aarch64-unix/ntdll.so wine-11.21" ] \
+  && [ -z "$(ls -A "$f6rrun/lib/wine/aarch64-windows")" ] \
+  && say ok "fh6 on 41303: nothing of the Rosetta improvement goes into the runner, on the FEX side either" \
+  || say FAIL "fh6 on 41303: the improvement went into the runner ($(ls "$f6rrun/lib/wine/aarch64-windows" | tr '\n' ' '))"
 rm -f "$f6rplug/mgf-shared.conf"
 f6rwhy="$(f6rdo --status 2>&1)"
 [ "$(f6rst)" = half ] && case "$f6rwhy" in *"Engine fixes row"*) true ;; *) false ;; esac \

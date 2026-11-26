@@ -115,10 +115,13 @@ fh6_put() {
 fh6_install_runtime() {
   # Stage the matching pair via the existing Rosetta installer; prefixes and per-game
   # launch clones are coordinated here because the generic installer does not own them.
-  # On 41303 the same run retires the modules' Intel-side ntdll.so from the runner. A runner whose
-  # Rosetta part is all left to NotProton and CodeWeavers has nothing to install: nomodules, not a failure.
+  # On 41303 FH6 needs nothing of the improvement: the run only takes out what an earlier install left
+  # on the runner's Intel side (--retire) and puts nothing in, the FEX side's modules included. A runner
+  # whose Rosetta part is all left to NotProton and CodeWeavers has nothing to install: nomodules, not a failure.
+  local retire=""
+  [ "$FH6_BUILD" = 27.0.0.41303 ] && retire=--retire
   if [ -f "$MODULES/engine-modules.sh" ]; then
-    /bin/bash "$MODULES/engine-modules.sh" "$RUNNER" --part=rosetta \
+    /bin/bash "$MODULES/engine-modules.sh" "$RUNNER" --part=rosetta ${retire:+"$retire"} \
       || [ "$(/bin/bash "$MODULES/engine-modules.sh" "$RUNNER" --status --part=rosetta 2>/dev/null | tail -1)" = nomodules ] || return 1
   fi
   if [ "$FH6_OWN_PE" = 0 ]; then
