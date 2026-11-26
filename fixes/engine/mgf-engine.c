@@ -18,8 +18,8 @@
 //                    0028, 0029                        exception Rosetta delivers on top of a
 //                                                      suspend, replayed after it
 //   rosetta-cpu      engine patches     every game the row is on for  Rosetta's CPUID leaf 7, CLWB,
-//                    0017, 0019, 0020                     RDPID and faults as copy protection
-//                                                         expects them (no execution breakpoints)
+//                    0017, 0019, 0020                     RDPID, faults and execution breakpoints
+//                                                         (Dr0-3) as copy protection expects them
 //   once-reentry     -                  every game the row is on for  a pthread_once a thread
 //                                       enters again from a suspend returns instead of ending the
 //                                       process (F1 25 under Swofty's offline play; once-reentry/)

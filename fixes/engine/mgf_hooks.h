@@ -93,4 +93,8 @@ typedef void (*mgf_signal_after_fn)(int sig, siginfo_t *info, ucontext_t *contex
 int mgf_signal_after(const struct np_plugin_api *api, const struct mach_header_64 *mh, intptr_t slide, int sig,
                      mgf_signal_after_fn fn);
 
+// Wine's own handler for `sig`, once ntdll.so has installed it behind ours (NULL before): a fix
+// that turns one signal into another hands the context to it. Read it from a handler, not at arm.
+void (*mgf_signal_wine(int sig))(int, siginfo_t *, void *);
+
 #endif

@@ -25,9 +25,21 @@
 //     fault, with 0f a2 just before RIP and the address those bytes hold, is the CPUID: it is
 //     run here and the thread resumes after it (0019).
 //
-// Not here: 0017's stand-in for x86 execution breakpoints (Dr0-3 through a thread context),
-// which needs Wine's thread data; the hub's plan leaves it in the runner until a game is shown
-// to need it.
+//   - Rosetta gives a thread no debug registers. A program that arms an execution breakpoint
+//     (Dr0-3 with Dr7) through a thread context expects the debug exception when the thread gets
+//     there; Denuvo's handler of a deliberate fault arms one on the faulting instruction and
+//     continues, and without it the fault repeats for ever (Phantom Blade Zero stays on one core
+//     and never opens its window: with CodeWeavers' ntdll.so plus 0017 alone it starts, without
+//     the breakpoints it does not). As in 0017: a fault at an armed breakpoint is reported as the
+//     debug exception the CPU raises first; a breakpoint on an instruction that does not fault
+//     takes the execute permission from its page, and a thread that enters the page is stepped
+//     with the trap flag until it reaches the breakpoint (reported) or leaves the page (guarded
+//     again); Dr7 reads with bit 10 set while a breakpoint is enabled, as on hardware.
+//     Wine keeps each thread's debug registers in its TEB (amd64_thread_data, GdiTebBatch, 0x2f0):
+//     they are read there, at the points where they can change (NtContinue, NtContinueEx and
+//     NtSetContextThread through ntdll.so's syscall table, and after a suspend, where another
+//     thread's context is applied), and the exception is raised through Wine's own SIGTRAP
+//     handler, whose frame then gets Dr6 as the hardware leaves it (0017).
 //
 // The handlers go before Wine's (../mgf-signals.c); each answers only for what it recognises and
 // passes everything else on, unchanged but for the general protection fault. A runner that still
@@ -52,6 +64,7 @@
 
 #include <mach/mach.h>
 #include <mach/mach_vm.h>
+#include <sys/mman.h>
 #include <sys/sysctl.h>
 
 // The x86 trap numbers Rosetta puts in the exception state, as Wine reads them (TRAP_sig).
@@ -149,10 +162,302 @@ static int rdpid(ucontext_t *uc, const unsigned char *b, unsigned len) {
     return 1;
 }
 
+// --- Execution breakpoints (0017's HRAVA_HW_EXEC_BREAKPOINT) ---------------------------------
+
+#define TRAP_TRCTRAP 1
+#define EFLAGS_TF 0x100u
+#define EFLAGS_RF 0x10000u
+#define CONTEXT_AMD64 0x00100000u
+#define CONTEXT_CONTROL_FLAGS (CONTEXT_AMD64 | 0x1u)
+#define CONTEXT_DEBUG_FLAGS (CONTEXT_AMD64 | 0x10u)
+#define CTX_FLAGS 0x30   // CONTEXT, x86-64: ContextFlags
+#define CTX_DR6 0x68
+#define CTX_DR7 0x70
+#define CTX_RIP 0xf8
+#define REC_AT 0x4f0     // Wine's exc_stack_layout: the EXCEPTION_RECORD after the CONTEXT
+#define SINGLE_STEP 0x80000004u
+#define TEB_DR 0x2f0     // amd64_thread_data in GdiTebBatch: dr0 dr1 dr2 dr3 dr6 dr7
+
+struct dr_data {
+    uint64_t dr[4], dr6, dr7;
+};
+
+struct sw_breakpoint {
+    uintptr_t addr, teb;
+    int prot;      // the page's protection, with execute permission
+    int armed;
+    int guarded;   // execute permission removed
+};
+
+static struct sw_breakpoint breakpoints[16];
+static uintptr_t dr_threads[64];   // TEBs of the threads with an execution breakpoint enabled
+static uintptr_t stepping[16];     // TEBs of the threads stepping through a breakpoint page
+static int lock;
+static unsigned raised, stepped;
+static void (*wine_trap)(int, siginfo_t *, void *);  // Wine's SIGTRAP handler, installed after arm
+static int breakpoints_on;
+static long (*query_memory)(void *, const void *, unsigned, void *, size_t, size_t *);  // NtQueryVirtualMemory
+static uintptr_t old_continue, old_continue_ex, old_set_context;
+
+static uintptr_t current_teb(void) {
+    uintptr_t teb;
+    __asm__ volatile("movq %%gs:0x30, %0" : "=r"(teb));
+    return teb;
+}
+
+static struct dr_data *dr_of(uintptr_t teb) { return (struct dr_data *)(teb + TEB_DR); }
+
+static int known(uintptr_t *set, unsigned n, uintptr_t teb) {
+    for (unsigned i = 0; i < n; i++)
+        if (__atomic_load_n(&set[i], __ATOMIC_ACQUIRE) == teb) return 1;
+    return 0;
+}
+
+static void remember(uintptr_t *set, unsigned n, uintptr_t teb, int in) {
+    for (unsigned i = 0; i < n; i++) {
+        uintptr_t was = __atomic_load_n(&set[i], __ATOMIC_ACQUIRE);
+        if (was == teb) {
+            if (!in) __atomic_compare_exchange_n(&set[i], &was, 0, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
+            return;
+        }
+    }
+    if (!in) return;
+    for (unsigned i = 0; i < n; i++) {
+        uintptr_t none = 0;
+        if (__atomic_compare_exchange_n(&set[i], &none, teb, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) return;
+    }
+}
+
+static void guard(struct sw_breakpoint *bp, int on) {
+    uintptr_t page = bp->addr & ~(uintptr_t)0xfff;
+    int was = !on;
+    if (__atomic_compare_exchange_n(&bp->guarded, &was, on, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
+        mprotect((void *)page, 0x1000, on ? (bp->prot & ~PROT_EXEC) : bp->prot);
+}
+
+// Whether execution breakpoint i of `d` is enabled (L or G bit, RW bits 00).
+static int exec_breakpoint(const struct dr_data *d, unsigned i) {
+    return (d->dr7 & (3u << (i * 2))) && !((d->dr7 >> (16 + i * 4)) & 0xf) && d->dr[i];
+}
+
+// Brings the current thread's guarded pages in line with its debug registers, as 0017's
+// sync_sw_breakpoints; a breakpoint on the address the thread resumes at stays out (the resume
+// flag). From a signal handler (`in_signal`) it gives up rather than wait for the lock.
+static void sync(uintptr_t resume, int in_signal) {
+    uintptr_t teb = current_teb(), want[4] = {0};
+    struct dr_data *d;
+    int any = 0, unlocked = 0;
+    if (!teb) return;
+    d = dr_of(teb);
+    for (unsigned i = 0; i < 4; i++)
+        if (exec_breakpoint(d, i)) {
+            any = 1;
+            if (d->dr[i] != resume) want[i] = d->dr[i];
+        }
+    if (any) d->dr7 |= 0x400;  // bit 10 reads as set, as on hardware
+    remember(dr_threads, 64, teb, any);
+    if (in_signal) {
+        if (!__atomic_compare_exchange_n(&lock, &unlocked, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+    } else {
+        while (!__atomic_compare_exchange_n(&lock, &unlocked, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) unlocked = 0;
+    }
+    for (unsigned j = 0; j < 16; j++) {
+        struct sw_breakpoint *bp = &breakpoints[j];
+        unsigned i;
+        if (!bp->armed || bp->teb != teb) continue;
+        for (i = 0; i < 4; i++)
+            if (want[i] == bp->addr) break;
+        if (i < 4) { want[i] = 0; continue; }  // still wanted, already in place
+        guard(bp, 0);
+        __atomic_store_n(&bp->armed, 0, __ATOMIC_RELEASE);
+    }
+    for (unsigned i = 0; i < 4; i++) {
+        unsigned char info[48];  // MEMORY_BASIC_INFORMATION: State at 0x20, Protect at 0x24
+        unsigned state, protect;
+        if (!want[i] || !query_memory) continue;
+        if (query_memory((void *)~(uintptr_t)0, (void *)want[i], 0, info, sizeof(info), NULL)) continue;
+        memcpy(&state, info + 0x20, 4);
+        memcpy(&protect, info + 0x24, 4);
+        if (state != 0x1000) continue;  // MEM_COMMIT
+        for (unsigned j = 0; j < 16; j++) {
+            struct sw_breakpoint *bp = &breakpoints[j];
+            if (bp->armed) continue;
+            bp->addr = want[i];
+            bp->teb = teb;
+            bp->prot = PROT_READ | PROT_EXEC | ((protect & 0xcc) ? PROT_WRITE : 0);  // the RW and WC protections
+            bp->guarded = 0;
+            __atomic_store_n(&bp->armed, 1, __ATOMIC_RELEASE);
+            guard(bp, 1);
+            break;
+        }
+    }
+    __atomic_store_n(&lock, 0, __ATOMIC_RELEASE);
+}
+
+// Raises the debug exception of breakpoint `addr` (number i of 4, or 4 when it is not one of
+// the thread's own) through Wine's SIGTRAP handler, and gives its frame Dr6 and Dr7 as the
+// hardware leaves them: Wine reads them back from the server, which never heard of the hit.
+static void raise_breakpoint(siginfo_t *info, ucontext_t *uc, uintptr_t teb, uintptr_t addr, unsigned i) {
+    struct dr_data *d = dr_of(teb);
+    uint64_t dr6 = 0xffff0ff0u | (i < 4 ? 1u << i : 0), dr7 = d->dr7 | 0x400;
+    unsigned char *frame;
+    uint32_t code;
+    uint64_t at, rip;
+    d->dr6 = dr6;
+    uc->uc_mcontext->__ss.__rflags &= ~EFLAGS_TF;
+    uc->uc_mcontext->__es.__trapno = TRAP_TRCTRAP;
+    wine_trap(SIGTRAP, info, uc);
+    frame = (unsigned char *)uc->uc_mcontext->__ss.__rsp;
+    memcpy(&code, frame + REC_AT, 4);
+    memcpy(&at, frame + REC_AT + 0x10, 8);
+    memcpy(&rip, frame + CTX_RIP, 8);
+    if (code == SINGLE_STEP && at == addr && rip == addr) {
+        memcpy(frame + CTX_DR6, &dr6, 8);
+        memcpy(frame + CTX_DR7, &dr7, 8);
+    }
+    note("an execution breakpoint", &raised);
+}
+
+// A fault (SIGSEGV, SIGBUS, SIGILL) of a thread with a breakpoint enabled, or in a guarded page.
+static int breakpoint_fault(siginfo_t *info, ucontext_t *uc) {
+    uintptr_t rip = uc->uc_mcontext->__ss.__rip, teb;
+    if (!breakpoints_on) return 0;
+    if (!wine_trap && !(wine_trap = mgf_signal_wine(SIGTRAP))) return 0;
+    teb = current_teb();
+    // At an armed breakpoint: the debug exception comes before the instruction's own fault.
+    if (known(dr_threads, 64, teb)) {
+        struct dr_data *d = dr_of(teb);
+        for (unsigned i = 0; i < 4; i++) {
+            if (!exec_breakpoint(d, i) || d->dr[i] != rip) continue;
+            if (uc->uc_mcontext->__ss.__rflags & EFLAGS_RF) {  // the resume flag: skip it once
+                uc->uc_mcontext->__ss.__rflags &= ~EFLAGS_RF;
+                return 0;
+            }
+            for (unsigned j = 0; j < 16; j++)
+                if (breakpoints[j].armed && breakpoints[j].addr == rip && breakpoints[j].teb == teb) {
+                    guard(&breakpoints[j], 0);
+                    __atomic_store_n(&breakpoints[j].armed, 0, __ATOMIC_RELEASE);
+                }
+            raise_breakpoint(info, uc, teb, rip, i);
+            return 1;
+        }
+    }
+    // Entering a guarded page: report the breakpoint, or step the thread through the page.
+    for (unsigned j = 0; j < 16; j++) {
+        struct sw_breakpoint *bp = &breakpoints[j];
+        if (!bp->armed || !bp->guarded || (bp->addr & ~(uintptr_t)0xfff) != (rip & ~(uintptr_t)0xfff)) continue;
+        if (bp->addr == rip && bp->teb == teb) {
+            guard(bp, 0);
+            __atomic_store_n(&bp->armed, 0, __ATOMIC_RELEASE);
+            raise_breakpoint(info, uc, teb, rip, 4);
+            return 1;
+        }
+        guard(bp, 0);
+        remember(stepping, 16, teb, 1);
+        if (known(stepping, 16, teb)) uc->uc_mcontext->__ss.__rflags |= EFLAGS_TF;
+        note("a step through a breakpoint page", &stepped);
+        return 1;
+    }
+    return 0;
+}
+
+// The trap after each instruction of a thread stepping through a breakpoint page.
+static int on_trap(int sig, siginfo_t *info, ucontext_t *uc) {
+    uintptr_t rip = uc->uc_mcontext->__ss.__rip, teb = current_teb();
+    int inside = 0;
+    (void)sig;
+    if (!known(stepping, 16, teb)) return 0;
+    if (!wine_trap && !(wine_trap = mgf_signal_wine(SIGTRAP))) return 0;
+    for (unsigned j = 0; j < 16; j++) {
+        struct sw_breakpoint *bp = &breakpoints[j];
+        if (!bp->armed) continue;
+        if (bp->addr == rip && bp->teb == teb) {
+            remember(stepping, 16, teb, 0);
+            guard(bp, 0);
+            __atomic_store_n(&bp->armed, 0, __ATOMIC_RELEASE);
+            raise_breakpoint(info, uc, teb, rip, 4);
+            return 1;
+        }
+        if ((bp->addr & ~(uintptr_t)0xfff) == (rip & ~(uintptr_t)0xfff)) inside = 1;
+    }
+    if (inside) uc->uc_mcontext->__ss.__rflags |= EFLAGS_TF;
+    else {  // left the page: stop stepping, guard the pages again
+        remember(stepping, 16, teb, 0);
+        uc->uc_mcontext->__ss.__rflags &= ~EFLAGS_TF;
+        for (unsigned j = 0; j < 16; j++)
+            if (breakpoints[j].armed) guard(&breakpoints[j], 1);
+    }
+    return 1;
+}
+
+// After a suspend: a context another thread set is applied there, inside ntdll.so.
+static void after_usr1(int sig, siginfo_t *info, ucontext_t *uc, uintptr_t pc) {
+    (void)sig; (void)info; (void)pc;
+    sync(uc->uc_mcontext->__ss.__rip, 1);
+}
+
+static int sets_debug_registers(const void *context) {
+    uint32_t flags;
+    memcpy(&flags, (const unsigned char *)context + CTX_FLAGS, 4);
+    return (flags & CONTEXT_DEBUG_FLAGS) == CONTEXT_DEBUG_FLAGS;
+}
+
+static uintptr_t resume_of(const void *context) {
+    uint32_t flags;
+    uint64_t rip;
+    memcpy(&flags, (const unsigned char *)context + CTX_FLAGS, 4);
+    if ((flags & CONTEXT_CONTROL_FLAGS) != CONTEXT_CONTROL_FLAGS) return 0;
+    memcpy(&rip, (const unsigned char *)context + CTX_RIP, 8);
+    return rip;
+}
+
+static long continue_hook(void *context, uintptr_t alertable) {
+    long rc = ((long (*)(void *, uintptr_t))old_continue)(context, alertable);
+    if (!rc && context && sets_debug_registers(context)) sync(resume_of(context), 0);
+    return rc;
+}
+
+static long continue_ex_hook(void *context, void *args) {
+    long rc = ((long (*)(void *, void *))old_continue_ex)(context, args);
+    if (!rc && context && sets_debug_registers(context)) sync(resume_of(context), 0);
+    return rc;
+}
+
+static long set_context_hook(void *thread, void *context) {
+    long rc = ((long (*)(void *, void *))old_set_context)(thread, context);
+    if (!rc && thread == (void *)~(uintptr_t)1 && context && sets_debug_registers(context))  // GetCurrentThread()
+        sync(resume_of(context), 0);
+    return rc;
+}
+
+static int hook(const struct mach_header_64 *mh, intptr_t slide, const char *name, uintptr_t *old, void *with) {
+    uintptr_t *slot = mgf_syscall_slot(api, mh, slide, name, old);
+    return slot && api->swap_pointer(slot, *old, (uintptr_t)with);
+}
+
+static void arm_breakpoints(const struct mach_header_64 *mh, intptr_t slide) {
+    query_memory = (long (*)(void *, const void *, unsigned, void *, size_t, size_t *))api->symbol(
+        mh, slide, "_NtQueryVirtualMemory");
+    if (!query_memory || !mgf_signal_first(api, mh, slide, SIGTRAP, on_trap) ||
+        !mgf_signal_after(api, mh, slide, SIGUSR1, after_usr1)) {
+        api->log(TAG, "execution breakpoints: no place in ntdll.so, not armed");
+        return;
+    }
+    if (!hook(mh, slide, "_NtContinue", &old_continue, (void *)continue_hook) ||
+        !hook(mh, slide, "_NtContinueEx", &old_continue_ex, (void *)continue_ex_hook) ||
+        !hook(mh, slide, "_NtSetContextThread", &old_set_context, (void *)set_context_hook)) {
+        api->log(TAG, "execution breakpoints: a context call not found in the syscall table, not armed");
+        return;
+    }
+    breakpoints_on = 1;
+    api->log(TAG, "execution breakpoints (Dr0-3) are emulated");
+}
+
 static int on_ill(int sig, siginfo_t *info, ucontext_t *uc) {
     unsigned char b[12];
     unsigned len;
-    (void)sig; (void)info;
+    (void)sig;
+    if (breakpoint_fault(info, uc)) return 1;
     if (uc->uc_mcontext->__es.__trapno != TRAP_PRIVINFLT) return 0;
     len = read_code(uc->uc_mcontext->__ss.__rip, b, sizeof(b));
     return rdpid(uc, b, len) || clwb(uc, b, len);
@@ -183,6 +488,7 @@ static int skipped_cpuid(siginfo_t *info, ucontext_t *uc) {
 static int on_fault(int sig, siginfo_t *info, ucontext_t *uc) {
     int64_t high = (int64_t)(uintptr_t)info->si_addr >> 47;
     (void)sig;
+    if (breakpoint_fault(info, uc)) return 1;
     if (uc->uc_mcontext->__es.__trapno != TRAP_PAGEFLT) return 0;
     if (skipped_cpuid(info, uc)) return 1;
     // Non-canonical: Wine's handler then reports the general protection fault, an access
@@ -251,6 +557,7 @@ static void arm(const struct mach_header_64 *mh, intptr_t slide) {
         api->log(TAG, "cannot put handlers before Wine's, not armed");
         return;
     }
+    arm_breakpoints(mh, slide);
     if ((tables = extend_cpuid(CLFLUSHOPT_CLWB, RDPID))) {
         cpuid7_ebx = CLFLUSHOPT_CLWB;
         cpuid7_ecx = RDPID;

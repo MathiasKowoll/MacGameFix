@@ -23,7 +23,9 @@
 #     and 200 from both IP_TTL and IPV6_UNICAST_HOPS with it;
 #   - rosetta-cpu/check.c reads CPUID leaf 7 and runs CLWB, RDPID and a non-canonical read: the
 #     leaf lacks the bits without the fix; with it they are there, both instructions run and the
-#     read faults at -1 as on Windows;
+#     read faults at -1 as on Windows. With it, it also arms execution breakpoints (Dr0, Dr7) as
+#     Denuvo does, on a ud2 from that fault's handler and on a function through SetThreadContext,
+#     and each has to stop the thread with the debug exception;
 #   - direct-syscall runs engine/tests/direct-syscall-suspend/suspend.c (built with llvm-mingw,
 #     LLVM_MINGW): threads making system calls with a syscall instruction of their own and threads
 #     raising exceptions, while another suspends them. Without the fix a look at a thread never
