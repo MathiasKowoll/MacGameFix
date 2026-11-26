@@ -278,6 +278,15 @@ bits were off unless asked for. The rest takes effect only when a
 program meets it: an instruction Rosetta does not have, a hardware breakpoint,
 or a fault through a non-canonical address.
 
+On NotProton, `rosetta-cpu` in `fixes/engine` (the **Engine fixes** row) does what
+`0017`, `0019` and `0020` do from outside `ntdll.so`, execution breakpoints
+included, so a runner with CodeWeavers' own `ntdll.so` needs none of the three.
+Measured on 2026-11-25 with Phantom Blade Zero on CrossOver Preview 41303's
+runner: with NotProton's `ntdll.so` and `rosetta-cpu` without the breakpoints,
+Denuvo spun for minutes, twice; with CodeWeavers' `ntdll.so` plus `0017` alone it
+started; with NotProton's `ntdll.so` and `rosetta-cpu` with the breakpoints it
+reached Unreal in 12 seconds, after more than ten emulated breakpoints.
+
 `ntdll.so` is built from the same CrossOver sources as CodeWeavers', so their
 hacks stay: CW HACK 22144, the loader link Game Mode works through
 (`app/GameMode.swift`), among them. Like CodeWeavers', 26.3's is built with

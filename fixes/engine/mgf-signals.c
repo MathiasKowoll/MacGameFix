@@ -105,3 +105,7 @@ int mgf_signal_after(const struct np_plugin_api *api, const struct mach_header_6
                      mgf_signal_after_fn fn) {
     return fn && add(api, mh, slide, sig, NULL, fn);
 }
+
+void (*mgf_signal_wine(int sig))(int, siginfo_t *, void *) {
+    return sig > 0 && sig < NSIG ? __atomic_load_n(&next[sig], __ATOMIC_ACQUIRE) : NULL;
+}
