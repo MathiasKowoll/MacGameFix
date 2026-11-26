@@ -1834,7 +1834,8 @@ struct EngineView: View {
 
             NotProtonPluginsSection(model: model)
 
-            NativePortSection(extra: model.extraFolders)
+            NativePortSection(port: NativePort.batman, extra: model.extraFolders)
+            NativePortSection(port: NativePort.bioshock, extra: model.extraFolders)
 
             Section {
                 Toggle("Also into runners for new CrossOver builds", isOn: Binding(
