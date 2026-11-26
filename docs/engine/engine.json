@@ -42,8 +42,8 @@
           "modules": [
             "winebus.sys"
           ],
-          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0004-winebus-bluetooth.patch"
+          "commit": "8193e7a8f72b132e6feaf17085969fee74c4c4a0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8193e7a8f72b132e6feaf17085969fee74c4c4a0/engine/patches/wine-11.0/0004-winebus-bluetooth.patch"
         },
         {
           "name": "0005-winecoreaudio-bluetooth.patch",
@@ -52,8 +52,8 @@
           "modules": [
             "winecoreaudio.drv"
           ],
-          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0005-winecoreaudio-bluetooth.patch"
+          "commit": "8193e7a8f72b132e6feaf17085969fee74c4c4a0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8193e7a8f72b132e6feaf17085969fee74c4c4a0/engine/patches/wine-11.0/0005-winecoreaudio-bluetooth.patch"
         },
         {
           "name": "0006-winebus-xinput-and-triggers.patch",
@@ -62,8 +62,8 @@
           "modules": [
             "winebus.sys"
           ],
-          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0006-winebus-xinput-and-triggers.patch"
+          "commit": "8193e7a8f72b132e6feaf17085969fee74c4c4a0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8193e7a8f72b132e6feaf17085969fee74c4c4a0/engine/patches/wine-11.0/0006-winebus-xinput-and-triggers.patch"
         },
         {
           "name": "0007-hidclass-xinput.patch",
@@ -122,8 +122,8 @@
           "modules": [
             "winecoreaudio.drv"
           ],
-          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0012-winecoreaudio-edge-output-name.patch"
+          "commit": "8193e7a8f72b132e6feaf17085969fee74c4c4a0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8193e7a8f72b132e6feaf17085969fee74c4c4a0/engine/patches/wine-11.0/0012-winecoreaudio-edge-output-name.patch"
         },
         {
           "name": "0013-winebus-dualshock4.patch",
@@ -132,8 +132,8 @@
           "modules": [
             "winebus.sys"
           ],
-          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0013-winebus-dualshock4.patch"
+          "commit": "8193e7a8f72b132e6feaf17085969fee74c4c4a0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8193e7a8f72b132e6feaf17085969fee74c4c4a0/engine/patches/wine-11.0/0013-winebus-dualshock4.patch"
         },
         {
           "name": "0014-winebus-trigger-replace-and-live-settings.patch",
@@ -142,18 +142,8 @@
           "modules": [
             "winebus.sys"
           ],
-          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0014-winebus-trigger-replace-and-live-settings.patch"
-        },
-        {
-          "name": "0015-winebus-input-rate-once-a-minute.patch",
-          "file": "engine/patches/wine-11.0/0015-winebus-input-rate-once-a-minute.patch",
-          "subject": "With diagnostics on, the pad's input rate is logged once a minute, not every 2 s",
-          "modules": [
-            "winebus.sys"
-          ],
-          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0015-winebus-input-rate-once-a-minute.patch"
+          "commit": "8193e7a8f72b132e6feaf17085969fee74c4c4a0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8193e7a8f72b132e6feaf17085969fee74c4c4a0/engine/patches/wine-11.0/0014-winebus-trigger-replace-and-live-settings.patch"
         },
         {
           "name": "0016-winebus-rumble-flag-0x02-keeps-the-motors.patch",
@@ -162,8 +152,8 @@
           "modules": [
             "winebus.sys"
           ],
-          "commit": "dcb8529700b3172b949115a63d8de917d6f00cf9",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/dcb8529700b3172b949115a63d8de917d6f00cf9/engine/patches/wine-11.0/0016-winebus-rumble-flag-0x02-keeps-the-motors.patch"
+          "commit": "8193e7a8f72b132e6feaf17085969fee74c4c4a0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8193e7a8f72b132e6feaf17085969fee74c4c4a0/engine/patches/wine-11.0/0016-winebus-rumble-flag-0x02-keeps-the-motors.patch"
         },
         {
           "name": "0017-ntdll-rosetta-cpu-fidelity.patch",
@@ -204,6 +194,17 @@
           ],
           "commit": "1005dd1ade6d1a3e8c4f879c4700a705f07c7dd0",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/1005dd1ade6d1a3e8c4f879c4700a705f07c7dd0/engine/patches/wine-11.0/0020-ntdll-rosetta-cpuid-by-default.patch"
+        },
+        {
+          "name": "0042-controls-diagnostics.patch",
+          "file": "engine/patches/wine-11.0/0042-controls-diagnostics.patch",
+          "subject": "What only diagnostics on writes to the pad's log, kept apart from the controls' patches",
+          "modules": [
+            "winebus.sys",
+            "winecoreaudio.drv"
+          ],
+          "commit": "8193e7a8f72b132e6feaf17085969fee74c4c4a0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8193e7a8f72b132e6feaf17085969fee74c4c4a0/engine/patches/wine-11.0/0042-controls-diagnostics.patch"
         }
       ]
     },
@@ -472,8 +473,8 @@
           "modules": [
             "winebus.sys"
           ],
-          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0004-winebus-bluetooth.patch"
+          "commit": "8193e7a8f72b132e6feaf17085969fee74c4c4a0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8193e7a8f72b132e6feaf17085969fee74c4c4a0/engine/patches/wine-11.21/0004-winebus-bluetooth.patch"
         },
         {
           "name": "0005-winecoreaudio-bluetooth.patch",
@@ -482,8 +483,8 @@
           "modules": [
             "winecoreaudio.drv"
           ],
-          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0005-winecoreaudio-bluetooth.patch"
+          "commit": "8193e7a8f72b132e6feaf17085969fee74c4c4a0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8193e7a8f72b132e6feaf17085969fee74c4c4a0/engine/patches/wine-11.21/0005-winecoreaudio-bluetooth.patch"
         },
         {
           "name": "0006-winebus-xinput-and-triggers.patch",
@@ -492,8 +493,8 @@
           "modules": [
             "winebus.sys"
           ],
-          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0006-winebus-xinput-and-triggers.patch"
+          "commit": "8193e7a8f72b132e6feaf17085969fee74c4c4a0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8193e7a8f72b132e6feaf17085969fee74c4c4a0/engine/patches/wine-11.21/0006-winebus-xinput-and-triggers.patch"
         },
         {
           "name": "0007-hidclass-xinput.patch",
@@ -552,8 +553,8 @@
           "modules": [
             "winecoreaudio.drv"
           ],
-          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0012-winecoreaudio-edge-output-name.patch"
+          "commit": "8193e7a8f72b132e6feaf17085969fee74c4c4a0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8193e7a8f72b132e6feaf17085969fee74c4c4a0/engine/patches/wine-11.21/0012-winecoreaudio-edge-output-name.patch"
         },
         {
           "name": "0013-winebus-dualshock4.patch",
@@ -562,8 +563,8 @@
           "modules": [
             "winebus.sys"
           ],
-          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0013-winebus-dualshock4.patch"
+          "commit": "8193e7a8f72b132e6feaf17085969fee74c4c4a0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8193e7a8f72b132e6feaf17085969fee74c4c4a0/engine/patches/wine-11.21/0013-winebus-dualshock4.patch"
         },
         {
           "name": "0014-winebus-trigger-replace-and-live-settings.patch",
@@ -572,18 +573,8 @@
           "modules": [
             "winebus.sys"
           ],
-          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0014-winebus-trigger-replace-and-live-settings.patch"
-        },
-        {
-          "name": "0015-winebus-input-rate-once-a-minute.patch",
-          "file": "engine/patches/wine-11.21/0015-winebus-input-rate-once-a-minute.patch",
-          "subject": "With diagnostics on, the pad's input rate is logged once a minute, not every 2 s",
-          "modules": [
-            "winebus.sys"
-          ],
-          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0015-winebus-input-rate-once-a-minute.patch"
+          "commit": "8193e7a8f72b132e6feaf17085969fee74c4c4a0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8193e7a8f72b132e6feaf17085969fee74c4c4a0/engine/patches/wine-11.21/0014-winebus-trigger-replace-and-live-settings.patch"
         },
         {
           "name": "0016-winebus-rumble-flag-0x02-keeps-the-motors.patch",
@@ -592,8 +583,8 @@
           "modules": [
             "winebus.sys"
           ],
-          "commit": "a92dfd6395d01a24c6ff92758555d7c6b6af1fd2",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/a92dfd6395d01a24c6ff92758555d7c6b6af1fd2/engine/patches/wine-11.21/0016-winebus-rumble-flag-0x02-keeps-the-motors.patch"
+          "commit": "8193e7a8f72b132e6feaf17085969fee74c4c4a0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8193e7a8f72b132e6feaf17085969fee74c4c4a0/engine/patches/wine-11.21/0016-winebus-rumble-flag-0x02-keeps-the-motors.patch"
         },
         {
           "name": "0017-ntdll-rosetta-cpu-fidelity.patch",
@@ -732,8 +723,8 @@
           "modules": [
             "winebus.sys"
           ],
-          "commit": "e94594f1f5d08de9d359ac85064917beec42da84",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/e94594f1f5d08de9d359ac85064917beec42da84/engine/patches/wine-11.21/0030-winebus-bluetooth-pad-usb-again.patch"
+          "commit": "8193e7a8f72b132e6feaf17085969fee74c4c4a0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8193e7a8f72b132e6feaf17085969fee74c4c4a0/engine/patches/wine-11.21/0030-winebus-bluetooth-pad-usb-again.patch"
         },
         {
           "name": "0031-ntdll-diagnostic-stores-on-demand.patch",
@@ -845,6 +836,17 @@
           ],
           "commit": "ee81464a6fea353d28cb4a945c985b910789c60e",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/ee81464a6fea353d28cb4a945c985b910789c60e/engine/patches/wine-11.21/0041-kernelbase-FindPackagesByPackageFamily.patch"
+        },
+        {
+          "name": "0042-controls-diagnostics.patch",
+          "file": "engine/patches/wine-11.21/0042-controls-diagnostics.patch",
+          "subject": "What only diagnostics on writes to the pad's log, kept apart from the controls' patches",
+          "modules": [
+            "winebus.sys",
+            "winecoreaudio.drv"
+          ],
+          "commit": "8193e7a8f72b132e6feaf17085969fee74c4c4a0",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/8193e7a8f72b132e6feaf17085969fee74c4c4a0/engine/patches/wine-11.21/0042-controls-diagnostics.patch"
         }
       ]
     }
