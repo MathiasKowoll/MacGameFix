@@ -344,7 +344,7 @@ under NotProton's own file names, each off until it is switched on for a game:
   lacked, where some games crashed playing a video.
 - **Red Dead Online fix** (`60-red-dead-online.conf`, `tcp-noopt.dylib`), on
   Red Dead Redemption 2 and Red Dead Online's pages only: `TCP_NOOPT` on the
-  game's sockets.
+  game's sockets. Red Dead Redemption 2's fix switches it on for the game.
 
 The three libraries need NotProton's plugin host, which NotProton's own Update
 installs, and the Unreal row a NotProton that reads `patch`. Where one cannot

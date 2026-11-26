@@ -21,8 +21,8 @@
 # WHAT THIS FIXES.
 #
 # Under Rosetta the game's Denuvo spins one core at 100% and never opens a
-# window. The Wine modules' ntdll.so (engine patch 0017, the Intel side of
-# CrossOver 26.3 and Preview 41073) can show Rosetta's CPU with the leaf 7 bits
+# window. The Rosetta improvement's ntdll.so (engine patch 0017, the Intel side of a
+# CrossOver app or of NotProton's 41073 runner) can show Rosetta's CPU with the leaf 7 bits
 # the protection checks for, CLFLUSHOPT, CLWB and RDPID, and emulate the two
 # instructions; it does so for a process only when WINE_ROSETTA_CPUID7_OR asks,
 # and reads that from AppDefaults\<exe>\Environment as well as from the
@@ -52,8 +52,9 @@
 # 2026-11-20 with the 41303 runner: the first start with it compiled 65,685 and wrote
 # 7.9 GB; the next one compiled 113. A CrossOver bottle has no way to load it.
 #
-# What else it needs, and this does not do: the Wine modules on (Wine Modules
-# tab), since CrossOver's own ntdll ignores the value; D3DMetal 4 (CrossOver
+# What else it needs, and this does not do: outside NotProton's 41303 runner on
+# Rosetta, the Rosetta improvement (Improvements tab), since CrossOver's own ntdll
+# ignores the value (the install says so where it is missing); D3DMetal 4 (CrossOver
 # Preview 27 carries it; 26.3 carries 3.0); the Intel side, not FEX. Played on
 # 2026-11-01 with the same values passed in the launch options, on Preview
 # 41073's NotProton runner: it passed Denuvo and was played for 32 minutes,
@@ -63,10 +64,9 @@
 # no NV12); in the game it has not been played yet.
 #
 # MGVF-SCOPE: prefix
-# MGVF-NEEDS: rosetta
 # MGVF-INSTRUCTIONS: pbz-instructions.md
 # MGVF-GAME: Phantom Blade Zero | PBZ.exe | platform/steam
-# MGVF-WHY: Never opens a window under Rosetta: its Denuvo checks the CPU for instructions Rosetta does not have. The Wine modules' ntdll shows them to this executable alone, it loads Microsoft's Visual C++ runtime first, and an H.264 decoder that offers NV12 brings back the black menu video. In NotProton it also turns on a pipeline cache, so the shaders Metal's own cache has no room for are not compiled again at every start. On NotProton's 41303 runner on Rosetta it also switches on the shared Engine fixes row for the game (NOTPROTON_MGF_ENGINE=1), whose library shows the protection the CPU it checks for from outside ntdll; checked with a test program, not yet played with the row.
+# MGVF-WHY: Never opens a window under Rosetta: its Denuvo checks the CPU for instructions Rosetta does not have. The Rosetta improvement's ntdll shows them to this executable alone, it loads Microsoft's Visual C++ runtime first, and an H.264 decoder that offers NV12 brings back the black menu video. In NotProton it also turns on a pipeline cache, so the shaders Metal's own cache has no room for are not compiled again at every start. On NotProton's 41303 runner on Rosetta the improvement is not needed: the fix switches on the shared Engine fixes row for the game (NOTPROTON_MGF_ENGINE=1), whose library shows the protection that CPU, on NotProton's own ntdll; played that way on 2026-11-25.
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -143,8 +143,8 @@ if [ -n "$PFX" ] && [ -f "$(dirname "$PFX")/notproton-build" ] && [ -d "$NP_SUPP
 # CPUID Rosetta skips), from outside ntdll (engine/mgf-engine.c). PBZ has no row of its own: the
 # record is the one other games use (np-plugin-shared.conf, plugins/mgf-shared.conf), and this
 # game is added to its apps. On NotProton's runner for CrossOver Preview 41303 on Rosetta, with
-# its plugin host, only. While the Wine modules' ntdll still carries those patches, the row
-# changes nothing the game sees; it is what lets that ntdll go without them.
+# its plugin host, only. That runner keeps NotProton's own ntdll.so, so there the row is what
+# shows the game the CPU (played on 2026-11-25), and the CPUID value below goes unread.
 ROWS_ON=0
 if [ "$NOTPROTON" = 1 ]; then
   . "$HERE/notproton-plugins.sh"
@@ -409,7 +409,13 @@ if [ -n "$PFX" ]; then
   done < <(values)
   echo "  $COUNT values written for $EXE only, into the prefix's user.reg"
   [ "$NOTPROTON" = 0 ] || cache_install || exit 1
-  if [ "$ROWS_ON" = 1 ]; then np_plugins_install || exit 1; fi
+  if [ "$ROWS_ON" = 1 ]; then np_plugins_install || exit 1
+  elif [ "$NOTPROTON" = 1 ]; then
+    # Without the row, only the Rosetta improvement's ntdll.so reads the value.
+    pbz_ntdll="$NP_SUPPORT/runners/crossover-$pbz_build/CrossOver/lib/wine/x86_64-unix/ntdll.so"
+    /usr/bin/grep -aqF "$CPUID_NAME" "$pbz_ntdll" 2>/dev/null \
+      || echo "note: this runner's ntdll.so does not read $CPUID_NAME; put the Rosetta improvement in it."
+  fi
 else
   cx="$(find_crossover)" || { echo "error: no CrossOver found in /Applications" >&2; exit 1; }
   reachable "$BOTTLE" "$cx" || { echo "error: this bottle cannot run reg.exe, so nothing was written." >&2; exit 1; }
@@ -425,6 +431,6 @@ else
   echo "  $COUNT values written for $EXE only, through the bottle"
   # The values do nothing under CrossOver's own ntdll.
   /usr/bin/grep -aqF "$CPUID_NAME" "$cx/lib/wine/x86_64-unix/ntdll.so" 2>/dev/null \
-    || echo "note: this CrossOver's ntdll.so does not read $CPUID_NAME; turn the Wine modules on for it."
+    || echo "note: this CrossOver's ntdll.so does not read $CPUID_NAME; put the Rosetta improvement in it."
 fi
 echo "installed"

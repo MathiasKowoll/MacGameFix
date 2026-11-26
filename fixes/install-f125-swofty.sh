@@ -94,7 +94,6 @@
 # and a race from Steam's Play, the game's objects at 0x4.., 0x5.. and 0x6...
 #
 # MGVF-SCOPE: prefix
-# MGVF-NEEDS: rosetta
 # MGVF-GAME: F1 25 | F1_25.exe |
 # MGVF-TESTING: Mathias Kowoll
 # MGVF-INSTRUCTIONS: f125-instructions.md

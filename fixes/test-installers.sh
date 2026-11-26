@@ -180,29 +180,41 @@ last="$(ng3 --restore 2>/dev/null | tail -1)"
   && ! /usr/bin/grep -q "NINJA GAIDEN" "$pfx/user.reg" \
   && say ok "ng3 in a Steam Play prefix: restored, the overrides gone" || say FAIL "ng3 prefix: restore ($last, $(ng3st))"
 
-# Red Dead Online's fix is NotProton's notproton-tcp-noopt file beside the prefix, for a runner
-# whose ntdll.so carries engine patch 0037 (it names that file).
-rh="$W/rdohome"; rc="$W/rdo/compatdata/1174180"; rp="$rc/pfx"; rg="$W/rdo/game"
-rnt="$rh/Library/Application Support/notproton/runners/crossover-27.0.0.41303-fex/CrossOver/lib/wine/x86_64-unix"
-mkdir -p "$rp/drive_c" "$rg" "$rnt"; : > "$rp/system.reg"; : > "$rp/user.reg"; : > "$rg/RDR2.exe"
-printf '27.0.0.41303-fex\n' > "$rc/notproton-build"; printf 'an ntdll.so without 0037\n' > "$rnt/ntdll.so"
-rdo() { HOME="$rh" MGVF_BOTTLE="$rp" /bin/bash "$FIX/install-rdo-tcp.sh" "$rg" "$@"; }
+# Red Dead Online's fix switches on NotProton's Red Dead Online fix row (NOTPROTON_TCP_NOOPT=1 in
+# the game's launch options), on 41303's runner on Rosetta, where MacGameFix keeps that row.
+rh="$W/rdohome"; rc="$W/rdo/compatdata/1174180"; rp="$rc/pfx"; rg="$W/rdo/game"; rfix="$W/rdo/fixes"
+rnp="$rh/Library/Application Support/notproton"; rvdf="$rh/Library/Application Support/Steam/userdata/1/config/localconfig.vdf"
+mkdir -p "$rp/drive_c" "$rg" "$rnp/plugins" "$rfix" "$(dirname "$rvdf")"; : > "$rp/system.reg"; : > "$rp/user.reg"; : > "$rg/RDR2.exe"
+for n in install-rdo-tcp.sh bottles.sh steam-launch-options.pl; do cp "$FIX/$n" "$rfix/$n"; done
+sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$rfix/steam-launch-options.pl"
+printf '27.0.0.41303-fex\nCrossOver Preview 27.0.0.41303 - Rosetta\n' > "$rc/notproton-build"
+printf '"UserLocalConfigStore"\n{\n\t"Software" { "Valve" { "Steam" { "apps" {\n\t\t"1174180"\n\t\t{\n\t\t\t"LaunchOptions"\t\t"NOTPROTON_ENV_WINE_TCP_NOOPT=1 %%command%%"\n\t\t}\n\t} } } }\n}\n' > "$rvdf"
+rvdf0="$(cat "$rvdf")"
+rdo() { HOME="$rh" MGVF_BOTTLE="$rp" /bin/bash "$rfix/install-rdo-tcp.sh" "$rg" "$@"; }
 rdost() { rdo --status 2>/dev/null | /usr/bin/grep -E '^(installed|absent|half|norecipe)$' | tail -1; }
 [ "$(rdost)" = absent ] && say ok "rdo: absent before" || say FAIL "rdo: absent before ($(rdost))"
-! rdo > "$W/rdo1.log" 2>&1 && [ ! -e "$rc/notproton-tcp-noopt" ] && /usr/bin/grep -q 'does not have the fix' "$W/rdo1.log" \
-  && say ok "rdo: refused while the runner's ntdll.so lacks 0037, nothing written" || say FAIL "rdo: refused without 0037"
-printf 'ntdll.so ... %%s/../notproton-tcp-noopt ...\n' > "$rnt/ntdll.so"
-MGVF_STATUS_ONLY=1 rdo > /dev/null 2>&1; [ ! -e "$rc/notproton-tcp-noopt" ] \
-  && say ok "rdo: MGVF_STATUS_ONLY never installs" || say FAIL "rdo: MGVF_STATUS_ONLY wrote the switch"
-rdo > "$W/rdo2.log" 2>&1 && [ -f "$rc/notproton-tcp-noopt" ] && [ ! -s "$rc/notproton-tcp-noopt" ] && [ "$(rdost)" = installed ] \
+! rdo > "$W/rdo1.log" 2>&1 && [ "$(cat "$rvdf")" = "$rvdf0" ] && /usr/bin/grep -q 'Red Dead Online fix row is not' "$W/rdo1.log" \
+  && say ok "rdo: refused while NotProton has no Red Dead Online row, nothing written" || say FAIL "rdo: refused without the row"
+: > "$rnp/plugin-host.dylib"; : > "$rnp/plugins/tcp-noopt.dylib"
+printf '[NOTPROTON_TCP_NOOPT]\nlabel = Red Dead Online fix\ninject = 1\nrequires = Library/Application Support/notproton/plugins/tcp-noopt.dylib\n' > "$rnp/plugins/60-red-dead-online.conf"
+: > "$rc/notproton-tcp-noopt"
+[ "$(rdost)" = half ] && say ok "rdo: the switch file of the 0037 version alone is half" || say FAIL "rdo: old switch ($(rdost))"
+MGVF_STATUS_ONLY=1 rdo > /dev/null 2>&1; [ "$(cat "$rvdf")" = "$rvdf0" ] \
+  && say ok "rdo: MGVF_STATUS_ONLY never installs" || say FAIL "rdo: MGVF_STATUS_ONLY wrote the launch options"
+rdo > "$W/rdo2.log" 2>&1 && [ "$(rdost)" = installed ] && [ ! -e "$rc/notproton-tcp-noopt" ] \
+  && /usr/bin/grep -q 'NOTPROTON_TCP_NOOPT=1 NOTPROTON_ENV_WINE_TCP_NOOPT=1 %command%' "$rvdf" \
   && [ -z "$(ls -A "$rg" | /usr/bin/grep -v '^RDR2.exe$')" ] \
-  && say ok "rdo: installed, the empty switch beside the prefix and nothing in the game folder" || say FAIL "rdo: install ($(rdost), $(tail -1 "$W/rdo2.log"))"
-printf 'an ntdll.so without 0037\n' > "$rnt/ntdll.so"
-[ "$(rdost)" = half ] && say ok "rdo: half when the runner's ntdll.so loses 0037" || say FAIL "rdo: half ($(rdost))"
-rdo --restore > /dev/null 2>&1 && [ ! -e "$rc/notproton-tcp-noopt" ] && [ "$(rdost)" = absent ] \
-  && say ok "rdo: restore takes the switch away" || say FAIL "rdo: restore ($(rdost))"
-printf '27.0.0.41073-fex\n' > "$rc/notproton-build"
-[ "$(rdost)" = norecipe ] && ! rdo > /dev/null 2>&1 && [ ! -e "$rc/notproton-tcp-noopt" ] \
+  && say ok "rdo: installed, the row on in the launch options, the old switch gone, nothing in the game folder" || say FAIL "rdo: install ($(rdost), $(tail -1 "$W/rdo2.log"))"
+rm "$rnp/plugins/tcp-noopt.dylib"
+[ "$(rdost)" = half ] && say ok "rdo: half when the row's library is gone" || say FAIL "rdo: half ($(rdost))"
+: > "$rnp/plugins/tcp-noopt.dylib"
+rdo --restore > /dev/null 2>&1 && [ "$(rdost)" = absent ] && [ "$(cat "$rvdf")" = "$rvdf0" ] \
+  && say ok "rdo: restore gives the launch options back as they were" || say FAIL "rdo: restore ($(rdost))"
+printf '27.0.0.41303-fex\nCrossOver Preview 27.0.0.41303 - FEX\n' > "$rc/notproton-build"
+[ "$(rdost)" = norecipe ] && ! rdo > /dev/null 2>&1 && [ "$(cat "$rvdf")" = "$rvdf0" ] \
+  && say ok "rdo: the FEX side is norecipe, and refused" || say FAIL "rdo: FEX ($(rdost))"
+printf '27.0.0.41073-fex\nCrossOver Preview 27.0.0.41073 - Rosetta\n' > "$rc/notproton-build"
+[ "$(rdost)" = norecipe ] && ! rdo > /dev/null 2>&1 \
   && say ok "rdo: another runner build is norecipe, and refused" || say FAIL "rdo: another build ($(rdost))"
 : > "$rp/cxbottle.conf"
 [ "$(rdost)" = norecipe ] && ! rdo > /dev/null 2>&1 \

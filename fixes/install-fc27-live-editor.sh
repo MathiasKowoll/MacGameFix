@@ -87,7 +87,6 @@
 # player. Not played: the editors themselves, a long session, a match.
 #
 # MGVF-SCOPE: prefix
-# MGVF-NEEDS: rosetta
 # MGVF-GAME: EA SPORTS FC 27 | FC27.exe |
 # MGVF-TESTING: Mathias Kowoll
 # MGVF-INSTRUCTIONS: fc27-instructions.md
