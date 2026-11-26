@@ -37,6 +37,12 @@ switch="${NOTPROTON_MGF_MODTOOL:-}"; play="${NOTPROTON_MGF_PLAY:-game}"; profile
 opens=game; notes=off
 case "$play" in window) opens=window ;; notes) notes=on ;; esac
 [ "$switch" = 1 ] || exec "$@"
+# Swofty Launcher's window needs MacGameFix's dwrite.dll and directmanipulation.dll, which the shared
+# runner does not carry: NotProton runs this start on its runner variant with them, which the
+# install wrote.
+if [ -f "$HOME/Library/Application Support/notproton/variants/mgf-f125-swofty.conf" ]; then
+  export NOTPROTON_RUNNER_VARIANT="${NOTPROTON_RUNNER_VARIANT:+$NOTPROTON_RUNNER_VARIANT+}mgf-f125-swofty-window"
+fi
 # A path as the prefix sees it: the Steam library on the drive NotProton gives it there (S: so
 # far, read from the prefix's dosdevices), anything else under Z:.
 library="${STEAM_COMPAT_DATA_PATH%/steamapps/compatdata/*}"

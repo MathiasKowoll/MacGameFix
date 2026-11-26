@@ -115,8 +115,12 @@ fh6_put() {
 fh6_install_runtime() {
   # Stage the matching pair via the existing Rosetta installer; prefixes and per-game
   # launch clones are coordinated here because the generic installer does not own them.
-  # On 41303 the same run retires the modules' Intel-side ntdll.so from the runner.
-  [ -f "$MODULES/engine-modules.sh" ] && /bin/bash "$MODULES/engine-modules.sh" "$RUNNER" --part=rosetta
+  # On 41303 the same run retires the modules' Intel-side ntdll.so from the runner. A runner whose
+  # Rosetta part is all left to NotProton and CodeWeavers has nothing to install: nomodules, not a failure.
+  if [ -f "$MODULES/engine-modules.sh" ]; then
+    /bin/bash "$MODULES/engine-modules.sh" "$RUNNER" --part=rosetta \
+      || [ "$(/bin/bash "$MODULES/engine-modules.sh" "$RUNNER" --status --part=rosetta 2>/dev/null | tail -1)" = nomodules ] || return 1
+  fi
   if [ "$FH6_OWN_PE" = 0 ]; then
     if [ -n "$CLONE" ]; then
       fh6_pe_out "$CLONE/lib/wine/x86_64-windows/ntdll.dll" "$RUNNER/lib/wine/x86_64-windows/ntdll.dll" || return 1

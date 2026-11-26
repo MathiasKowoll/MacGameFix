@@ -282,11 +282,13 @@ On NotProton, `rosetta-cpu` in `fixes/engine` (the **Engine fixes** row) does wh
 `0017`, `0019` and `0020` do from outside `ntdll.so`, execution breakpoints
 included, so a runner with CodeWeavers' own `ntdll.so` needs none of the three.
 In NotProton's runner for CrossOver Preview 41303 the Intel side now keeps
-CodeWeavers' `ntdll.so`, `kernel32.dll`, `kernelbase.dll`, `user32.dll` and
-`win32u.so` and NotProton's `ntdll.dll` (`LEAVE` in `engine-modules.sh`); a runner
-the modules gave them before gets the kept files back on its next update. What
-they carried comes per game from the Engine fixes row (`0017` to `0021`, `0026` to
-`0029`, `0038`, `0041`). Left behind: 2XKO's `0032` to `0036`, which never made it
+CodeWeavers' `ntdll.so`, `kernel32.dll`, `kernelbase.dll`, `user32.dll`,
+`win32u.so`, `dwrite.dll` and `directmanipulation.dll` and NotProton's `ntdll.dll`
+(`LEAVE` in `engine-modules.sh`); a runner the modules gave them before gets the
+kept files back on its next update. What they carried comes per game from the
+Engine fixes row (`0017` to `0021`, `0026` to `0029`, `0038`, `0041`), and `0039`
+and `0040` reach F1 25 alone as a runner variant (see "A GPUI program's fonts and
+window"). Left behind: 2XKO's `0032` to `0036`, which never made it
 start, and Red Dead Online's `0037`. A CrossOver app and the FEX side keep every
 module. Played on 2026-11-25 on NotProton's `ntdll` with CodeWeavers' `kernel32`
 and `kernelbase`: F1 25, EA SPORTS FC 27, Forza Horizon 6, Phantom Blade Zero,
@@ -741,6 +743,11 @@ a program built on GPUI open its window. Swofty Launcher is one, as the Zed edit
   does.
 - **Still the program's to ask for:** `GPUI_DISABLE_DIRECT_COMPOSITION=1`. Wine's
   DirectComposition gives a window nothing to draw to, and GPUI has that switch for it.
+- **Where they go:** a CrossOver app gets both. NotProton's 41303 runner keeps
+  CodeWeavers' on its Intel side; F1 25's fix copies ours from the modules catalog
+  into `swofty/window` and writes a NotProton runner variant for them
+  (`notproton/variants/mgf-f125-swofty.conf`), which the play script asks for with
+  `NOTPROTON_RUNNER_VARIANT`. Only starts through Swofty run on that runner copy.
 
 Played on 2026-11-23 on NotProton's 41303 runner (Rosetta) with Swofty Launcher's
 official 1.10.35 release and no third-party DLL: with CodeWeavers' two modules its log

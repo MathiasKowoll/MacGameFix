@@ -44,7 +44,7 @@ The fix adds no row of its own. It uses three of MacGameFix's rows, in the group
 
 Choose **The mod tool's window** to turn addons on or off, install mods, edit the game database or change the profile. Its own Play starts the game from there. Set the row back to **The game** to go straight into the game again.
 
-The window needs the Wine modules with the fonts and window fixes for CrossOver Preview 41303 (engine patches 0039 and 0040). Without them it closes as it opens, and `f125-swofty-window.log` beside the play script says "failed to resolve font" or "initializing Direct Manipulation". Touchpad pinch and inertia do not work in it; the wheel and two-finger scrolling do.
+The window needs MacGameFix's fonts and window fixes for CrossOver Preview 41303 (engine patches 0039 and 0040). The fix installs them for F1 25 alone, as a NotProton runner variant; NotProton's shared runner keeps CodeWeavers' own. Without them it closes as it opens, and `f125-swofty-window.log` beside the play script says "failed to resolve font" or "initializing Direct Manipulation". Touchpad pinch and inertia do not work in it; the wheel and two-finger scrolling do.
 
 # Profiles
 

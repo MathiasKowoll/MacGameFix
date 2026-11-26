@@ -17,7 +17,8 @@
 #             which forwards to kernelbase.dll the function EA SPORTS FC 27's activation
 #             looks up (0041); and on 41073's Intel side, and in CrossOver apps, ntdll.dll (a
 #             NotProton runner of 41303 keeps NotProton's own ntdll.dll, and CodeWeavers' ntdll.so,
-#             kernel32.dll, kernelbase.dll, user32.dll and win32u.so on its Intel side: see LEAVE below)
+#             kernel32.dll, kernelbase.dll, user32.dll, win32u.so, dwrite.dll and directmanipulation.dll
+#             on its Intel side: see LEAVE below)
 # Without --part every improvement the build carries is meant, as before there were two.
 # An improvement is in when the list in the backup folder names one of its modules. One
 # that was never installed, or was taken out with --part, is absent whatever the other is.
@@ -126,12 +127,13 @@ done
 # Forza Horizon 6, Phantom Blade Zero, STAR WARS: Galactic Racer and Persona 4 Golden were played on
 # NotProton's ntdll with CodeWeavers' kernel32 and kernelbase (2026-11-25). Left out: 2XKO's 0032 to
 # 0036, which never made that game start, and Red Dead Online's 0037. dwrite.dll and
-# directmanipulation.dll (0039, 0040, Swofty Launcher's window) stay until they reach F1 25 alone.
+# directmanipulation.dll (0039, 0040, Swofty Launcher's window) go to F1 25 alone, as a NotProton
+# runner variant its fix writes (fixes/install-f125-swofty.sh).
 # A CrossOver app keeps every module, and so does the FEX side. One put in before is retired: the
 # kept file goes back, while ours is still there.
 LEAVE=""
 if [ -z "$APP" ]; then case "$BUILD" in 27.0.0.41303)
-  LEAVE="x86_64-windows/ntdll.dll x86_64-unix/ntdll.so x86_64-windows/kernel32.dll x86_64-windows/kernelbase.dll x86_64-windows/user32.dll x86_64-unix/win32u.so" ;; esac; fi
+  LEAVE="x86_64-windows/ntdll.dll x86_64-unix/ntdll.so x86_64-windows/kernel32.dll x86_64-windows/kernelbase.dll x86_64-windows/user32.dll x86_64-unix/win32u.so x86_64-windows/dwrite.dll x86_64-windows/directmanipulation.dll" ;; esac; fi
 leaves() { case " $LEAVE " in *" $1 "*) return 0 ;; esac; return 1; }
 # The improvement asked for alone.
 KEEP=""
