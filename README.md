@@ -359,7 +359,10 @@ One more is MacGameFix's own:
   to macOS and does what the Wine modules do inside their own: the Bluetooth
   pad as a wired one, haptics, XInput, trigger effects and DualShock 4 mode,
   by the game's settings in Game Feel. Where the two files are MacGameFix's
-  own it leaves them alone. Played on 2026-11-26 with Marvel's Spider-Man 2
+  own it leaves them alone. The Windows side is moving into the library too,
+  one module at a time: `setupapi.dll`'s change (a device's base container id
+  as WCHAR from the ANSI function, which Nioh 3 needs) is made in memory on
+  CodeWeavers' own file. Played on 2026-11-26 with Marvel's Spider-Man 2
   (Bluetooth and a cable), Crysis 3 Remastered and Crash Bandicoot 4.
 
 The four libraries need NotProton's plugin host, which NotProton's own Update
