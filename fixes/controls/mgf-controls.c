@@ -11,6 +11,7 @@
 // Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <mach-o/getsect.h>
 #include <mach-o/loader.h>
 #include "pad.h"
 #include "../../app/notproton-plugins/notproton_plugin.h"
@@ -20,14 +21,25 @@ void mgf_controls_audio_arm(const struct np_plugin_api *api, const struct mach_h
 
 static const struct np_plugin_api *api;
 
+// A runner the Wine modules were put into has MacGameFix's own winebus.so and winecoreaudio.so,
+// which do all of this themselves: taking their calls as well would do it twice. Those files
+// name the folder the pad's log is in ("/tmp/macgamefix-%u"); CodeWeavers' do not.
+static bool ours(const struct mach_header_64 *mh, const char *name) {
+    unsigned long size = 0;
+    const uint8_t *strings = getsectiondata(mh, "__TEXT", "__cstring", &size);
+    if (!strings || !memmem(strings, size, "/tmp/macgamefix-", 16)) return false;
+    pad_log("controls: %s is MacGameFix's own here, which does this itself: left alone\n", name);
+    return true;
+}
+
 static void audio_loaded(const struct mach_header_64 *mh, intptr_t slide, const char *path) {
     (void)path;
-    mgf_controls_audio_arm(api, mh, slide);
+    if (!ours(mh, "winecoreaudio.so")) mgf_controls_audio_arm(api, mh, slide);
 }
 
 static void bus_loaded(const struct mach_header_64 *mh, intptr_t slide, const char *path) {
     (void)path;
-    mgf_controls_bus_arm(api, mh, slide);
+    if (!ours(mh, "winebus.so")) mgf_controls_bus_arm(api, mh, slide);
 }
 
 __attribute__((constructor)) static void mgf_controls_init(void) {
