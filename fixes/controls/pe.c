@@ -145,6 +145,80 @@ bool pe_point_export(const struct pe_image *image, const char *name, const uint8
     return true;
 }
 
+// The optional header of the image and its section table; false for anything but a PE32+ image.
+static bool headers(const struct pe_image *image, uint8_t **opt, uint8_t **sections, unsigned *count) {
+    uint8_t *base = image->base;
+    if (image->size < 0x1000 || base[0] != 'M' || base[1] != 'Z') return false;
+    uint32_t nt = *(uint32_t *)(base + 0x3c);
+    if (nt > 0x1000 - 0x108 || memcmp(base + nt, "PE\0\0", 4)) return false;
+    *opt = base + nt + 24;
+    if (*(uint16_t *)*opt != 0x20b) return false;
+    *count = *(uint16_t *)(base + nt + 6);
+    *sections = *opt + *(uint16_t *)(base + nt + 20);
+    return (uint64_t)(*sections - base) + (uint64_t)*count * 40 <= 0x1000;
+}
+
+bool pe_section(const struct pe_image *image, unsigned index, uint8_t **start, uint32_t *size, bool *code) {
+    uint8_t *opt, *sections;
+    unsigned count;
+    if (!headers(image, &opt, &sections, &count) || index >= count) return false;
+    const uint8_t *s = sections + index * 40;
+    uint32_t virtual_size = *(uint32_t *)(s + 8), rva = *(uint32_t *)(s + 12);
+    *start = image->base + rva;
+    *size = (uint64_t)rva + virtual_size <= image->size ? virtual_size : 0;
+    *code = *(uint32_t *)(s + 36) & 0x20000000;  // IMAGE_SCN_MEM_EXECUTE
+    return true;
+}
+
+uint32_t pe_code(const struct pe_image *image, const uint8_t *at) {
+    uint8_t *start;
+    uint32_t size;
+    bool code;
+    for (unsigned i = 0; pe_section(image, i, &start, &size, &code); i++)
+        if (code && at >= start && at < start + size) return (uint32_t)(start + size - at);
+    return 0;
+}
+
+static bool same_name(const char *a, const char *b) {
+    for (; *a && *b; a++, b++)
+        if ((*a | 0x20) != (*b | 0x20)) return false;
+    return !*a && !*b;
+}
+
+uintptr_t *pe_import_slot(const struct pe_image *image, const char *dll, const char *name) {
+    uint8_t *opt, *sections;
+    unsigned count;
+    if (!headers(image, &opt, &sections, &count) || *(uint32_t *)(opt + 108) < 2) return NULL;
+    uint32_t dir = *(uint32_t *)(opt + 120), size = *(uint32_t *)(opt + 124);
+    if (!dir || (uint64_t)dir + size > image->size) return NULL;
+    // Import descriptors: the lookup table, two fields not used here, the module's name, the address table.
+    for (uint32_t at = dir; at + 20 <= dir + size; at += 20) {
+        const uint32_t *d = (const uint32_t *)(image->base + at);
+        uint32_t lookup = d[0], module = d[3], addresses = d[4];
+        if (!module && !addresses) break;
+        if (!lookup || module >= image->size - 64 || !same_name((const char *)image->base + module, dll)) continue;
+        for (uint32_t i = 0; (uint64_t)lookup + (i + 1) * 8 <= image->size && (uint64_t)addresses + (i + 1) * 8 <= image->size; i++) {
+            uint64_t entry = *(uint64_t *)(image->base + lookup + i * 8);
+            if (!entry) break;
+            if (entry >> 63 || entry + 2 + strlen(name) + 1 > image->size) continue;  // by ordinal
+            if (!strcmp((const char *)image->base + entry + 2, name)) return (uintptr_t *)(image->base + addresses + i * 8);
+        }
+    }
+    return NULL;
+}
+
+bool pe_write_pointer(uintptr_t *slot, uintptr_t value) {
+    void *addr = slot;
+    size_t len = sizeof(*slot);
+    uint32_t old;
+    if (protect(CURRENT_PROCESS, &addr, &len, PAGE_READWRITE, &old)) return false;
+    *slot = value;
+    addr = slot;
+    len = sizeof(*slot);
+    protect(CURRENT_PROCESS, &addr, &len, old, &old);
+    return true;
+}
+
 static NTSTATUS map_hook(HANDLE section, HANDLE process, void **addr, uintptr_t zero_bits, size_t commit,
                          const int64_t *offset, size_t *size, uint32_t inherit, mgf_stack_u32 type,
                          mgf_stack_u32 protect_) {
