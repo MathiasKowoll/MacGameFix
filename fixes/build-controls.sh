@@ -16,7 +16,7 @@ OUT="${1:-$HERE}"
   -dynamiclib -O2 -Wall -Wextra -Werror -install_name @rpath/mgf-controls.dylib \
   -framework IOKit -framework CoreFoundation -framework CoreAudio -framework AudioToolbox -o "$OUT/mgf-controls.dylib" \
   "$SRC/mgf-controls.c" "$SRC/bus.c" "$SRC/bt.c" "$SRC/triggers.c" "$SRC/audio.c" "$SRC/pad.c" \
-  "$SRC/pe.c" "$SRC/setupapi.c" "$SRC/container.c" "$SRC/mmdevapi.c"
+  "$SRC/pe.c" "$SRC/setupapi.c" "$SRC/container.c" "$SRC/mmdevapi.c" "$SRC/endpoints.c"
 /usr/bin/codesign -f -s - "$OUT/mgf-controls.dylib" 2>/dev/null
 echo "built: $OUT/mgf-controls.dylib $(/usr/bin/shasum -a 256 "$OUT/mgf-controls.dylib" | cut -c1-8)"
 [ "${MGVF_CONTROLS_CHECKS:-0}" = 1 ] || exit 0
@@ -31,8 +31,9 @@ echo "built: $OUT/mgf-controls.dylib $(/usr/bin/shasum -a 256 "$OUT/mgf-controls
 #     module's file is put for it: the bus drivers are off here, and it is the write it checks.
 #   - checks/mmdevapi.c asks every audio output for its container, with a stand-in for a
 #     Bluetooth pad where the library looks for pads: no output has the pad's container
-#     without the library (exit 2), one has it with it. Skipped while a game runs, which
-#     would list the stand-in as an output too.
+#     without the library (exit 2), one has it with it.
+#   - checks/endpoints.c asks SetupAPI for the audio outputs, with the same stand-in: none has
+#     the pad's container without the library (exit 2), one has it with it.
 RUNNER="${MGVF_CHECK_RUNNER:-$HOME/Library/Application Support/notproton/runners/crossover-27.0.0.41303-fex/CrossOver}"
 STOCK="${MGVF_CHECK_STOCK:-$HOME/Library/Application Support/MacGameFix/engine-backup/crossover-27.0.0.41303-fex}"
 if ! command -v x86_64-w64-mingw32-gcc >/dev/null; then echo "note: no x86_64-w64-mingw32-gcc, the checks are skipped"; exit 0; fi
@@ -65,18 +66,16 @@ check() {  # <CodeWeavers' files to put, or -> <check> <the exit code without th
 }
 check x86_64-windows/setupapi.dll setupapi 2 -lsetupapi
 check - container 2 -lsetupapi
-if /usr/bin/pgrep -f 'wineserver|waitforexitandrun' >/dev/null; then
-  echo "  note  mmdevapi: skipped, a game is running"
-else
-  # The stand-in pad: a socket named as bt.c names a Bluetooth pad's, which the audio side lists.
-  PADS="/tmp/macgamefix-$(id -u)"; mkdir -p "$PADS"; STANDIN="$PADS/pad-00c0ffee-0ce6-0ce6.sock"
-  /usr/bin/python3 -c 'import socket,sys,time,os
-p=sys.argv[1]
-if os.path.exists(p): os.unlink(p)
-s=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM); s.bind(p); time.sleep(120)' "$STANDIN" & standin=$!
-  for _ in 1 2 3 4 5 6 7 8 9 10; do [ -S "$STANDIN" ] && break; /bin/sleep 0.2; done
-  check "x86_64-windows/mmdevapi.dll x86_64-unix/winecoreaudio.so" mmdevapi 2 -lole32
-  { kill "$standin" && wait "$standin"; } 2>/dev/null || true
-  rm -f "$STANDIN"
-fi
+# The stand-in pad: a socket named as bt.c names a Bluetooth pad's, which the audio side lists, in
+# a folder of the checks' own (MGF_CONTROLS_DIR): no game being played sees it. /tmp, as a
+# socket's path has to be short.
+export MGF_CONTROLS_DIR="/tmp/mgf-controls-check-$$"; mkdir -p "$MGF_CONTROLS_DIR"
+trap '"$SERVER" -k 2>/dev/null || true; rm -rf "$WORK" "$MGF_CONTROLS_DIR"' EXIT
+STANDIN="$MGF_CONTROLS_DIR/pad-00c0ffee-0ce6-0ce6.sock"
+/usr/bin/python3 -c 'import socket,sys,time
+s=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM); s.bind(sys.argv[1]); time.sleep(300)' "$STANDIN" & standin=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do [ -S "$STANDIN" ] && break; /bin/sleep 0.2; done
+check "x86_64-windows/mmdevapi.dll x86_64-unix/winecoreaudio.so" mmdevapi 2 -lole32
+check "x86_64-windows/mmdevapi.dll x86_64-unix/winecoreaudio.so" endpoints 2 -lole32 -lsetupapi
+{ kill "$standin" && wait "$standin"; } 2>/dev/null || true
 [ "$failed" = 0 ] || exit 1

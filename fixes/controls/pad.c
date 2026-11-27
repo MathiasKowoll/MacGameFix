@@ -5,9 +5,13 @@
 
 #include "pad.h"
 
-// /tmp/macgamefix-<uid>, made if it is not there: the pads' sockets and pad.log.
+// /tmp/macgamefix-<uid>, made if it is not there: the pads' sockets and pad.log. The checks
+// (build-controls.sh) name a folder of their own in MGF_CONTROLS_DIR, so that a stand-in pad of
+// theirs is no pad to a game being played at the time, and their lines stay out of its log.
 void pad_dir(char *dir, size_t size) {
-    snprintf(dir, size, "/tmp/macgamefix-%u", (unsigned)getuid());
+    const char *other = getenv("MGF_CONTROLS_DIR");
+    if (other && *other == '/' && strlen(other) < size) snprintf(dir, size, "%s", other);
+    else snprintf(dir, size, "/tmp/macgamefix-%u", (unsigned)getuid());
     mkdir(dir, 0700);
 }
 
