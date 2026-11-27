@@ -7,14 +7,13 @@
 #define MGF_CONTROLS_CONTROLS_H
 
 #include "bt.h"
+#include "pad.h"
 #include "dualshock4.h"
 
 #define COUNT_OF(a) (sizeof(a) / sizeof((a)[0]))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
-#define XINPUT_RUMBLE 1  // xinput=rumble: XInput's vibration on the pad's motors
-#define XINPUT_PAD    2  // xinput=pad: the pad itself an XInput controller
 
 struct pad {
     struct pad *next;

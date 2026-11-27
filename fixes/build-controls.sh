@@ -16,8 +16,12 @@ OUT="${1:-$HERE}"
   -dynamiclib -O2 -Wall -Wextra -Werror -install_name @rpath/mgf-controls.dylib \
   -framework IOKit -framework CoreFoundation -framework CoreAudio -framework AudioToolbox -o "$OUT/mgf-controls.dylib" \
   "$SRC/mgf-controls.c" "$SRC/bus.c" "$SRC/bt.c" "$SRC/triggers.c" "$SRC/audio.c" "$SRC/pad.c" \
-  "$SRC/pe.c" "$SRC/setupapi.c" "$SRC/container.c" "$SRC/mmdevapi.c" "$SRC/endpoints.c" "$SRC/xaudio2.c"
+  "$SRC/pe.c" "$SRC/setupapi.c" "$SRC/container.c" "$SRC/mmdevapi.c" "$SRC/endpoints.c" "$SRC/xaudio2.c" "$SRC/xinput.c" "$SRC/hidclass.c"
 /usr/bin/codesign -f -s - "$OUT/mgf-controls.dylib" 2>/dev/null
+# The Sony layout as Wine's xinput reads it (controls/xinput_map.h), checked on the Mac itself.
+MAPCHECK="$(mktemp -d)/xinput_map"
+/usr/bin/clang -std=c17 -Wall -Wextra -Werror -o "$MAPCHECK" "$SRC/checks/xinput_map.c" && "$MAPCHECK"
+rm -rf "$(dirname "$MAPCHECK")"
 echo "built: $OUT/mgf-controls.dylib $(/usr/bin/shasum -a 256 "$OUT/mgf-controls.dylib" | cut -c1-8)"
 [ "${MGVF_CONTROLS_CHECKS:-0}" = 1 ] || exit 0
 
@@ -36,6 +40,10 @@ echo "built: $OUT/mgf-controls.dylib $(/usr/bin/shasum -a 256 "$OUT/mgf-controls
 #     without the library (exit 2), one has it with it.
 #   - checks/endpoints.c asks SetupAPI for the audio outputs, with the same stand-in: none has
 #     the pad's container without the library (exit 2), one has it with it.
+#   - checks/hid.c asks hid.dll's five exports that xinput.c holds something hid.dll refuses:
+#     the same refusal with the library and without, and the library's log has to say it held
+#     them. What xinput.c translates is checked on the Mac by checks/xinput_map.c at every build;
+#     no check has a pad for xinput to open, nor a device for hidclass.c: those two need a game.
 #   - checks/xaudio2.c names the stand-in's output to an XAudio2 mastering voice and counts the
 #     voice's channels (the stand-in's has four, the Mac's own two): the default output's with
 #     the xaudio2 part left out (exit 3), the named one's with it.
@@ -78,6 +86,18 @@ left_out() {  # <check, built by check> <the part> <the exit code without the pa
   if [ "$rc" != "$without" ]; then echo "  FAIL  $name with $part left out: exit $rc, not $without"; failed=1
   else echo "  ok    $name: fails with $part left out ($without)"; fi
 }
+# A check of something the library holds for others' sake: the same answer with it and without.
+same() {  # <check> [libraries the check links]
+  local name="$1" rc; shift
+  x86_64-w64-mingw32-gcc -O1 -Wall -Werror -o "$WORK/$name.exe" "$SRC/checks/$name.c" "$@"
+  rc=0; "$WINE" "$WORK/$name.exe" >/dev/null 2>&1 || rc=$?
+  "$SERVER" -w
+  if [ "$rc" != 0 ]; then echo "  FAIL  $name without the library: exit $rc"; failed=1; fi
+  rc=0; DYLD_INSERT_LIBRARIES="$OUT/mgf-controls.dylib" "$WINE" "$WORK/$name.exe" >/dev/null 2>&1 || rc=$?
+  "$SERVER" -k 2>/dev/null || true; "$SERVER" -w 2>/dev/null || true
+  if [ "$rc" != 0 ]; then echo "  FAIL  $name with the library: exit $rc"; failed=1
+  else echo "  ok    $name: the same with the library and without"; fi
+}
 check x86_64-windows/setupapi.dll setupapi 2 -lsetupapi
 # With mgf-engine.dylib too, whose package-family takes the same syscall table entry as this
 # library (NtMapViewOfSection): in either order both have to be armed (mgf_hooks.h).
@@ -108,4 +128,8 @@ check "x86_64-windows/mmdevapi.dll x86_64-unix/winecoreaudio.so" endpoints 2 -lo
 check "x86_64-windows/xaudio2_9.dll" xaudio2 2 -lole32
 left_out xaudio2 xaudio2 3
 { kill "$standin" && wait "$standin"; } 2>/dev/null || true
+same hid -lhid
+if ! /usr/bin/grep -q 'hid.dll answers xinput about a Sony pad' "$MGF_CONTROLS_DIR/pad.log" 2>/dev/null; then
+  echo "  FAIL  hid: the library did not take hid.dll's exports in that check"; failed=1
+fi
 [ "$failed" = 0 ] || exit 1

@@ -7,11 +7,17 @@
 // winecoreaudio.so is, its CoreAudio calls (audio.c). What engine patches 0004-0016 and 0030 do
 // inside those two files is done from here, by the game's settings in Game Feel (pad.d).
 //
-// The Windows side moves here too, module by module: setupapi.dll's is done (pe.h, setupapi.c),
-// winebus.sys's, the container of a USB device (container.c), and mmdevapi.dll's two: an audio
-// endpoint's container (mmdevapi.c) and the endpoints listed in SetupAPI (endpoints.c), and
-// xaudio2_9.dll's, the device a game names (xaudio2.c). hidclass.sys and xinput are still the
-// Wine modules' own files in the runner.
+// The Windows side is done from here too, on CodeWeavers' own files, each module by a part of
+// its own (pe.h for what the macOS side does to a module as it is mapped, windows.h for what the
+// game then runs as Windows code):
+//   setupapi.c   setupapi.dll   a device's base container id in WCHAR from the ANSI function (0010)
+//   container.c  winebus.sys    a USB device's container made from its location (0001)
+//   mmdevapi.c   mmdevapi.dll   an audio endpoint's container asked of the driver (0003)
+//   endpoints.c  mmdevapi.dll   the audio endpoints listed in SetupAPI (0009)
+//   xaudio2.c    xaudio2_9.dll  the device a mastering voice is created on (0011)
+//   hidclass.c   hidclass.sys   a pad's collection with motors offered to xinput (0007)
+//   xinput.c     xinput*.dll    a Sony pad's own descriptor read in Sony's order (0008)
+// A module that is the Wine modules' own does its part itself, and each part steps aside for it.
 //
 // Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 // SPDX-License-Identifier: LGPL-2.1-or-later
@@ -27,6 +33,8 @@ void mgf_controls_audio_arm(const struct np_plugin_api *api, const struct mach_h
 void mgf_controls_setupapi(void);
 void mgf_controls_mmdevapi(void);
 void mgf_controls_xaudio2(void);
+void mgf_controls_xinput(void);
+void mgf_controls_hidclass(void);
 void mgf_controls_endpoints_arm(const struct np_plugin_api *api, const struct mach_header_64 *mh, intptr_t slide);
 void mgf_controls_container(const struct np_plugin_api *api, const struct mach_header_64 *mh, intptr_t slide);
 
@@ -60,6 +68,8 @@ static void ntdll_loaded(const struct mach_header_64 *mh, intptr_t slide, const 
     mgf_controls_setupapi();
     mgf_controls_mmdevapi();
     mgf_controls_xaudio2();
+    mgf_controls_xinput();
+    mgf_controls_hidclass();
     pe_arm(api, mh, slide);
     mgf_controls_container(api, mh, slide);
     mgf_controls_endpoints_arm(api, mh, slide);

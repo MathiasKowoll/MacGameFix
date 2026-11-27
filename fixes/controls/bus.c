@@ -300,6 +300,16 @@ static void pad_found(IOHIDDeviceRef device) {
     p->xinput = p->ds4 ? (pad_game_option("xinput=rumble") ? XINPUT_RUMBLE : 0)
               : pad_option("xinput=rumble") ? XINPUT_RUMBLE : pad_option("xinput=pad") ? XINPUT_PAD : 0;
     p->descriptor = shown_descriptor(p);
+    if (p->xinput) {
+        // For hidclass.c: which product id carries xinput's collections, and where they are.
+        uint16_t product = p->ds4 ? DS4_PID : p->edge && !p->as_standard ? DS_EDGE_PID : DUALSENSE_PID;
+        for (unsigned i = 0; i < COUNT_OF(mgf_xinput_pads); i++)
+            if (!mgf_xinput_pads[i].product || mgf_xinput_pads[i].product == product) {
+                mgf_xinput_pads[i].mode = (uint8_t)p->xinput;
+                mgf_xinput_pads[i].product = product;
+                break;
+            }
+    }
 
     if (p->bt) pad_log("the Bluetooth %s at location %08x is shown as wired\n", p->model, p->location);
     if (p->ds4)

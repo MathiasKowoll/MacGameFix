@@ -52,6 +52,16 @@ uint64_t pad_ticks(double seconds);
 double pad_seconds(uint64_t ticks);
 void pad_realtime(double period, double constraint);
 
+#define XINPUT_RUMBLE 1  // xinput=rumble: XInput's vibration on the pad's motors
+#define XINPUT_PAD    2  // xinput=pad: the pad itself an XInput controller
+// The pads bus.c gave xinput's haptics collections, by the product id each is shown with, for
+// hidclass.c, which is run as Windows code and can only read this.
+struct mgf_xinput_pad {
+    uint16_t product;  // 0: free
+    uint8_t mode;      // XINPUT_RUMBLE or XINPUT_PAD
+};
+extern struct mgf_xinput_pad mgf_xinput_pads[8];
+
 // Whether MGF_CONTROLS_WITHOUT names this part of the Windows side.
 bool pad_part_off(const char *part);
 

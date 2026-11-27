@@ -34,7 +34,7 @@ static free_fn release;
 static struct {
     const char *dll;
     pe_mapped_fn fn;
-} wanted[8];
+} wanted[24];
 static unsigned wanted_count;
 
 struct export_directory {

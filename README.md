@@ -359,17 +359,16 @@ One more is MacGameFix's own:
   to macOS and does what the Wine modules do inside their own: the Bluetooth
   pad as a wired one, haptics, XInput, trigger effects and DualShock 4 mode,
   by the game's settings in Game Feel. Where the two files are MacGameFix's
-  own it leaves them alone. The Windows side is moving into the library too,
-  one module at a time: `setupapi.dll`'s change (a device's base container id
-  as WCHAR from the ANSI function, which Nioh 3 needs) is made in memory on
-  CodeWeavers' own file, a USB pad's container is made from where it is
-  plugged in, as its audio output's is, when `winebus.sys` is CodeWeavers',
-  CodeWeavers' `mmdevapi.dll` gives an audio output's container, which it
-  never asked the driver for, the audio outputs are listed in SetupAPI, and
-  an XAudio2 mastering voice opens the device the game names (the five
-  changes are checked, not played yet). Played on 2026-11-26 with
-  Marvel's Spider-Man 2 (Bluetooth and a cable), Crysis 3 Remastered and
-  Crash Bandicoot 4.
+  own it leaves them alone. The Windows side is done from the library too, on
+  CodeWeavers' own files: what the Wine modules change in `setupapi.dll`,
+  `winebus.sys`, `mmdevapi.dll`, `xaudio2_9.dll`, `hidclass.sys` and the
+  `xinput` DLLs is done in memory in the game's processes
+  (`fixes/controls/mgf-controls.c` lists each part). Five of the seven parts
+  have a check that fails without them; the two for XInput (`hidclass.sys`,
+  `xinput`) can only be checked with a pad in a game. None of the seven has
+  been played yet with CodeWeavers' file in a runner. The macOS side was
+  played on 2026-11-26 with Marvel's Spider-Man 2 (Bluetooth and a cable),
+  Crysis 3 Remastered and Crash Bandicoot 4.
 
 The four libraries need NotProton's plugin host, which NotProton's own Update
 installs, and the Unreal row a NotProton that reads `patch`. Where one cannot
