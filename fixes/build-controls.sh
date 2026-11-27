@@ -16,7 +16,7 @@ OUT="${1:-$HERE}"
   -dynamiclib -O2 -Wall -Wextra -Werror -install_name @rpath/mgf-controls.dylib \
   -framework IOKit -framework CoreFoundation -framework CoreAudio -framework AudioToolbox -o "$OUT/mgf-controls.dylib" \
   "$SRC/mgf-controls.c" "$SRC/bus.c" "$SRC/bt.c" "$SRC/triggers.c" "$SRC/audio.c" "$SRC/pad.c" \
-  "$SRC/pe.c" "$SRC/setupapi.c"
+  "$SRC/pe.c" "$SRC/setupapi.c" "$SRC/container.c"
 /usr/bin/codesign -f -s - "$OUT/mgf-controls.dylib" 2>/dev/null
 echo "built: $OUT/mgf-controls.dylib $(/usr/bin/shasum -a 256 "$OUT/mgf-controls.dylib" | cut -c1-8)"
 [ "${MGVF_CONTROLS_CHECKS:-0}" = 1 ] || exit 0
@@ -26,6 +26,9 @@ echo "built: $OUT/mgf-controls.dylib $(/usr/bin/shasum -a 256 "$OUT/mgf-controls
 # where each has to fail, and with it. As build-engine.sh runs the engine's.
 #   - checks/setupapi.c reads a device's base container id with the ANSI function: ANSI without
 #     the library (exit 2), WCHAR with it, and another string still ANSI.
+#   - checks/container.c stores a USB device's container as ntoskrnl does: as winebus.sys gave
+#     it without the library (exit 2), the location's with it, and five others as given. No
+#     module's file is put for it: the bus drivers are off here, and it is the write it checks.
 RUNNER="${MGVF_CHECK_RUNNER:-$HOME/Library/Application Support/notproton/runners/crossover-27.0.0.41303-fex/CrossOver}"
 STOCK="${MGVF_CHECK_STOCK:-$HOME/Library/Application Support/MacGameFix/engine-backup/crossover-27.0.0.41303-fex}"
 if ! command -v x86_64-w64-mingw32-gcc >/dev/null; then echo "note: no x86_64-w64-mingw32-gcc, the checks are skipped"; exit 0; fi
@@ -43,9 +46,9 @@ trap '"$SERVER" -k 2>/dev/null || true; rm -rf "$WORK"' EXIT
 "$WINE" wineboot -i >/dev/null 2>&1
 "$SERVER" -w
 failed=0
-check() {  # <module's file> <check> <the exit code without the library> [libraries the check links]
+check() {  # <module's file, or -> <check> <the exit code without the library> [libraries the check links]
   local file="$1" name="$2" without="$3" rc; shift 3
-  cp "$STOCK/x86_64-windows/$file" "$WORK/runner/lib/wine/x86_64-windows/$file"
+  [ "$file" = - ] || cp "$STOCK/x86_64-windows/$file" "$WORK/runner/lib/wine/x86_64-windows/$file"
   x86_64-w64-mingw32-gcc -O1 -Wall -Werror -o "$WORK/$name.exe" "$SRC/checks/$name.c" "$@"
   rc=0; "$WINE" "$WORK/$name.exe" >/dev/null 2>&1 || rc=$?
   "$SERVER" -w
@@ -55,4 +58,5 @@ check() {  # <module's file> <check> <the exit code without the library> [librar
   if [ "$rc" != 0 ]; then echo "  FAIL  $name with the library: exit $rc"; failed=1; else echo "  ok    $name: fails without the library ($without), passes with it"; fi
 }
 check setupapi.dll setupapi 2 -lsetupapi
+check - container 2 -lsetupapi
 [ "$failed" = 0 ] || exit 1

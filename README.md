@@ -362,8 +362,11 @@ One more is MacGameFix's own:
   own it leaves them alone. The Windows side is moving into the library too,
   one module at a time: `setupapi.dll`'s change (a device's base container id
   as WCHAR from the ANSI function, which Nioh 3 needs) is made in memory on
-  CodeWeavers' own file. Played on 2026-11-26 with Marvel's Spider-Man 2
-  (Bluetooth and a cable), Crysis 3 Remastered and Crash Bandicoot 4.
+  CodeWeavers' own file, and a USB pad's container is made from where it is
+  plugged in, as its audio output's is, when `winebus.sys` is CodeWeavers'
+  (the two changes are checked, not played yet). Played on 2026-11-26 with
+  Marvel's Spider-Man 2 (Bluetooth and a cable), Crysis 3 Remastered and
+  Crash Bandicoot 4.
 
 The four libraries need NotProton's plugin host, which NotProton's own Update
 installs, and the Unreal row a NotProton that reads `patch`. Where one cannot
