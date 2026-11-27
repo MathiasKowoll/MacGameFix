@@ -29,12 +29,14 @@
 # added to its id (NotProton refuses one id in two files) and, from NotProton 1.2.7, an
 # "apps = <appid>" line, so the row shows on that game's page only. Removing one game's fix
 # removes that file and nothing of another game's; a library goes once no descriptor in the
-# folder names it. NotProton's own Delete does the same from its side.
+# folder names it. NotProton's own Delete does the same from its side. A game with no record of
+# its own has no descriptor for NotProton: what it uses of the shared rows is noted in
+# plugins/mgf-<appid>.uses, which NotProton does not read (np_plugins_setup).
 #
 # SHARED ROWS. NotProton reads at most 32 records for every game together, so the rows that are
 # not one game's own are written once and reused by every game that needs them: one file,
 # plugins/mgf-shared.conf, from one template (np-plugin-shared.conf), with each record's "apps"
-# the games that use it. A game says which it uses in its descriptor, "# shared rows: <id>...";
+# the games that use it. A game says which it uses in its descriptor or its note, "# shared rows: <id>...";
 # the file is written again from the descriptors whenever one comes or goes, a record goes with
 # the last game that uses it, and the file with the last record. The one library the shared
 # rows load (mgf-engine.dylib, which arms each game's own fixes in that game alone) goes when no
@@ -81,7 +83,18 @@ NP_CHOICES_MAX=16
 np_plugins_setup() {
   NP_APPID="$1"; NP_PFX="${2%/}"; shift 2
   NP_TEMPLATES=("$@")
-  NP_CONF="$NP_PLUGINS/mgf-$NP_APPID.conf"
+  # A game with no row of its own keeps only a note of the shared rows it uses. NotProton's app
+  # lists every .conf in the folder, by its first row's label, so a file with no row was listed
+  # there by its file name, "mgf-<appid>", with nothing to say what it was, and offered for the
+  # Trash (2026-11-27). Such a note is kept as mgf-<appid>.uses, which NotProton does not read or
+  # list; a game with rows keeps mgf-<appid>.conf, listed by its first row's label. The other
+  # name, left by an earlier install, goes at the next one.
+  # (A template with no record in it, which is how a game with none calls this, counts as none.)
+  if /usr/bin/grep -qs '^\[' "$@" </dev/null; then
+    NP_CONF="$NP_PLUGINS/mgf-$NP_APPID.conf"; NP_CONF_OTHER="$NP_PLUGINS/mgf-$NP_APPID.uses"
+  else
+    NP_CONF="$NP_PLUGINS/mgf-$NP_APPID.uses"; NP_CONF_OTHER="$NP_PLUGINS/mgf-$NP_APPID.conf"
+  fi
   # Beside pfx, in compatdata/<appid>, where NotProton writes notproton-build.
   NP_GAME_DIR="$(dirname "$NP_PFX")"
   NP_JOURNAL="$NP_GAME_DIR/.mgf-notproton-plugins.json"
@@ -163,9 +176,9 @@ np_shared_records() {
 # "<app> <id>" for every shared row each game's descriptor in the folder uses.
 np_shared_table() {
   local f a
-  for f in "$NP_PLUGINS"/mgf-*.conf; do
+  for f in "$NP_PLUGINS"/mgf-*.conf "$NP_PLUGINS"/mgf-*.uses; do
     [ -f "$f" ] && [ "$f" != "$NP_SHARED_CONF" ] || continue
-    a="$(basename "$f" .conf)"; a="${a#mgf-}"
+    a="$(basename "$f")"; a="${a#mgf-}"; a="${a%.conf}"; a="${a%.uses}"
     case "$a" in *[!0-9]*|"") continue ;; esac
     /usr/bin/sed -n "s/^$NP_SHARED_MARK //p" "$f" | tr ' ' '\n' | /usr/bin/grep . | /usr/bin/sed "s/^/$a /"
   done | sort -n -k1,1 -s
@@ -174,7 +187,7 @@ np_shared_table() {
 # "<id> = <value> = <label>" for the choices the descriptors in the folder add, each once.
 np_shared_choices() {
   local f
-  for f in "$NP_PLUGINS"/mgf-*.conf; do
+  for f in "$NP_PLUGINS"/mgf-*.conf "$NP_PLUGINS"/mgf-*.uses; do
     [ -f "$f" ] && [ "$f" != "$NP_SHARED_CONF" ] || continue
     /usr/bin/sed -n 's/^# shared choice: //p' "$f"
   done | /usr/bin/awk -F' = ' '!seen[$1 " = " $2]++'
@@ -348,6 +361,7 @@ np_plugins_install() {
     cp -p "$l" "$live.mgf-new" && mv -f "$live.mgf-new" "$live"
   done < <(np_libraries)
   np_expected > "$NP_CONF.mgf-new" && mv -f "$NP_CONF.mgf-new" "$NP_CONF"
+  /bin/rm -f "$NP_CONF_OTHER"
   [ -z "$(np_ids)" ] || echo "  NotProton: $(np_ids | /usr/bin/grep -c .) row(s) in plugins/mgf-$NP_APPID.conf$(np_knows_apps && echo ", shown on this game's page only")"
   np_shared_write || return 1
   [ -z "$NP_SHARED_USES" ] || echo "  NotProton: $(printf '%s\n' $NP_SHARED_USES | /usr/bin/grep -c .) shared row(s) used, in plugins/mgf-shared.conf: $(/usr/bin/grep -c '^\[' "$NP_SHARED_CONF") row(s) for $(np_shared_table | cut -d' ' -f1 | sort -u | /usr/bin/grep -c .) game(s)"
@@ -372,10 +386,14 @@ np_plugins_install() {
 np_plugins_status() {
   local l
   if [ ! -f "$NP_CONF" ]; then
+    if [ -f "$NP_CONF_OTHER" ]; then
+      echo "Why: plugins/$(basename "$NP_CONF_OTHER") is the name an earlier install gave this game's file: install again" >&2
+      echo half; return
+    fi
     [ -f "$NP_SWITCHED" ] && { echo half; return; }
     echo absent; return
   fi
-  [ "$(cat "$NP_CONF")" = "$(np_expected)" ] || { echo "Why: plugins/mgf-$NP_APPID.conf is not what this fix writes" >&2; echo half; return; }
+  [ "$(cat "$NP_CONF")" = "$(np_expected)" ] || { echo "Why: plugins/$(basename "$NP_CONF") is not what this fix writes" >&2; echo half; return; }
   if [ -n "$NP_SHARED_USES" ] && [ "$(cat "$NP_SHARED_CONF" 2>/dev/null)" != "$(np_shared_table | np_shared_expected)" ]; then
     echo "Why: plugins/mgf-shared.conf, the shared rows, is missing or not what the fixes write" >&2; echo half; return
   fi
@@ -396,7 +414,7 @@ np_lib_named() { /usr/bin/grep -lqF "/$(basename "$1")" "$NP_PLUGINS"/*.conf 2>/
 np_plugins_restore() {
   local l
   if [ -f "$NP_JOURNAL" ]; then np_options restore $(np_switches) >/dev/null || return 1; fi
-  /bin/rm -f "$NP_CONF" "$NP_SWITCHED"
+  /bin/rm -f "$NP_CONF" "$NP_CONF_OTHER" "$NP_SWITCHED"
   # The shared rows without this game, or gone with the last one.
   [ -z "$NP_SHARED_USES" ] || np_shared_write || return 1
   while IFS= read -r l; do
