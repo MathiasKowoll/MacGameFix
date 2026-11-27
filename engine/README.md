@@ -431,6 +431,36 @@ that branch's probe, an overlapped pipe read whose `Status` sits at a given offs
 of a 16-byte granule: CodeWeavers' own `ntdll.so` dies at offset 14; this one passes
 at offsets 0, 2, 13, 14 and 15.
 
+## The engine fixes on the FEX side
+
+`mgf-engine.dylib` has had an arm64 half from the start, but until 2026-11-26 nothing
+checked it. On the FEX side, NotProton's arm64 `ntdll.dll` loads the libraries named in
+`NOTPROTON_PLUGIN_LIBS` through `npload.so`, which it finds in the prefix's Steam folder.
+That side's wine drops `DYLD_INSERT_LIBRARIES`. `fixes/build-engine.sh` now runs the
+checks there too, on CodeWeavers' own arm64 `ntdll.so`, `kernel32.dll` and `kernelbase.dll`.
+
+Two things kept the fixes from arming there:
+
+- The arm64 `ntdll.so` (41303) puts thunks in its syscall table, as the x86_64 one does for
+  a few. `NtSetTimer`'s, at slot 0x62, is `and w4, w4, #0xff` then `b NtSetTimer`.
+  `NtMapViewOfSection`'s, at slot 0x28, moves its tenth argument within the stack and then
+  branches. `mgf_thunk_target` reads those now. `package-family` and `low-allocations`
+  look the entry up through `mgf_syscall_slot` and chain to what it held, the thunk
+  included.
+- Wine's dispatcher passes stack arguments in 8-byte slots. Apple's arm64 ABI packs them to
+  their own size, which is why that thunk exists. A hook in the entry takes those 32-bit
+  arguments as whole slots (`mgf_stack_u32`).
+
+How each fix does on the FEX side, 2026-11-26:
+
+- **Checked there:** timer-overflow, dualstack-ipv4 and enumerator-name. Each fails without
+  the library and passes with it.
+- **Arm there, no check of their own:** low-allocations and once-reentry.
+- **Not there yet:** package-family. On this side kernel32.dll is an ARM64X image, mapped
+  with `NtMapViewOfSectionEx`, and an x64 program reads its ARM64EC exports. Its check runs
+  and only reports.
+- **Rosetta's alone:** rosetta-cpu and direct-syscall.
+
 ## IPv4 options on a dual-stack socket
 
 Windows applies an `IPPROTO_IP` option set on an `AF_INET6` socket to the socket's

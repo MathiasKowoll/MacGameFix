@@ -38,6 +38,10 @@
 # no check of their own: they are played (see their sources). d3dmetal-hookable's check (d3dmetal-hookable/check.c, an
 # x86_64 program under Rosetta, no Wine) runs with this library, the fix named the same way;
 # build-d3dmetal-hookable.sh runs it without, where it has to fault.
+# The same checks then run on the runner's FEX side (its arm64 Wine, which NotProton's FEX tool
+# plays games on), for the fixes that work there: timer-overflow, dualstack-ipv4 and
+# enumerator-name. package-family's check runs there too but only reports, and rosetta-cpu and
+# direct-syscall are Rosetta's alone (see THE FEX SIDE below).
 # The runner is MGVF_CHECK_RUNNER (the 41303 runner by default); CodeWeavers' files come from
 # MGVF_CHECK_STOCK (MacGameFix's backup of CrossOver Preview 41303's own by default). Without
 # either, or without mingw, the checks are skipped and the script says so.
@@ -51,7 +55,13 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SRC="$HERE/engine"
 WORK="$(mktemp -d)"
-cleanup() { [ -z "${SERVER:-}" ] || WINEPREFIX="$WORK/pfx" "$SERVER" -k 2>/dev/null || true; rm -rf "$WORK"; }
+# Each side's wineserver, ended with its prefix: "<server>|<prefix>" lines.
+SERVERS=""
+cleanup() {
+  local s
+  while IFS= read -r s; do [ -z "$s" ] || WINEPREFIX="${s#*|}" "${s%%|*}" -k 2>/dev/null || true; done <<<"$SERVERS"
+  rm -rf "$WORK"
+}
 trap cleanup EXIT
 /usr/bin/clang -arch arm64 -arch x86_64 -mmacosx-version-min=15.0 -Werror=unguarded-availability-new -std=c17 \
   -dynamiclib -O2 -Wall -Wextra -Werror -install_name @rpath/mgf-engine.dylib -o "$WORK/mgf-engine.dylib" \
@@ -78,20 +88,35 @@ else
   done
   WINE="$WORK/runner/lib/wine/x86_64-unix/wine"
   SERVER="$WORK/runner/bin/wineserver"; [ -x "$SERVER" ] || SERVER="$WORK/runner/bin/wineserver-x86"
+  # No bus drivers: a check prefix that opened the HID devices would seize a controller the
+  # player is using in a game at the time, and start a second writer to it (2026-11-26).
+  export WINEDLLOVERRIDES="winebus.sys,winebth.sys,wineusb.sys=d"
   export WINEPREFIX="$WORK/pfx" WINEDEBUG=-all WINELOADER="$WINE" WINESERVER="$SERVER"
+  SERVERS="$SERVER|$WINEPREFIX"
+  # How the library goes into a Wine process: Rosetta's wine takes DYLD_INSERT_LIBRARIES.
+  SIDE=Rosetta INJECT=DYLD_INSERT_LIBRARIES
   "$WINE" wineboot -i >/dev/null 2>&1
   "$SERVER" -w
   check() {  # <fix> <the exit code without it> [libraries the check links]
     local fix="$1" without="$2" rc
     x86_64-w64-mingw32-gcc -O1 -Wall -Werror -o "$WORK/$fix.exe" "$SRC/$fix/check.c" "${@:3}"
-    echo "== $fix, without the library: it has to fail"
+    echo "== $fix ($SIDE), without the library: it has to fail"
     rc=0; "$WINE" "$WORK/$fix.exe" || rc=$?
     "$SERVER" -w
-    [ "$rc" = "$without" ] || { echo "$fix: without the library the check ended with $rc, not $without: the runner may carry the engine patch, so the check would test nothing" >&2; exit 1; }
-    echo "== $fix, with it"
-    rc=0; MGF_ENGINE_FIXES="$fix" DYLD_INSERT_LIBRARIES="$WORK/mgf-engine.dylib" "$WINE" "$WORK/$fix.exe" 2>/dev/null || rc=$?
+    [ "$rc" = "$without" ] || { echo "$fix ($SIDE): without the library the check ended with $rc, not $without: the runner may carry the engine patch, so the check would test nothing" >&2; exit 1; }
+    echo "== $fix ($SIDE), with it"
+    rc=0; env MGF_ENGINE_FIXES="$fix" "$INJECT=$WORK/mgf-engine.dylib" "$WINE" "$WORK/$fix.exe" 2>/dev/null || rc=$?
     "$SERVER" -w
-    [ "$rc" = 0 ] || { echo "$fix: with the library the check ended with $rc" >&2; exit 1; }
+    [ "$rc" = 0 ] || { echo "$fix ($SIDE): with the library the check ended with $rc" >&2; exit 1; }
+  }
+  # A fix that does not work on this side yet: its check runs, and only says how it went.
+  pending() {  # <fix> <why> [libraries the check links]
+    local fix="$1" why="$2" rc
+    x86_64-w64-mingw32-gcc -O1 -Wall -Werror -o "$WORK/$fix.exe" "$SRC/$fix/check.c" "${@:3}"
+    rc=0; env MGF_ENGINE_FIXES="$fix" "$INJECT=$WORK/mgf-engine.dylib" "$WINE" "$WORK/$fix.exe" >/dev/null 2>&1 || rc=$?
+    "$SERVER" -w
+    if [ "$rc" = 0 ]; then echo "note: $fix now passes on the $SIDE side: give it a check() there"
+    else echo "note: $fix is not on the $SIDE side yet ($why)"; fi
   }
   check package-family 2
   check timer-overflow 3
@@ -120,6 +145,47 @@ else
     [ "$rc" = 0 ] || { echo "direct-syscall: with the library suspend.exe ended with $rc" >&2; exit 1; }
   else
     echo "note: no llvm-mingw at $LLVM_MINGW (LLVM_MINGW), the direct-syscall check is skipped"
+  fi
+
+  # THE FEX SIDE: the same runner's arm64 Wine, which NotProton's FEX tool runs games on, with
+  # CodeWeavers' own arm64 ntdll.so, kernel32.dll and kernelbase.dll. Its wine drops
+  # DYLD_INSERT_LIBRARIES (hardened runtime): NotProton's arm64 ntdll.dll loads the libraries in
+  # NOTPROTON_PLUGIN_LIBS through npload.so, from the prefix's Steam folder, so the runner keeps
+  # that ntdll.dll and the prefix gets npload.so (MGVF_CHECK_NPLOAD, NotProton's bridge copy by
+  # default). The checks are the same x86_64 programs, which FEX runs.
+  #   rosetta-cpu and direct-syscall are Rosetta's: CPUID and breakpoints are FEX's own there,
+  #   and FEX delivers no system call on top of a suspend. Not run.
+  #   package-family: on this side kernel32.dll is an ARM64X image, mapped with
+  #   NtMapViewOfSectionEx, and an x64 program reads its ARM64EC exports, which the fix does not
+  #   reach. Run, and only reported.
+  FEX_WINE="$RUNNER/lib/wine/aarch64-unix/wine.app/Contents/MacOS/wine"
+  NPLOAD="${MGVF_CHECK_NPLOAD:-$HOME/Library/Application Support/notproton/bridge/npload.so}"
+  if [ ! -x "$FEX_WINE" ] || [ ! -x "$RUNNER/bin/wineserver-arm64" ]; then
+    echo "note: the runner has no arm64 Wine, the FEX side's checks are skipped"
+  elif [ ! -f "$STOCK/aarch64-unix/ntdll.so" ]; then
+    echo "note: no CodeWeavers arm64 ntdll.so in $STOCK (MGVF_CHECK_STOCK), the FEX side's checks are skipped"
+  elif [ ! -f "$NPLOAD" ]; then
+    echo "note: no npload.so at $NPLOAD (MGVF_CHECK_NPLOAD), the FEX side's checks are skipped"
+  else
+    cp -cR "$RUNNER" "$WORK/runner-fex"
+    cp "$STOCK/aarch64-unix/ntdll.so" "$WORK/runner-fex/lib/wine/aarch64-unix/ntdll.so"
+    for f in kernel32.dll kernelbase.dll; do
+      [ ! -f "$STOCK/aarch64-windows/$f" ] || cp "$STOCK/aarch64-windows/$f" "$WORK/runner-fex/lib/wine/aarch64-windows/$f"
+    done
+    WINE="$WORK/runner-fex/lib/wine/aarch64-unix/wine.app/Contents/MacOS/wine"
+    SERVER="$WORK/runner-fex/bin/wineserver-arm64"
+    export WINEPREFIX="$WORK/pfx-fex" WINELOADER="$WINE" WINESERVER="$SERVER" FEX_X87REDUCEDPRECISION=1
+    SERVERS="$SERVERS
+$SERVER|$WINEPREFIX"
+    SIDE=FEX INJECT=NOTPROTON_PLUGIN_LIBS
+    "$WINE" wineboot -i >/dev/null 2>&1
+    "$SERVER" -w
+    mkdir -p "$WINEPREFIX/drive_c/Program Files (x86)/Steam"
+    cp "$NPLOAD" "$WINEPREFIX/drive_c/Program Files (x86)/Steam/npload.so"
+    check timer-overflow 3
+    check dualstack-ipv4 2 -lws2_32
+    check enumerator-name 2 -lsetupapi -lcfgmgr32
+    pending package-family "kernel32.dll's ARM64EC exports"
   fi
 fi
 echo "== d3dmetal-hookable, with the library"

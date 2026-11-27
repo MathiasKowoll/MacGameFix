@@ -36,7 +36,14 @@ struct mgf_service_table {
     unsigned char *arguments;
 };
 
-// Where a thunk at `at` jumps, or 0: the first E9 jmp in its first 24 bytes, x86-64 only.
+// Where a thunk at `at` jumps, or 0: the first jmp in its first 24 bytes. On x86-64 an E9 jmp.
+// On arm64 an unconditional b; the FEX side's ntdll.so (41303) has thunks of its own, packed
+// one after the other with nops between them, so only the first b counts:
+//     12001c84  and  w4, w4, #0xff       NtSetTimer, slot 0x62: its BOOLEAN resume
+//     17ffefc1  b    NtSetTimer
+//     b9400be8  ldr  w8, [sp, #8]        NtMapViewOfSection, slot 0x28: a narrow stack argument
+//     b90007e8  str  w8, [sp, #4]
+//     14005c8c  b    NtMapViewOfSection
 static inline uintptr_t mgf_thunk_target(uintptr_t at) {
 #if defined(__x86_64__)
     const unsigned char *b = (const unsigned char *)at;
@@ -48,11 +55,33 @@ static inline uintptr_t mgf_thunk_target(uintptr_t at) {
         }
         if (b[i] == 0xc3) return 0;  // a ret first: not a thunk
     }
+#elif defined(__aarch64__)
+    for (int i = 0; i < 6; i++) {
+        uint32_t ins;
+        memcpy(&ins, (const void *)(at + 4 * i), 4);
+        if ((ins & 0xfc000000) == 0x14000000) {  // b <imm26>
+            int32_t imm = (int32_t)(ins << 6) >> 6;
+            return at + 4 * i + (intptr_t)imm * 4;
+        }
+        if ((ins & 0xfffffc1f) == 0xd65f0000) return 0;  // a ret first: not a thunk
+    }
 #else
     (void)at;
 #endif
     return 0;
 }
+
+// A 32-bit argument of a syscall that is passed on the stack, after the eighth. Wine's syscall
+// dispatcher passes stack arguments in 8-byte slots, as Windows does. On arm64, Apple's ABI packs
+// them to their own size, so the FEX side's ntdll.so has a thunk that repacks them
+// (NtMapViewOfSection's at slot 0x28, above). A hook in that entry sees the slots as the
+// dispatcher left them, so it takes such an argument as a whole slot, and it passes the slot on
+// to the thunk the same way.
+#if defined(__aarch64__)
+typedef uint64_t mgf_stack_u32;
+#else
+typedef uint32_t mgf_stack_u32;
+#endif
 
 // The syscall table's one entry for `name` (as nm spells it, with its underscore), the entry
 // itself or a thunk to it; NULL when there is none or more than one. *old gets what it holds.
