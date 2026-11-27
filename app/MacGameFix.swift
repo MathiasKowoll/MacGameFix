@@ -1910,7 +1910,7 @@ struct NotProtonPluginsSection: View {
                               count: model.plugins.map { "\($0.filter { $0.state == .inPlace }.count) of \($0.count)" } ?? "Off")
         } footer: {
             Text("Each one is off until you turn it on for a game, in NotProton's options for that game, under "
-                 + "MacGameFix · Video, MacGameFix · D3DMetal, MacGameFix · Controllers or MacGameFix · Per game. "
+                 + "MacGameFix: Controllers, D3DMetal, Game fixes or Video. "
                  + "All but the Unreal one need NotProton's plugin host, which NotProton's Update installs.")
                 .font(.caption).foregroundStyle(.secondary)
         }

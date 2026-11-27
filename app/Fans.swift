@@ -113,7 +113,7 @@ enum Fans {
             "[NOTPROTON_MGF_FANS]",
             NotProtonRow.label("Fans at full speed", grouped: grouped),
         ]
-        if grouped { lines.append("group = MacGameFix · Performance") }
+        if grouped { lines.append("group = MacGameFix / Performance") }
         lines += [
             "description = The Mac's fans run at full speed while this game runs",
             "section = dev",

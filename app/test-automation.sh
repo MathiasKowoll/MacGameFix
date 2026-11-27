@@ -1161,10 +1161,10 @@ MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep >/dev/null
 check '! has "$(cat "$NPR")" "group = "' "one NotProton in Steam that does not know groups keeps the group out"
 rm -rf "$CT/notproton-b"
 MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep >/dev/null
-check 'has "$(cat "$NPR")" "group = MacGameFix · Performance" && [ "$(/usr/bin/grep -c MacGameFix "$NPR")" = 1 ]' "with every NotProton knowing groups, the row goes in MacGameFix · Performance and names MacGameFix there alone"
+check 'has "$(cat "$NPR")" "group = MacGameFix / Performance" && [ "$(/usr/bin/grep -c MacGameFix "$NPR")" = 1 ]' "with every NotProton knowing groups, the row goes in MacGameFix / Performance and names MacGameFix there alone"
 mkdir -p "$CT/notproton-gone"; : > "$CT/notproton-gone/run.backup"
 MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep >/dev/null
-check 'has "$(cat "$NPR")" "group = MacGameFix · Performance"' "a notproton folder with no run script (a tool NotProton emptied) has no say"
+check 'has "$(cat "$NPR")" "group = MacGameFix / Performance"' "a notproton folder with no run script (a tool NotProton emptied) has no say"
 rm -rf "$CT/notproton-gone"
 MACGAMEFIX_CPUS=10,4 "$BIN" --cpu-row-keep >/dev/null
 check 'has "$(cat "$NPR")" "choice = 0 = All (10)" && has "$(cat "$NPR")" "choice = 4 = 4 (performance cores)" && has "$(cat "$NPR")" "choice = 8" && ! /usr/bin/grep -Eq "^choice = (1[0-9])" "$NPR"' "a Mac with 10 is offered All, 4, 6 and 8"
@@ -1183,7 +1183,7 @@ rm -f "$NPF" "$NPD" "$NPV"
 OUT=$(MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep)
 check 'has "$OUT" "frame rate cap row: written for a 120 Hz display" && has "$OUT" "ray tracing row: written"' "the agent's rows for every game are written beside the processors row"
 F=$(cat "$NPF")
-check 'has "$F" "[NOTPROTON_ENV_D3DM_MAX_FPS]" && has "$F" "default = 0" && has "$F" "choice = 0 = No limit (120 Hz)" && has "$F" "group = MacGameFix · Performance"' "every game is unlimited by default, and picking No limit clears a game's cap"
+check 'has "$F" "[NOTPROTON_ENV_D3DM_MAX_FPS]" && has "$F" "default = 0" && has "$F" "choice = 0 = No limit (120 Hz)" && has "$F" "group = MacGameFix / Performance"' "every game is unlimited by default, and picking No limit clears a game's cap"
 check 'has "$F" "choice = 70 = 60 fps" && has "$F" "choice = 100 = 80 fps" && has "$F" "choice = 54 = 48 fps" && has "$F" "choice = 44 = 40 fps" && has "$F" "choice = 32 = 30 fps"' "each rate writes the cap halfway to the next faster step: 60 fps writes 70, as measured"
 check '! has "$F" "120 fps" && ! has "$F" "34 fps" && ! has "$F" "27 fps"' "no rate the display's fastest, and no step that is not a whole rate"
 check 'has "$F" "tools = notproton-fex*" && has "$F" "tools = notproton-preview*" && ! has "$F" "notproton-2"' "only for the Preview tools, which run D3DMetal 4 (D3DMetal 3 has no cap)"
@@ -1191,9 +1191,9 @@ MACGAMEFIX_DISPLAY=60,0 "$BIN" --rows-keep >/dev/null
 check 'has "$(cat "$NPF")" "choice = 0 = No limit (60 Hz)" && has "$(cat "$NPF")" "choice = 45 = 30 fps" && [ "$(/usr/bin/grep -c "^choice = " "$NPF")" = 2 ]' "a 60 Hz display with fixed steps is offered No limit and 30"
 check 'has "$(MACGAMEFIX_DISPLAY=0,0 "$BIN" --rows-keep)" "frame rate cap row: this Mac'"'"'s display could not be read"' "with no display read, the cap row is not touched"
 D=$(cat "$NPD")
-check 'has "$D" "[NOTPROTON_MGF_DXR_OFF]" && has "$D" "on = 1" && has "$D" "env = D3DM_SUPPORT_DXR=0" && has "$D" "group = MacGameFix · D3DMetal"' "the ray tracing row, switched on, gives the game D3DM_SUPPORT_DXR=0"
+check 'has "$D" "[NOTPROTON_MGF_DXR_OFF]" && has "$D" "on = 1" && has "$D" "env = D3DM_SUPPORT_DXR=0" && has "$D" "group = MacGameFix / D3DMetal"' "the ray tracing row, switched on, gives the game D3DM_SUPPORT_DXR=0"
 V=$(cat "$NPV")
-check 'has "$OUT" "NVIDIA driver row: written" && has "$V" "[NOTPROTON_MGF_NVIDIA_DRIVER]" && has "$V" "on = 1" && has "$V" "group = MacGameFix · D3DMetal" && has "$V" "tools = notproton-fex-rosetta*"' "the NVIDIA driver row is written for every game, for the Rosetta tools it was played on"
+check 'has "$OUT" "NVIDIA driver row: written" && has "$V" "[NOTPROTON_MGF_NVIDIA_DRIVER]" && has "$V" "on = 1" && has "$V" "group = MacGameFix / D3DMetal" && has "$V" "tools = notproton-fex-rosetta*"' "the NVIDIA driver row is written for every game, for the Rosetta tools it was played on"
 check '[ "$(/usr/bin/grep -c "^patch = D3DMetal/x86_64: " "$NPV")" = 2 ] && [ "$(/usr/bin/grep -o "=9f [a-f0-9]*=86 00=01 00 48 b8" "$NPV" | /usr/bin/grep -c .)" = 4 ] && [ "$(/usr/bin/grep -c "72 36 31 36 5f 34 31 | .* 72 35 36 30 5f 38 38$" "$NPV")" = 2 ]' "its two patches write 99999 over D3DMetal's driver version, one form for D3DMetal 4 and one for D3DMetal 3"
 MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep >/dev/null
 check '[ "$(MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep)" = "rows: nothing to do" ]' "rows already right are left as they are"
@@ -1217,16 +1217,16 @@ check 'has "$OUT" "Unreal video row: written" && [ -f "$NPU" ] && [ ! -e "$NPZ" 
 OUT=$("$BIN" --plugins-report)
 check 'has "$OUT" "Unreal video fix: in place" && has "$OUT" "D3DMetal freeze fix: not offered, NotProton'"'"'s plugin host is not installed"' "the window says which plugins are in place and why one is not offered"
 U=$(cat "$NPU")
-check 'has "$U" "[NOTPROTON_UNREAL_VIDEO]" && has "$U" "group = MacGameFix · Video" && has "$U" "on = 1" && [ "$(/usr/bin/grep -c "^patch = winegstreamer.dll: " "$NPU")" = 2 ] && has "$U" "label = Unreal video fix" && [ "$(/usr/bin/grep -c MacGameFix "$NPU")" = 1 ]' "the Unreal row is NotProton's own, with its two patches, in MacGameFix · Video, and names MacGameFix there alone"
+check 'has "$U" "[NOTPROTON_UNREAL_VIDEO]" && has "$U" "group = MacGameFix / Video" && has "$U" "on = 1" && [ "$(/usr/bin/grep -c "^patch = winegstreamer.dll: " "$NPU")" = 2 ] && has "$U" "label = Unreal video fix" && [ "$(/usr/bin/grep -c MacGameFix "$NPU")" = 1 ]' "the Unreal row is NotProton's own, with its two patches, in MacGameFix / Video, and names MacGameFix there alone"
 : > "$NPHOST"
 OUT=$("$BIN" --rows-keep)
 check 'has "$OUT" "D3DMetal freeze library: put in place" && has "$OUT" "D3DMetal freeze row: written" && has "$OUT" "D3DMetal video crash row: written" && has "$OUT" "Red Dead Online row: written" && has "$OUT" "DualSense controllers library: put in place" && has "$OUT" "DualSense controllers row: written"' "with the plugin host, the four rows and their libraries go in"
 check 'cmp -s "$NPLIB/d3dmetal-freeze.dylib" "$NPP/d3dmetal-freeze.dylib" && cmp -s "$NPLIB/d3dmetal-notifier.dylib" "$NPP/d3dmetal-notifier.dylib" && cmp -s "$NPLIB/tcp-noopt.dylib" "$NPP/tcp-noopt.dylib" && [ -x "$NPP/tcp-noopt.dylib" ]' "each library is the one the app carries"
-check 'has "$(cat "$NPZ")" "requires = Library/Application Support/notproton/plugins/d3dmetal-freeze.dylib" && has "$(cat "$NPZ")" "inject = 1" && has "$(cat "$NPZ")" "group = MacGameFix · D3DMetal"' "a library's row injects it and requires it where it was put"
+check 'has "$(cat "$NPZ")" "requires = Library/Application Support/notproton/plugins/d3dmetal-freeze.dylib" && has "$(cat "$NPZ")" "inject = 1" && has "$(cat "$NPZ")" "group = MacGameFix / D3DMetal"' "a library's row injects it and requires it where it was put"
 T6=$(cat "$NPT")
-check 'has "$T6" "[NOTPROTON_TCP_NOOPT]" && has "$T6" "apps = 1174180" && has "$T6" "apps = 1404210" && has "$T6" "group = MacGameFix · Per game"' "the Red Dead Online row shows for Red Dead Redemption 2 and Red Dead Online only"
+check 'has "$T6" "[NOTPROTON_TCP_NOOPT]" && has "$T6" "apps = 1174180" && has "$T6" "apps = 1404210" && has "$T6" "group = MacGameFix / Game fixes"' "the Red Dead Online row shows for Red Dead Redemption 2 and Red Dead Online only"
 C6=$(cat "$NPC")
-check 'has "$C6" "[NOTPROTON_MGF_CONTROLS]" && has "$C6" "label = DualSense controllers" && has "$C6" "group = MacGameFix · Controllers" && has "$C6" "inject = 1" && has "$C6" "tools = notproton-fex-rosetta*" && has "$C6" "requires = Library/Application Support/notproton/plugins/mgf-controls.dylib" && ! /usr/bin/grep -q "^apps" "$NPC" && cmp -s "$NPLIB/mgf-controls.dylib" "$NPP/mgf-controls.dylib"' "the DualSense controllers row is on every game's page, for the Rosetta tools, and loads the library the app carries"
+check 'has "$C6" "[NOTPROTON_MGF_CONTROLS]" && has "$C6" "label = DualSense controllers" && has "$C6" "group = MacGameFix / Controllers" && has "$C6" "inject = 1" && has "$C6" "tools = notproton-fex-rosetta*" && has "$C6" "requires = Library/Application Support/notproton/plugins/mgf-controls.dylib" && ! /usr/bin/grep -q "^apps" "$NPC" && cmp -s "$NPLIB/mgf-controls.dylib" "$NPP/mgf-controls.dylib"' "the DualSense controllers row is on every game's page, for the Rosetta tools, and loads the library the app carries"
 check '[ "$("$BIN" --plugins-report | /usr/bin/grep -c ": in place$")" = 5 ]' "with the plugin host, the window shows all five in place"
 check '[ "$("$BIN" --rows-keep)" = "rows: nothing to do" ]' "plugins already right are left as they are"
 printf 'an older build' > "$NPP/tcp-noopt.dylib"

@@ -138,7 +138,7 @@ enum FrameCapRow {
 
     static func text(fastest: Int, steps: Double, grouped: Bool) -> String {
         var lines = ["[\(id)]", NotProtonRow.label("Frame rate cap", grouped: grouped)]
-        if grouped { lines.append("group = MacGameFix · Performance") }
+        if grouped { lines.append("group = MacGameFix / Performance") }
         lines += [
             "description = Holds the game to a rate this display (\(fastest) Hz) can keep. Preview tools only",
             "section = dev",
@@ -174,7 +174,7 @@ enum RayTracingRow {
 
     static func text(grouped: Bool) -> String {
         var lines = ["[\(id)]", NotProtonRow.label("Ray tracing off", grouped: grouped)]
-        if grouped { lines.append("group = MacGameFix · D3DMetal") }
+        if grouped { lines.append("group = MacGameFix / D3DMetal") }
         lines += [
             "description = The game sees no ray tracing. For a game that closes as a level loads: Phantom Blade Zero with DLSS on",
             "section = dev",
@@ -206,7 +206,7 @@ enum DriverVersionRow {
 
     static func text(grouped: Bool) -> String {
         var lines = ["[\(id)]", NotProtonRow.label("NVIDIA driver version", grouped: grouped)]
-        if grouped { lines.append("group = MacGameFix · D3DMetal") }
+        if grouped { lines.append("group = MacGameFix / D3DMetal") }
         lines += [
             "description = The game sees a newer NVIDIA driver and stops asking for a driver update. Played with EA SPORTS FC 27",
             "on = 1",

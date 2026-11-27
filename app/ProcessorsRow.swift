@@ -57,7 +57,7 @@ enum ProcessorsRow {
             "[\(id)]",
             NotProtonRow.label("Processors the game sees", grouped: grouped),
         ]
-        if grouped { lines.append("group = MacGameFix · Performance") }
+        if grouped { lines.append("group = MacGameFix / Performance") }
         lines += [
             "description = All by default. Some games run cooler or steadier with fewer",
             "section = dev",
