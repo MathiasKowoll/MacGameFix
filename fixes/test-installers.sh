@@ -388,7 +388,7 @@ f1 > "$W/f125.install.log" 2>&1 || say FAIL "f1 25: install failed: $(tail -2 "$
   && ! /usr/bin/grep -q 'choice = bad' "$fplug/mgf-shared.conf" && [ "$(/usr/bin/grep -c '^choice = vanilla' "$fplug/mgf-shared.conf")" = 1 ] \
   && /usr/bin/grep -qx '\[NOTPROTON_MGF_MODTOOL\]' "$fplug/mgf-shared.conf" && /usr/bin/grep -qx '\[NOTPROTON_MGF_PLAY\]' "$fplug/mgf-shared.conf" \
   && [ "$(/usr/bin/grep -c '^apps = 3059520$' "$fplug/mgf-shared.conf")" = 3 ] && [ "$(/usr/bin/grep -c '^apps' "$fplug/mgf-shared.conf")" = 3 ] \
-  && [ "$(/usr/bin/grep -c '^description = .*Played on NotProton 41303 (Rosetta), 2026-11-24$' "$fplug/mgf-shared.conf")" = 4 ] \
+  && [ "$(/usr/bin/grep -c '^description = ' "$fplug/mgf-shared.conf")" = 4 ] && [ "$(/usr/bin/grep -c '^label = .* (MacGameFix)$' "$fplug/mgf-shared.conf")" = 4 ] \
   && /usr/bin/grep -qx 'requires = Library/Application Support/notproton/plugins/mgf-engine.dylib' "$fplug/mgf-shared.conf" && cmp -s "$fplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
   && ! /usr/bin/grep -q 'NOTPROTON_MGF_PLAY' "$fvdf" \
   && cmp -s "$fstore/window/x86_64-windows/dwrite.dll" "$fc/fixes/engine-27.0.0.41303-x86_64-windows-dwrite.dll" \
@@ -469,10 +469,10 @@ f1 --restore > /dev/null 2>&1; [ "$(f1st)" = absent ] || say FAIL "f1 25: restor
 fvdf_with 'MGF_FANS=max %command%'
 # Where NotProton knows groups, the rows carry one of the game's own; where it does not, none, as it would refuse the row.
 MGVF_NOTPROTON_GROUPS=1 f1 > /dev/null 2>&1
-[ "$(/usr/bin/grep -c '^group = MacGameFix$' "$fplug/mgf-shared.conf")" = 4 ] && [ "$(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1)" = installed ] \
-  && say ok "f1 25 in NotProton: with a NotProton that knows groups, every shared row is in MacGameFix's group" || say FAIL "f1 25: grouped rows ($(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1))"
-f1 > /dev/null 2>&1; ! /usr/bin/grep -q '^group' "$fplug/mgf-shared.conf" && [ "$(f1st)" = installed ] \
-  && say ok "f1 25 in NotProton: with one that does not, the rows carry no group" || say FAIL "f1 25: ungrouped rows ($(f1st))"
+[ "$(/usr/bin/grep -c '^group = MacGameFix$' "$fplug/mgf-shared.conf")" = 4 ] && ! /usr/bin/grep -q '^label = .*MacGameFix' "$fplug/mgf-shared.conf" && ! /usr/bin/grep -q '^description = .*MacGameFix' "$fplug/mgf-shared.conf" && [ "$(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1)" = installed ] \
+  && say ok "f1 25 in NotProton: with a NotProton that knows groups, every shared row is in MacGameFix's group and names it nowhere else" || say FAIL "f1 25: grouped rows ($(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1))"
+f1 > /dev/null 2>&1; ! /usr/bin/grep -q '^group' "$fplug/mgf-shared.conf" && [ "$(/usr/bin/grep -c '^label = .* (MacGameFix)$' "$fplug/mgf-shared.conf")" = 4 ] && [ "$(f1st)" = installed ] \
+  && say ok "f1 25 in NotProton: with one that does not, the rows carry no group and their labels name MacGameFix" || say FAIL "f1 25: ungrouped rows ($(f1st))"
 f1 --restore > /dev/null 2>&1
 # What the user had before stays theirs: an override, an ActiveUser and a loginusers.vdf of their own.
 MGVF_BOTTLE="$fpfx" /bin/bash -c '. "$0/bottles.sh"; user_reg_edit "$1" set "Software\\Wine\\AppDefaults\\F1_25.exe\\DllOverrides" version native,builtin; user_reg_edit "$1" setdword "Software\\Valve\\Steam\\ActiveProcess" ActiveUser 7' "$FIX" "$fpfx"

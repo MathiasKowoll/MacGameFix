@@ -62,7 +62,7 @@ Denuvo-protected games such as Phantom Blade Zero, Persona 4 Golden and
 STAR WARS: Galactic Racer; the games played, reported or in progress are in
 [`docs/improvements`](docs/improvements); in NotProton's runner for CrossOver Preview 41303 the
 Intel side keeps CodeWeavers' and NotProton's files, and those games get the same from the
-**Engine fixes (MacGameFix)** row on their Compatibility page), see
+**Engine fixes** row on their Compatibility page), see
 [`engine/README.md`](engine/README.md), each with a switch and an Update button for every CrossOver
 app and NotProton runner (the stable CrossOver and the latest Preview are maintained; an older
 Preview's modules are kept as they were last built, without support, and the tab says "No longer

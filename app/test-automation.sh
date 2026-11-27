@@ -1137,7 +1137,7 @@ check '[ "$(MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep)" = "processors row: wri
 R=$(cat "$NPR")
 check 'has "$R" "[NOTPROTON_ENV_WINENCPU]" && has "$R" "type = choice" && has "$R" "default = 0" && has "$R" "choice = 0 = All (16)"' "every game sees All by default, and picking All clears a game's option"
 check 'has "$R" "choice = 12 = 12 (performance cores)" && has "$R" "choice = 14" && ! /usr/bin/grep -Eq "^choice = (1[6-9]|[2-9][0-9])" "$NPR"' "it offers only counts below this Mac's, and names the performance cores"
-check '! has "$R" "group = "' "without a NotProton that knows groups, no group line (an older one refuses the row)"
+check '! has "$R" "group = " && has "$R" "label = Processors the game sees (MacGameFix)"' "without a NotProton that knows groups, no group line (an older one refuses the row), and the label says whose row it is"
 check '[ "$(MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep)" = "processors row: nothing to do" ]' "a row already right is left as it is"
 mkdir -p "$CT/notproton-a" "$CT/notproton-b"
 printf '      split("label description section on off type choice default apps patch variants group improves needed_for", f, " ")\n' > "$CT/notproton-a/run"
@@ -1146,7 +1146,7 @@ MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep >/dev/null
 check '! has "$(cat "$NPR")" "group = "' "one NotProton in Steam that does not know groups keeps the group out"
 rm -rf "$CT/notproton-b"
 MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep >/dev/null
-check 'has "$(cat "$NPR")" "group = MacGameFix · Performance"' "with every NotProton knowing groups, the row goes in MacGameFix · Performance"
+check 'has "$(cat "$NPR")" "group = MacGameFix · Performance" && [ "$(/usr/bin/grep -c MacGameFix "$NPR")" = 1 ]' "with every NotProton knowing groups, the row goes in MacGameFix · Performance and names MacGameFix there alone"
 mkdir -p "$CT/notproton-gone"; : > "$CT/notproton-gone/run.backup"
 MACGAMEFIX_CPUS=16,12 "$BIN" --cpu-row-keep >/dev/null
 check 'has "$(cat "$NPR")" "group = MacGameFix · Performance"' "a notproton folder with no run script (a tool NotProton emptied) has no say"
@@ -1202,7 +1202,7 @@ check 'has "$OUT" "Unreal video row: written" && [ -f "$NPU" ] && [ ! -e "$NPZ" 
 OUT=$("$BIN" --plugins-report)
 check 'has "$OUT" "Unreal video fix: in place" && has "$OUT" "D3DMetal freeze fix: not offered, NotProton'"'"'s plugin host is not installed"' "the window says which plugins are in place and why one is not offered"
 U=$(cat "$NPU")
-check 'has "$U" "[NOTPROTON_UNREAL_VIDEO]" && has "$U" "group = MacGameFix · Video" && has "$U" "on = 1" && [ "$(/usr/bin/grep -c "^patch = winegstreamer.dll: " "$NPU")" = 2 ] && has "$U" "(MacGameFix)"' "the Unreal row is NotProton's own, with its two patches, in MacGameFix · Video"
+check 'has "$U" "[NOTPROTON_UNREAL_VIDEO]" && has "$U" "group = MacGameFix · Video" && has "$U" "on = 1" && [ "$(/usr/bin/grep -c "^patch = winegstreamer.dll: " "$NPU")" = 2 ] && has "$U" "label = Unreal video fix" && [ "$(/usr/bin/grep -c MacGameFix "$NPU")" = 1 ]' "the Unreal row is NotProton's own, with its two patches, in MacGameFix · Video, and names MacGameFix there alone"
 : > "$NPHOST"
 OUT=$("$BIN" --rows-keep)
 check 'has "$OUT" "D3DMetal freeze library: put in place" && has "$OUT" "D3DMetal freeze row: written" && has "$OUT" "D3DMetal video crash row: written" && has "$OUT" "Red Dead Online row: written"' "with the plugin host, the three rows and their libraries go in"

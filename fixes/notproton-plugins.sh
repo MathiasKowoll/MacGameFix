@@ -196,8 +196,9 @@ np_shared_expected() {
         last = 0; have = 0
         for (i = 1; i <= nb; i++) if (buf[i] ~ /^choice[[:space:]]*=/) { last = i; have++; v = buf[i]; sub(/^choice[[:space:]]*=[[:space:]]*/, "", v); sub(/[[:space:]]*=.*/, "", v); taken[v] = 1 }
         for (i = 1; i <= nb; i++) {
+          # A row in the MacGameFix group does not name it again; with no group, its label does.
+          if (buf[i] ~ /^label[[:space:]]*=/) { if (group != "") { print buf[i]; print "group = " group } else print buf[i] " (MacGameFix)"; continue }
           print buf[i]
-          if (buf[i] ~ /^label[[:space:]]*=/ && group != "") print "group = " group
           if (i == last && (id in extra)) {
             ne = split(extra[id], e, "\n")
             for (k = 1; k <= ne; k++) {

@@ -107,14 +107,15 @@ enum Fans {
         let fm = FileManager.default
         guard fm.fileExists(atPath: Engine.notproton.path) else { return false }
         guard on else { try? fm.removeItem(at: notProtonRow); return false }
+        // An older NotProton refuses a row with a field it does not know.
+        let grouped = NotProtonRow.knowsGroups()
         var lines = [
             "[NOTPROTON_MGF_FANS]",
-            "label = Fans at full speed",
+            NotProtonRow.label("Fans at full speed", grouped: grouped),
         ]
-        // An older NotProton refuses a row with a field it does not know.
-        if NotProtonRow.knowsGroups() { lines.append("group = MacGameFix · Performance") }
+        if grouped { lines.append("group = MacGameFix · Performance") }
         lines += [
-            "description = Runs the Mac's fans at their maximum while this game runs, before the Mac gets hot enough for macOS to cut the processor's speed (MacGameFix)",
+            "description = The Mac's fans run at full speed while this game runs",
             "section = dev",
             "on = 1",
             "requires = /Library/PrivilegedHelperTools/\(label)",

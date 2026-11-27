@@ -55,11 +55,11 @@ enum ProcessorsRow {
     static func text(all: Int, performance: Int, grouped: Bool) -> String {
         var lines = [
             "[\(id)]",
-            "label = Processors the game sees",
+            NotProtonRow.label("Processors the game sees", grouped: grouped),
         ]
         if grouped { lines.append("group = MacGameFix · Performance") }
         lines += [
-            "description = All by default. Some games run cooler or steadier with fewer: their engine starts fewer worker threads. Only counts this Mac has (\(all)) are offered (MacGameFix)",
+            "description = All by default. Some games run cooler or steadier with fewer",
             "section = dev",
             "type = choice",
             "default = 0",
