@@ -202,3 +202,17 @@ void pad_realtime(double period, double constraint) {
     thread_policy_set(pthread_mach_thread_np(pthread_self()), THREAD_TIME_CONSTRAINT_POLICY,
                       (thread_policy_t)&policy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
 }
+
+// MGF_CONTROLS_WITHOUT names parts of the Windows side to leave out, by their module, with
+// commas: "xaudio2,mmdevapi". For the checks, which have to see a part fail without it, and for
+// telling which part a fault is in.
+bool pad_part_off(const char *part) {
+    const char *list = getenv("MGF_CONTROLS_WITHOUT");
+    size_t length = strlen(part);
+    for (const char *at = list; at && *at; at = strchr(at, ',') ? strchr(at, ',') + 1 : NULL)
+        if (!strncmp(at, part, length) && (!at[length] || at[length] == ',')) {
+            pad_log("controls: %s is left out (MGF_CONTROLS_WITHOUT)\n", part);
+            return true;
+        }
+    return false;
+}

@@ -795,6 +795,7 @@ static uint32_t (*real_get_prop_value)(void *);
 // endpoint's device in every question of its own, and asks one of each endpoint when it lists
 // them: the devices are kept by GUID from those.
 const char mgf_container_request_tag = 0;
+const char mgf_log_request_tag = 0;
 uintptr_t mgf_audio_unix_handle;
 
 static struct { wine_guid guid; char device[256]; } endpoints[64];
@@ -860,6 +861,11 @@ static uint32_t get_prop_value(void *args) {
 
     if (*(const void **)args == &mgf_container_request_tag) {
         container_request(args);
+        return 0;
+    }
+    if (*(const void **)args == &mgf_log_request_tag) {
+        const struct mgf_log_request *line = args;
+        pad_log("controls: %s (%llx)\n", line->text, (unsigned long long)line->value);
         return 0;
     }
     // Engine patch 0009 (endpoints.c): the endpoint is listed in SetupAPI, with its container.

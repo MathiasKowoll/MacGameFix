@@ -207,6 +207,22 @@ uintptr_t *pe_import_slot(const struct pe_image *image, const char *dll, const c
     return NULL;
 }
 
+uintptr_t *pe_import_first(const struct pe_image *image, const char *dll) {
+    uint8_t *opt, *sections;
+    unsigned count;
+    if (!headers(image, &opt, &sections, &count) || *(uint32_t *)(opt + 108) < 2) return NULL;
+    uint32_t dir = *(uint32_t *)(opt + 120), size = *(uint32_t *)(opt + 124);
+    if (!dir || (uint64_t)dir + size > image->size) return NULL;
+    for (uint32_t at = dir; at + 20 <= dir + size; at += 20) {
+        const uint32_t *d = (const uint32_t *)(image->base + at);
+        if (!d[3] && !d[4]) break;
+        if (d[3] < image->size - 64 && same_name((const char *)image->base + d[3], dll) &&
+            (uint64_t)d[4] + 8 <= image->size)
+            return (uintptr_t *)(image->base + d[4]);
+    }
+    return NULL;
+}
+
 bool pe_write_pointer(uintptr_t *slot, uintptr_t value) {
     void *addr = slot;
     size_t len = sizeof(*slot);

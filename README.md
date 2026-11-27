@@ -364,9 +364,10 @@ One more is MacGameFix's own:
   as WCHAR from the ANSI function, which Nioh 3 needs) is made in memory on
   CodeWeavers' own file, a USB pad's container is made from where it is
   plugged in, as its audio output's is, when `winebus.sys` is CodeWeavers',
-  and CodeWeavers' `mmdevapi.dll` gives an audio output's container, which
-  it never asked the driver for (the three changes are checked, not played
-  yet). Played on 2026-11-26 with
+  CodeWeavers' `mmdevapi.dll` gives an audio output's container, which it
+  never asked the driver for, the audio outputs are listed in SetupAPI, and
+  an XAudio2 mastering voice opens the device the game names (the five
+  changes are checked, not played yet). Played on 2026-11-26 with
   Marvel's Spider-Man 2 (Bluetooth and a cable), Crysis 3 Remastered and
   Crash Bandicoot 4.
 
