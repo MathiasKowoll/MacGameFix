@@ -1141,6 +1141,13 @@ CodeWeavers' `ntdll.so` and files, one with these seven files:
 | `tests/tcp-noopt/run.sh` | - | all four rows as on 41303: options and 4024 without, none and 536 with |
 | `FindPackagesByPackageFamily`, `GetPointerDevice`, `GetMappedFileNameW` (a probe not kept in the repository) | none in `kernel32.dll` and `user32.dll`; `\??\C:\windows\...` | count 0 and `ERROR_SUCCESS`; `ERROR_INVALID_PARAMETER`; `\Device\HarddiskVolume1\windows\...` |
 
+**What Wine 11.0 does not have stays so.** Where a game's fix needs something Wine 11.0 does not
+implement, nothing is written for it here: that game is offered CrossOver Preview with NotProton
+instead, where it was played. So far that is Forza Horizon 6: its exception chain (`0023`-`0025`)
+and its online game socket, whose `SIO_UDP_NETRESET` 11.0's `ws2_32` refuses, are for NotProton's
+41303 runner (its fix already installs only the Xbox sign-in part in a CrossOver bottle), and a
+game on the FEX side (`0022`) is NotProton's FEX runner's too.
+
 The prefixes those probes made started on the new `win32u.so`, `user32.dll`, `kernelbase.dll`
 and `kernel32.dll`. Nothing else was run: no game is played on 26.3 with these, and `0021`,
 `0032`/`0036`, `0033`, `0039`, `0040` and `0043` were not probed on 11.0.
