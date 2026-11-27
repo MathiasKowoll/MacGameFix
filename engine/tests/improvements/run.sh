@@ -207,6 +207,22 @@ cwfex4() { [ "$(cat "$R4/lib/wine/aarch64-unix/ntdll.so")" = "CodeWeavers' aarch
 E3 "$R4" --part=rosetta --retire >/dev/null
 check 'cwso3 "$R4" && cwfex4 && ! grep -q ntdll "$S4/installed.list"' "--retire puts CodeWeavers' ntdll.so back and leaves the FEX side's alone"
 check '[ "$(E3 "$R4" --part=rosetta --retire | tail -1)" = "Nothing retired is left in $R4." ] && cwfex4' "--retire again changes nothing"
+# 41303's FEX side leaves them too (2026-11-26): an ntdll.so earlier modules put there goes back to
+# the runner's own, and its controls stay.
+printf 'ours aarch64-unix/winecoreaudio.so wine-11.21\n' >"$CAT/engine-$B3-aarch64-unix-winecoreaudio.so"
+R6="$T/notproton/runners/crossover-$B3-fex6/CrossOver"; S6="$MGVF_ENGINE_BACKUP/crossover-$B3-fex6"
+mkdir -p "$R6/lib/wine/x86_64-unix" "$R6/lib/wine/aarch64-unix" "$S6/aarch64-unix"
+printf "CodeWeavers' x86_64-unix/ntdll.so wine-11.21\n" >"$R6/lib/wine/x86_64-unix/ntdll.so"
+printf "NotProton's aarch64-unix/ntdll.so wine-11.21\n" >"$S6/aarch64-unix/ntdll.so"
+for f in aarch64-unix/ntdll.so aarch64-unix/winecoreaudio.so; do
+  cp "$CAT/engine-$B3-$(printf '%s' "$f" | tr / -)" "$R6/lib/wine/$f"
+  printf '%s  %s\n' "$(shasum -a 256 "$R6/lib/wine/$f" | cut -d' ' -f1)" "$f" >>"$S6/installed.list"
+done
+npfex6() { [ "$(cat "$R6/lib/wine/aarch64-unix/ntdll.so")" = "NotProton's aarch64-unix/ntdll.so wine-11.21" ]; }
+check '[ "$(st3 "$R6" --part=rosetta)" = outdated ]' "41303, a runner whose FEX side still has the modules' ntdll.so: outdated"
+E3 "$R6" --part=rosetta >/dev/null
+check 'npfex6 && ! grep -q ntdll "$S6/installed.list" && [ "$(st3 "$R6" --part=rosetta)" = nomodules ]' "an install puts the runner's own FEX ntdll.so back and takes it off the list"
+check 'ours3 "$R6" aarch64-unix/winecoreaudio.so && grep -q winecoreaudio "$S6/installed.list"' "and the FEX side's controls stay"
 # 26.3 (CrossOver stable): the app gets the whole engine, ntdll.so, win32u.so, kernelbase.dll and
 # the rest; NotProton's runner for 26.3 leaves those to CodeWeavers, as 41303's does, and the
 # ntdll.so earlier modules put in it goes back to CodeWeavers'. The controls go into both.
