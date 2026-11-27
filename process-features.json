@@ -152,7 +152,8 @@
       "codec": "",
       "gptk": "",
       "env": {},
-      "symptom": "Cutscene runs with sound, picture solid green; a crash dialog on leaving"
+      "symptom": "Cutscene runs with sound, picture solid green; a crash dialog on leaving",
+      "not_needed_from_gptk": "4.0b3"
     },
     "MK11_DX12.exe": {
       "title": "Mortal Kombat 11",
