@@ -1251,7 +1251,11 @@ NotProton's rows (`fixes/engine/mgf-engine.c` and the game's own rows), and keep
 `directmanipulation.dll` (`LEAVE` in `engine-modules.sh`, for 41303 and 26.3): the controls'
 modules still go into them. The Engine fixes row is for 41303's Rosetta tool alone so far, so
 NotProton's 26.3 runner has none of the Rosetta fixes until a row of it supports that runner. No
-Preview app is maintained that way; the 41303 app's modules are still in the catalog as built.
+Preview app is maintained: `"appsKept"` in `support.json` names a build whose CrossOver app is only
+kept while its NotProton runner is maintained (41303 since 2026-11-26). The app still installs and
+removes that app's modules as they were last built and says "No longer maintained" under it;
+`app/bundle-engine.py` writes it as each build's `"appSupport"`, and `tools/export-engine-docs.py`
+as `appSupport` and `appKeptSince` in `docs/engine/engine.json`.
 
 The modules of an older Preview are **kept, without support**: they stay in the catalog as
 they were last built, and the app still installs and removes them, so a CrossOver that is

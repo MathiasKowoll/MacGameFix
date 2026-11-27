@@ -809,10 +809,10 @@ extension Model {
     /// Only a CrossOver there are modules for, of its exact build and Wine, can be turned on.
     func engineSelectable(_ row: EngineRow) -> Bool { row.state != .noModules && row.state != .unknown }
     /// Whether this CrossOver's modules are only kept (engine/support.json), not maintained.
-    func engineOnlyKept(_ build: String) -> Bool { engineBuilds.first { $0.build == build }?.kept ?? false }
+    func engineOnlyKept(_ target: EngineTarget) -> Bool { engineBuilds.first { $0.build == target.build }?.kept(for: target) ?? false }
     /// A state as a report words it: a CrossOver that is no longer maintained says so.
     func engineStateLine(_ row: EngineRow) -> String {
-        engineOnlyKept(row.target.build) ? "\(row.state.label), \(Engine.keptNote.lowercased())" : row.state.label
+        engineOnlyKept(row.target) ? "\(row.state.label), \(Engine.keptNote.lowercased())" : row.state.label
     }
 
     /// An improvement's switch is the action: on installs it into that CrossOver and
@@ -2852,7 +2852,7 @@ struct EngineSwitch: View {
                     if let o = row.outcome { Text(o).foregroundStyle(.orange) }
                 }
                 .font(.caption)
-                if model.engineOnlyKept(row.target.build) {
+                if model.engineOnlyKept(row.target) {
                     Text(Engine.keptNote).font(.caption).foregroundStyle(.orange).help(Engine.keptDetail)
                 }
             }
@@ -3329,7 +3329,7 @@ enum Entry {
             wait {
                 for t in Engine.targets() {
                     var line = "\(t.name) | \(t.build)\(t.fex ? " | fex" : "") | \(await Engine.status(t, catalog: dir))"
-                    if builds.first(where: { $0.build == t.build })?.kept ?? false { line += " | kept" }
+                    if builds.first(where: { $0.build == t.build })?.kept(for: t) ?? false { line += " | kept" }
                     for part in EnginePart.allCases { line += " | \(part.rawValue) \(await Engine.status(t, part: part, catalog: dir))" }
                     print(line)
                 }

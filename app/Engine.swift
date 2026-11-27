@@ -135,9 +135,20 @@ struct EngineBuild: Decodable {
     /// "maintained" or "kept" (engine/support.json); a catalog older than that file says nothing.
     var support: String?
 
+    /// The same for the build's CrossOver apps (engine/support.json's "appsKept"): only the
+    /// stable CrossOver's app is maintained, a Preview's app is kept while its NotProton runner
+    /// is maintained. Missing in an older catalog, where apps go by `support`.
+    var appSupport: String?
+
     /// An older Preview's modules: they stay as they were last built, and nothing new is
     /// built or checked for them. The stable CrossOver and the latest Preview are maintained.
     var kept: Bool { support == "kept" }
+
+    /// Whether this CrossOver's modules are only kept: a CrossOver app goes by `appSupport`,
+    /// a runner by `support`.
+    func kept(for target: EngineTarget) -> Bool {
+        kept || (target.app != nil && appSupport == "kept")
+    }
 }
 
 enum Engine {
@@ -161,7 +172,7 @@ enum Engine {
     /// What a CrossOver whose modules are only kept is told, wherever it is listed.
     static let keptNote = "No longer maintained"
     static let keptDetail = "Its modules stay as they were last built: nothing new is built or tested for this CrossOver. "
-        + "The stable CrossOver and the latest Preview are maintained."
+        + "The stable CrossOver's app and NotProton's runner of the latest Preview are maintained."
 
     static func builds(in catalog: URL) -> [EngineBuild] {
         struct Table: Decodable { let builds: [EngineBuild] }

@@ -1018,7 +1018,8 @@
       "name": "CrossOver 26.3",
       "wine": "11.0",
       "series": "wine-11.0",
-      "support": "maintained"
+      "support": "maintained",
+      "appSupport": "maintained"
     },
     {
       "build": "27.0.0.41069",
@@ -1026,7 +1027,8 @@
       "wine": "11.17",
       "series": "wine-11.17",
       "support": "kept",
-      "keptSince": "2026-11-18"
+      "keptSince": "2026-11-18",
+      "appSupport": "kept"
     },
     {
       "build": "27.0.0.41073",
@@ -1034,14 +1036,17 @@
       "wine": "11.17",
       "series": "wine-11.17",
       "support": "kept",
-      "keptSince": "2026-11-18"
+      "keptSince": "2026-11-18",
+      "appSupport": "kept"
     },
     {
       "build": "27.0.0.41303",
       "name": "CrossOver Preview 20261111",
       "wine": "11.21",
       "series": "wine-11.21",
-      "support": "maintained"
+      "support": "maintained",
+      "appSupport": "kept",
+      "appKeptSince": "2026-11-26"
     }
   ],
   "excerpts": {

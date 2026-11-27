@@ -75,6 +75,21 @@ check 'has "$(engine 20261006)" "| fex | absent"' "a runner of a carried build, 
 check 'has "$(engine 20261099)" "noModules"' "a runner of a build with no modules says so"
 # 20261006 is an older Preview: its modules are kept (engine/support.json), not maintained.
 check 'has "$(engine 20261006)" "| kept" && ! has "$(engine 20261099)" "| kept"' "a runner of a Preview that is only kept says so, and one with no modules does not"
+# 20261111 (41303): NotProton's runner is maintained, the CrossOver Preview app only kept
+# (engine/support.json's appsKept): only the stable CrossOver's app is maintained.
+KR="$SUPPORT/notproton/runners/crossover-27.0.0.41303-fex/CrossOver"
+KA="$MACGAMEFIX_HOME/Applications/CrossOver Preview Kept.app"; KX="$KA/Contents/SharedSupport/CrossOver"
+for root in "$KR" "$KX"; do
+  mkdir -p "$root/lib/wine/x86_64-unix" "$root/etc"
+  printf 'x wine-11.21-1 x' > "$root/lib/wine/x86_64-unix/ntdll.so"
+  printf '"BuildTag" = "cxpreview-20261111-rc1"\n' > "$root/etc/CrossOver.conf"
+done
+/usr/libexec/PlistBuddy -c 'Add :CFBundleVersion string 27.0.0.41303' "$KA/Contents/Info.plist" >/dev/null
+KREP="$("$BIN" --engine-report 2>&1)"
+krunner="$(printf '%s\n' "$KREP" | grep -F "runner · CrossOver Preview 20261111 |" || true)"
+kapp="$(printf '%s\n' "$KREP" | grep -F "CrossOver Preview 20261111" | grep -v -F "runner ·" | grep -F "| kept" || true)"
+check '[ -n "$krunner" ] && ! has "$krunner" "| kept" && [ -n "$kapp" ]' "41303: NotProton's runner is maintained, the CrossOver Preview app is only kept"
+rm -rf "$KA" "$SUPPORT/notproton/runners/crossover-27.0.0.41303-fex"
 "$BIN" --engine-install "$RUNNER" >/dev/null 2>&1 || true
 same=1
 for f in $ENGINE_FILES; do
