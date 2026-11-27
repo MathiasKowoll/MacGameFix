@@ -5,7 +5,10 @@
 #   NP_WRAPPER=<path>     the installer's play script, when one stands before %command%
 #   NP_SHARED_TEMPLATE=<np-plugin-shared.conf> NP_SHARED_LIBRARY=<mgf-engine.dylib>
 #   NP_SHARED_USES="<id>..." NP_SHARED_GROUP=<group, or empty>   the shared rows the game uses;
-#                         the group is its own rows' too
+#                         the group is its own rows' too. A template row says which part of the
+#                         group it goes under with "subgroup = <name>", written as
+#                         "group = <group> / <name>" (NotProton's subgroups; one that does not
+#                         know them shows that as one group's name)
 #   NP_SHARED_CHOICES="<id> = <value> = <label>" lines   choices of its own for a shared row
 #   np_plugins_ready      true when NotProton keeps this prefix and its support folder is there
 #   np_plugins_preflight  what an install would refuse, before anything changes
@@ -129,7 +132,8 @@ np_expected() {
       /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
       /^\[/ { if (open && apps) print "apps = " app
               sub(/\]$/, "_" app "]"); print; open = 1; next }
-      /^label[[:space:]]*=/ { if (group != "") { print; print "group = " group } else print $0 " (MacGameFix)"; next }
+      /^label[[:space:]]*=/ { if (group != "") print; else print $0 " (MacGameFix)"; next }
+      /^subgroup[[:space:]]*=/ { if (group != "") { sub(/^subgroup[[:space:]]*=[[:space:]]*/, ""); print "group = " group " / " $0 }; next }
       /^depends[[:space:]]*=/ { sub(/[[:space:]]*$/, ""); print $0 "_" app; next }
       { print }
       END { if (open && apps) print "apps = " app }' "$t"
@@ -200,7 +204,8 @@ np_shared_expected() {
         for (i = 1; i <= nb; i++) if (buf[i] ~ /^choice[[:space:]]*=/) { last = i; have++; v = buf[i]; sub(/^choice[[:space:]]*=[[:space:]]*/, "", v); sub(/[[:space:]]*=.*/, "", v); taken[v] = 1 }
         for (i = 1; i <= nb; i++) {
           # A row in the MacGameFix group does not name it again; with no group, its label does.
-          if (buf[i] ~ /^label[[:space:]]*=/) { if (group != "") { print buf[i]; print "group = " group } else print buf[i] " (MacGameFix)"; continue }
+          if (buf[i] ~ /^label[[:space:]]*=/) { if (group != "") print buf[i]; else print buf[i] " (MacGameFix)"; continue }
+          if (buf[i] ~ /^subgroup[[:space:]]*=/) { if (group != "") { v = buf[i]; sub(/^subgroup[[:space:]]*=[[:space:]]*/, "", v); print "group = " group " / " v }; continue }
           print buf[i]
           if (i == last && (id in extra)) {
             ne = split(extra[id], e, "\n")

@@ -469,7 +469,7 @@ f1 --restore > /dev/null 2>&1; [ "$(f1st)" = absent ] || say FAIL "f1 25: restor
 fvdf_with 'MGF_FANS=max %command%'
 # Where NotProton knows groups, the rows carry one of the game's own; where it does not, none, as it would refuse the row.
 MGVF_NOTPROTON_GROUPS=1 f1 > /dev/null 2>&1
-[ "$(/usr/bin/grep -c '^group = MacGameFix$' "$fplug/mgf-shared.conf")" = 4 ] && ! /usr/bin/grep -q '^label = .*MacGameFix' "$fplug/mgf-shared.conf" && ! /usr/bin/grep -q '^description = .*MacGameFix' "$fplug/mgf-shared.conf" && [ "$(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1)" = installed ] \
+[ "$(/usr/bin/grep -c '^group = MacGameFix / Mods$' "$fplug/mgf-shared.conf")" = 3 ] && [ "$(/usr/bin/grep -c '^group = MacGameFix / Game fixes$' "$fplug/mgf-shared.conf")" = 1 ] && ! /usr/bin/grep -q '^subgroup' "$fplug/mgf-shared.conf" && ! /usr/bin/grep -q '^label = .*MacGameFix' "$fplug/mgf-shared.conf" && ! /usr/bin/grep -q '^description = .*MacGameFix' "$fplug/mgf-shared.conf" && [ "$(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1)" = installed ] \
   && say ok "f1 25 in NotProton: with a NotProton that knows groups, every shared row is in MacGameFix's group and names it nowhere else" || say FAIL "f1 25: grouped rows ($(MGVF_NOTPROTON_GROUPS=1 f1 --status 2>/dev/null | tail -1))"
 f1 > /dev/null 2>&1; ! /usr/bin/grep -q '^group' "$fplug/mgf-shared.conf" && [ "$(/usr/bin/grep -c '^label = .* (MacGameFix)$' "$fplug/mgf-shared.conf")" = 4 ] && [ "$(f1st)" = installed ] \
   && say ok "f1 25 in NotProton: with one that does not, the rows carry no group and their labels name MacGameFix" || say FAIL "f1 25: ungrouped rows ($(f1st))"
@@ -651,7 +651,7 @@ case "$eout" in "waitforexitandrun|/some/installer.exe|"*) true ;; *) false ;; e
 # Groups, where NotProton knows them: both rows carry the game's own, and the library still goes in.
 e1 --restore > /dev/null 2>&1
 MGVF_NOTPROTON_GROUPS=1 e1 > /dev/null 2>&1
-[ "$(MGVF_NOTPROTON_GROUPS=1 e1st)" = installed ] && [ "$(/usr/bin/grep -c '^group = MacGameFix$' "$eplug/mgf-shared.conf")" = 3 ] && cmp -s "$eplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
+[ "$(MGVF_NOTPROTON_GROUPS=1 e1st)" = installed ] && [ "$(/usr/bin/grep -c '^group = MacGameFix / ' "$eplug/mgf-shared.conf")" = 3 ] && /usr/bin/grep -qx 'group = MacGameFix / Game fixes' "$eplug/mgf-shared.conf" && cmp -s "$eplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
   && say ok "fc 27 in NotProton: where NotProton knows groups the shared rows carry MacGameFix's, and the library is found all the same" || say FAIL "fc 27: groups ($(MGVF_NOTPROTON_GROUPS=1 e1st))"
 # Removing: the options and NotProton as they were, the player's Live Editor kept, and the game's
 # own EA AntiCheat launcher back where a cut-short session left the stand-in.
@@ -1017,7 +1017,7 @@ fnrun_with " patch"
   && say ok "fh5 in NotProton: with the plugin host and patch, a fix without its row reads half and says why" || say FAIL "fh5 NotProton: half before the row ($(fnst))"
 fnp --install > "$fn/install.log" 2>&1 && [ "$(fnst)" = installed ] \
   && /usr/bin/grep -qx '\[NOTPROTON_MGF_FH5_SIGNIN_1551360\]' "$fnconf" && /usr/bin/grep -qx 'label = Xbox sign-in window' "$fnconf" \
-  && /usr/bin/grep -qx 'group = MacGameFix' "$fnconf" && /usr/bin/grep -qx 'apps = 1551360' "$fnconf" && /usr/bin/grep -qx 'tools = notproton-fex-rosetta\*' "$fnconf" \
+  && /usr/bin/grep -qx 'group = MacGameFix / Game fixes' "$fnconf" && ! /usr/bin/grep -q '^subgroup' "$fnconf" && /usr/bin/grep -qx 'apps = 1551360' "$fnconf" && /usr/bin/grep -qx 'tools = notproton-fex-rosetta\*' "$fnconf" \
   && [ "$(/usr/bin/grep -c '^patch = win32u.so/x86_64: .* e9=c3 ?? ?? ?? ??$' "$fnconf")" = 1 ] && [ "$(/usr/bin/grep -c 'MacGameFix' "$fnconf")" = 2 ] \
   && /usr/bin/grep -qF '"NOTPROTON_MGF_FH5_SIGNIN_1551360=1 NOTPROTON_ENV_D3DM_VENDOR_ID=4318 %command%"' "$fnvdf" \
   && say ok "fh5 in NotProton: the sign-in row for this game alone, in MacGameFix's group, patching win32u.so, switched on in front of the player's options" \
@@ -1025,7 +1025,7 @@ fnp --install > "$fn/install.log" 2>&1 && [ "$(fnst)" = installed ] \
 sed -i '' 's/NOTPROTON_MGF_FH5_SIGNIN_1551360=1 //' "$fnvdf"
 [ "$(fnst)" = installed ] && fnp --install > /dev/null 2>&1 && ! /usr/bin/grep -q 'NOTPROTON_MGF_FH5_SIGNIN' "$fnvdf" \
   && say ok "fh5 in NotProton: a row the player switched off stays off, and the fix still reads installed" || say FAIL "fh5 NotProton: the player's switch ($(fnst))"
-MGVF_NOTPROTON_GROUPS=0 fnp --install > /dev/null 2>&1 && /usr/bin/grep -qx 'label = Xbox sign-in window (MacGameFix)' "$fnconf" && ! /usr/bin/grep -q '^group' "$fnconf" \
+MGVF_NOTPROTON_GROUPS=0 fnp --install > /dev/null 2>&1 && /usr/bin/grep -qx 'label = Xbox sign-in window (MacGameFix)' "$fnconf" && ! /usr/bin/grep -q -E '^(sub)?group' "$fnconf" \
   && [ "$(MGVF_NOTPROTON_GROUPS=0 fnp --status 2>/dev/null | tail -1)" = installed ] \
   && say ok "fh5 in NotProton: where NotProton knows no groups, the row's label names MacGameFix" || say FAIL "fh5 NotProton: ungrouped row"
 fnp --install > /dev/null 2>&1

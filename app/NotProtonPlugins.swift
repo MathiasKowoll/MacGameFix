@@ -68,7 +68,7 @@ enum NotProtonPlugins {
     static let all: [Plugin] = [
         Plugin(
             name: "Unreal video", file: "40-unreal-video.conf", id: "NOTPROTON_UNREAL_VIDEO",
-            group: "MacGameFix · Video", label: "Unreal video fix",
+            group: "MacGameFix / Video", label: "Unreal video fix",
             description: "For Unreal Engine videos that stay black. Not for every game: Town to City crashes with it",
             library: nil, fields: ["patch"],
             rest: [
@@ -78,23 +78,23 @@ enum NotProtonPlugins {
             ]),
         Plugin(
             name: "D3DMetal freeze", file: "50-d3dmetal-freeze.conf", id: "NOTPROTON_D3DMETAL_NODEGUARD",
-            group: "MacGameFix · D3DMetal", label: "D3DMetal freeze fix",
+            group: "MacGameFix / D3DMetal", label: "D3DMetal freeze fix",
             description: "For a game that freezes on an older D3DMetal: Town to City, Life is Strange, FATAL FURY. Does nothing on Preview 41303",
             library: "d3dmetal-freeze.dylib", fields: [], rest: ["on = 1", "inject = 1"]),
         Plugin(
             name: "D3DMetal video crash", file: "55-d3dmetal-notifier.conf", id: "NOTPROTON_D3DMETAL_NOTIFIER",
-            group: "MacGameFix · D3DMetal", label: "D3DMetal video crash fix",
+            group: "MacGameFix / D3DMetal", label: "D3DMetal video crash fix",
             description: "For a game that crashes playing a video on an older D3DMetal. Not needed on Preview 41303",
             library: "d3dmetal-notifier.dylib", fields: [], rest: ["on = 1", "inject = 1"]),
         Plugin(
             name: "Red Dead Online", file: "60-red-dead-online.conf", id: "NOTPROTON_TCP_NOOPT",
-            group: "MacGameFix · Per game", label: "Red Dead Online fix",
+            group: "MacGameFix / Game fixes", label: "Red Dead Online fix",
             description: "Lets Red Dead Online connect. Played online on NotProton 41303",
             library: "tcp-noopt.dylib", fields: ["apps"],
             rest: ["on = 1", "inject = 1", "apps = 1174180", "apps = 1404210"]),
         Plugin(
             name: "DualSense controllers", file: "mgf-controls.conf", id: "NOTPROTON_MGF_CONTROLS",
-            group: "MacGameFix · Controllers", label: "DualSense controllers",
+            group: "MacGameFix / Controllers", label: "DualSense controllers",
             description: "The DualSense in this game: Bluetooth as a cable, haptics, XInput, triggers. Set it up in MacGameFix's Game Feel",
             library: "mgf-controls.dylib", fields: [],
             rest: ["on = 1", "inject = 1", "tools = notproton-fex-rosetta*"]),
