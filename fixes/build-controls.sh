@@ -44,6 +44,8 @@ echo "built: $OUT/mgf-controls.dylib $(/usr/bin/shasum -a 256 "$OUT/mgf-controls
 #     the same refusal with the library and without, and the library's log has to say it held
 #     them. What xinput.c translates is checked on the Mac by checks/xinput_map.c at every build;
 #     no check has a pad for xinput to open, nor a device for hidclass.c: those two need a game.
+#   - checks/hidclass.c maps ntoskrnl.exe, hidclass.sys and win32u.dll in winedevice.exe's
+#     order: the library's log has to say it took the three exports hidclass.sys calls.
 #   - checks/xaudio2.c names the stand-in's output to an XAudio2 mastering voice and counts the
 #     voice's channels (the stand-in's has four, the Mac's own two): the default output's with
 #     the xaudio2 part left out (exit 3), the named one's with it.
@@ -131,5 +133,11 @@ left_out xaudio2 xaudio2 3
 same hid -lhid
 if ! /usr/bin/grep -q 'hid.dll answers xinput about a Sony pad' "$MGF_CONTROLS_DIR/pad.log" 2>/dev/null; then
   echo "  FAIL  hid: the library did not take hid.dll's exports in that check"; failed=1
+fi
+: > "$MGF_CONTROLS_DIR/pad.log"
+cp "$STOCK/x86_64-windows/hidclass.sys" "$WORK/runner/lib/wine/x86_64-windows/hidclass.sys"
+same hidclass
+if ! /usr/bin/grep -q "hidclass.sys offers a pad's collection with motors to xinput" "$MGF_CONTROLS_DIR/pad.log" 2>/dev/null; then
+  echo "  FAIL  hidclass: the library did not take the three exports hidclass.sys calls"; failed=1
 fi
 [ "$failed" = 0 ] || exit 1
