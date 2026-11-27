@@ -1,0 +1,211 @@
+From: MacGameFix
+Subject: directmanipulation: a viewport can be set up, and stays without a contact
+
+Nothing in Wine hands a touch or a precision touchpad's pointer to Direct Manipulation,
+so no manipulation ever starts. The calls a program makes to set a viewport up returned
+E_NOTIMPL all the same, and one that needs the set-up to succeed before it opens its
+window never opens it: one built on GPUI stops with "failed to open window: initializing
+Direct Manipulation: Not implemented (0x80004001)" (Swofty Launcher 1.10.35 on
+NotProton's runner for CrossOver Preview 41303, Rosetta, 2026-11-23, once 0039 had given
+it its fonts).
+
+A viewport now keeps its rectangle, its status (building, enabled by Enable, disabled by
+Disable and Abandon) and one event handler, which is held and never called;
+IDirectManipulationManager::Activate and Deactivate, IDirectManipulationUpdateManager::
+Update, and the viewport's SetContact and Stop succeed and do nothing. A program gets its
+window; touchpad pinch and inertia do not happen, the wheel does.
+
+--- a/dlls/directmanipulation/directmanipulation.c
++++ b/dlls/directmanipulation/directmanipulation.c
+@@ -111,8 +111,9 @@
+ static HRESULT WINAPI update_manager_Update(IDirectManipulationUpdateManager *iface, IDirectManipulationFrameInfoProvider *provider)
+ {
+     struct directupdatemanager *This = impl_from_IDirectManipulationUpdateManager(iface);
+-    FIXME("%p, %p\n", This, provider);
+-    return E_NOTIMPL;
++    /* No viewport is ever running, so there is nothing to bring up to date. */
++    TRACE("%p, %p\n", This, provider);
++    return S_OK;
+ }
+ 
+ struct IDirectManipulationUpdateManagerVtbl updatemanagerVtbl =
+@@ -384,10 +385,18 @@
+     content_SyncContentTransform
+ };
+ 
++/* A viewport here never gets a contact: nothing in Wine hands a touch or a precision
++ * touchpad's pointer to Direct Manipulation, so no manipulation starts and no event is sent.
++ * What a program does to set one up is kept and answered, so that one which needs the set-up
++ * to succeed before it opens its window gets its window (one built on GPUI stops with
++ * "initializing Direct Manipulation: Not implemented"; Swofty Launcher, 2026-11-23). */
+ struct directviewport
+ {
+     IDirectManipulationViewport2 IDirectManipulationViewport2_iface;
+     LONG ref;
++    DIRECTMANIPULATION_STATUS status;
++    RECT rect;
++    IDirectManipulationViewportEventHandler *handler;
+ };
+ 
+ static inline struct directviewport *impl_from_IDirectManipulationViewport2(IDirectManipulationViewport2 *iface)
+@@ -432,6 +441,7 @@
+ 
+     if (!ref)
+     {
++        if (This->handler) IDirectManipulationViewportEventHandler_Release(This->handler);
+         free(This);
+     }
+     return ref;
+@@ -440,22 +450,25 @@
+ static HRESULT WINAPI viewport_Enable(IDirectManipulationViewport2 *iface)
+ {
+     struct directviewport *This = impl_from_IDirectManipulationViewport2(iface);
+-    FIXME("%p\n", This);
+-    return E_NOTIMPL;
++    TRACE("%p\n", This);
++    This->status = DIRECTMANIPULATION_ENABLED;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI viewport_Disable(IDirectManipulationViewport2 *iface)
+ {
+     struct directviewport *This = impl_from_IDirectManipulationViewport2(iface);
+-    FIXME("%p\n", This);
+-    return E_NOTIMPL;
++    TRACE("%p\n", This);
++    This->status = DIRECTMANIPULATION_DISABLED;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI viewport_SetContact(IDirectManipulationViewport2 *iface, UINT32 id)
+ {
+     struct directviewport *This = impl_from_IDirectManipulationViewport2(iface);
+-    FIXME("%p, %d\n", This, id);
+-    return E_NOTIMPL;
++    /* No pointer reaches Direct Manipulation here, so the viewport stays as it is. */
++    FIXME("%p, %d: no contact is tracked\n", This, id);
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI viewport_ReleaseContact(IDirectManipulationViewport2 *iface, UINT32 id)
+@@ -475,8 +488,10 @@
+ static HRESULT WINAPI viewport_GetStatus(IDirectManipulationViewport2 *iface, DIRECTMANIPULATION_STATUS *status)
+ {
+     struct directviewport *This = impl_from_IDirectManipulationViewport2(iface);
+-    FIXME("%p, %p\n", This, status);
+-    return E_NOTIMPL;
++    TRACE("%p, %p\n", This, status);
++    if (!status) return E_POINTER;
++    *status = This->status;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI viewport_GetTag(IDirectManipulationViewport2 *iface, REFIID riid, void **object, UINT32 *id)
+@@ -496,14 +511,18 @@
+ static HRESULT WINAPI viewport_GetViewportRect(IDirectManipulationViewport2 *iface, RECT *viewport)
+ {
+     struct directviewport *This = impl_from_IDirectManipulationViewport2(iface);
+-    FIXME("%p, %p\n", This, viewport);
+-    return E_NOTIMPL;
++    TRACE("%p, %p\n", This, viewport);
++    if (!viewport) return E_POINTER;
++    *viewport = This->rect;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI viewport_SetViewportRect(IDirectManipulationViewport2 *iface, const RECT *viewport)
+ {
+     struct directviewport *This = impl_from_IDirectManipulationViewport2(iface);
+-    FIXME("%p, %p\n", This, viewport);
++    TRACE("%p, %s\n", This, wine_dbgstr_rect(viewport));
++    if (!viewport) return E_POINTER;
++    This->rect = *viewport;
+     return S_OK;
+ }
+ 
+@@ -616,15 +635,24 @@
+                     IDirectManipulationViewportEventHandler *eventHandler, DWORD *cookie)
+ {
+     struct directviewport *This = impl_from_IDirectManipulationViewport2(iface);
+-    FIXME("%p, %p, %p, %p\n", This, window, eventHandler, cookie);
+-    return E_NOTIMPL;
++    TRACE("%p, %p, %p, %p\n", This, window, eventHandler, cookie);
++    if (!eventHandler || !cookie) return E_POINTER;
++    /* One handler: it is kept and never called, as no manipulation starts. */
++    if (This->handler) return E_FAIL;
++    This->handler = eventHandler;
++    IDirectManipulationViewportEventHandler_AddRef(eventHandler);
++    *cookie = 1;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI viewport_RemoveEventHandler(IDirectManipulationViewport2 *iface, DWORD cookie)
+ {
+     struct directviewport *This = impl_from_IDirectManipulationViewport2(iface);
+-    FIXME("%p, %ld\n", This, cookie);
+-    return E_NOTIMPL;
++    TRACE("%p, %ld\n", This, cookie);
++    if (cookie != 1 || !This->handler) return E_INVALIDARG;
++    IDirectManipulationViewportEventHandler_Release(This->handler);
++    This->handler = NULL;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI viewport_SetInputMode(IDirectManipulationViewport2 *iface, DIRECTMANIPULATION_INPUT_MODE mode)
+@@ -644,15 +672,16 @@
+ static HRESULT WINAPI viewport_Stop(IDirectManipulationViewport2 *iface)
+ {
+     struct directviewport *This = impl_from_IDirectManipulationViewport2(iface);
+-    FIXME("%p\n", This);
+-    return E_NOTIMPL;
++    TRACE("%p\n", This);
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI viewport_Abandon(IDirectManipulationViewport2 *iface)
+ {
+     struct directviewport *This = impl_from_IDirectManipulationViewport2(iface);
+-    FIXME("%p\n", This);
+-    return E_NOTIMPL;
++    TRACE("%p\n", This);
++    This->status = DIRECTMANIPULATION_DISABLED;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI viewport_AddBehavior(IDirectManipulationViewport2 *iface, IUnknown *behavior, DWORD *cookie)
+@@ -718,12 +747,13 @@
+ {
+     struct directviewport *object;
+ 
+-    object = malloc(sizeof(*object));
++    object = calloc(1, sizeof(*object));
+     if(!object)
+         return E_OUTOFMEMORY;
+ 
+     object->IDirectManipulationViewport2_iface.lpVtbl = &viewportVtbl;
+     object->ref = 1;
++    object->status = DIRECTMANIPULATION_BUILDING;
+ 
+     *obj = &object->IDirectManipulationViewport2_iface;
+ 
+@@ -773,15 +803,16 @@
+ static HRESULT WINAPI direct_manip_Activate(IDirectManipulationManager2 *iface, HWND window)
+ {
+     struct directmanipulation *This = impl_from_IDirectManipulationManager2(iface);
+-    FIXME("%p, %p\n", This, window);
+-    return E_NOTIMPL;
++    /* Nothing to route to the window: see struct directviewport. */
++    FIXME("%p, %p: no input is routed\n", This, window);
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI direct_manip_Deactivate(IDirectManipulationManager2 *iface, HWND window)
+ {
+     struct directmanipulation *This = impl_from_IDirectManipulationManager2(iface);
+-    FIXME("%p, %p\n", This, window);
+-    return E_NOTIMPL;
++    TRACE("%p, %p\n", This, window);
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI direct_manip_RegisterHitTestTarget(IDirectManipulationManager2 *iface, HWND window,

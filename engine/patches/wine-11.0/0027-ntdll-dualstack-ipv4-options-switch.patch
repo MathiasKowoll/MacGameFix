@@ -1,0 +1,31 @@
+--- a/dlls/ntdll/unix/socket.c
++++ b/dlls/ntdll/unix/socket.c
+@@ -1605,6 +1605,20 @@
+ }
+ 
+ 
++/* WINE_DUALSTACK_IPV4_OPTIONS=0 turns the counterparts below off: the host's refusal is handed
++ * on as it was, for a program that does worse with the counterpart than with WSAEINVAL. Read once. */
++static BOOL ipv4_option_counterparts_enabled(void)
++{
++    static int enabled = -1;
++
++    if (enabled == -1)
++    {
++        const char *env = getenv( "WINE_DUALSTACK_IPV4_OPTIONS" );
++        enabled = !(env && env[0] == '0' && !env[1]);
++    }
++    return enabled;
++}
++
+ /* Windows applies IPPROTO_IP options on an AF_INET6 socket to its IPv4 traffic (a dual-stack socket's
+  * IPv4-mapped peers). macOS refuses them there with EINVAL, so a program that sets one on a dual-stack
+  * socket sees WSAEINVAL. Forza Horizon 6 binds its UDP game socket to [::]:3074 with IPV6_V6ONLY off,
+@@ -1616,6 +1630,7 @@
+  * the IPv4 option never takes this path. */
+ static int ipv4_option_counterpart( int option )
+ {
++    if (!ipv4_option_counterparts_enabled()) return -1;
+     switch (option)
+     {
+ #if defined(IP_DONTFRAG) && defined(IPV6_DONTFRAG)

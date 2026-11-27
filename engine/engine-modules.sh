@@ -4,6 +4,7 @@
 #   engine-modules.sh <CrossOver folder> --status    installed, outdated, half, absent or nomodules
 #   engine-modules.sh <CrossOver folder>             install
 #   engine-modules.sh <CrossOver folder> --restore   put CrossOver's own files back
+#   engine-modules.sh <CrossOver folder> --retire    only put back what this build retired (LEAVE)
 #   ... --part=controls|rosetta                      the same for one improvement only
 #
 # The modules are two improvements, each installed and removed on its own:
@@ -11,7 +12,14 @@
 #   rosetta   Rosetta's CPU for copy protection: ntdll.so, which also carries the
 #             timer thread's fix (0021), on the FEX side too where a build has one; and
 #             where a build carries them, kernelbase.dll, user32.dll and win32u.so, which
-#             2XKO's copy protection and the Riot Client need (wine-11.21's 0033-0035)
+#             2XKO's copy protection and the Riot Client need (wine-11.21's 0033-0035),
+#             dwrite.dll and directmanipulation.dll, with which a program built on
+#             GPUI finds its fonts and opens its window (0039 and 0040), and kernel32.dll,
+#             which forwards to kernelbase.dll the function EA SPORTS FC 27's activation
+#             looks up (0041); and on 41073's Intel side, and in CrossOver apps, ntdll.dll (a
+#             NotProton runner of 41303 keeps NotProton's own ntdll.dll, and CodeWeavers' ntdll.so,
+#             kernel32.dll, kernelbase.dll, user32.dll, win32u.so, dwrite.dll and directmanipulation.dll
+#             on its Intel side, and one of 26.3 keeps CodeWeavers' on its only side: see LEAVE below)
 # Without --part every improvement the build carries is meant, as before there were two.
 # An improvement is in when the list in the backup folder names one of its modules. One
 # that was never installed, or was taken out with --part, is absent whatever the other is.
@@ -49,7 +57,7 @@ for arg in "$@"; do
 done
 ROOT="${ROOT%/}"
 # Which improvement a module belongs to.
-part_of() { case "${1##*/}" in ntdll.so|ntdll.dll|kernelbase.dll|user32.dll|win32u.so) echo rosetta ;; *) echo controls ;; esac; }
+part_of() { case "${1##*/}" in ntdll.so|ntdll.dll|kernelbase.dll|kernel32.dll|user32.dll|win32u.so|dwrite.dll|directmanipulation.dll) echo rosetta ;; *) echo controls ;; esac; }
 in_part() { [ "$PART" = all ] || [ "$(part_of "$1")" = "$PART" ]; }
 BACKUPS="${MGVF_ENGINE_BACKUP:-$HOME/Library/Application Support/MacGameFix/engine-backup}"
 LIB="$ROOT/lib/wine"
@@ -97,9 +105,12 @@ for side in x86_64 aarch64; do
     # then setupapi.dll and xaudio2_9.dll, and ntdll.so (Rosetta's CPU fidelity on the
     # Intel side, the timer fix on both) with, on 41073's Intel side, its ntdll.dll,
     # came later; a build may not carry them.
-    # kernelbase.dll, user32.dll and win32u.so (2XKO) came with 41303's 0033-0035.
+    # kernelbase.dll, user32.dll and win32u.so (2XKO) came with 41303's 0033-0035,
+    # dwrite.dll and directmanipulation.dll (a GPUI program's fonts and window) with 0039-0040,
+    # and kernel32.dll (its forward to kernelbase.dll's FindPackagesByPackageFamily) with 0041.
     for f in $side-unix/winebus.so $side-unix/ntdll.so $side-windows/ntdll.dll $side-windows/hidclass.sys $side-windows/setupapi.dll $side-windows/xaudio2_9.dll $XINPUT_DLLS \
-             $side-windows/kernelbase.dll $side-windows/user32.dll $side-unix/win32u.so; do
+             $side-windows/kernelbase.dll $side-windows/kernel32.dll $side-windows/user32.dll $side-unix/win32u.so \
+             $side-windows/dwrite.dll $side-windows/directmanipulation.dll; do
       case "$f" in */*) ;; *) f="$side-windows/$f" ;; esac
       [ -f "$(src "$f")" ] && FILES="$FILES $f"
     done
@@ -107,10 +118,49 @@ for side in x86_64 aarch64; do
     say "This CrossOver has a $side side, and there are no modules for it."
   fi
 done
+# What a NotProton runner leaves to NotProton. From 41303 on, its own patched ntdll.dll (CodeWeavers'
+# with NotProton's Steam bridge) stays: what MacGameFix's ntdll.dll brought, Forza Horizon 6's exception
+# chain (0023-0025), now comes from that game's own proxy (fixes/fh6-d3d12/exception_chain.h), which
+# hooks it into this ntdll.dll, and played as well as the file (2026-11-25). The Intel side's ntdll.so,
+# kernel32.dll, kernelbase.dll, user32.dll and win32u.so go back to CodeWeavers' as well: what they
+# carried for a game now comes to that game alone, from NotProton's Engine fixes row
+# (fixes/engine/mgf-engine.c: 0017 to 0021, 0026 to 0029, 0038 and 0041), and F1 25, EA SPORTS FC 27,
+# Forza Horizon 6, Phantom Blade Zero, STAR WARS: Galactic Racer and Persona 4 Golden were played on
+# NotProton's ntdll with CodeWeavers' kernel32 and kernelbase (2026-11-25). Left out: 2XKO's 0032 to
+# 0036, which never made that game start; 0033's win32u.so goes to Red Dead Redemption 2 alone, for the
+# Rockstar Games Launcher's window, as a runner variant its fix writes. Red Dead Online's 0037 comes
+# from NotProton's Red Dead Online fix row (app/notproton-plugins/plugins/tcp-noopt.c), which RDR2's
+# fix switches on. dwrite.dll and
+# directmanipulation.dll (0039, 0040, Swofty Launcher's window) go to F1 25 alone, as a NotProton
+# runner variant its fix writes (fixes/install-f125-swofty.sh).
+# A CrossOver app keeps every module, and so does the FEX side. One put in before is retired: the
+# kept file goes back, while ours is still there.
+# In this catalog (1.6.7's, with CrossOver 26.3's whole engine) only 26.3's runner leaves them:
+# 41303's runner gets its modules as the catalog before it gave them, until the in-memory rows
+# that replace them are published.
+# NotProton's runner for CrossOver 26.3 leaves the same modules (26.3 has no ntdll.dll of ours):
+# from 2026-11-26 the modules that change Wine for a game go into the CrossOver 26.3 app alone, and
+# a NotProton runner gets a game's fixes in memory, from NotProton's rows, where a row supports
+# that runner (the Engine fixes row is for 41303's Rosetta tool only, so far). Its ntdll.so of
+# 0017-0020, which earlier modules put in, goes back to CodeWeavers'. The controls stay, as on 41303.
+LEAVE=""
+if [ -z "$APP" ]; then case "$BUILD" in 26.3.0.39832)
+  LEAVE="x86_64-windows/ntdll.dll x86_64-unix/ntdll.so x86_64-windows/kernel32.dll x86_64-windows/kernelbase.dll x86_64-windows/user32.dll x86_64-unix/win32u.so x86_64-windows/dwrite.dll x86_64-windows/directmanipulation.dll" ;; esac; fi
+leaves() { case " $LEAVE " in *" $1 "*) return 0 ;; esac; return 1; }
 # The improvement asked for alone.
 KEEP=""
-for f in $FILES; do in_part "$f" && KEEP="$KEEP $f"; done
+for f in $FILES; do in_part "$f" && ! leaves "$f" && KEEP="$KEEP $f"; done
 FILES="$KEEP"
+# The modules retired here that are still ours in this CrossOver.
+retired() {
+  local f r
+  for f in $LEAVE; do
+    in_part "$f" || continue
+    r="$(recorded "$f")"
+    [ -n "$r" ] && [ "$(sha "$LIB/$f")" = "$r" ] && printf '%s\n' "$f"
+  done
+  return 0
+}
 sha() { shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1; }
 recorded() { [ -f "$SAVE/installed.list" ] && sed -n "s|^\([0-9a-f]*\)  $1\$|\1|p" "$SAVE/installed.list"; }
 # Whether the improvement a module belongs to is in: the list names one of its modules.
@@ -133,14 +183,24 @@ state() {
     elif [ -n "$t" ] && [ -z "$(recorded "$f")" ] && part_in "$f"; then
       old=$((old + 1)); fi
   done
+  # A retired module still in place: an update takes it out.
+  for f in $(retired); do n=$((n + 1)); old=$((old + 1)); done
   if [ "$n" -gt 0 ] && [ "$ours" -eq "$n" ]; then echo installed
   elif [ "$old" -gt 0 ] && [ $((ours + old)) -eq "$n" ]; then echo outdated
   elif [ $((ours + old)) -gt 0 ]; then echo half
   else echo absent; fi
 }
 
+# --retire: a fix that needs nothing of the improvement on this build has the files it retired
+# taken out, CrossOver's own back, and puts nothing in (Forza Horizon 6 on 41303's runner).
+RETIRE=0
+if [ "$MODE" = --retire ]; then
+  [ -n "$(retired)" ] || { say "Nothing retired is left in $ROOT."; exit 0; }
+  RETIRE=1; FILES=""; MODE=install
+fi
+
 if [ "$MODE" = --status ]; then
-  [ -n "$FILES" ] || { say "There is nothing of this improvement for CrossOver $BUILD yet."; say nomodules; exit 0; }
+  [ -n "$FILES" ] || [ -n "$(retired)" ] || { say "There is nothing of this improvement for CrossOver $BUILD yet."; say nomodules; exit 0; }
   s="$(state)"
   if [ "$s" = absent ]; then
     for f in $FILES; do
@@ -199,15 +259,21 @@ resign() {
 
 case "$MODE" in
 install)
-  [ -n "$FILES" ] || { say "Nothing to install for CrossOver $BUILD."; exit 1; }
+  [ -n "$FILES" ] || [ -n "$(retired)" ] || { say "Nothing to install for CrossOver $BUILD."; exit 1; }
   mkdir -p "$SAVE" || exit 1
   # What another improvement put in stays on the list.
   : >"$SAVE/installed.list.new"
   if [ -f "$SAVE/installed.list" ]; then
     while read -r h f; do
-      case " $FILES " in *" $f "*) ;; *) printf '%s  %s\n' "$h" "$f" >>"$SAVE/installed.list.new" ;; esac
+      case " $FILES " in *" $f "*) ;; *) leaves "$f" && in_part "$f" || printf '%s  %s\n' "$h" "$f" >>"$SAVE/installed.list.new" ;; esac
     done <"$SAVE/installed.list"
   fi
+  for f in $(retired); do
+    if [ -f "$SAVE/$f.absent" ]; then rm -f "$LIB/$f" 2>/dev/null || refused "$LIB/$f"
+    elif [ -f "$SAVE/$f" ]; then put "$SAVE/$f" "$LIB/$f" -p || refused "$LIB/$f"
+    else continue; fi
+    say "  $f: CrossOver's own back, left to NotProton"
+  done
   for f in $FILES; do
     t="$(sha "$LIB/$f")"; s="$(sha "$(src "$f")")"
     # The first time, a file that is neither ours nor what we last put there is
@@ -231,7 +297,8 @@ install)
   rm -f "$SAVE/off.list"      # a note older scripts kept; the list alone says what is in
   refresh_prefixes
   resign
-  say "Installed the modules for CrossOver $BUILD into $ROOT." ;;
+  if [ "$RETIRE" = 1 ]; then say "Took the retired modules out of $ROOT."
+  else say "Installed the modules for CrossOver $BUILD into $ROOT."; fi ;;
 --restore)
   [ -d "$SAVE" ] || { say "Nothing of MacGameFix's is in $ROOT."; exit 0; }
   for f in x86_64-windows/winebus.sys x86_64-windows/mmdevapi.dll x86_64-windows/hidclass.sys \
@@ -239,8 +306,11 @@ install)
            aarch64-windows/mmdevapi.dll aarch64-windows/hidclass.sys aarch64-unix/winecoreaudio.so \
            aarch64-unix/winebus.so aarch64-unix/ntdll.so x86_64-windows/setupapi.dll aarch64-windows/setupapi.dll \
            x86_64-windows/xaudio2_9.dll aarch64-windows/xaudio2_9.dll \
-           x86_64-windows/kernelbase.dll aarch64-windows/kernelbase.dll x86_64-windows/user32.dll \
+           x86_64-windows/kernelbase.dll aarch64-windows/kernelbase.dll \
+           x86_64-windows/kernel32.dll aarch64-windows/kernel32.dll x86_64-windows/user32.dll \
            aarch64-windows/user32.dll x86_64-unix/win32u.so aarch64-unix/win32u.so \
+           x86_64-windows/dwrite.dll aarch64-windows/dwrite.dll \
+           x86_64-windows/directmanipulation.dll aarch64-windows/directmanipulation.dll \
            $(for x in $XINPUT_DLLS; do printf 'x86_64-windows/%s aarch64-windows/%s ' "$x" "$x"; done); do
     in_part "$f" || continue
     if [ -f "$SAVE/$f.absent" ]; then

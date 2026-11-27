@@ -1,0 +1,69 @@
+From: MacGameFix
+Subject: The shared copy-on-write views of 0032 only in the Riot Client's and 2XKO's processes
+
+0032 (from NotProton's creator) maps every copy-on-write view of a page-file section
+shared and writable on macOS, which 2XKO's copy protection needs. On Windows such a view
+keeps the process's writes to itself; mapped shared, they reach the section and every
+other view of it. This keeps 0032 for Lion.exe, Lion-Win64-Shipping.exe, RiotClient*.exe
+and "Riot Client.exe", and gives every other program Windows' copy-on-write back.
+WINE_WRITECOPY_SHARED=1 or 0 turns it on or off for any process.
+
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -3127,7 +3127,47 @@
+     if (shared_needs_close) close( shared_fd );
+     return status;
+ }
++
++
++#ifndef __linux__
++/* The name of this process's executable, case-insensitively, against an ASCII name; with
++ * prefix, only its start. */
++static BOOL exe_name_is( const WCHAR *name, const char *ascii, BOOL prefix )
++{
++    for (; *ascii; name++, ascii++)
++    {
++        char c = *ascii;
++        if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
++        if (!*name || ntdll_towlower( *name ) != (WCHAR)(unsigned char)c) return FALSE;
++    }
++    return prefix || !*name;
++}
++
++/* MacGameFix: whether a copy-on-write view of a page-file section is mapped shared and
++ * writable here, as the patch before this one does (2XKO's copy protection needs it).
++ * On Windows such a view sees the section's later changes until the process writes a
++ * page, and keeps what it writes to itself. Mapped shared, every write goes back into
++ * the section, where other views see it, so it is done only for the Riot Client's and
++ * 2XKO's own processes. WINE_WRITECOPY_SHARED=1 or 0 turns it on or off for any process.
++ * Decided once, when the executable's name is known. */
++static BOOL writecopy_shared(void)
++{
++    static int shared = -1;
++    const WCHAR *name;
++    const char *env;
+ 
++    if (shared != -1) return shared;
++    if ((env = getenv( "WINE_WRITECOPY_SHARED" )) && (env[0] == '0' || env[0] == '1') && !env[1])
++        return shared = (env[0] == '1');
++    if (!main_wargv || !main_wargv[0]) return FALSE;  /* not known yet: asked again later */
++    if ((name = ntdll_wcsrchr( main_wargv[0], '\\' ))) name++;
++    else name = main_wargv[0];
++    shared = exe_name_is( name, "Lion.exe", FALSE ) || exe_name_is( name, "Lion-Win64-Shipping.exe", FALSE )
++          || exe_name_is( name, "RiotClient", TRUE ) || exe_name_is( name, "Riot Client.exe", FALSE );
++    if (shared) TRACE( "copy-on-write views of page-file sections are mapped shared in %s\n", debugstr_w(name) );
++    return shared;
++}
++#endif
+ 
+ /***********************************************************************
+  *             virtual_map_section
+@@ -3233,7 +3273,7 @@
+ 
+     TRACE( "handle=%p size=%lx offset=%s\n", handle, size, wine_dbgstr_longlong(offset.QuadPart) );
+ #ifndef __linux__
+-    if (!(sec_flags & SEC_FILE) && (vprot & VPROT_WRITECOPY))
++    if (!(sec_flags & SEC_FILE) && (vprot & VPROT_WRITECOPY) && writecopy_shared())
+         res = map_file_into_view( view, unix_handle, 0, size, offset.QuadPart,
+                                   (vprot & ~VPROT_WRITECOPY) | VPROT_WRITE, needs_close );
+     else

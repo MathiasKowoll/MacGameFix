@@ -118,5 +118,31 @@ E --restore --part=rosetta >/dev/null
 check 'cw x86_64-unix/ntdll.so && cw aarch64-unix/ntdll.so && [ "$(st --part=rosetta)" = absent ]' "and taking it out puts CrossOver's ntdll.so back on both"
 E >/dev/null; E --restore >/dev/null
 check 'cw aarch64-unix/ntdll.so && cw aarch64-windows/winebus.sys && ! [ -d "$MGVF_ENGINE_BACKUP/crossover-$B-fex" ]' "a plain restore takes the FEX side's out too"
+# 26.3 (CrossOver stable): the app gets the whole engine; NotProton's runner for 26.3 leaves
+# Rosetta's modules to CodeWeavers, and the ntdll.so earlier modules put in it goes back.
+B5=26.3.0.39832
+F5="x86_64-unix/ntdll.so x86_64-unix/win32u.so x86_64-windows/kernelbase.dll x86_64-windows/user32.dll x86_64-unix/winebus.so x86_64-windows/winebus.sys x86_64-windows/mmdevapi.dll"
+for f in $F5 x86_64-unix/winecoreaudio.so; do printf 'ours %s wine-11.0-1\n' "$f" >"$CAT/engine-$B5-$(printf '%s' "$f" | tr / -)"; done
+printf '{"builds": [{"build": "%s", "crossover": "CrossOver 26.3", "wine": "11.0", "files": {}}]}\n' "$B5" >"$CAT/engine-modules.json"
+R5="$T/notproton/runners/crossover-$B5/CrossOver"; A5="$T/CrossOver.app"; X5="$A5/Contents/SharedSupport/CrossOver"
+for root in "$R5" "$X5"; do
+  mkdir -p "$root/lib/wine/x86_64-unix" "$root/lib/wine/x86_64-windows"
+  for f in $F5 x86_64-unix/winecoreaudio.so; do printf "CodeWeavers' %s wine-11.0-1\n" "$f" >"$root/lib/wine/$f"; done
+done
+/usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $B5" "$A5/Contents/Info.plist" >/dev/null
+E5() { /bin/bash "$CAT/engine-modules.sh" "$1" "${@:2}" 2>&1; }
+st5() { E5 "$@" --status | tail -1; }
+ours5() { cmp -s "$1/lib/wine/$2" "$CAT/engine-$B5-$(printf '%s' "$2" | tr / -)"; }
+cw5() { [ "$(cat "$1/lib/wine/$2")" = "CodeWeavers' $2 wine-11.0-1" ]; }
+E5 "$X5" >/dev/null
+check 'ours5 "$X5" x86_64-unix/ntdll.so && ours5 "$X5" x86_64-unix/win32u.so && ours5 "$X5" x86_64-windows/kernelbase.dll && ours5 "$X5" x86_64-windows/user32.dll && ours5 "$X5" x86_64-unix/winebus.so && [ "$(st5 "$X5")" = installed ]' "26.3, the CrossOver app: the whole engine goes in"
+S5="$MGVF_ENGINE_BACKUP/crossover-$B5"; mkdir -p "$S5/x86_64-unix"
+cp "$R5/lib/wine/x86_64-unix/ntdll.so" "$S5/x86_64-unix/ntdll.so"
+printf 'earlier x86_64-unix/ntdll.so wine-11.0-1\n' >"$R5/lib/wine/x86_64-unix/ntdll.so"
+printf '%s  %s\n' "$(shasum -a 256 "$R5/lib/wine/x86_64-unix/ntdll.so" | cut -d' ' -f1)" x86_64-unix/ntdll.so >"$S5/installed.list"
+check '[ "$(st5 "$R5" --part=rosetta)" = outdated ]' "26.3, NotProton's runner with an earlier ntdll.so of ours: outdated"
+E5 "$R5" >/dev/null
+check 'cw5 "$R5" x86_64-unix/ntdll.so && cw5 "$R5" x86_64-unix/win32u.so && cw5 "$R5" x86_64-windows/kernelbase.dll && cw5 "$R5" x86_64-windows/user32.dll && ours5 "$R5" x86_64-unix/winebus.so' "an install puts CodeWeavers' ntdll.so back in the runner, leaves its win32u.so, kernelbase.dll and user32.dll, and puts the controls in"
+check '[ "$(st5 "$R5" --part=rosetta)" = nomodules ] && [ "$(st5 "$R5" --part=controls)" = installed ] && ! grep -q ntdll "$S5/installed.list"' "then the runner has nothing of Rosetta's improvement and the controls installed"
 echo "==> $fails failed"
 exit $((fails > 0))
