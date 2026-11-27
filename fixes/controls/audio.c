@@ -30,6 +30,7 @@
 #include <mach-o/loader.h>
 #include <CoreAudio/CoreAudio.h>
 #include <AudioToolbox/AudioToolbox.h>
+#include "mmdevapi.h"
 #include "pad.h"
 #include "../../app/notproton-plugins/notproton_plugin.h"
 
@@ -756,9 +757,6 @@ static OSStatus hook_AudioComponentInstanceDispose(AudioComponentInstance unit)
 // winebus.sys builds the same container from that location ID for the device's HID functions, so
 // that games can pair a controller with its audio output: the endpoint's DEVPKEY_Device_ContainerId
 // is answered with it. Wine's own get_prop_value does not know that key.
-typedef struct { uint32_t Data1; uint16_t Data2, Data3; uint8_t Data4[8]; } wine_guid;
-struct property_key { wine_guid fmtid; uint32_t pid; };
-struct prop_variant { uint16_t vt, reserved[3]; wine_guid *puuid; };
 // mmdevapi's unixlib.h, Wine 11.0 and 11.21 alike.
 struct get_prop_value_params {
     const char *device;
@@ -770,8 +768,6 @@ struct get_prop_value_params {
     void *buffer;
     unsigned *buffer_size;
 };
-#define UNIX_GET_PROP_VALUE 29  // its index in winecoreaudio.so's __wine_unix_call_funcs
-#define VT_CLSID 72
 #define E_NOT_SUFFICIENT_BUFFER ((int32_t)0x8007007a)
 
 static const struct property_key container_key = {{0x8c7ed206, 0x3f8a, 0x4827, {0xb3, 0xab, 0xae, 0x9e, 0x1f, 0xae, 0xfc, 0x6c}}, 2};
@@ -794,10 +790,75 @@ static bool usb_container(const char *device, wine_guid *guid) {
 
 static uint32_t (*real_get_prop_value)(void *);
 
+// Engine patch 0003, with mmdevapi.c: CodeWeavers' mmdevapi.dll never asks for an endpoint's
+// container, so mmdevapi.c asks it here, by the endpoint's GUID (mmdevapi.h). mmdevapi names an
+// endpoint's device in every question of its own, and asks one of each endpoint when it lists
+// them: the devices are kept by GUID from those.
+const char mgf_container_request_tag = 0;
+uintptr_t mgf_audio_unix_handle;
+
+static struct { wine_guid guid; char device[256]; } endpoints[64];
+static unsigned endpoint_count;
+
+static void remember_endpoint(const wine_guid *guid, const char *device) {
+    unsigned i;
+    if (!guid || !device || strlen(device) >= sizeof(endpoints[0].device)) return;
+    pthread_mutex_lock(&mgf_lock);
+    for (i = 0; i < endpoint_count && memcmp(&endpoints[i].guid, guid, sizeof(*guid)); i++);
+    if (i < COUNT_OF(endpoints)) {
+        endpoints[i].guid = *guid;
+        strcpy(endpoints[i].device, device);
+        if (i == endpoint_count) endpoint_count++;
+    }
+    pthread_mutex_unlock(&mgf_lock);
+}
+
+// "{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}" in UTF-16.
+static bool guid_of_text(const uint16_t *text, wine_guid *guid) {
+    static const int8_t at[16] = {1, 3, 5, 7, 10, 12, 15, 17, 20, 22, 25, 27, 29, 31, 33, 35};  // byte by byte
+    uint8_t bytes[16];
+    if (text[0] != '{' || text[9] != '-' || text[14] != '-' || text[19] != '-' || text[24] != '-' || text[37] != '}')
+        return false;
+    for (unsigned i = 0; i < 16; i++) {
+        unsigned value = 0;
+        for (unsigned d = 0; d < 2; d++) {
+            uint16_t c = text[at[i] + d];
+            if (c >= '0' && c <= '9') value = value << 4 | (c - '0');
+            else if ((c | 0x20) >= 'a' && (c | 0x20) <= 'f') value = value << 4 | ((c | 0x20) - 'a' + 10);
+            else return false;
+        }
+        bytes[i] = (uint8_t)value;
+    }
+    guid->Data1 = (uint32_t)bytes[0] << 24 | bytes[1] << 16 | bytes[2] << 8 | bytes[3];
+    guid->Data2 = (uint16_t)(bytes[4] << 8 | bytes[5]);
+    guid->Data3 = (uint16_t)(bytes[6] << 8 | bytes[7]);
+    memcpy(guid->Data4, bytes + 8, 8);
+    return true;
+}
+
+static void container_request(struct mgf_container_request *request) {
+    wine_guid endpoint, container;
+    char device[256] = "";
+
+    if (!guid_of_text(request->endpoint, &endpoint)) return;
+    pthread_mutex_lock(&mgf_lock);
+    for (unsigned i = 0; i < endpoint_count; i++)
+        if (!memcmp(&endpoints[i].guid, &endpoint, sizeof(endpoint))) strcpy(device, endpoints[i].device);
+    pthread_mutex_unlock(&mgf_lock);
+    if (!usb_container(device, &container)) return;
+    memcpy(request->endpoint, &container, sizeof(container));
+    request->found = 1;
+}
+
 static uint32_t get_prop_value(void *args) {
     struct get_prop_value_params *params = args;
     wine_guid container;
 
+    if (*(const void **)args == &mgf_container_request_tag) {
+        container_request(args);
+        return 0;
+    }
+    remember_endpoint(params->guid, params->device);
     if (!memcmp(params->prop, &container_key, sizeof(container_key)) && usb_container(params->device, &container)) {
         if (*params->buffer_size < sizeof(container)) {
             params->result = E_NOT_SUFFICIENT_BUFFER;
@@ -805,8 +866,8 @@ static uint32_t get_prop_value(void *args) {
             return 0;
         }
         params->value->vt = VT_CLSID;
-        params->value->puuid = params->buffer;
-        *params->value->puuid = container;
+        params->value->pointer = params->buffer;
+        memcpy(params->buffer, &container, sizeof(container));
         params->result = 0;
         return 0;
     }
@@ -856,6 +917,7 @@ void mgf_controls_audio_arm(const struct np_plugin_api *api, const struct mach_h
         pad_log("controls: winecoreaudio.so's get_prop_value could not be taken, nothing is\n");
         return;
     }
+    mgf_audio_unix_handle = (uintptr_t)table;
     for (unsigned i = 0; i < COUNT; i++)
         if (!api->swap_pointer(slots[i], fns[i], (uintptr_t)hooks[i].replacement)) {
             pad_log("controls: winecoreaudio.so's %s could not be written, %u of %u taken\n", hooks[i].name, i,
