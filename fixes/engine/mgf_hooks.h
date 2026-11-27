@@ -24,6 +24,7 @@
 #ifndef MGF_HOOKS_H
 #define MGF_HOOKS_H
 
+#include <dlfcn.h>
 #include "../../app/notproton-plugins/notproton_plugin.h"
 
 #include <stdint.h>
@@ -83,15 +84,37 @@ typedef uint64_t mgf_stack_u32;
 typedef uint32_t mgf_stack_u32;
 #endif
 
+// Two of MacGameFix's libraries can want the same entry in one game: mgf-engine's package-family
+// and mgf-controls both take NtMapViewOfSection, and EA SPORTS FC 27 has both rows on. Once one
+// has put its hook there the entry no longer points at the function, and the other would find
+// none (measured 2026-11-27: whichever library loaded second was not armed). So each entry
+// found is kept in one table for the whole process, mgf_taken_slots, which every library defines
+// and all read from the library that loaded first; the second library is given the same entry,
+// and chains to the first one's hook.
+struct mgf_taken_slot {
+    uintptr_t fn;
+    uintptr_t *slot;
+};
+#define MGF_TAKEN_SLOTS 32
+__attribute__((weak, visibility("default"))) struct mgf_taken_slot mgf_taken_slots[MGF_TAKEN_SLOTS];
+
 // The syscall table's one entry for `name` (as nm spells it, with its underscore), the entry
-// itself or a thunk to it; NULL when there is none or more than one. *old gets what it holds.
+// itself or a thunk to it; NULL when there is none or more than one. *old gets what it holds:
+// the function, its thunk, or the hook another of MacGameFix's libraries put there.
 static inline uintptr_t *mgf_syscall_slot(const struct np_plugin_api *api, const struct mach_header_64 *mh,
                                           intptr_t slide, const char *name, uintptr_t *old) {
     struct mgf_service_table *t = (struct mgf_service_table *)api->symbol(mh, slide, "_KeServiceDescriptorTable");
+    struct mgf_taken_slot *taken = dlsym(RTLD_DEFAULT, "mgf_taken_slots");
     uintptr_t fn = api->symbol(mh, slide, name);
     uintptr_t *found = NULL;
     int count = 0;
     if (!t || !fn || !t->table || t->limit > 4096) return NULL;
+    if (!taken) taken = mgf_taken_slots;
+    for (int i = 0; i < MGF_TAKEN_SLOTS; i++)
+        if (taken[i].fn == fn) {
+            *old = *taken[i].slot;
+            return taken[i].slot;
+        }
     for (uint32_t i = 0; i < t->limit; i++) {
         uintptr_t entry = (uintptr_t)t->table[i];
         if (entry == fn || (entry && mgf_thunk_target(entry) == fn)) {
@@ -100,6 +123,12 @@ static inline uintptr_t *mgf_syscall_slot(const struct np_plugin_api *api, const
         }
     }
     if (count != 1) return NULL;
+    for (int i = 0; i < MGF_TAKEN_SLOTS; i++)
+        if (!taken[i].fn) {
+            taken[i].slot = found;
+            taken[i].fn = fn;
+            break;
+        }
     *old = *found;
     return found;
 }
