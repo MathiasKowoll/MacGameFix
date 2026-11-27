@@ -48,6 +48,17 @@
 # to NotProton's 16. The descriptor holds what the game has now, so a change reads as half and
 # the next install writes the row again.
 #
+# THE GAMES A ROW IS FOR. A template's record says them with NotProton's own fields, one line a
+# game: "needed_for = <appid> <one short sentence>" where the game does not run or crashes
+# without the row, "improves = <appid> <one short sentence>" for the rest. NotProton's
+# Compatibility page then offers a row that is off on that game's page, in a box "Fixes for This
+# Game" with Apply and Dismiss, with the sentence under the row's name. The lines are written
+# only where every NotProton in Steam reads the field (np_knows_field): one that does not refuses
+# a record that carries it, and gets the record as it was before the fields existed. In a shared
+# record a line is written for the games whose fix uses the row, and for every game the template
+# names when the row is on every game's page. NotProton allows neither field on a row with a
+# "type", an app in only one of the two per row, 16 of each, and 200 characters of sentence.
+#
 # A ROW IS ON ONLY WHILE THE GAME'S LAUNCH OPTIONS CARRY <id>=<on>: NotProton has no other
 # switch. The first install puts every toggle row's variable in, with steam-launch-options.pl
 # (Steam closed, and a journal so a restore gives back what was there), and lists them in
@@ -127,6 +138,20 @@ np_knows_apps() {
   [ "${a:-0}" -eq 1 ] && [ "${b:-0}" -eq 2 ] && [ "${c:-0}" -ge 7 ]
 }
 
+# Whether every NotProton in Steam reads a field: each tool's run script lists the fields it
+# reads, and the app asks the same way (NotProtonRow.knows). With no run script to ask, no.
+np_knows_field() {
+  local run seen=1
+  for run in "${MGVF_STEAM_ROOT:-$HOME/Library/Application Support/Steam}"/compatibilitytools.d/[Nn]ot[Pp]roton*/run; do
+    [ -f "$run" ] || continue
+    seen=0
+    LC_ALL=C /usr/bin/grep -qE "split\\(\"label description[^\"]* $1[ \"]" "$run" || return 1
+  done
+  return $seen
+}
+# "1" or "0" for awk.
+np_knows_flag() { if np_knows_field "$1"; then printf 1; else printf 0; fi; }
+
 np_sha() { /usr/bin/shasum -a 256 "$1" 2>/dev/null | cut -d' ' -f1; }
 
 # The values of "# <name> = " lines in a template.
@@ -134,15 +159,18 @@ np_meta() { /usr/bin/sed -n "s/^# $2 = //p" "$1"; }
 
 # The records of every template, as they go into the game's descriptor.
 np_expected() {
-  local t apps=0
+  local t apps=0 nf im
   np_knows_apps && apps=1
+  nf="$(np_knows_flag needed_for)"; im="$(np_knows_flag improves)"
   printf '# MacGameFix writes this file for app %s and removes it with the fix; edits do not last.\n' "$NP_APPID"
   [ -z "$NP_SHARED_USES" ] || printf '%s %s\n' "$NP_SHARED_MARK" "$NP_SHARED_USES"
   [ -z "$NP_SHARED_CHOICES" ] || printf '%s\n' "$NP_SHARED_CHOICES" | /usr/bin/grep . | /usr/bin/sed 's/^/# shared choice: /'
   for t in "${NP_TEMPLATES[@]}"; do
     # A row in the MacGameFix group does not name it again; with no group, its label does.
-    /usr/bin/awk -v app="$NP_APPID" -v apps="$apps" -v group="$NP_SHARED_GROUP" '
+    /usr/bin/awk -v app="$NP_APPID" -v apps="$apps" -v group="$NP_SHARED_GROUP" -v nf="$nf" -v im="$im" '
       /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+      /^needed_for[[:space:]]*=/ { if (nf) print; next }
+      /^improves[[:space:]]*=/ { if (im) print; next }
       /^\[/ { if (open && apps) print "apps = " app
               sub(/\]$/, "_" app "]"); print; open = 1; next }
       /^label[[:space:]]*=/ { if (group != "") print; else print $0 " (MacGameFix)"; next }
@@ -215,7 +243,8 @@ np_shared_expected() {
   printf '# MacGameFix writes this file for the games whose fixes use its rows, and removes it with the last of them; edits do not last.\n'
   NP_TABLE="$table" NP_CHOICES="$(np_shared_choices)" np_shared_records | NP_TABLE="$table" NP_CHOICES="$(np_shared_choices)" \
     NP_EVERY="$(/usr/bin/sed -n 's/^# every game = //p' "$(np_shared_template)" 2>/dev/null)" \
-    /usr/bin/awk -v group="$NP_SHARED_GROUP" -v apps="$apps" -v max="$NP_CHOICES_MAX" '
+    /usr/bin/awk -v group="$NP_SHARED_GROUP" -v apps="$apps" -v max="$NP_CHOICES_MAX" \
+      -v nf="$(np_knows_flag needed_for)" -v im="$(np_knows_flag improves)" '
     BEGIN { n = split(ENVIRON["NP_TABLE"], rows, "\n"); for (i = 1; i <= n; i++) { split(rows[i], f, " "); use[f[2]] = use[f[2]] " " f[1] }
             n = split(ENVIRON["NP_EVERY"], f, " "); for (i = 1; i <= n; i++) every[f[i]] = 1
             n = split(ENVIRON["NP_CHOICES"], rows, "\n")
@@ -228,6 +257,13 @@ np_shared_expected() {
           # A row in the MacGameFix group does not name it again; with no group, its label does.
           if (buf[i] ~ /^label[[:space:]]*=/) { if (group != "") print buf[i]; else print buf[i] " (MacGameFix)"; continue }
           if (buf[i] ~ /^subgroup[[:space:]]*=/) { if (group != "") { v = buf[i]; sub(/^subgroup[[:space:]]*=[[:space:]]*/, "", v); print "group = " group " / " v }; continue }
+          # The games the row is for: where NotProton reads the field, and for a game that uses
+          # the row, or every game the template names when the row is on the page of every game.
+          if (buf[i] ~ /^(needed_for|improves)[[:space:]]*=/) {
+            if (!(buf[i] ~ /^needed_for/ ? nf : im)) continue
+            v = buf[i]; sub(/^[a-z_]+[[:space:]]*=[[:space:]]*/, "", v); sub(/[[:space:]].*/, "", v)
+            if (!(id in every) && !index(use[id] " ", " " v " ")) continue
+          }
           print buf[i]
           if (i == last && (id in extra)) {
             ne = split(extra[id], e, "\n")

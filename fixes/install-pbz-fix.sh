@@ -286,6 +286,17 @@ cache_on() { cache_plugin_ok && cache_options status >/dev/null 2>&1; }
 # The plugin can serve other games too: only PBZ's switch says the fix is partly here.
 cache_any() { cache_options status >/dev/null 2>&1; }
 
+# The plugin's descriptor. With 1 it names this game ("improves"), so NotProton offers the row on
+# PBZ's Compatibility page when it is off; only for a NotProton that reads the field, as one
+# that does not refuses the row (notproton-plugins.sh, "THE GAMES A ROW IS FOR").
+cache_conf_text() {
+  printf '[%s]\nlabel = Rosetta pipeline cache\n' "$CACHE_ID"
+  printf "description = Keeps the GPU code of the pipelines D3DMetal compiles in a Rosetta game, beyond Metal's 1.1 GB cache\n"
+  [ "$1" != 1 ] || printf 'improves = %s The game compiles far fewer shaders at each start.\n' "$APPID"
+  printf 'section = dev\non = 1\ninject = 1\n'
+  printf 'requires = Library/Application Support/notproton/plugins/notproton-rosetta-pipeline-cache.dylib\n'
+}
+
 cache_install() {
   mkdir -p "$PLUGINS"
   # The library is renamed into place, so a game still running keeps the one it loaded.
@@ -296,18 +307,14 @@ cache_install() {
     fi
     cp -p "$CACHE_LIB" "$CACHE_LIVE.mgf-new" && mv -f "$CACHE_LIVE.mgf-new" "$CACHE_LIVE"
   fi
-  # One the user wrote stays: NotProton refuses a second descriptor for the same id.
-  if ! /usr/bin/grep -lqx "\[$CACHE_ID\]" "$PLUGINS"/*.conf 2>/dev/null; then
-    cat > "$CACHE_CONF.mgf-new" <<CONF
-[$CACHE_ID]
-label = Rosetta pipeline cache
-description = Keeps the GPU code of the pipelines D3DMetal compiles in a Rosetta game, beyond Metal's 1.1 GB cache
-section = dev
-on = 1
-inject = 1
-requires = Library/Application Support/notproton/plugins/notproton-rosetta-pipeline-cache.dylib
-CONF
-    mv -f "$CACHE_CONF.mgf-new" "$CACHE_CONF"
+  # One the user wrote stays: NotProton refuses a second descriptor for the same id. Ours, as
+  # this installer writes it with the game's line or without, is brought to what NotProton reads.
+  local named=0 text have
+  np_knows_field improves && named=1
+  text="$(cache_conf_text "$named")"; have="$(cat "$CACHE_CONF" 2>/dev/null || true)"
+  if ! /usr/bin/grep -lqx "\[$CACHE_ID\]" "$PLUGINS"/*.conf 2>/dev/null \
+     || { [ "$have" != "$text" ] && { [ "$have" = "$(cache_conf_text 0)" ] || [ "$have" = "$(cache_conf_text 1)" ]; }; }; then
+    printf '%s\n' "$text" > "$CACHE_CONF.mgf-new" && mv -f "$CACHE_CONF.mgf-new" "$CACHE_CONF"
   fi
   cache_options install >/dev/null
   echo "  pipeline cache: plugin in NotProton's plugins folder, $CACHE_ID=1 in PBZ's launch options"

@@ -30,6 +30,18 @@ enum NotProtonRow {
         grouped ? "label = \(name)" : "label = \(name) (MacGameFix)"
     }
 
+    /// The lines that say which games a row is for, "<app id> <one short sentence>" each: with
+    /// them NotProton's Compatibility page offers a row that is off on that game's page, in a box
+    /// "Fixes for This Game" with Apply and Dismiss, the sentence under the row's name.
+    /// `neededFor` where the game does not run or crashes without the row, `improves` for the
+    /// rest. Only the fields the NotProton in Steam reads: an older one refuses a row with a
+    /// field it does not know, and gets the row as it was. NotProton allows neither on a row
+    /// with a type, an app in only one of the two, 16 of each and 200 characters of sentence.
+    static func games(neededFor: [String] = [], improves: [String] = []) -> [String] {
+        (neededFor.isEmpty || !knows("needed_for") ? [] : neededFor.map { "needed_for = \($0)" })
+            + (improves.isEmpty || !knows("improves") ? [] : improves.map { "improves = \($0)" })
+    }
+
     /// Whether every NotProton Steam runs knows a field: its run script lists the fields it reads.
     static func knows(_ field: String) -> Bool {
         let tools = Paths.home.appendingPathComponent("Library/Application Support/Steam/compatibilitytools.d")
@@ -167,7 +179,8 @@ enum FrameCapRow {
 /// D3DM_SUPPORT_DXR=0 makes D3DMetal say it has no ray tracing. A game that closes, or crashes
 /// as it loads a level, where D3DMetal offers ray tracing it cannot do then starts without it:
 /// Phantom Blade Zero with DLSS on (D3DMetal's NVAPI offers opacity micromaps it cannot build),
-/// played on Preview 41073. The game's own ray tracing settings go away with it.
+/// played on Preview 41073. The game's own ray tracing settings go away with it. The row names
+/// that game (4115450, install-pbz-fix.sh) as one it improves, so NotProton offers it there.
 enum RayTracingRow {
     static let id = "NOTPROTON_MGF_DXR_OFF"
     static let file = "mgf-dxr.conf"
@@ -177,6 +190,9 @@ enum RayTracingRow {
         if grouped { lines.append("group = MacGameFix / D3DMetal") }
         lines += [
             "description = The game sees no ray tracing. For a game that closes as a level loads: Phantom Blade Zero with DLSS on",
+        ]
+        lines += NotProtonRow.games(improves: ["4115450 With DLSS on, the game no longer closes as a level loads."])
+        lines += [
             "section = dev",
             "on = 1",
             "env = D3DM_SUPPORT_DXR=0",
@@ -199,7 +215,8 @@ enum RayTracingRow {
 /// reports another version needs a form of its own (NotProton reads four in a patch).
 ///
 /// With the row on, FC 27 started with no dialog and reached its menu (NotProton 41303 under
-/// Rosetta, 2026-11-26). Wine's own driver version, in the registry, is not this one.
+/// Rosetta, 2026-11-26). Wine's own driver version, in the registry, is not this one. The row
+/// names FC 27 (4080220, install-fc27-live-editor.sh) as the game it improves.
 enum DriverVersionRow {
     static let id = "NOTPROTON_MGF_NVIDIA_DRIVER"
     static let file = "mgf-nvidia-driver.conf"
@@ -209,6 +226,9 @@ enum DriverVersionRow {
         if grouped { lines.append("group = MacGameFix / D3DMetal") }
         lines += [
             "description = The game sees a newer NVIDIA driver and stops asking for a driver update. Played with EA SPORTS FC 27",
+        ]
+        lines += NotProtonRow.games(improves: ["4080220 The game stops asking for a driver update at every start."])
+        lines += [
             "on = 1",
             "tools = notproton-fex-rosetta*",
             "patch = D3DMetal/x86_64: 48 c7 42 04 02=9f e1=86 00=01 00 48 b8 72 36 31 36 5f 34 31 | 48 c7 42 04 2d=9f db=86 00=01 00 48 b8 72 35 36 30 5f 38 38",

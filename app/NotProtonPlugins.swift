@@ -38,6 +38,10 @@ enum NotProtonPlugins {
         /// The fields past the oldest NotProton with plugins that the row needs.
         let fields: [String]
         let rest: [String]
+        /// The games the row is for, "<app id> <sentence>" each (NotProtonRow.games): only where
+        /// this repository names the game by its Steam app.
+        var neededFor: [String] = []
+        var improves: [String] = []
     }
 
     /// Every row MacGameFix writes names it: in its group, or in its label where there is none.
@@ -56,7 +60,9 @@ enum NotProtonPlugins {
     /// - D3DMetal video crash: gives D3D12 devices the ID3DDestructionNotifier interface older
     ///   D3DMetal lacked; 4.0b3 has it.
     /// - Red Dead Online: sets TCP_NOOPT on the game's sockets before they connect, from
-    ///   NotProton's creator's fix. Played online with the row on 2026-11-26.
+    ///   NotProton's creator's fix. Played online with the row on 2026-11-26. The one row here
+    ///   that names its games to NotProton (improves): the other three are for games this
+    ///   repository names by title only, or names none, and the pad's row is the player's choice.
     /// - DualSense controllers: mgf-controls.dylib takes the IOKit calls of CodeWeavers'
     ///   winebus.so and the CoreAudio calls of their winecoreaudio.so, and does what engine
     ///   patches 0004-0016 and 0030 do inside ours: the Bluetooth pad as a wired one, haptics,
@@ -91,7 +97,9 @@ enum NotProtonPlugins {
             group: "MacGameFix / Game fixes", label: "Red Dead Online fix",
             description: "Lets Red Dead Online connect. Played online on NotProton 41303",
             library: "tcp-noopt.dylib", fields: ["apps"],
-            rest: ["on = 1", "inject = 1", "apps = 1174180", "apps = 1404210"]),
+            rest: ["on = 1", "inject = 1", "apps = 1174180", "apps = 1404210"],
+            improves: ["1174180 Red Dead Online connects to its servers.",
+                       "1404210 Red Dead Online connects to its servers."]),
         Plugin(
             name: "DualSense controllers", file: "mgf-controls.conf", id: "NOTPROTON_MGF_CONTROLS",
             group: "MacGameFix / Controllers", label: "DualSense controllers",
@@ -104,6 +112,7 @@ enum NotProtonPlugins {
         var lines = ["[\(p.id)]", NotProtonRow.label(p.label, grouped: grouped)]
         if grouped { lines.append("group = \(p.group)") }
         lines.append("description = \(p.description)")
+        lines += NotProtonRow.games(neededFor: p.neededFor, improves: p.improves)
         lines += p.rest
         if let library = p.library {
             lines.append("requires = Library/Application Support/notproton/plugins/\(library)")

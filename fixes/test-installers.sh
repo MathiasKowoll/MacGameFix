@@ -325,6 +325,59 @@ npbzr > "$W/pbzrows.install.log" 2>&1 && [ "$(npstr)" = installed ] \
 rm -f "$nplug/mgf-shared.conf"
 [ "$(npstr)" = half ] && say ok "pbz in NotProton on 41303 Rosetta: the shared row missing is half" || say FAIL "pbz rows: missing row ($(npstr))"
 npbzr > /dev/null 2>&1 && [ "$(npstr)" = installed ] && say ok "pbz in NotProton on 41303 Rosetta: installing again puts it back" || say FAIL "pbz rows: repair ($(npstr))"
+# The games a row is for (needed_for, improves) are written only where every NotProton in Steam
+# reads the fields, which each tool's run script says. For one that does not, the rows are what
+# they were before the fields existed: it refuses a row with a field it does not know.
+nshared0="$(printf '%s\n' '# MacGameFix writes this file for the games whose fixes use its rows, and removes it with the last of them; edits do not last.' \
+  '[NOTPROTON_MGF_ENGINE]' 'label = Engine fixes (MacGameFix)' \
+  'description = Each game gets only its own fixes. Leave it on; turn it on for a game with Denuvo' \
+  'on = 1' 'inject = 1' 'requires = Library/Application Support/notproton/plugins/mgf-engine.dylib' 'tools = notproton-fex-rosetta*')"
+ncache0="$(printf '%s\n' '[NOTPROTON_ROSETTA_PIPELINE_CACHE]' 'label = Rosetta pipeline cache' \
+  "description = Keeps the GPU code of the pipelines D3DMetal compiles in a Rosetta game, beyond Metal's 1.1 GB cache" \
+  'section = dev' 'on = 1' 'inject = 1' 'requires = Library/Application Support/notproton/plugins/notproton-rosetta-pipeline-cache.dylib')"
+ncache="$nplug/rosetta-pipeline-cache.conf"; nshared="$nplug/mgf-shared.conf"
+[ "$(cat "$nshared")" = "$nshared0" ] && [ "$(cat "$ncache")" = "$ncache0" ] \
+  && say ok "pbz in NotProton: with no NotProton that reads needed_for and improves, the rows are written as before the fields" \
+  || say FAIL "pbz rows: the rows without the fields ($(cat "$nshared" "$ncache" | tr '\n' '|'))"
+ntool="$nhome/Library/Application Support/Steam/compatibilitytools.d"; mkdir -p "$ntool/notproton-a"
+nrun() { printf '      split("label description section on off depends requires inject env tools type choice default apps patch%s", f, " ")\n' "$2" > "$ntool/$1/run"; }
+nrun notproton-a " group improves needed_for"
+[ "$(npstr)" = half ] && npbzr > /dev/null 2>&1 && [ "$(npstr)" = installed ] \
+  && /usr/bin/grep -qx 'needed_for = 4115450 The game never opens a window.' "$nshared" && /usr/bin/grep -qx 'needed_for = 3059520 The game crashes about a minute after it starts.' "$nshared" \
+  && [ "$(/usr/bin/grep -c '^needed_for = ' "$nshared")" = 5 ] && [ "$(/usr/bin/grep -c '^improves = ' "$nshared")" = 1 ] \
+  && /usr/bin/grep -qx 'improves = 2483190 Online sessions connect, and an idle timer thread stops using the processor.' "$nshared" \
+  && [ "$(/usr/bin/grep -vE '^(needed_for|improves) = ' "$nshared")" = "$nshared0" ] \
+  && /usr/bin/grep -qx 'improves = 4115450 The game compiles far fewer shaders at each start.' "$ncache" && [ "$(/usr/bin/grep -v '^improves = ' "$ncache")" = "$ncache0" ] \
+  && say ok "pbz in NotProton: a NotProton that reads the fields gets the games each row is for, Engine fixes for every game it has a fix for, and nothing else changes" \
+  || say FAIL "pbz rows: the games a row is for ($(npstr), $(cat "$nshared" "$ncache" | tr '\n' '|'))"
+! /usr/bin/awk '/^\[/ { delete seen } /^(needed_for|improves) = / { if ($3 in seen) bad = 1; seen[$3] = 1; if (length($0) - index($0, $3) - length($3) > 200) bad = 1 } /^type = / { typed = 1 } END { exit !(bad || typed) }' "$nshared" \
+  && say ok "pbz in NotProton: no game is named twice in a row, no sentence is past NotProton's 200 characters, and no such row has a type" \
+  || say FAIL "pbz rows: a row NotProton would refuse ($(cat "$nshared" | tr '\n' '|'))"
+mkdir -p "$ntool/notproton-b"; nrun notproton-b " group"
+[ "$(npstr)" = half ] && npbzr > /dev/null 2>&1 && [ "$(npstr)" = installed ] && [ "$(cat "$nshared")" = "$nshared0" ] && [ "$(cat "$ncache")" = "$ncache0" ] \
+  && say ok "pbz in NotProton: one NotProton in Steam that does not read the fields, and the rows are as before them again" \
+  || say FAIL "pbz rows: one NotProton without the fields ($(npstr), $(cat "$nshared" "$ncache" | tr '\n' '|'))"
+nrun notproton-b " group improves"
+npbzr > /dev/null 2>&1 && [ "$(npstr)" = installed ] && ! /usr/bin/grep -q '^needed_for' "$nshared" && [ "$(/usr/bin/grep -c '^improves = ' "$nshared")" = 1 ] \
+  && /usr/bin/grep -q '^improves = 4115450 ' "$ncache" \
+  && say ok "pbz in NotProton: a field only some NotProton reads is left out, the one they all read is written" \
+  || say FAIL "pbz rows: improves alone ($(npstr), $(cat "$nshared" | tr '\n' '|'))"
+printf '[NOTPROTON_ROSETTA_PIPELINE_CACHE]\nlabel = mine\ninject = 1\nrequires = Library/Application Support/notproton/plugins/notproton-rosetta-pipeline-cache.dylib\n' > "$ncache"
+npbzr > /dev/null 2>&1 && /usr/bin/grep -q '^label = mine$' "$ncache" && ! /usr/bin/grep -q '^improves' "$ncache" \
+  && say ok "pbz in NotProton: a pipeline cache descriptor the user wrote is not given the line" || say FAIL "pbz rows: the user's descriptor ($(cat "$ncache" | tr '\n' '|'))"
+# A shared row that is not on every game's page names only the games whose fix uses it.
+nrun notproton-b " group improves needed_for"
+( HOME="$nhome"; . "$npc/fixes/notproton-plugins.sh"
+  printf '%s\n' '# every game = NOTPROTON_MGF_ALL' '[NOTPROTON_MGF_ALL]' 'label = All' 'improves = 111 One.' 'needed_for = 222 Two.' \
+    '[NOTPROTON_MGF_SOME]' 'label = Some' 'needed_for = 111 One.' 'needed_for = 222 Two.' 'improves = 333 Three.' 'improves = 444 Four.' > "$npc/shared-test.conf"
+  NP_SHARED_TEMPLATE="$npc/shared-test.conf"; NP_PLUGINS="$npc/no-plugins"
+  got="$(printf '222 NOTPROTON_MGF_ALL\n222 NOTPROTON_MGF_SOME\n333 NOTPROTON_MGF_SOME\n' | MGVF_NOTPROTON_VERSION=1.2.8 np_shared_expected | /usr/bin/grep -v '^#' | tr '\n' '|')"
+  [ "$got" = '[NOTPROTON_MGF_ALL]|label = All (MacGameFix)|improves = 111 One.|needed_for = 222 Two.|[NOTPROTON_MGF_SOME]|label = Some (MacGameFix)|needed_for = 222 Two.|improves = 333 Three.|apps = 222|apps = 333|' ] ) \
+  && say ok "shared rows: a row for every game names every game the template gives it; a row with apps names only the games that use it" \
+  || say FAIL "shared rows: the games of a row with apps"
+rm -rf "$ntool" "$ncache" "$npc/shared-test.conf"
+npbzr > /dev/null 2>&1; [ "$(npstr)" = installed ] && [ "$(cat "$nshared")" = "$nshared0" ] && [ "$(cat "$ncache")" = "$ncache0" ] \
+  || say FAIL "pbz rows: back to a NotProton without the fields ($(npstr))"
 last="$(npbzr --restore 2>/dev/null | tail -1)"
 [ "$last" = restored ] && [ "$(npstr)" = absent ] && [ "$(cat "$nvdf")" = "$nvdf0" ] \
   && [ ! -e "$nplug/mgf-4115450.uses" ] && [ ! -e "$nplug/mgf-shared.conf" ] && [ ! -e "$nplug/mgf-engine.dylib" ] \
@@ -1071,6 +1124,26 @@ MGVF_NOTPROTON_GROUPS=0 fnp --install > /dev/null 2>&1 && /usr/bin/grep -qx 'lab
   && [ "$(MGVF_NOTPROTON_GROUPS=0 fnp --status 2>/dev/null | tail -1)" = installed ] \
   && say ok "fh5 in NotProton: where NotProton knows no groups, the row's label names MacGameFix" || say FAIL "fh5 NotProton: ungrouped row"
 fnp --install > /dev/null 2>&1
+# The row says the game does not run without it (needed_for) only to a NotProton that reads the
+# field: NotProton then offers the row on the game's page when it is off. For one that does not
+# read it, the descriptor is what it was before the field existed.
+fnconf0="$(printf '%s\n' '# MacGameFix writes this file for app 1551360 and removes it with the fix; edits do not last.' \
+  '[NOTPROTON_MGF_FH5_SIGNIN_1551360]' 'label = Xbox sign-in window' 'group = MacGameFix' \
+  'description = Keeps the Xbox sign-in page from closing the game. Leave it on' 'on = 1' 'tools = notproton-fex-rosetta*' \
+  'patch = win32u.so/x86_64: 48 8d 7b 38 e8 ?? ?? ?? ?? 48 89 df 48 83 c4 08 5b 41 5e 41 5f 5d e9=c3 ?? ?? ?? ??' 'apps = 1551360')"
+[ "$(cat "$fnconf")" = "$fnconf0" ] && say ok "fh5 in NotProton: a NotProton that does not read needed_for gets the row as before the field" \
+  || say FAIL "fh5 NotProton: the row without needed_for ($(cat "$fnconf" | tr '\n' '|'))"
+fnrun_with " patch improves needed_for"
+[ "$(fnst)" = half ] && fnp --install > /dev/null 2>&1 && [ "$(fnst)" = installed ] \
+  && /usr/bin/grep -qx 'needed_for = 1551360 The Xbox sign-in page closes the game.' "$fnconf" && ! /usr/bin/grep -q '^improves' "$fnconf" \
+  && [ "$(/usr/bin/grep -v '^needed_for = ' "$fnconf")" = "$fnconf0" ] && ! /usr/bin/grep -q 'NOTPROTON_MGF_FH5_SIGNIN' "$fnvdf" \
+  && say ok "fh5 in NotProton: a NotProton that reads needed_for is told the game needs the row; the row the player switched off stays off" \
+  || say FAIL "fh5 NotProton: needed_for ($(fnst), $(cat "$fnconf" | tr '\n' '|'))"
+mkdir -p "$fntool/../notproton-b"; printf '      split("label description section on off type choice default apps patch group", f, " ")\n      if (names[i] == "group") next\n' > "$fntool/../notproton-b/run"
+[ "$(fnst)" = half ] && fnp --install > /dev/null 2>&1 && [ "$(fnst)" = installed ] && [ "$(cat "$fnconf")" = "$fnconf0" ] \
+  && say ok "fh5 in NotProton: one NotProton in Steam that does not read needed_for, and the row is as before the field again" \
+  || say FAIL "fh5 NotProton: one NotProton without needed_for ($(fnst), $(cat "$fnconf" | tr '\n' '|'))"
+rm -rf "$fntool/../notproton-b"; fnrun_with " patch"
 fnp --restore > "$fn/restore.log" 2>&1 && [ "$(fnst)" = absent ] && [ ! -e "$fnconf" ] && [ "$(cat "$fnvdf")" = "$fnvdf0" ] \
   && say ok "fh5 in NotProton: restored, the row gone and the launch options as they were" || say FAIL "fh5 NotProton: restore ($(fnst), $(tail -2 "$fn/restore.log" | tr '\n' ' '))"
 
@@ -1184,6 +1257,31 @@ printf 'my own plugin\n' > "$f6pl/notproton-rosetta-trap-boost.dylib"
 f6do --install > "$f6/plugin2.log" 2>&1 && [ "$(cat "$f6pl/notproton-rosetta-trap-boost.dylib")" = "my own plugin" ] \
   && say ok "fh6 on a fake prefix: a user's own priority plugin is kept" \
   || say FAIL "fh6: own plugin ($(tail -2 "$f6/plugin2.log" | tr '\n' ' '))"
+# The priority plugin's descriptor names Forza Horizon 6 as the game it improves only for a
+# NotProton that reads the field; the installer's own descriptor follows what NotProton reads,
+# and one that is not its own stays.
+f6boost="$f6pl/rosetta-trap-boost.conf"; f6ct="$f6home/Library/Application Support/Steam/compatibilitytools.d/notproton-a"
+f6boost0="$(printf '%s\n' '[NOTPROTON_ROSETTA_TRAP_BOOST]' 'label = Rosetta exception priority' 'description = Raises Rosetta exception delivery priority for the FH6 profile' \
+  'section = dev' 'on = 1' 'inject = 1' 'requires = Library/Application Support/notproton/plugins/notproton-rosetta-trap-boost.dylib')"
+rm -f "$f6boost"
+f6do --install > /dev/null 2>&1 && [ "$(cat "$f6boost")" = "$f6boost0" ] \
+  && say ok "fh6 on a fake prefix: with no NotProton that reads improves, the priority plugin's descriptor is as before the field" \
+  || say FAIL "fh6: descriptor without improves ($(cat "$f6boost" | tr '\n' '|'))"
+mkdir -p "$f6ct"; printf '      split("label description section on off depends requires inject env tools type choice default apps patch improves needed_for", f, " ")\n' > "$f6ct/run"
+f6do --install > /dev/null 2>&1 && /usr/bin/grep -qx "improves = 2483190 Cuts the waits while Rosetta handles the game's exceptions." "$f6boost" \
+  && [ "$(/usr/bin/grep -v '^improves = ' "$f6boost")" = "$f6boost0" ] \
+  && say ok "fh6 on a fake prefix: a NotProton that reads improves is told the priority plugin is for this game" \
+  || say FAIL "fh6: descriptor with improves ($(cat "$f6boost" | tr '\n' '|'))"
+printf '      split("label description section on off depends requires inject env tools type choice default apps patch", f, " ")\n' > "$f6ct/run"
+f6do --install > /dev/null 2>&1 && [ "$(cat "$f6boost")" = "$f6boost0" ] \
+  && say ok "fh6 on a fake prefix: a NotProton that no longer reads improves gets the descriptor without it" \
+  || say FAIL "fh6: descriptor back without improves ($(cat "$f6boost" | tr '\n' '|'))"
+printf '      split("label description section on off depends requires inject env tools type choice default apps patch improves needed_for", f, " ")\n' > "$f6ct/run"
+printf '[x]\n' > "$f6boost"
+f6do --install > /dev/null 2>&1 && [ "$(cat "$f6boost")" = "[x]" ] \
+  && say ok "fh6 on a fake prefix: a descriptor that is not the installer's own is not given the line" \
+  || say FAIL "fh6: a user's descriptor ($(cat "$f6boost" | tr '\n' '|'))"
+rm -rf "$f6home/Library/Application Support/Steam/compatibilitytools.d"; printf 'my own plugin\n' > "$f6pl/notproton-rosetta-trap-boost.dylib"
 # FH6's runner clone holding an earlier ntdll.so, as new Wine modules in the runner leave it.
 # While the clone is the runner's current copy it is looked at: the fix reads half and an
 # install refuses what it did not put there. Once NotProton is going to make the clone again

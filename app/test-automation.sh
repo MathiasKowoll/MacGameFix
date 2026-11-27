@@ -1196,9 +1196,32 @@ check 'has "$D" "[NOTPROTON_MGF_DXR_OFF]" && has "$D" "on = 1" && has "$D" "env 
 V=$(cat "$NPV")
 check 'has "$OUT" "NVIDIA driver row: written" && has "$V" "[NOTPROTON_MGF_NVIDIA_DRIVER]" && has "$V" "on = 1" && has "$V" "group = MacGameFix / D3DMetal" && has "$V" "tools = notproton-fex-rosetta*"' "the NVIDIA driver row is written for every game, for the Rosetta tools it was played on"
 check '[ "$(/usr/bin/grep -c "^patch = D3DMetal/x86_64: " "$NPV")" = 2 ] && [ "$(/usr/bin/grep -o "=9f [a-f0-9]*=86 00=01 00 48 b8" "$NPV" | /usr/bin/grep -c .)" = 4 ] && [ "$(/usr/bin/grep -c "72 36 31 36 5f 34 31 | .* 72 35 36 30 5f 38 38$" "$NPV")" = 2 ]' "its two patches write 99999 over D3DMetal's driver version, one form for D3DMetal 4 and one for D3DMetal 3"
+check 'has "$D" "improves = 4115450 With DLSS on, the game no longer closes as a level loads." && has "$V" "improves = 4080220 The game stops asking for a driver update at every start." && ! has "$D$V" "needed_for"' "a NotProton that reads improves is told the game each row is for: ray tracing off for Phantom Blade Zero, the driver version for EA SPORTS FC 27"
+check '! /usr/bin/grep -Eq "^(improves|needed_for)" "$NPF" "$NPR"' "the rows with a type name no game: NotProton refuses the fields there"
 MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep >/dev/null
 check '[ "$(MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep)" = "rows: nothing to do" ]' "rows already right are left as they are"
 cp "$CT/notproton-a/run" "$T/run-with-patch"
+# A NotProton from before needed_for and improves refuses a row that carries them: it gets the
+# rows as they were before the fields.
+DXR0="$(printf '%s\n' '[NOTPROTON_MGF_DXR_OFF]' 'label = Ray tracing off' 'group = MacGameFix · D3DMetal' \
+  'description = The game sees no ray tracing. For a game that closes as a level loads: Phantom Blade Zero with DLSS on' 'section = dev' 'on = 1' 'env = D3DM_SUPPORT_DXR=0')"
+NVD0="$(printf '%s\n' '[NOTPROTON_MGF_NVIDIA_DRIVER]' 'label = NVIDIA driver version' 'group = MacGameFix · D3DMetal' \
+  'description = The game sees a newer NVIDIA driver and stops asking for a driver update. Played with EA SPORTS FC 27' 'on = 1' 'tools = notproton-fex-rosetta*' \
+  'patch = D3DMetal/x86_64: 48 c7 42 04 02=9f e1=86 00=01 00 48 b8 72 36 31 36 5f 34 31 | 48 c7 42 04 2d=9f db=86 00=01 00 48 b8 72 35 36 30 5f 38 38' \
+  'patch = D3DMetal/x86_64: c7 01 02=9f e1=86 00=01 00 48 b8 72 36 31 36 5f 34 31 | c7 01 2d=9f db=86 00=01 00 48 b8 72 35 36 30 5f 38 38')"
+check '[ "$(/usr/bin/grep -v "^improves = " "$NPD")" = "$DXR0" ] && [ "$(/usr/bin/grep -v "^improves = " "$NPV")" = "$NVD0" ]' "the line is all that the fields add to a row"
+printf '      split("label description section on off type choice default apps patch variants group", f, " ")\n' > "$CT/notproton-a/run"
+OUT=$(MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep)
+check 'has "$OUT" "ray tracing row: written" && has "$OUT" "NVIDIA driver row: written" && [ "$(cat "$NPD")" = "$DXR0" ] && [ "$(cat "$NPV")" = "$NVD0" ]' "a NotProton that reads neither field gets the rows as they were before the fields"
+printf '      split("label description section on off type choice default apps patch variants group improves", f, " ")\n' > "$CT/notproton-a/run"
+mkdir -p "$CT/notproton-b"; printf '      split("label description section on off type choice default apps patch variants group", f, " ")\n' > "$CT/notproton-b/run"
+MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep >/dev/null
+check '[ "$(cat "$NPD")" = "$DXR0" ] && [ "$(cat "$NPV")" = "$NVD0" ]' "one NotProton in Steam that does not read improves keeps the line out"
+rm -rf "$CT/notproton-b"
+MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep >/dev/null
+check 'has "$(cat "$NPD")" "improves = 4115450 " && has "$(cat "$NPV")" "improves = 4080220 "' "with every NotProton reading improves, the rows name their games again"
+cp "$T/run-with-patch" "$CT/notproton-a/run"
+MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep >/dev/null
 printf '      split("label description section on off type choice default apps group", f, " ")\n' > "$CT/notproton-a/run"
 check 'has "$(MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep)" "NVIDIA driver row: taken out, the NotProton in Steam does not read patch" && [ ! -e "$NPV" ]' "a NotProton that does not read patch loses the NVIDIA driver row"
 check '[ "$(MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep)" = "rows: nothing to do" ]' "and is not given it again"
@@ -1230,6 +1253,17 @@ C6=$(cat "$NPC")
 check 'has "$C6" "[NOTPROTON_MGF_CONTROLS]" && has "$C6" "label = DualSense controllers" && has "$C6" "group = MacGameFix / Controllers" && has "$C6" "inject = 1" && has "$C6" "tools = notproton-fex-rosetta*" && has "$C6" "requires = Library/Application Support/notproton/plugins/mgf-controls.dylib" && ! /usr/bin/grep -q "^apps" "$NPC" && cmp -s "$NPLIB/mgf-controls.dylib" "$NPP/mgf-controls.dylib"' "the DualSense controllers row is on every game's page, for the Rosetta tools, and loads the library the app carries"
 check '[ "$("$BIN" --plugins-report | /usr/bin/grep -c ": in place$")" = 5 ]' "with the plugin host, the window shows all five in place"
 check '[ "$("$BIN" --rows-keep)" = "rows: nothing to do" ]' "plugins already right are left as they are"
+check 'has "$T6" "improves = 1174180 Red Dead Online connects to its servers." && has "$T6" "improves = 1404210 Red Dead Online connects to its servers." && ! has "$T6" "needed_for"' "a NotProton that reads improves is told the Red Dead Online row is for Red Dead Redemption 2 and Red Dead Online"
+check '! /usr/bin/grep -Eq "^(improves|needed_for)" "$NPU" "$NPZ" "$NPN" "$NPC"' "the rows whose games this repository does not name by Steam app name none"
+RDO0="$(printf '%s\n' '[NOTPROTON_TCP_NOOPT]' 'label = Red Dead Online fix' 'group = MacGameFix · Per game' 'description = Lets Red Dead Online connect. Played online on NotProton 41303' \
+  'on = 1' 'inject = 1' 'apps = 1174180' 'apps = 1404210' 'requires = Library/Application Support/notproton/plugins/tcp-noopt.dylib')"
+cp "$CT/notproton-a/run" "$T/run-with-fields"
+printf '      split("label description description_on section on off depends requires inject env overrides stage tools type choice min max step default suffix hide_crossover apps patch variants group", f, " ")\n' > "$CT/notproton-a/run"
+OUT=$("$BIN" --rows-keep)
+check 'has "$OUT" "Red Dead Online row: written" && ! has "$OUT" "Unreal" && ! has "$OUT" "D3DMetal freeze" && ! has "$OUT" "video crash" && ! has "$OUT" "DualSense" && ! has "$OUT" "library" && [ "$(cat "$NPT")" = "$RDO0" ] && [ "$("$BIN" --plugins-report | /usr/bin/grep -c ": in place$")" = 5 ]' "a NotProton that does not read improves gets the Red Dead Online row as it was before the field, and no other carried plugin changes"
+cp "$T/run-with-fields" "$CT/notproton-a/run"
+OUT=$("$BIN" --rows-keep)
+check 'has "$OUT" "Red Dead Online row: written" && [ "$(/usr/bin/grep -v "^improves = " "$NPT")" = "$RDO0" ] && [ "$(/usr/bin/grep -c "^improves = " "$NPT")" = 2 ] && [ "$("$BIN" --rows-keep)" = "rows: nothing to do" ]' "and one that reads it again gets the two lines back, and nothing else"
 printf 'an older build' > "$NPP/tcp-noopt.dylib"
 check 'has "$("$BIN" --plugins-report)" "Red Dead Online fix: not in place yet"' "a library that differs shows as not in place yet"
 check '[ "$("$BIN" --rows-keep)" = "Red Dead Online library: put in place" ] && cmp -s "$NPLIB/tcp-noopt.dylib" "$NPP/tcp-noopt.dylib" && [ ! -e "$NPP/.tcp-noopt.dylib.mgf-new" ]' "a library that differs is replaced, through a rename, and nothing is left beside it"
