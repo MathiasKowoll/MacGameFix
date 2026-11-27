@@ -1906,12 +1906,12 @@ struct NotProtonPluginsSection: View {
             }
         } header: {
             ImprovementHeader(symbol: "puzzlepiece.extension", title: "NotProton plugins",
-                              summary: "Four of MacGameFix's fixes as NotProton plugins, ported by NotProton's creator.",
+                              summary: "MacGameFix's fixes and its DualSense controls as NotProton plugins.",
                               count: model.plugins.map { "\($0.filter { $0.state == .inPlace }.count) of \($0.count)" } ?? "Off")
         } footer: {
             Text("Each one is off until you turn it on for a game, in NotProton's options for that game, under "
-                 + "MacGameFix · Video, MacGameFix · D3DMetal or MacGameFix · Per game. The D3DMetal and Red Dead "
-                 + "Online ones need NotProton's plugin host, which NotProton's Update installs.")
+                 + "MacGameFix · Video, MacGameFix · D3DMetal, MacGameFix · Controllers or MacGameFix · Per game. "
+                 + "All but the Unreal one need NotProton's plugin host, which NotProton's Update installs.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }

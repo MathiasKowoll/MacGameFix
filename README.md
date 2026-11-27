@@ -351,7 +351,18 @@ under NotProton's own file names, each off until it is switched on for a game:
   Red Dead Redemption 2 and Red Dead Online's pages only: `TCP_NOOPT` on the
   game's sockets. Red Dead Redemption 2's fix switches it on for the game.
 
-The three libraries need NotProton's plugin host, which NotProton's own Update
+One more is MacGameFix's own:
+
+- **DualSense controllers** (`mgf-controls.conf`, `mgf-controls.dylib`, the
+  Rosetta tools): the DualSense in a game whose runner keeps CodeWeavers' own
+  `winebus.so` and `winecoreaudio.so`. The library takes those two files' calls
+  to macOS and does what the Wine modules do inside their own: the Bluetooth
+  pad as a wired one, haptics, XInput, trigger effects and DualShock 4 mode,
+  by the game's settings in Game Feel. Where the two files are MacGameFix's
+  own it leaves them alone. Played on 2026-11-26 with Marvel's Spider-Man 2
+  (Bluetooth and a cable), Crysis 3 Remastered and Crash Bandicoot 4.
+
+The four libraries need NotProton's plugin host, which NotProton's own Update
 installs, and the Unreal row a NotProton that reads `patch`. Where one cannot
 work its row is taken out again. A row another plugin file already declares is
 left alone, with its library, so a NotProton that ships the same plugins keeps
