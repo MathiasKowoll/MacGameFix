@@ -3,4 +3,4 @@
 # "notes"; the app shows them with the update and the agent in its notification.
 # Rewrite them with every change to the modules: what stays here is said again with
 # the next catalog. Lines that start with # are not carried.
-CrossOver Preview 41303: Red Dead Online can connect to its servers with WINE_TCP_NOOPT=1 in the game's launch options (the fix of NotProton's creator). It is off unless asked for.
+CrossOver Preview 41303: Forza Horizon 5 no longer closes while you sign in to Xbox. The sign-in page's browser stopped on a Wine check, and the game went with it.
