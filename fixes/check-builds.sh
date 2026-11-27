@@ -474,8 +474,34 @@ for d in fixes engine/modules; do
   esac
 done
 
+# EARLIER BUILDS. An installer replaces a library in NotProton's plugin folder only when it is
+# the one shipped or a build np-plugin-shared.conf names under "earlier": any other is taken for
+# someone else's and left. mgf-engine.dylib was rebuilt twice (#185, #192) without the build
+# before being named there, and the folder kept the old library (found 2026-11-27). So every
+# build of it this repository ever committed, but the current one, has to be in that list.
+# History is asked of git; a tree with no history (a source archive) has nothing to ask.
+earlier_drift=0
+if git -C "$HERE" rev-parse --git-dir >/dev/null 2>&1 && [ "$(git -C "$HERE" rev-parse --is-shallow-repository)" = false ]; then
+  listed="$(sed -n 's/^# earlier = //p' "$HERE/np-plugin-shared.conf")"
+  current="$(shasum -a 256 "$HERE/mgf-engine.dylib" | cut -d' ' -f1)"
+  builds=0
+  for commit in $(git -C "$HERE" log --format=%H -- mgf-engine.dylib); do
+    sha="$(git -C "$HERE" show "$commit:fixes/mgf-engine.dylib" 2>/dev/null | shasum -a 256 | cut -d' ' -f1)"
+    builds=$((builds + 1))
+    [ "$sha" = "$current" ] && continue
+    case " $listed " in *" $sha "*) ;; *)
+      echo "  earlier builds: mgf-engine.dylib of $(git -C "$HERE" log -1 --format='%h (%s)' "$commit") is not under \"earlier\" in np-plugin-shared.conf: $sha"
+      earlier_drift=1 ;;
+    esac
+  done
+  [ "$earlier_drift" = 0 ] && echo "  earlier builds: all $builds committed builds of mgf-engine.dylib are the current one or named in np-plugin-shared.conf"
+else
+  echo "  earlier builds: no git history here, not checked"
+fi
+
 echo
 echo "  $checked rebuilt and compared, $drifted drifted, $missing_source unattributed"
 [ "$drifted" = 0 ] && [ "$bundle_drift" = 0 ] && [ "$missing_source" = 0 ] \
-  && [ "$decl_drift" = 0 ] && [ "$log_drift" = 0 ] && [ "$name_leak" = 0 ] && [ "$sig_drift" = 0 ] || exit 1
+  && [ "$decl_drift" = 0 ] && [ "$log_drift" = 0 ] && [ "$name_leak" = 0 ] && [ "$sig_drift" = 0 ] \
+  && [ "$earlier_drift" = 0 ] || exit 1
 exit 0
