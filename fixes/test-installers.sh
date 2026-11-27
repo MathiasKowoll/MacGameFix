@@ -982,6 +982,56 @@ fhdo --restore > "$fh/restore.log" 2>&1 \
   && say ok "fh5 on a fake prefix: originals, runner and the earlier WebView2 Version restored" \
   || say FAIL "fh5: restore ($(fhst), $(tail -2 "$fh/restore.log" | tr '\n' ' '))"
 
+# On NotProton's runner for CrossOver Preview 41303 (Rosetta) the fix also gives the game a row of
+# its own, a patch of win32u.so in memory for the Xbox sign-in, and switches it on the first time.
+# Only where NotProton has its plugin host and reads "patch". A disposable HOME, and a copy of the
+# launch-options editor that does not look for Steam.
+fn="$W/fh5np"; fnhome="$fn/home"; fnpfx="$fn/compatdata/1551360/pfx"; fngame="$fn/game"; fnfix="$fn/fixes"
+fnnp="$fnhome/Library/Application Support/notproton"; fnrun="$fnnp/runners/crossover-27.0.0.41303-fex/CrossOver"
+fntool="$fnhome/Library/Application Support/Steam/compatibilitytools.d/notproton-a"
+mkdir -p "$fnrun/bin" "$fnrun/lib/apple_gptk/wine/x86_64-windows" "$fnrun/lib/apple_gptk/wine/x86_64-unix" \
+  "$fnrun/lib/wine/x86_64-windows" "$fnrun/lib/wine/x86_64-unix" "$fnpfx/drive_c/windows/system32" "$fngame" "$fnfix" "$fntool"
+printf '#!/bin/sh\nexit 0\n' > "$fnrun/bin/wine"; chmod +x "$fnrun/bin/wine"
+cp "$FIX/d3d12-fh5.dll" "$fnrun/lib/apple_gptk/wine/x86_64-windows/d3d12.dll"; touch "$fnrun/lib/apple_gptk/wine/x86_64-unix/d3d12.so"
+cp "$FIX/ws2_32-fh5.dll" "$fnrun/lib/wine/x86_64-windows/ws2_32.dll"; touch "$fnrun/lib/wine/x86_64-unix/ws2_32.so"
+printf 'WINE REGISTRY Version 2\n' > "$fnpfx/user.reg"; printf 'WINE REGISTRY Version 2\n' > "$fnpfx/system.reg"
+printf 'fake executable\n' > "$fngame/ForzaHorizon5.exe"
+printf '27.0.0.41303-fex\nCrossOver Preview 20261111 - Rosetta\n' > "$fn/compatdata/1551360/notproton-build"
+for n in install-fh5-fix.sh install-fh5-netfix.sh bottles.sh pe.pl d3d12-fh5.dll ws2_32-fh5.dll fh5-THIRD-PARTY-LICENCES.md notproton-plugins.sh np-plugin-fh5.conf steam-launch-options.pl; do cp "$FIX/$n" "$fnfix/$n"; done
+sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$fnfix/steam-launch-options.pl"
+fnvdf="$fnhome/Library/Application Support/Steam/userdata/1/config/localconfig.vdf"; mkdir -p "$(dirname "$fnvdf")"
+printf '"UserLocalConfigStore"\n{\n\t"Software" { "Valve" { "Steam" { "apps" {\n\t\t"1551360"\n\t\t{\n\t\t\t"LaunchOptions"\t\t"NOTPROTON_ENV_D3DM_VENDOR_ID=4318 %%command%%"\n\t\t}\n\t} } } }\n}\n' > "$fnvdf"
+fnvdf0="$(cat "$fnvdf")"; fnconf="$fnnp/plugins/mgf-1551360.conf"
+fnrun_with() { printf '      split("label description section on off depends requires inject env tools type choice default apps%s group", f, " ")\n      if (names[i] == "group") next\n' "$1" > "$fntool/run"; }
+fnp() { HOME="$fnhome" MGVF_BOTTLE="$fnpfx" MGVF_NOTPROTON_VERSION=1.2.8 MGVF_STEAM_RUNNING=0 /bin/bash "$fnfix/install-fh5-fix.sh" "$fngame" "$@"; }
+fnst() { fnp --status 2>/dev/null | /usr/bin/grep -E '^(installed|absent|half)$' | tail -1; }
+# No plugin host: the fix goes in without the row.
+fnrun_with " patch"
+fnp --install > "$fn/install0.log" 2>&1 && [ "$(fnst)" = installed ] && [ ! -e "$fnconf" ] && [ "$(cat "$fnvdf")" = "$fnvdf0" ] \
+  && say ok "fh5 in NotProton: without NotProton's plugin host the fix installs and writes no row" || say FAIL "fh5 NotProton: no host ($(fnst), $(tail -2 "$fn/install0.log" | tr '\n' ' '))"
+: > "$fnnp/plugin-host.dylib"; fnrun_with ""
+[ "$(fnst)" = installed ] && fnp --install > /dev/null 2>&1 && [ ! -e "$fnconf" ] \
+  && say ok "fh5 in NotProton: a NotProton that does not read patch gets no row either" || say FAIL "fh5 NotProton: no patch field ($(fnst))"
+fnrun_with " patch"
+[ "$(fnst)" = half ] && fnp --status 2>&1 | /usr/bin/grep -q "Xbox sign-in window row is not in place" \
+  && say ok "fh5 in NotProton: with the plugin host and patch, a fix without its row reads half and says why" || say FAIL "fh5 NotProton: half before the row ($(fnst))"
+fnp --install > "$fn/install.log" 2>&1 && [ "$(fnst)" = installed ] \
+  && /usr/bin/grep -qx '\[NOTPROTON_MGF_FH5_SIGNIN_1551360\]' "$fnconf" && /usr/bin/grep -qx 'label = Xbox sign-in window' "$fnconf" \
+  && /usr/bin/grep -qx 'group = MacGameFix' "$fnconf" && /usr/bin/grep -qx 'apps = 1551360' "$fnconf" && /usr/bin/grep -qx 'tools = notproton-fex-rosetta\*' "$fnconf" \
+  && [ "$(/usr/bin/grep -c '^patch = win32u.so/x86_64: .* e9=c3 ?? ?? ?? ??$' "$fnconf")" = 1 ] && [ "$(/usr/bin/grep -c 'MacGameFix' "$fnconf")" = 2 ] \
+  && /usr/bin/grep -qF '"NOTPROTON_MGF_FH5_SIGNIN_1551360=1 NOTPROTON_ENV_D3DM_VENDOR_ID=4318 %command%"' "$fnvdf" \
+  && say ok "fh5 in NotProton: the sign-in row for this game alone, in MacGameFix's group, patching win32u.so, switched on in front of the player's options" \
+  || say FAIL "fh5 NotProton: the row ($(fnst), $(tail -2 "$fn/install.log" | tr '\n' ' '))"
+sed -i '' 's/NOTPROTON_MGF_FH5_SIGNIN_1551360=1 //' "$fnvdf"
+[ "$(fnst)" = installed ] && fnp --install > /dev/null 2>&1 && ! /usr/bin/grep -q 'NOTPROTON_MGF_FH5_SIGNIN' "$fnvdf" \
+  && say ok "fh5 in NotProton: a row the player switched off stays off, and the fix still reads installed" || say FAIL "fh5 NotProton: the player's switch ($(fnst))"
+MGVF_NOTPROTON_GROUPS=0 fnp --install > /dev/null 2>&1 && /usr/bin/grep -qx 'label = Xbox sign-in window (MacGameFix)' "$fnconf" && ! /usr/bin/grep -q '^group' "$fnconf" \
+  && [ "$(MGVF_NOTPROTON_GROUPS=0 fnp --status 2>/dev/null | tail -1)" = installed ] \
+  && say ok "fh5 in NotProton: where NotProton knows no groups, the row's label names MacGameFix" || say FAIL "fh5 NotProton: ungrouped row"
+fnp --install > /dev/null 2>&1
+fnp --restore > "$fn/restore.log" 2>&1 && [ "$(fnst)" = absent ] && [ ! -e "$fnconf" ] && [ "$(cat "$fnvdf")" = "$fnvdf0" ] \
+  && say ok "fh5 in NotProton: restored, the row gone and the launch options as they were" || say FAIL "fh5 NotProton: restore ($(fnst), $(tail -2 "$fn/restore.log" | tr '\n' ' '))"
+
 # FH6 uses its own profile of the shared D3D12 source. It deliberately has no
 # FH5 network proxy or descriptor translation, but has the same reversible
 # private-alias layout.

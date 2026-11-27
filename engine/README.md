@@ -838,10 +838,12 @@ being flushed while the USER lock is held.
   unchanged.
 - **Where it reaches a game:** a CrossOver app gets `win32u.so` with Rosetta's
   improvement. NotProton's 41303 runner keeps CodeWeavers' `win32u.so` (`LEAVE` in
-  `engine-modules.sh`), so there the fix is to come to the game alone, as a NotProton
-  `patch =` row once NotProton's plugins are released: `window_surface_set_shape` ends in
-  a jump to `window_surface_flush`, and turning that jump into a return (one byte, found
-  once in CodeWeavers' file) leaves the shape to the message loop's flush as well.
+  `engine-modules.sh`), so there the fix comes to the game alone, in memory: Forza
+  Horizon 5's fix writes a NotProton row of the game's own (`fixes/np-plugin-fh5.conf`),
+  a `patch =` on `win32u.so`. `window_surface_set_shape` ends in a jump to
+  `window_surface_flush`, and the row turns that jump into a return (one byte, found once
+  in CodeWeavers' file), which leaves the shape to the message loop's flush as well. It
+  needs NotProton's plugin host and a NotProton that reads `patch`.
 
 The same code is in Wine 11.0 and 11.17 as CrossOver ships them; `win32u.so` is built for
 41303 alone.

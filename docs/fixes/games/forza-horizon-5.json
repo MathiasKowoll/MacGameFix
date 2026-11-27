@@ -5,7 +5,7 @@
   "executable": "ForzaHorizon5.exe",
   "carrierDirectory": null,
   "alsoRuns": [],
-  "summary": "After Xbox sign-in it never leaves the blurred loading screen: a source-built D3D12 proxy translates the NVIDIA-style descriptor layout Forza expects to D3DMetal and fills the D3D12 gaps it reaches; the Xbox UDP proxy keeps online play's socket open.",
+  "summary": "After Xbox sign-in it never leaves the blurred loading screen: a source-built D3D12 proxy translates the NVIDIA-style descriptor layout Forza expects to D3DMetal and fills the D3D12 gaps it reaches; the Xbox UDP proxy keeps online play's socket open. On NotProton's CrossOver Preview 41303 runner it also keeps the Xbox sign-in page from closing the game.",
   "page": "legacy/wiki/Forza-Horizon-5.md",
   "installs": [
     "d3d12-fh5.dll",
@@ -13,7 +13,10 @@
     "install-fh5-netfix.sh",
     "fh5-THIRD-PARTY-LICENCES.md",
     "pe.pl",
-    "bottles.sh"
+    "bottles.sh",
+    "np-plugin-fh5.conf",
+    "notproton-plugins.sh",
+    "steam-launch-options.pl"
   ],
   "builtFrom": [
     "fh5-d3d12/d3d12.c",

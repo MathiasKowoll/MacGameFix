@@ -4,7 +4,8 @@
 #   np_plugins_setup <appid> <prefix> <template>...
 #   NP_WRAPPER=<path>     the installer's play script, when one stands before %command%
 #   NP_SHARED_TEMPLATE=<np-plugin-shared.conf> NP_SHARED_LIBRARY=<mgf-engine.dylib>
-#   NP_SHARED_USES="<id>..." NP_SHARED_GROUP=<group, or empty>   the shared rows the game uses
+#   NP_SHARED_USES="<id>..." NP_SHARED_GROUP=<group, or empty>   the shared rows the game uses;
+#                         the group is its own rows' too
 #   NP_SHARED_CHOICES="<id> = <value> = <label>" lines   choices of its own for a shared row
 #   np_plugins_ready      true when NotProton keeps this prefix and its support folder is there
 #   np_plugins_preflight  what an install would refuse, before anything changes
@@ -123,10 +124,12 @@ np_expected() {
   [ -z "$NP_SHARED_USES" ] || printf '%s %s\n' "$NP_SHARED_MARK" "$NP_SHARED_USES"
   [ -z "$NP_SHARED_CHOICES" ] || printf '%s\n' "$NP_SHARED_CHOICES" | /usr/bin/grep . | /usr/bin/sed 's/^/# shared choice: /'
   for t in "${NP_TEMPLATES[@]}"; do
-    /usr/bin/awk -v app="$NP_APPID" -v apps="$apps" '
+    # A row in the MacGameFix group does not name it again; with no group, its label does.
+    /usr/bin/awk -v app="$NP_APPID" -v apps="$apps" -v group="$NP_SHARED_GROUP" '
       /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
       /^\[/ { if (open && apps) print "apps = " app
               sub(/\]$/, "_" app "]"); print; open = 1; next }
+      /^label[[:space:]]*=/ { if (group != "") { print; print "group = " group } else print $0 " (MacGameFix)"; next }
       /^depends[[:space:]]*=/ { sub(/[[:space:]]*$/, ""); print $0 "_" app; next }
       { print }
       END { if (open && apps) print "apps = " app }' "$t"
