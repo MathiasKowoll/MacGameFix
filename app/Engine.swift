@@ -64,8 +64,8 @@ enum EnginePart: String, CaseIterable, Identifiable {
         case .controls:
             return "Patched Wine modules for the DualSense. Game Feel sets the options per game."
         case .rosetta:
-            return "A patched ntdll for CrossOver apps and older runners. "
-                + "On NotProton's 41303 runner each game gets it from its Engine fixes row instead."
+            return "Patched Wine modules for the CrossOver apps and the older Preview runners. "
+                + "NotProton's 26.3 and 41303 runners keep their own: there a game gets its fix from its own row."
         }
     }
 

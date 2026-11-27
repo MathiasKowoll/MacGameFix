@@ -27,7 +27,7 @@ fi
 
 crossover="$1"; side="${2:-x86_64}"
 case "$side" in
-x86_64) wine="$crossover/lib/wine/x86_64-unix/wine"; wineserver="$crossover/bin/wineserver-x86" ;;
+x86_64) wine="$crossover/lib/wine/x86_64-unix/wine"; wineserver="$crossover/bin/wineserver-x86"; [ -x "$wineserver" ] || wineserver="$crossover/bin/wineserver" ;;  # 26.3: one side, bin/wineserver
 arm64)  wine="$crossover/lib/wine/aarch64-unix/wine.app/Contents/MacOS/wine"; wineserver="$crossover/bin/wineserver-arm64" ;;
 *) echo "unknown side $side (x86_64 or arm64)"; exit 2 ;;
 esac

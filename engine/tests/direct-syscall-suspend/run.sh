@@ -20,7 +20,7 @@ set -eu
 [ $# -ge 1 ] || { sed -n '3,5p' "$0"; exit 2; }
 here="$(cd "$(dirname "$0")" && pwd)"
 crossover="$1"; seconds="${2:-20}"; step="${3:-}"
-wine="$crossover/lib/wine/x86_64-unix/wine"; wineserver="$crossover/bin/wineserver-x86"
+wine="$crossover/lib/wine/x86_64-unix/wine"; wineserver="$crossover/bin/wineserver-x86"; [ -x "$wineserver" ] || wineserver="$crossover/bin/wineserver"  # 26.3: one side
 [ -x "$wine" ] && [ -x "$wineserver" ] || { echo "no Intel-side Wine in $crossover"; exit 1; }
 LLVM_MINGW="${LLVM_MINGW:-$HOME/.local/cxge/toolchains/llvm-mingw}"
 [ -x "$LLVM_MINGW/bin/x86_64-w64-mingw32-clang" ] || { echo "llvm-mingw not found at $LLVM_MINGW (set LLVM_MINGW)"; exit 1; }

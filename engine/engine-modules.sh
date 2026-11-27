@@ -19,7 +19,7 @@
 #             looks up (0041); and on 41073's Intel side, and in CrossOver apps, ntdll.dll (a
 #             NotProton runner of 41303 keeps NotProton's own ntdll.dll, and CodeWeavers' ntdll.so,
 #             kernel32.dll, kernelbase.dll, user32.dll, win32u.so, dwrite.dll and directmanipulation.dll
-#             on its Intel side: see LEAVE below)
+#             on its Intel side, and one of 26.3 keeps CodeWeavers' on its only side: see LEAVE below)
 # Without --part every improvement the build carries is meant, as before there were two.
 # An improvement is in when the list in the backup folder names one of its modules. One
 # that was never installed, or was taken out with --part, is absent whatever the other is.
@@ -135,8 +135,13 @@ done
 # runner variant its fix writes (fixes/install-f125-swofty.sh).
 # A CrossOver app keeps every module, and so does the FEX side. One put in before is retired: the
 # kept file goes back, while ours is still there.
+# NotProton's runner for CrossOver 26.3 leaves the same modules (26.3 has no ntdll.dll of ours):
+# from 2026-11-26 the modules that change Wine for a game go into the CrossOver 26.3 app alone, and
+# a NotProton runner gets a game's fixes in memory, from NotProton's rows, where a row supports
+# that runner (the Engine fixes row is for 41303's Rosetta tool only, so far). Its ntdll.so of
+# 0017-0020, which earlier modules put in, goes back to CodeWeavers'. The controls stay, as on 41303.
 LEAVE=""
-if [ -z "$APP" ]; then case "$BUILD" in 27.0.0.41303)
+if [ -z "$APP" ]; then case "$BUILD" in 27.0.0.41303|26.3.0.39832)
   LEAVE="x86_64-windows/ntdll.dll x86_64-unix/ntdll.so x86_64-windows/kernel32.dll x86_64-windows/kernelbase.dll x86_64-windows/user32.dll x86_64-unix/win32u.so x86_64-windows/dwrite.dll x86_64-windows/directmanipulation.dll" ;; esac; fi
 leaves() { case " $LEAVE " in *" $1 "*) return 0 ;; esac; return 1; }
 # The improvement asked for alone.
