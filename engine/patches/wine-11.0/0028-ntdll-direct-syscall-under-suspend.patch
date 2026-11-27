@@ -1,0 +1,188 @@
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -510,6 +510,8 @@
+     void                **instrumentation_callback; /* 0330 */
+     DWORD                 fs;            /* 0338 WOW TEB selector */
+     DWORD                 mxcsr;         /* 033c Unix-side mxcsr register */
++    char                  direct_syscall_pending; /* 0340 a SIGSYS was delivered on top of another handler */
++    WORD                  direct_syscall_id;      /* 0342 the system call number it carried */
+ };
+ 
+ C_ASSERT( sizeof(struct amd64_thread_data) <= sizeof(((struct ntdll_thread_data *)0)->cpu_data) );
+@@ -3173,6 +3175,10 @@
+ }
+ 
+ 
++#ifdef __APPLE__
++static void finish_direct_syscall( ucontext_t *ucontext, ULONG64 rip );
++#endif
++
+ /**********************************************************************
+  *		usr1_handler
+  *
+@@ -3181,6 +3187,9 @@
+ static void usr1_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+ {
+     ucontext_t *ucontext = init_handler( sigcontext );
++#ifdef __APPLE__
++    ULONG64 rip = RIP_sig(ucontext);
++#endif
+ 
+     if (is_inside_syscall( RSP_sig(ucontext) ))
+     {
+@@ -3236,6 +3245,9 @@
+         if (is_wow64() && context.c.SegCs == cs64_sel) context.c.ContextFlags |= CONTEXT_EXCEPTION_ACTIVE;
+         wait_suspend( &context.c );
+         restore_context( &context, ucontext );
++#ifdef __APPLE__
++        finish_direct_syscall( ucontext, rip );
++#endif
+     }
+ }
+ 
+@@ -3250,20 +3262,18 @@
+                    "popq %rcx\n\t"
+                    "jmp " __ASM_LOCAL_LABEL("__wine_syscall_dispatcher_prolog_end") );
+ 
+-/**********************************************************************
+- *		sigsys_handler
++/***********************************************************************
++ *           enter_direct_syscall
+  *
+- * Handler for SIGSYS, signals that a non-existent system call was invoked.
+- * Only called on macOS 14 Sonoma and later.
++ * Send a thread that ran a syscall instruction of its own into the system call dispatcher,
++ * as if it had come through an ntdll stub. ucontext is the thread just after the
++ * instruction, with the system call number still in rax.
+  */
+-static void sigsys_handler( int signal, siginfo_t *siginfo, void *sigcontext )
++static void enter_direct_syscall( ucontext_t *ucontext )
+ {
+     extern const void *__wine_syscall_dispatcher_prolog_end_ptr;
+-    ucontext_t *ucontext = init_handler( sigcontext );
+     struct syscall_frame *frame = get_syscall_frame();
+ 
+-    TRACE_(seh)("SIGSYS, rax %#llx, rip %#llx.\n", RAX_sig(ucontext), RIP_sig(ucontext));
+-
+     frame->rip = RIP_sig(ucontext) + 0xb;
+     frame->rcx = RIP_sig(ucontext);
+     frame->eflags = EFL_sig(ucontext);
+@@ -3299,6 +3309,107 @@
+         }
+     }
+ }
++
++/* WINE_DIRECT_SYSCALL_DEFERRAL=0 turns finish_direct_syscall and what feeds it off. Rosetta only. */
++static BOOL direct_syscall_deferral;
++
++/***********************************************************************
++ *           finish_direct_syscall
++ *
++ * Under Rosetta 2 the SIGSYS of a syscall instruction does not wait for its turn. When
++ * SIGUSR1 reaches the thread at the same instruction (another thread is suspending it, or
++ * the server has a system APC for it), SIGUSR1's frame is built first, with the thread just
++ * after the instruction and the system call not made. Then one of two things happens to
++ * the SIGSYS:
++ *
++ * - it is delivered on top of that frame, before usr1_handler has run: its context is the
++ *   entry of the signal trampoline, on the signal stack. Sent into the dispatcher, that
++ *   context runs the system call on the signal stack with whatever the registers hold and
++ *   returns into the middle of the trampoline. usr1_handler never runs, so the thread that
++ *   called SuspendThread waits for ever in GetThreadContext, and this one is lost;
++ * - or it is not delivered at all, and the program carries on after its instruction with
++ *   the system call number where the result should be.
++ *
++ * Blocking SIGSYS while other handlers run turns the first into the second: Rosetta drops
++ * a blocked one.
++ *
++ * So sigsys_handler only notes a SIGSYS that lands on the signal stack, and usr1_handler
++ * calls this when it is done, with the context it was given: if a SIGSYS was noted, the
++ * system call is entered from here. rip is where the thread was when the handler began:
++ * a context another thread has moved meanwhile is left alone.
++ *
++ * With no SIGSYS there is only the thread's state to go by, and the two bytes before rip
++ * can end any instruction. The system call is entered if they are 0f 05, rax could be a
++ * system call number, the thread has not been through the dispatcher (which leaves the
++ * return address in rcx, as the instruction does) and r10 equals rcx, as it does after
++ * the mov r10,rcx every system call stub starts with. A program that loads r10 some
++ * other way keeps the second outcome.
++ */
++static void finish_direct_syscall( ucontext_t *ucontext, ULONG64 rip )
++{
++    struct amd64_thread_data *amd64_data = amd64_thread_data();
++    BOOL noted;
++    BYTE insn[2];
++
++    if (!direct_syscall_deferral) return;
++    noted = amd64_data->direct_syscall_pending;
++    amd64_data->direct_syscall_pending = 0;
++
++    if (RIP_sig(ucontext) == rip &&
++        (noted ? (WORD)RAX_sig(ucontext) == amd64_data->direct_syscall_id
++               : (RCX_sig(ucontext) != rip && RCX_sig(ucontext) == R10_sig(ucontext) &&
++                  RAX_sig(ucontext) < 0x3000)) &&
++        !is_inside_syscall( RSP_sig(ucontext) ) &&
++        !is_inside_signal_stack( (void *)RSP_sig(ucontext) ) &&
++        virtual_uninterrupted_read_memory( (BYTE *)rip - 2, insn, 2 ) == 2 &&
++        insn[0] == 0x0f && insn[1] == 0x05)
++    {
++        TRACE_(seh)( "entering system call %#llx made at %p, %s\n", RAX_sig(ucontext), (void *)rip,
++                     noted ? "its SIGSYS came on top of this handler" : "its SIGSYS never came" );
++        enter_direct_syscall( ucontext );
++    }
++    else if (noted)
++        ERR_(seh)( "system call %#x not made: SIGSYS came on top of a handler at %p, the thread is at %p\n",
++                   amd64_data->direct_syscall_id, (void *)rip, (void *)RIP_sig(ucontext) );
++}
++
++/**********************************************************************
++ *		sigsys_handler
++ *
++ * Handler for SIGSYS, signals that a non-existent system call was invoked.
++ * Only called on macOS 14 Sonoma and later.
++ */
++static void sigsys_handler( int signal, siginfo_t *siginfo, void *sigcontext )
++{
++    ucontext_t *ucontext = init_handler( sigcontext );
++
++    TRACE_(seh)("SIGSYS, rax %#llx, rip %#llx.\n", RAX_sig(ucontext), RIP_sig(ucontext));
++
++    if (direct_syscall_deferral)
++    {
++        struct amd64_thread_data *amd64_data = amd64_thread_data();
++        BYTE insn[2];
++
++        if (is_inside_signal_stack( (void *)RSP_sig(ucontext) ))
++        {
++            /* delivered on top of another handler: that handler enters the system call */
++            amd64_data->direct_syscall_id = RAX_sig(ucontext);
++            amd64_data->direct_syscall_pending = 1;
++            return;
++        }
++        if (RCX_sig(ucontext) == RIP_sig(ucontext) ||
++            virtual_uninterrupted_read_memory( (BYTE *)RIP_sig(ucontext) - 2, insn, 2 ) != 2 ||
++            insn[0] != 0x0f || insn[1] != 0x05)
++        {
++            /* Not a thread that has just run a syscall instruction: it is elsewhere, or the
++             * dispatcher has returned it there already. Never seen; it would be a SIGSYS that
++             * came after finish_direct_syscall had taken it for one that never would. */
++            WARN_(seh)( "SIGSYS with nothing to enter, rip %#llx\n", RIP_sig(ucontext) );
++            return;
++        }
++    }
++    enter_direct_syscall( ucontext );
++}
+ #endif
+ 
+ 
+@@ -3596,6 +3707,10 @@
+             is_rosetta2 = ret;
+     }
+     rosetta_extend_cpuid();  /* HRAVA_ROSETTA_CPUID */
++    {
++        const char *env = getenv( "WINE_DIRECT_SYSCALL_DEFERRAL" );
++        direct_syscall_deferral = is_rosetta2 && !(env && env[0] == '0' && !env[1]);
++    }
+ 
+     /* CW Hack 23427: __builtin_available presumably isn't signal-safe. */
+     if (__builtin_available( macOS 15.0, * ))

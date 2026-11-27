@@ -11,6 +11,11 @@
 # maintained at once is refused, so a new Preview cannot come in without the one
 # before it being named there.
 #
+# A CrossOver app is maintained in its stable release alone (2026-11-26): a Preview whose
+# NotProton runner is maintained has its app only kept, which "appsKept" in support.json
+# names with the day, and each build's "appSupport" says so for its apps. The app still
+# installs and removes their modules.
+#
 #   python3 bundle-engine.py <engine/modules> <bundle Resources>
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
@@ -23,8 +28,10 @@ import sys
 
 mods, res = sys.argv[1:3]
 support = os.path.join(os.path.dirname(os.path.abspath(mods)), "support.json")
-kept = json.load(open(support)).get("kept", {}) if os.path.isfile(support) else {}
-for b in kept:
+table = json.load(open(support)) if os.path.isfile(support) else {}
+kept = table.get("kept", {})
+apps_kept = table.get("appsKept", {})
+for b in list(kept) + list(apps_kept):
     if not os.path.isfile(os.path.join(mods, b, "built-for.json")):
         sys.exit(f"error: engine/support.json keeps {b}, which has no modules")
 builds = []
@@ -44,7 +51,8 @@ for b in sorted(os.listdir(mods)):
         print(name)
     builds.append({"build": b, "crossover": d.get("crossover", b),
                    "wine": d["wine"].replace("Wine version ", ""), "files": d["files"],
-                   "support": "kept" if b in kept else "maintained"})
+                   "support": "kept" if b in kept else "maintained",
+                   "appSupport": "kept" if b in kept or b in apps_kept else "maintained"})
 previews = [b["build"] for b in builds if b["support"] == "maintained" and "Preview" in b["crossover"]]
 if len(previews) > 1:
     sys.exit("error: more than one Preview is maintained (" + ", ".join(previews)

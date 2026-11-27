@@ -1,0 +1,21 @@
+From: NotProtonNot <332734261+NotProtonNot@users.noreply.github.com>
+Subject: A copy-on-write view of a page-file section is mapped writable and shared outside Linux; 2XKO's copy protection needs it. From NotProton's creator
+
+Patch by NotProton's creator (https://github.com/NotProtonNot/NotProton), handed to
+MacGameFix. Only the file name changed here; the diff is theirs as given.
+
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -3232,6 +3232,12 @@
+     if (res) goto done;
+ 
+     TRACE( "handle=%p size=%lx offset=%s\n", handle, size, wine_dbgstr_longlong(offset.QuadPart) );
++#ifndef __linux__
++    if (!(sec_flags & SEC_FILE) && (vprot & VPROT_WRITECOPY))
++        res = map_file_into_view( view, unix_handle, 0, size, offset.QuadPart,
++                                  (vprot & ~VPROT_WRITECOPY) | VPROT_WRITE, needs_close );
++    else
++#endif
+     res = map_file_into_view( view, unix_handle, 0, size, offset.QuadPart, vprot, needs_close );
+     if (res == STATUS_SUCCESS)
+     {

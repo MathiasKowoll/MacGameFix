@@ -1,0 +1,76 @@
+From: MacGameFix
+Subject: win32u: a shared-memory window surface is not flushed with the USER lock held
+
+A window whose parent is in another process gets CodeWeavers' shared-memory surface
+(CX HACK 23950). Its flush is a message to the parent's process, WM_WINE_FLUSHSHMSURFACE,
+sent with send_message_timeout. No message is sent with the USER lock held:
+send_inter_thread_message calls user_check_not_lock, which asserts.
+
+apply_window_pos calls update_surface_region while it holds the window pointer, which is
+the USER lock, and update_surface_region holds it too when it calls
+window_surface_set_shape. That ends in window_surface_flush, and so in the surface's flush:
+a driver call for every other surface, a message for this one. Whenever the surface has
+something to flush at that moment, the process aborts:
+
+    err:system:user_check_not_lock BUG: holding USER lock
+    Assertion failed: (0), function user_check_not_lock, file sysparams.c, line 351.
+
+Forza Horizon 5 (Steam) on NotProton's runner for CrossOver Preview 41303, 2026-11-26: the
+game's WebView2 browser process (msedgewebview2.exe, thread CrBrowserMain) aborted so while
+the Xbox sign-in page was up, and the game faulted two seconds later, as it does when its
+WebView2 window goes away (a read of 0 at exe+0x53441F9). The return addresses of the
+assertion's stack, read in CodeWeavers' win32u.so: apply_window_pos ->
+window_surface_set_shape -> window_surface_flush (the call through funcs->flush) ->
+send_message_timeout( 0x80000011, SMTO_ABORTIFHUNG | SMTO_BLOCK, 500 ) -> the assertion.
+It was first seen on 2026-11-18, twice, while the sign-in page was typed in. A player who
+is signed in already does not meet it: the browser's window is then never drawn.
+
+With the lock held the flush now does nothing and says so, so the surface's bounds stay as
+they are: the message loop's own flush (flush_window_surfaces), which holds no lock, sends
+them, as it sends every other draw. The same code is in Wine 11.0 and 11.17 as CrossOver
+ships them.
+
+Ported to Wine 11.0 (CrossOver 26.3), whose apply_window_pos, update_surface_region,
+window_surface_set_shape and shm_surface_flush are the same: the dce.c and sysparams.c
+hunks apply as they are, and win32u_private.h's declaration goes beside
+user_check_not_lock, where 11.0 has it.
+
+--- a/dlls/win32u/dce.c
++++ b/dlls/win32u/dce.c
+@@ -759,6 +759,12 @@
+ 
+     TRACE("%p\n", surface);
+ 
++    /* The flush is a message to the parent's process, and no message is sent with the USER
++     * lock held: user_check_not_lock asserts. apply_window_pos and update_surface_region
++     * hold it when they set the surface's shape, which flushes. The bounds stay as they
++     * are, and the message loop's own flush, which holds no lock, sends them. */
++    if (user_lock_held()) return FALSE;
++
+     params.section = HandleToLong( surface->section );
+     params.hwnd = HandleToLong( surface->header.hwnd );
+     params.info = surface->info;
+--- a/dlls/win32u/sysparams.c
++++ b/dlls/win32u/sysparams.c
+@@ -315,6 +315,11 @@
+     pthread_mutex_unlock( &user_mutex );
+ }
+ 
++BOOL user_lock_held(void)
++{
++    return user_lock_thread == GetCurrentThreadId();
++}
++
+ void user_check_not_lock(void)
+ {
+     if (user_lock_thread == GetCurrentThreadId())
+--- a/dlls/win32u/win32u_private.h
++++ b/dlls/win32u/win32u_private.h
+@@ -193,6 +193,7 @@
+ extern void user_lock(void);
+ extern void user_unlock(void);
+ extern void user_check_not_lock(void);
++extern BOOL user_lock_held(void);
+ 
+ /* d3dkmtc. */
+ 

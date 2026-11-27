@@ -145,7 +145,9 @@ def crossover():
     they were last built (engine/support.json names them with the day they stopped), and
     nothing new is built or checked for them."""
     with open(os.path.join(ROOT, 'engine', 'support.json'), encoding='utf-8') as f:
-        kept = json.load(f).get('kept', {})
+        table = json.load(f)
+    kept = table.get('kept', {})
+    apps_kept = table.get('appsKept', {})
     folder = os.path.join(ROOT, 'engine', 'modules')
     out = []
     for build in sorted(os.listdir(folder)):
@@ -163,8 +165,13 @@ def crossover():
         }
         if build in kept:
             entry['keptSince'] = kept[build]
+        # The CrossOver app is maintained in its stable release alone: a Preview's app is
+        # kept while its NotProton runner is maintained ("appsKept").
+        entry['appSupport'] = 'kept' if build in kept or build in apps_kept else 'maintained'
+        if build in apps_kept and build not in kept:
+            entry['appKeptSince'] = apps_kept[build]
         out.append(entry)
-    for build in sorted(set(kept) - {e['build'] for e in out}):
+    for build in sorted((set(kept) | set(apps_kept)) - {e['build'] for e in out}):
         fail(f'engine/support.json keeps {build}, which has no modules')
     return out
 
