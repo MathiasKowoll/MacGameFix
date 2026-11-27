@@ -133,8 +133,14 @@ done
 # fix switches on. dwrite.dll and
 # directmanipulation.dll (0039, 0040, Swofty Launcher's window) go to F1 25 alone, as a NotProton
 # runner variant its fix writes (fixes/install-f125-swofty.sh).
-# A CrossOver app keeps every module, and so does the FEX side. One put in before is retired: the
-# kept file goes back, while ours is still there.
+# 41303's FEX side leaves the same files, from 2026-11-26: its ntdll.so's 0021, 0026 and 0027 come
+# from the Engine fixes row, which arms on that side too (fixes/build-engine.sh checks it there), and
+# 0037 from the Red Dead Online row; the games kernel32.dll, kernelbase.dll, user32.dll, win32u.so,
+# dwrite.dll and directmanipulation.dll were for play on Rosetta. 0022 (an async status store
+# Apple silicon faults on, for Phantom Blade Zero) goes too: that game plays on Rosetta, and goes
+# back to FEX only once FEX runs D3D12 games; then 0022 comes back for it alone, as a variant.
+# A CrossOver app keeps every module. One put in before is retired: the kept file goes back, while
+# ours is still there.
 # NotProton's runner for CrossOver 26.3 leaves the same modules (26.3 has no ntdll.dll of ours):
 # from 2026-11-26 the modules that change Wine for a game go into the CrossOver 26.3 app alone, and
 # a NotProton runner gets a game's fixes in memory, from NotProton's rows, where a row supports
@@ -142,7 +148,9 @@ done
 # 0017-0020, which earlier modules put in, goes back to CodeWeavers'. The controls stay, as on 41303.
 LEAVE=""
 if [ -z "$APP" ]; then case "$BUILD" in 27.0.0.41303|26.3.0.39832)
-  LEAVE="x86_64-windows/ntdll.dll x86_64-unix/ntdll.so x86_64-windows/kernel32.dll x86_64-windows/kernelbase.dll x86_64-windows/user32.dll x86_64-unix/win32u.so x86_64-windows/dwrite.dll x86_64-windows/directmanipulation.dll" ;; esac; fi
+  LEAVE="x86_64-windows/ntdll.dll x86_64-unix/ntdll.so x86_64-windows/kernel32.dll x86_64-windows/kernelbase.dll x86_64-windows/user32.dll x86_64-unix/win32u.so x86_64-windows/dwrite.dll x86_64-windows/directmanipulation.dll" ;; esac
+  case "$BUILD" in 27.0.0.41303)
+  LEAVE="$LEAVE aarch64-unix/ntdll.so aarch64-windows/kernel32.dll aarch64-windows/kernelbase.dll aarch64-windows/user32.dll aarch64-unix/win32u.so aarch64-windows/dwrite.dll aarch64-windows/directmanipulation.dll" ;; esac; fi
 leaves() { case " $LEAVE " in *" $1 "*) return 0 ;; esac; return 1; }
 # The improvement asked for alone.
 KEEP=""

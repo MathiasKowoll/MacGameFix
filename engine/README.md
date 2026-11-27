@@ -295,8 +295,12 @@ window"). Left behind: 2XKO's `0032` to `0036`, which never made it start; `0033
 Rockstar Games Launcher never shows Social Club's window and gives up after 30 s (twice
 with CodeWeavers' `win32u.so`, then signed in with `0033`'s, 2026-11-26). Red Dead
 Online's `0037` comes from NotProton's **Red Dead Online fix** row, which Red Dead
-Redemption 2's fix switches on (see below). A CrossOver app and the FEX side keep every
-module. `engine-modules.sh <runner> --retire` takes out only what a build retired, putting
+Redemption 2's fix switches on (see below). From 2026-11-26 the runner's FEX side leaves
+the same files too: its `0021`, `0026` and `0027` come from the Engine fixes row, which arms
+there (see "The engine fixes on the FEX side"), and the games the rest were for play on
+Rosetta. `0022` goes as well. Phantom Blade Zero plays on Rosetta, and returns to FEX only
+once FEX runs D3D12 games; `0022` would then come back for it alone, as a variant. A
+CrossOver app keeps every module. `engine-modules.sh <runner> --retire` takes out only what a build retired, putting
 nothing in: Forza Horizon 6's fix runs that on 41303, where it needs nothing of the
 improvement. Played on 2026-11-25 on NotProton's `ntdll` with CodeWeavers' `kernel32`
 and `kernelbase`: F1 25, EA SPORTS FC 27, Forza Horizon 6, Phantom Blade Zero,
