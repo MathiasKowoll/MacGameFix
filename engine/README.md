@@ -1093,12 +1093,64 @@ printed the same on the runner itself.
 
 No game is played on 26.3 with them yet, the haptics on a cable included.
 
+#### The rest of the engine (2026-11-26)
+
+From 2026-11-26 the CrossOver 26.3 app is the one place that gets the whole engine as Wine
+modules, every one built from 26.3's own sources; NotProton's runners get a game's fixes in
+memory, from NotProton's rows, and keep CodeWeavers' files (see "Which CrossOver builds are
+maintained"). So `wine-11.0` now carries every `wine-11.21` patch whose defect is in Wine 11.0,
+with the same numbers and names, and `build.conf` says `PROTECTION_MODULES=yes` and
+`WINDOW_MODULES=yes`: the modules go from fourteen files to twenty, `win32u.so`,
+`kernelbase.dll`, `kernel32.dll`, `user32.dll`, `dwrite.dll` and `directmanipulation.dll` with
+`ntdll.so`. There is no `ntdll.dll`: no patch in the series changes ntdll's PE half.
+
+Each patch was tried on 11.0 with `0001`-`0020` applied, then the series as a whole on the
+pristine sources, every patch with no offset or fuzz:
+
+| Patch | On Wine 11.0 |
+|---|---|
+| `0021` timer | Ported; the patch is 11.21's, its comment rewritten. 11.0's threadpool waits on a condition variable and never arms the timer that spins (see "The threadpool's timer thread"), but wineserver's `timeout_to_abstime` (`server/file.h`) overflows the same way for a program that sets one |
+| `0026`, `0027` dual-stack options | Ported as they are: `socket.c` is the same there |
+| `0028`, `0029` direct system calls under a suspend | Written again: 11.0's handlers take no `thread_data` (`init_handler` returns the context, `get_syscall_frame()`, `amd64_thread_data()` and `is_inside_syscall( sp )` take none), and its `amd64_thread_data` ends at `mxcsr` (`0x33c`), so the two new fields go at `0x340` and `0x342`. 11.0's `sigsys_handler` sends whatever context it gets into the dispatcher, as 11.21's did, and its `segv_handler`, `trap_handler` and `fpe_handler` take a signal on top of `SIGUSR1`'s frame for the exception's place: the defect is the same |
+| `0032`-`0037` | Ported as they are |
+| `0039`-`0041` | Ported as they are; 11.0's `kernelbase.spec` has the same commented `FindPackagesByPackageFamily` stub |
+| `0043` USER lock | The `dce.c` and `sysparams.c` hunks as they are; the declaration goes beside `user_check_not_lock` in `win32u_private.h`, where 11.0 has it. `apply_window_pos`, `update_surface_region` and `window_surface_set_shape` take the same path there |
+| `0022` FEX async status | Left out: 26.3 has no FEX side, and the patch is for aarch64 alone |
+| `0023`-`0025`, `0031` FH6's exception dispatcher | Left out: 13 of `0023`'s 15 hunks in `signal_x86_64.c` fail (11.0's file differs from 11.21's in about 1,100 lines), Forza Horizon 6's fix installs only its sign-in part in a CrossOver bottle, and on 41303 the chain comes from the game's own D3D12 proxy now, not from `ntdll.dll`. `0031` only moves `0023`'s stores out of the image |
+| `0030` Bluetooth pad as USB | Not needed (above) |
+| `0038` low allocations | Left out: Wine 11.0 reserves `0x10000`-`0x68000000` and asks macOS after that (`virtual.c`), which gives low addresses, and F1 25 ran on 26.3 |
+
+`win32u.so` is built as CodeWeavers build 26.3's: with FreeType and MoltenVK, opening FreeType as
+`libfreetype.dylib` (`FREETYPE_SONAME` in `build.conf`; their file's strings name it so, a link to
+`lib64/libfreetype.6.dylib`). 26.3 keeps its libraries in `CrossOver/lib64`, which `build.sh` now
+takes for `CROSSOVER_LIB`, and its source archive was extracted without FreeType's headers here,
+so they came from `crossover-sources-26.3.0.tar.gz` (FreeType 2.13.3) through `FREETYPE_INCLUDE`.
+The fourteen controls' files are the ones that were there, since nothing they are built from
+changed; `ntdll.so` and the six new ones are new. Each exports what CodeWeavers' does, plus
+`FindPackagesByPackageFamily` in `kernelbase.dll` and `kernel32.dll` (`0041`) and
+`GetPointerDevice` in `user32.dll` (`0035`); `ntdll.so` and `win32u.so` link the same libraries,
+with the same rpaths and minimum macOS, as CodeWeavers'.
+
+Run on 2026-11-26 in two copies of the CrossOver folder of NotProton's 26.3 runner, one with
+CodeWeavers' `ntdll.so` and files, one with these seven files:
+
+| Probe | CodeWeavers' | These |
+|---|---|---|
+| `tests/direct-syscall-suspend/run.sh`, msync on and off | fails within 10 s: the three raising threads ended by Wine (`nested exception on signal stack`), direct calls that never wake | 20 s each way: 102,284 and 107,128 looks, 144,164 and 127,759 pairs of direct calls, every exception seen once, nothing lost |
+| `tests/dualstack-udp/run.sh` | 12 of 26 checks fail | 1 fails: `SIO_UDP_NETRESET`, which Wine 11.0's `ws2_32` does not have (11.21's does) and no patch here adds |
+| `tests/tcp-noopt/run.sh` | - | all four rows as on 41303: options and 4024 without, none and 536 with |
+| `FindPackagesByPackageFamily`, `GetPointerDevice`, `GetMappedFileNameW` (a probe not kept in the repository) | none in `kernel32.dll` and `user32.dll`; `\??\C:\windows\...` | count 0 and `ERROR_SUCCESS`; `ERROR_INVALID_PARAMETER`; `\Device\HarddiskVolume1\windows\...` |
+
+The prefixes those probes made started on the new `win32u.so`, `user32.dll`, `kernelbase.dll`
+and `kernel32.dll`. Nothing else was run: no game is played on 26.3 with these, and `0021`,
+`0032`/`0036`, `0033`, `0039`, `0040` and `0043` were not probed on 11.0.
+
 | CrossOver | Sources | Wine | Intel (x86_64) | FEX (arm64) |
 |---|---|---|---|---|
 | Preview 27.0.0.41069 (20261006) | `crossover-sources-20261006.tar.gz` | 11.17 | played; see "Measured" | built, not played |
 | Preview 27.0.0.41073 (20261015) | `crossover-sources-20261015.tar.gz` | 11.17 | played; see "Measured" | built, not played |
 | Preview 27.0.0.41303 (20261111) | `crossover-sources-20261111.tar.gz` | 11.21 | built from `wine-11.21`; `0021` checked with the probe, not played | built; `0021` and `0022` checked with the probes, not played |
-| 26.3.0.39832 | `crossover-sources-26.3.0.tar.gz` | 11.0 | `0001`-`0016` (the controllers; `0004`-`0016` built on 2026-11-18) and the `ntdll.so` it had, built, not played; see "Wine 11.0 (26.3)" | no FEX side |
+| 26.3.0.39832 | `crossover-sources-26.3.0.tar.gz` | 11.0 | `0001`-`0016` (the controllers; `0004`-`0016` built on 2026-11-18) and, from 2026-11-26, the rest of the engine (`0017`-`0043` but `0022`-`0025`, `0030`, `0031` and `0038`), built, checked with the probes, not played; see "Wine 11.0 (26.3)" | no FEX side |
 
 `modules/<id>/` holds the files laid out as in `lib/wine` (`x86_64-windows`,
 `x86_64-unix`, `aarch64-windows`, `aarch64-unix`), plus `built-for.json` with the
@@ -1184,6 +1236,16 @@ do it.
 Two are: the stable CrossOver (26.3 now) and the latest Preview (20261111, build
 27.0.0.41303, now). New patches are built for those two, and what is played is played on them.
 
+How they get them differs since 2026-11-26. The CrossOver app is maintained only in its
+stable release, and it alone gets the whole engine as Wine modules, built from that release's
+own sources (`wine-11.0` for 26.3). NotProton's runners get a game's fix in memory, from
+NotProton's rows (`fixes/engine/mgf-engine.c` and the game's own rows), and keep CodeWeavers'
+`ntdll.so`, `win32u.so`, `kernel32.dll`, `kernelbase.dll`, `user32.dll`, `dwrite.dll` and
+`directmanipulation.dll` (`LEAVE` in `engine-modules.sh`, for 41303 and 26.3): the controls'
+modules still go into them. The Engine fixes row is for 41303's Rosetta tool alone so far, so
+NotProton's 26.3 runner has none of the Rosetta fixes until a row of it supports that runner. No
+Preview app is maintained that way; the 41303 app's modules are still in the catalog as built.
+
 The modules of an older Preview are **kept, without support**: they stay in the catalog as
 they were last built, and the app still installs and removes them, so a CrossOver that is
 not updated goes on as it was. Nothing new is built or checked for them, a fix that needs a
@@ -1264,7 +1326,9 @@ What else each kind of CrossOver needs:
   `lib/wine`: on a fake app (2026-10-22) `codesign --force --deep --sign -` left
   their sha256 and their Developer ID as they were, so the status check still
   finds them. A CrossOver update puts its own files back.
-- **NotProton:** "Update" or "Reinstall" may put the runner's own files back.
+- **NotProton:** "Update" or "Reinstall" may put the runner's own files back. On 41303's and
+  26.3's runners only the controls' modules go in; an `ntdll.so` or another module of Rosetta's
+  improvement that earlier modules put there goes back to CodeWeavers' with the next install.
   NotProton builds that carry PR #203 replace `mmdevapi.dll` with its wrapper.
 
 `tools/runner-swap.sh` is the developer tool the first tests used. It keeps its

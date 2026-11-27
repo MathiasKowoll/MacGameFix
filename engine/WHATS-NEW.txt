@@ -3,7 +3,6 @@
 # "notes"; the app shows them with the update and the agent in its notification.
 # Rewrite them with every change to the modules: what stays here is said again with
 # the next catalog. Lines that start with # are not carried.
-CrossOver Preview 41303: Forza Horizon 5 no longer closes while you sign in to Xbox. The sign-in page's browser stopped on a Wine check, and the game went with it.
-CrossOver Preview 41303: F1 25 no longer closes half a minute after it starts. Wine gave the game memory at addresses it cannot use; it gets low ones again.
-CrossOver Preview 41303: Swofty Launcher's window opens, and so can other programs built the same way: Wine can now look their fonts up and lets them set up touchpad gestures, which still do nothing.
-CrossOver Preview 41303: EA SPORTS FC 27 starts instead of stopping at "There is a problem with your game's setup. Please reinstall your game." Wine lacked a Windows function the game asks for; it has it now, and it answers that no Windows package is installed.
+CrossOver 26.3: the whole engine now comes to CrossOver 26.3, the stable release, built from its own sources: the fixes for EA SPORTS FC 27's start, Forza Horizon 5's Xbox sign-in window, Red Dead Online's connection, Forza Horizon 6's online sessions, Swofty Launcher's window and copy protection that makes its own system calls, beside the controllers' and Rosetta's.
+CrossOver 26.3: none of it has been played on 26.3 yet; the system-call, network and missing-function fixes were checked with test programs.
+NotProton's runner for 26.3: like 41303's, it keeps CodeWeavers' own Wine files and gets only the controllers' modules. The Rosetta file of ours it had goes back to CodeWeavers' with the next install; a game gets its fixes from NotProton's rows instead, where a row supports 26.3.
