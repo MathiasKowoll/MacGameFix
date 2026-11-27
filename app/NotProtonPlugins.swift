@@ -7,6 +7,10 @@
 //   55-d3dmetal-notifier.conf  D3DMetal video crash fix  d3dmetal-notifier.dylib
 //   60-red-dead-online.conf    Red Dead Online fix       tcp-noopt.dylib, RDR2 and RDO only
 //
+// and one of MacGameFix's own, kept the same way:
+//
+//   mgf-controls.conf          DualSense controllers     mgf-controls.dylib (fixes/controls)
+//
 // They carry NotProton's own file names, so a NotProton that installs the same plugins writes
 // the same files rather than a second copy: NotProton refuses an id two files declare, and
 // neither row would show. A row another file already declares is left alone, with its library.
@@ -53,6 +57,14 @@ enum NotProtonPlugins {
     ///   D3DMetal lacked; 4.0b3 has it.
     /// - Red Dead Online: sets TCP_NOOPT on the game's sockets before they connect, from
     ///   NotProton's creator's fix. Played online with the row on 2026-11-26.
+    /// - DualSense controllers: mgf-controls.dylib takes the IOKit calls of CodeWeavers'
+    ///   winebus.so and the CoreAudio calls of their winecoreaudio.so, and does what engine
+    ///   patches 0004-0016 and 0030 do inside ours: the Bluetooth pad as a wired one, haptics,
+    ///   XInput, trigger effects, DualShock 4 mode, by the game's settings in Game Feel. For a
+    ///   runner that keeps CodeWeavers' two files; where they are MacGameFix's own it leaves
+    ///   them alone. Played on NotProton 41303 (Rosetta), 2026-11-26: Marvel's Spider-Man 2
+    ///   over Bluetooth and on a cable, Crysis 3 Remastered (XInput, triggers) and Crash
+    ///   Bandicoot 4 (DualShock 4 mode).
     static let all: [Plugin] = [
         Plugin(
             name: "Unreal video", file: "40-unreal-video.conf", id: "NOTPROTON_UNREAL_VIDEO",
@@ -80,6 +92,12 @@ enum NotProtonPlugins {
             description: "Lets Red Dead Online connect. Played online on NotProton 41303",
             library: "tcp-noopt.dylib", fields: ["apps"],
             rest: ["on = 1", "inject = 1", "apps = 1174180", "apps = 1404210"]),
+        Plugin(
+            name: "DualSense controllers", file: "mgf-controls.conf", id: "NOTPROTON_MGF_CONTROLS",
+            group: "MacGameFix · Controllers", label: "DualSense controllers",
+            description: "The DualSense in this game: Bluetooth as a cable, haptics, XInput, triggers. Set it up in MacGameFix's Game Feel",
+            library: "mgf-controls.dylib", fields: [],
+            rest: ["on = 1", "inject = 1", "tools = notproton-fex-rosetta*"]),
     ]
 
     static func text(_ p: Plugin, grouped: Bool) -> String {

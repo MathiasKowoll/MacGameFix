@@ -252,6 +252,13 @@ for p in d3dmetal-freeze d3dmetal-notifier tcp-noopt; do
     codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$RES/notproton-plugins/$p.dylib"
   fi
 done
+# The DualSense controls (fixes/controls, NotProtonPlugins.swift): one library NotProton loads
+# into a game whose row is on, which does there what the Wine modules' winebus.so and
+# winecoreaudio.so do in a runner that has them.
+/bin/bash "$ROOT/fixes/build-controls.sh" "$RES/notproton-plugins" >/dev/null
+if [ "$SIGN_ID" != - ]; then
+  codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$RES/notproton-plugins/mgf-controls.dylib"
+fi
 
 echo "==> Info.plist"
 if [ -n "$UPDATES_BASE" ] && [ -n "$UPDATES_SECRET" ]; then

@@ -1,12 +1,13 @@
-// MacGameFix's DualSense controls, one library for NotProton and one row: "DualSense controllers
-// (MacGameFix)", on for every game through the tool's defaults.
+// MacGameFix's DualSense controls, one library for NotProton and one row: "DualSense controllers",
+// the same on every game's page and switched on game by game (app/NotProtonPlugins.swift).
 //
-// The runner keeps CodeWeavers' own winebus.so and winecoreaudio.so. NotProton loads this library
-// into every process of a game whose row is on, winedevice.exe included (it gets the game's
-// environment): when winebus.so is loaded this takes its IOKit calls (bus.c), and when
-// winecoreaudio.so is, its CoreAudio calls (audio.c). What engine
-// patches 0004-0016 and 0030 did inside those files is done from here; their Windows halves
-// (winebus.sys, hidclass, xinput, mmdevapi, setupapi, xaudio2) come as a NotProton variant.
+// For a runner that keeps CodeWeavers' own winebus.so and winecoreaudio.so. NotProton loads this
+// library into every process of a game whose row is on, winedevice.exe included (it gets the
+// game's environment): when winebus.so is loaded this takes its IOKit calls (bus.c), and when
+// winecoreaudio.so is, its CoreAudio calls (audio.c). What engine patches 0004-0016 and 0030 do
+// inside those two files is done from here, by the game's settings in Game Feel (pad.d). Their
+// Windows halves (winebus.sys, hidclass, xinput, mmdevapi, setupapi, xaudio2) are still the Wine
+// modules' own.
 //
 // Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 // SPDX-License-Identifier: LGPL-2.1-or-later
