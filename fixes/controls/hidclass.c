@@ -42,17 +42,10 @@
 // The pads bus.c gave xinput's collections, by the product id they are shown with.
 struct mgf_xinput_pad mgf_xinput_pads[8];
 
-#define HAVE(a) (sizeof(a) / sizeof((a)[0]))
-
 #if defined(__x86_64__)
-typedef struct { uint32_t Data1; uint16_t Data2, Data3; uint8_t Data4[8]; } guid;
-static const guid hid_interface = {0x4d1e55b2, 0xf16f, 0x11cf, {0x88, 0xcb, 0x00, 0x11, 0x11, 0x00, 0x00, 0x30}};
-static const guid winexinput_interface = {0x6c53d5fd, 0x6480, 0x440f, {0xb6, 0x18, 0x47, 0x67, 0x50, 0xc5, 0xe1, 0xa6}};
+static const wine_guid hid_interface = {0x4d1e55b2, 0xf16f, 0x11cf, {0x88, 0xcb, 0x00, 0x11, 0x11, 0x00, 0x00, 0x30}};
+static const wine_guid winexinput_interface = {0x6c53d5fd, 0x6480, 0x440f, {0xb6, 0x18, 0x47, 0x67, 0x50, 0xc5, 0xe1, 0xa6}};
 
-struct unicode_string {
-    uint16_t length, maximum_length;  // in bytes
-    uint16_t *buffer;
-};
 // What NtUserSendHardwareInput hands NtUserCallHwndParam (include/ntuser.h).
 struct hardware_input {
     uint32_t flags;
@@ -63,7 +56,7 @@ struct hardware_input {
 #define WM_INPUT_DEVICE_CHANGE 0x00fe
 #define MULTI_AXIS_CONTROLLER ((1u << 16) | 8)  // usage 8 on the generic desktop page
 
-typedef int32_t (WINAPI *register_fn)(void *device, const guid *class, struct unicode_string *reference,
+typedef int32_t (WINAPI *register_fn)(void *device, const wine_guid *class, struct unicode_string *reference,
                                       struct unicode_string *link);
 typedef int32_t (WINAPI *set_state_fn)(struct unicode_string *link, uint8_t enable);
 typedef uintptr_t (WINAPI *hwnd_param_fn)(void *window, uintptr_t param, uint32_t code);
@@ -73,7 +66,6 @@ static register_fn real_register;
 static set_state_fn real_set_state;
 static hwnd_param_fn real_hwnd_param;
 static uintptr_t hidclass_start, hidclass_end;
-static uintptr_t *ntdll_import;  // an import of ntoskrnl.exe from ntdll.dll, read when it is needed
 
 // The collections offered to xinput: the HID interface's name, and the WINEXINPUT one made for it.
 static struct offered {
@@ -83,7 +75,7 @@ static struct offered {
     struct unicode_string xinput;
 } offered[8];
 
-// ---- Run as Windows code: nothing below calls out of this file, except through pointers.
+// ---- Run as Windows code (windows.h).
 
 static bool from_hidclass(uintptr_t caller) { return caller >= hidclass_start && caller < hidclass_end; }
 
@@ -120,7 +112,7 @@ static int kind_of(const struct unicode_string *name) {
     int collection = find(name, "&COL");
     if (!hex4(name, find(name, "VID_"), &vendor) || !hex4(name, find(name, "PID_"), &product) || vendor != SONY_VID)
         return 0;
-    for (unsigned i = 0; i < HAVE(mgf_xinput_pads); i++) {
+    for (unsigned i = 0; i < COUNT_OF(mgf_xinput_pads); i++) {
         if (mgf_xinput_pads[i].product != product) continue;
         if (mgf_xinput_pads[i].mode == XINPUT_PAD && collection < 0) return XINPUT_PAD;
         if (mgf_xinput_pads[i].mode == XINPUT_RUMBLE && collection >= 0 && (unsigned)collection + 2 <= name->length / 2u &&
@@ -131,16 +123,16 @@ static int kind_of(const struct unicode_string *name) {
 }
 
 static struct offered *offered_as(const struct unicode_string *name) {
-    for (unsigned i = 0; i < HAVE(offered); i++) {
+    for (unsigned i = 0; i < COUNT_OF(offered); i++) {
         unsigned chars = name->length / 2, c = 0;
-        if (offered[i].used != 2 || chars >= HAVE(offered[i].name)) continue;
+        if (offered[i].used != 2 || chars >= COUNT_OF(offered[i].name)) continue;
         while (c < chars && offered[i].name[c] == name->buffer[c]) c++;
         if (c == chars && !offered[i].name[c]) return &offered[i];
     }
     return NULL;
 }
 
-static WINAPI int32_t register_interface(void *device, const guid *class, struct unicode_string *reference,
+static WINAPI int32_t register_interface(void *device, const wine_guid *class, struct unicode_string *reference,
                                          struct unicode_string *link) {
     uintptr_t caller = (uintptr_t)__builtin_return_address(0);
     int32_t status = real_register(device, class, reference, link);
@@ -149,9 +141,9 @@ static WINAPI int32_t register_interface(void *device, const guid *class, struct
     int kind;
 
     if (status || !from_hidclass(caller) || !class || asked[0] != hid[0] || asked[1] != hid[1] || !link ||
-        !link->buffer || link->length / 2u >= HAVE(offered[0].name) || !(kind = kind_of(link)))
+        !link->buffer || link->length / 2u >= COUNT_OF(offered[0].name) || !(kind = kind_of(link)))
         return status;
-    for (unsigned i = 0; i < HAVE(offered) && !entry; i++) {
+    for (unsigned i = 0; i < COUNT_OF(offered) && !entry; i++) {
         int none = 0;
         if (__atomic_compare_exchange_n(&offered[i].used, &none, 1, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST))
             entry = &offered[i];
@@ -165,6 +157,8 @@ static WINAPI int32_t register_interface(void *device, const guid *class, struct
     entry->name[link->length / 2] = 0;
     entry->motors_only = kind == XINPUT_RUMBLE;
     __atomic_store_n(&entry->used, 2, __ATOMIC_SEQ_CST);
+    win_log(entry->motors_only ? "hidclass: the collection with motors alone is offered to xinput, and to nobody else"
+                               : "hidclass: the pad is offered to xinput too", 0);
     return status;
 }
 
@@ -177,7 +171,7 @@ static WINAPI int32_t set_state(struct unicode_string *link, uint8_t enable) {
     status = entry->motors_only ? 0 : real_set_state(link, enable);
     real_set_state(&entry->xinput, enable);
     if (!enable) {
-        free_string_fn free_string = win_export(win_image_of(*ntdll_import), "RtlFreeUnicodeString");
+        free_string_fn free_string = win_export(win_module("ntdll.dll"), "RtlFreeUnicodeString");
         if (free_string) free_string(&entry->xinput);
         __atomic_store_n(&entry->used, 0, __ATOMIC_SEQ_CST);
     }
@@ -189,7 +183,7 @@ static WINAPI uintptr_t hwnd_param(void *window, uintptr_t param, uint32_t code)
     if (from_hidclass((uintptr_t)__builtin_return_address(0)) && sent && sent->input && sent->hid &&
         sent->input->type == INPUT_HARDWARE && sent->input->message == WM_INPUT_DEVICE_CHANGE &&
         sent->hid->usage == MULTI_AXIS_CONTROLLER) {
-        for (unsigned i = 0; i < HAVE(mgf_xinput_pads); i++)
+        for (unsigned i = 0; i < COUNT_OF(mgf_xinput_pads); i++)
             if (mgf_xinput_pads[i].mode == XINPUT_RUMBLE) return 1;
     }
     return real_hwnd_param(window, param, code);
@@ -202,45 +196,24 @@ static struct pe_image ntoskrnl, win32u;
 static void ntoskrnl_mapped(const struct pe_image *image) { ntoskrnl = *image; }
 static void win32u_mapped(const struct pe_image *image) { win32u = *image; }
 
-// An export pointed at a function here, through a jump in memory within 4 GB above its image:
-// mov rax, <the function>; jmp rax. What the export was goes to *real.
-static bool take(const struct pe_image *image, const char *name, void *with, void **real) {
-    uint8_t jump[12] = {0x48, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xe0};
-    uint8_t *was = pe_export(image, name), *room;
-    if (!was || !(room = pe_room(image, sizeof(jump)))) return false;
-    memcpy(jump + 2, &with, 8);
-    memcpy(room, jump, sizeof(jump));
-    *real = was;
-    return pe_runs(room, sizeof(jump)) && pe_point_export(image, name, room);
-}
-
 static void hidclass_mapped(const struct pe_image *image) {
     static int told;
-    uint8_t *start;
-    uint32_t size;
-    bool code;
 
-    for (unsigned i = 0; pe_section(image, i, &start, &size, &code); i++)
-        if (!code && size && memmem(start, size, "offered to xinput", 17)) {
-            pad_log("controls: hidclass.sys is MacGameFix's own here, which does this itself: left alone\n");
+    if (pe_has_text(image, "offered to xinput")) {
+        pad_log("controls: hidclass.sys is MacGameFix's own here, which does this itself: left alone\n");
+        return;
+    }
+    if (!real_register) {
+        if (!ntoskrnl.base || !win32u.base) {
+            pad_log("controls: ntoskrnl.exe or win32u.dll was not seen before hidclass.sys, it is left as it is\n");
             return;
         }
-    if (hidclass_start == (uintptr_t)image->base) return;  // mapped again where it was
-    ntdll_import = ntoskrnl.base ? pe_import_first(&ntoskrnl, "ntdll.dll") : NULL;
-    if (!ntoskrnl.base || !win32u.base || !ntdll_import) {
-        pad_log("controls: ntoskrnl.exe or win32u.dll was not seen before hidclass.sys, it is left as it is\n");
-        return;
-    }
-    if (real_register) {  // a second hidclass.sys in this process: the exports are taken already
-        hidclass_end = (uintptr_t)image->base + image->size;
-        hidclass_start = (uintptr_t)image->base;
-        return;
-    }
-    if (!take(&ntoskrnl, "IoRegisterDeviceInterface", register_interface, (void **)&real_register) ||
-        !take(&ntoskrnl, "IoSetDeviceInterfaceState", set_state, (void **)&real_set_state) ||
-        !take(&win32u, "NtUserCallHwndParam", hwnd_param, (void **)&real_hwnd_param)) {
-        pad_log("controls: an export hidclass.sys calls could not be pointed elsewhere, xinput may not find the pad\n");
-        return;
+        if (!pe_take_export(&ntoskrnl, "IoRegisterDeviceInterface", register_interface, (void **)&real_register) ||
+            !pe_take_export(&ntoskrnl, "IoSetDeviceInterfaceState", set_state, (void **)&real_set_state) ||
+            !pe_take_export(&win32u, "NtUserCallHwndParam", hwnd_param, (void **)&real_hwnd_param)) {
+            pad_log("controls: an export hidclass.sys calls could not be pointed elsewhere, xinput may not find the pad\n");
+            return;
+        }
     }
     hidclass_end = (uintptr_t)image->base + image->size;
     hidclass_start = (uintptr_t)image->base;

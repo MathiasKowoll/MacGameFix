@@ -17,17 +17,15 @@
 // The table's GetValue is pointed at get_value() below, which the game's own threads then run as
 // Windows code (windows.h). It asks the store as before; only when the container was asked for
 // and the answer is empty, it asks the same store for the endpoint's GUID (which mmdevapi answers
-// as text, in memory the caller frees), sends that through Wine's unix call dispatcher to audio.c
-// (mmdevapi.h), and where audio.c knows a container gives the same memory back with the 16 bytes
-// of it, as VT_CLSID.
+// as text, in memory the caller frees), asks audio.c for that endpoint's container (win_call),
+// and where audio.c knows one gives the same memory back with the 16 bytes of it, as VT_CLSID.
 //
 // An mmdevapi.dll that already answers (the Wine modules') is asked first and its answer kept.
-// Where winecoreaudio.so is MacGameFix's own there is nothing to ask, and nothing is.
+// Where winecoreaudio.so is MacGameFix's own, audio.c has taken nothing and knows no endpoint.
 //
 // Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "mmdevapi.h"
 #include "pad.h"
 #include "pe.h"
 #include "windows.h"
@@ -37,14 +35,11 @@ typedef int32_t (WINAPI *get_value_fn)(void *store, const struct property_key *k
 typedef void (WINAPI *free_fn)(void *memory);
 
 static get_value_fn real_get_value;
-static win_unix_call_fn dispatcher;
-// Two of mmdevapi's own imports, read when they are needed: the loader has bound them by then.
-static uintptr_t *ntdll_import, *free_import;
 
 static const struct property_key container_key = {{0x8c7ed206, 0x3f8a, 0x4827, {0xb3, 0xab, 0xae, 0x9e, 0x1f, 0xae, 0xfc, 0x6c}}, 2};
 static const struct property_key endpoint_guid_key = {{0x1da5d803, 0xd492, 0x4edd, {0x8c, 0x23, 0xe0, 0xc0, 0xff, 0xee, 0x7f, 0x0e}}, 4};
 
-// ---- Run as Windows code: nothing below calls out of this file, except through the pointers above.
+// ---- Run as Windows code (windows.h).
 
 static bool same_key(const struct property_key *a, const struct property_key *b) {
     const uint32_t *x = (const uint32_t *)a, *y = (const uint32_t *)b;
@@ -52,25 +47,23 @@ static bool same_key(const struct property_key *a, const struct property_key *b)
 }
 
 static WINAPI int32_t get_value(void *store, const struct property_key *key, struct prop_variant *value) {
-    struct mgf_container_request request;
+    struct mgf_container_request request = {NULL, 0};
     int32_t result = real_get_value(store, key, value);
+    free_fn free_memory;
 
-    if (result || value->vt != VT_EMPTY || !same_key(key, &container_key) || !mgf_audio_unix_handle) return result;
-    if (!dispatcher && !(dispatcher = win_dispatcher(*ntdll_import))) return result;
+    if (result || value->vt != VT_EMPTY || !same_key(key, &container_key)) return result;
     if (real_get_value(store, &endpoint_guid_key, value) || value->vt != VT_LPWSTR || !value->pointer) {
         value->vt = VT_EMPTY;
         value->pointer = NULL;
         return result;
     }
-    request.tag = &mgf_container_request_tag;
     request.endpoint = value->pointer;
-    request.found = 0;
-    dispatcher(mgf_audio_unix_handle, UNIX_GET_PROP_VALUE, &request);
+    win_call(MGF_CALL_CONTAINER, &request);
     if (request.found) {
         value->vt = VT_CLSID;
         return result;
     }
-    if (*free_import) ((free_fn)*free_import)(value->pointer);
+    if ((free_memory = win_export(win_module("combase.dll"), "CoTaskMemFree"))) free_memory(value->pointer);
     value->vt = VT_EMPTY;
     value->pointer = NULL;
     return result;
@@ -118,12 +111,6 @@ static void mapped(const struct pe_image *image) {
                 found);
         return;
     }
-    ntdll_import = pe_import_slot(image, "ntdll.dll", "NtQueryVirtualMemory");
-    free_import = pe_import_slot(image, "ole32.dll", "CoTaskMemFree");
-    if (!ntdll_import || !free_import) {
-        pad_log("controls: mmdevapi.dll does not import what the container's answer needs, left as it is\n");
-        return;
-    }
     if (table[5] == (uintptr_t)get_value) return;  // mapped again where it was
     real_get_value = (get_value_fn)table[5];
     if (!pe_write_pointer(&table[5], (uintptr_t)get_value)) {
@@ -137,6 +124,6 @@ static void mapped(const struct pe_image *image) {
 
 void mgf_controls_mmdevapi(void) {
 #if defined(__x86_64__)
-    pe_on_map("mmdevapi.dll", mapped);
+    if (!pad_part_off("mmdevapi")) pe_on_map("mmdevapi.dll", mapped);
 #endif
 }

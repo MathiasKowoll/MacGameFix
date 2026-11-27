@@ -4,11 +4,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include "pe.h"
+#include "nt.h"
 #include "pad.h"
 #include "../engine/mgf_hooks.h"
-
-typedef int32_t NTSTATUS;
-typedef void *HANDLE;
 
 #define CURRENT_PROCESS ((HANDLE)(intptr_t)-1)
 #define MEM_COMMIT 0x1000
@@ -179,48 +177,24 @@ uint32_t pe_code(const struct pe_image *image, const uint8_t *at) {
     return 0;
 }
 
-static bool same_name(const char *a, const char *b) {
-    for (; *a && *b; a++, b++)
-        if ((*a | 0x20) != (*b | 0x20)) return false;
-    return !*a && !*b;
+bool pe_has_text(const struct pe_image *image, const char *text) {
+    uint8_t *start;
+    uint32_t size;
+    bool code;
+    for (unsigned i = 0; pe_section(image, i, &start, &size, &code); i++)
+        if (!code && size && memmem(start, size, text, strlen(text))) return true;
+    return false;
 }
 
-uintptr_t *pe_import_slot(const struct pe_image *image, const char *dll, const char *name) {
-    uint8_t *opt, *sections;
-    unsigned count;
-    if (!headers(image, &opt, &sections, &count) || *(uint32_t *)(opt + 108) < 2) return NULL;
-    uint32_t dir = *(uint32_t *)(opt + 120), size = *(uint32_t *)(opt + 124);
-    if (!dir || (uint64_t)dir + size > image->size) return NULL;
-    // Import descriptors: the lookup table, two fields not used here, the module's name, the address table.
-    for (uint32_t at = dir; at + 20 <= dir + size; at += 20) {
-        const uint32_t *d = (const uint32_t *)(image->base + at);
-        uint32_t lookup = d[0], module = d[3], addresses = d[4];
-        if (!module && !addresses) break;
-        if (!lookup || module >= image->size - 64 || !same_name((const char *)image->base + module, dll)) continue;
-        for (uint32_t i = 0; (uint64_t)lookup + (i + 1) * 8 <= image->size && (uint64_t)addresses + (i + 1) * 8 <= image->size; i++) {
-            uint64_t entry = *(uint64_t *)(image->base + lookup + i * 8);
-            if (!entry) break;
-            if (entry >> 63 || entry + 2 + strlen(name) + 1 > image->size) continue;  // by ordinal
-            if (!strcmp((const char *)image->base + entry + 2, name)) return (uintptr_t *)(image->base + addresses + i * 8);
-        }
-    }
-    return NULL;
-}
-
-uintptr_t *pe_import_first(const struct pe_image *image, const char *dll) {
-    uint8_t *opt, *sections;
-    unsigned count;
-    if (!headers(image, &opt, &sections, &count) || *(uint32_t *)(opt + 108) < 2) return NULL;
-    uint32_t dir = *(uint32_t *)(opt + 120), size = *(uint32_t *)(opt + 124);
-    if (!dir || (uint64_t)dir + size > image->size) return NULL;
-    for (uint32_t at = dir; at + 20 <= dir + size; at += 20) {
-        const uint32_t *d = (const uint32_t *)(image->base + at);
-        if (!d[3] && !d[4]) break;
-        if (d[3] < image->size - 64 && same_name((const char *)image->base + d[3], dll) &&
-            (uint64_t)d[4] + 8 <= image->size)
-            return (uintptr_t *)(image->base + d[4]);
-    }
-    return NULL;
+bool pe_take_export(const struct pe_image *image, const char *name, const void *with, void **real) {
+    // mov rax, <with>; jmp rax
+    uint8_t jump[12] = {0x48, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xe0};
+    uint8_t *was = pe_export(image, name), *room;
+    if (!was || !(room = pe_room(image, sizeof(jump)))) return false;
+    memcpy(jump + 2, &with, 8);
+    memcpy(room, jump, sizeof(jump));
+    *real = was;
+    return pe_runs(room, sizeof(jump)) && pe_point_export(image, name, room);
 }
 
 bool pe_write_pointer(uintptr_t *slot, uintptr_t value) {

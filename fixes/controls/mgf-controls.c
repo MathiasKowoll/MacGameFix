@@ -26,6 +26,7 @@
 #include <mach-o/loader.h>
 #include "pad.h"
 #include "pe.h"
+#include "windows.h"
 #include "../../app/notproton-plugins/notproton_plugin.h"
 
 void mgf_controls_bus_arm(const struct np_plugin_api *api, const struct mach_header_64 *mh, intptr_t slide);
@@ -59,6 +60,15 @@ static void audio_loaded(const struct mach_header_64 *mh, intptr_t slide, const 
 static void bus_loaded(const struct mach_header_64 *mh, intptr_t slide, const char *path) {
     (void)path;
     if (!ours(mh, "winebus.so")) mgf_controls_bus_arm(api, mh, slide);
+}
+
+// What a function run as Windows code asked of this side (windows.h, through container.c).
+NTSTATUS mgf_windows_call(uint32_t kind, void *data) {
+    if (kind == MGF_CALL_LOG) {
+        const struct mgf_log_line *line = data;
+        pad_log("controls: %s (%llx)\n", line->text, (unsigned long long)line->value);
+    } else if (kind == MGF_CALL_CONTAINER) mgf_audio_container(data);
+    return STATUS_SUCCESS;
 }
 
 // The Windows side. pe.h: each part says which module it changes, then NtMapViewOfSection is
