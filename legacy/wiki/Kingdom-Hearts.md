@@ -336,6 +336,24 @@ comparison ran against a list that could not have contained the answer — the
 cause was not an environment variable at all. The dump now lists every name
 present, with values only for engine knobs.
 
+## HD 1.5+2.5 on CrossOver Preview 20261111: no fix needed
+
+A user tested HD 1.5+2.5 ReMIX on 2026-11-26 with NotProton 1.2.8 and its
+CrossOver Preview 20261111 runner (Rosetta, D3DMetal 4.0b3). The KH2 intro
+(`opn.mp4`) and the cutscene after the tutorial (`me2.mp4`) played with picture
+and sound, and the game ran well past both with no crash
+([issue #115](https://github.com/MathiasKowoll/MacGameFix/issues/115)).
+
+The bridge was not active: `dinput8.dll` sat beside the game, but the prefix had
+no `dinput8` override, so Wine's own `dinput8` was loaded. Which change cured the
+picture, D3DMetal 4.0b3 or the newer Wine under it, has not been measured.
+
+On stock CrossOver 26.3 the same install still crashes on `me2.mp4`. There the
+bridge loads and arms, but every frame reaches it as 4096 or 8192 bytes instead of
+1,382,400 for 1280x720, so it has no picture to write. **The fix stays** for
+earlier setups. On Preview 20261111 it is not needed. Dream Drop Distance has not
+been tried there.
+
 ## Caveats
 
 Do not use this on a game with anti-cheat. The fix patches a running process.

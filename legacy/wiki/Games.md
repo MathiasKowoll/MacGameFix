@@ -234,6 +234,7 @@ user on 2026-10-13 and 14.
 | Life is Strange: Double Exposure | Played without problems, over five minutes | No |
 | Life is Strange: Reunion | Played without problems | No |
 | Mortal Shell 2 | Played without its fix, cutscenes included (2026-10-14) | No |
+| KINGDOM HEARTS HD 1.5+2.5 ReMIX | Cutscenes play with picture and sound, on CrossOver Preview 20261111 (a user, 2026-11-26) | No |
 | Marvel's Spider-Man 2 | Its faults return | Yes |
 | The Witcher 3: Wild Hunt | Its faults return | Yes |
 | Tormented Souls 2 | Its fault returns | Yes |

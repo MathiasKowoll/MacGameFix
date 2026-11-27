@@ -295,10 +295,10 @@
           "symbol": null,
           "note": "Once kernel32.dll is mapped in the game's process, its export directory stays where it is and gets new arrays with one more name, in its sorted place; the function is a few instructions outside the directory, so Wine does not take it for a forward to another DLL.",
           "language": "c",
-          "startLine": 136,
-          "endLine": 208,
-          "commit": "07a455932b7ac708adb32aeb6c15013e1685e43c",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/07a455932b7ac708adb32aeb6c15013e1685e43c/fixes/engine/package-family/mgf-package-family.c#L136-L208",
+          "startLine": 137,
+          "endLine": 209,
+          "commit": "66b880ef487f23b1061d94ced954d3531b9ec093",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/66b880ef487f23b1061d94ced954d3531b9ec093/fixes/engine/package-family/mgf-package-family.c#L137-L209",
           "code": "static void add_name(uint8_t *base, uint32_t image_size, struct export_directory *d) {\n    const uint32_t *names = rva(base, d->address_of_names);\n    const uint16_t *ordinals = rva(base, d->address_of_name_ordinals);\n    const uint32_t *functions = rva(base, d->address_of_functions);\n    uint32_t n = d->number_of_names, f = d->number_of_functions, at = 0;\n\n    // Where the name goes in the sorted list; nothing to do when it is there already.\n    while (at < n) {\n        int c = strcmp(rva(base, names[at]), NAME);\n        if (!c) {\n            api->log(TAG, \"kernel32.dll already has %s, left as it is\", NAME);\n            return;\n        }\n        if (c > 0) break;\n        at++;\n    }\n    if (f >= 0xffff) {\n        api->log(TAG, \"kernel32.dll has %u functions, no ordinal left for one more, not added\", f);\n        return;\n    }\n\n    size_t code = (sizeof(FUNCTION) + 15) & ~(size_t)15;\n    size_t size = code + (f + 1) * 4 + (n + 1) * 4 + (n + 1) * 2 + sizeof(NAME);\n    uint8_t *room = room_near(base, image_size, size);\n    if (!room) {\n        api->log(TAG, \"no memory free within 4 GB above kernel32.dll, %s not added\", NAME);\n        return;\n    }\n    uint8_t *p = room;\n    memcpy(p, FUNCTION, sizeof(FUNCTION));\n    uint32_t *new_functions = (uint32_t *)(p += code);\n    uint32_t *new_names = (uint32_t *)(p += (f + 1) * 4);\n    uint16_t *new_ordinals = (uint16_t *)(p += (n + 1) * 4);\n    char *name = (char *)(p += (n + 1) * 2);\n    memcpy(name, NAME, sizeof(NAME));\n    #define RVA_OF(x) ((uint32_t)((uint8_t *)(x) - base))\n\n    memcpy(new_functions, functions, f * 4);\n    new_functions[f] = RVA_OF(room);\n    memcpy(new_names, names, at * 4);\n    memcpy(new_ordinals, ordinals, at * 2);\n    new_names[at] = RVA_OF(name);\n    new_ordinals[at] = (uint16_t)f;\n    memcpy(new_names + at + 1, names + at, (n - at) * 4);\n    memcpy(new_ordinals + at + 1, ordinals + at, (n - at) * 2);\n\n    // The function's page runs; the arrays on it are only read.\n    void *addr = room;\n    size_t len = size;\n    uint32_t old;\n    if (protect(CURRENT_PROCESS, &addr, &len, PAGE_EXECUTE_READ, &old)) {\n        api->log(TAG, \"the new function's memory could not be made executable, %s not added\", NAME);\n        return;\n    }\n\n    addr = d;\n    len = sizeof(*d);\n    if (protect(CURRENT_PROCESS, &addr, &len, PAGE_READWRITE, &old)) {\n        api->log(TAG, \"kernel32.dll's export directory could not be written, %s not added\", NAME);\n        return;\n    }\n    d->address_of_functions = RVA_OF(new_functions);\n    d->address_of_name_ordinals = RVA_OF(new_ordinals);\n    d->address_of_names = RVA_OF(new_names);\n    d->number_of_functions = f + 1;\n    d->number_of_names = n + 1;\n    addr = d;\n    len = sizeof(*d);\n    protect(CURRENT_PROCESS, &addr, &len, old, &old);\n    #undef RVA_OF\n    api->log(TAG, \"kernel32.dll at %p: %s added, ordinal %u, the function at %p\", (void *)base, NAME,\n             d->base + f, (void *)room);\n}"
         },
         {
@@ -407,10 +407,10 @@
           "symbol": null,
           "note": "An allocation the game asks for with no address is first asked for below the area Wine 11.21 reserves near the top, with an address requirement; only when nothing is free there does the game's own request go through as it was.",
           "language": "c",
-          "startLine": 120,
-          "endLine": 137,
-          "commit": "07a455932b7ac708adb32aeb6c15013e1685e43c",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/07a455932b7ac708adb32aeb6c15013e1685e43c/fixes/engine/low-allocations/mgf-low-allocations.c#L120-L137",
+          "startLine": 121,
+          "endLine": 138,
+          "commit": "66b880ef487f23b1061d94ced954d3531b9ec093",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/66b880ef487f23b1061d94ced954d3531b9ec093/fixes/engine/low-allocations/mgf-low-allocations.c#L121-L138",
           "code": "static NTSTATUS alloc_hook(HANDLE process, void **addr, uintptr_t zero_bits, size_t *size, uint32_t type,\n                           uint32_t protect) {\n    if (!zero_bits && wants_low(process, addr, type) && size) {\n        mem_extended_parameter params[1];\n        mem_address_requirements req;\n        size_t want = *size;\n        uint32_t n = with_low_limit(NULL, 0, params, 1, &req);\n        NTSTATUS status = real_alloc_ex(process, addr, size, type, protect, params, n);\n        if (status == STATUS_SUCCESS) {\n            say_low(*addr);\n            return status;\n        }\n        *addr = NULL;\n        *size = want;\n        say_fell_back();\n    }\n    return real_alloc(process, addr, zero_bits, size, type, protect);\n}"
         },
         {
@@ -418,10 +418,10 @@
           "symbol": null,
           "note": "NotProton's ntdll stays as it is: the library swaps the syscall table's four entries, all or none, inside F1 25's process only.",
           "language": "c",
-          "startLine": 218,
-          "endLine": 243,
-          "commit": "07a455932b7ac708adb32aeb6c15013e1685e43c",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/07a455932b7ac708adb32aeb6c15013e1685e43c/fixes/engine/low-allocations/mgf-low-allocations.c#L218-L243",
+          "startLine": 216,
+          "endLine": 241,
+          "commit": "66b880ef487f23b1061d94ced954d3531b9ec093",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/66b880ef487f23b1061d94ced954d3531b9ec093/fixes/engine/low-allocations/mgf-low-allocations.c#L216-L241",
           "code": "static void arm(const struct mach_header_64 *mh, intptr_t slide, const char *image) {\n    (void)image;\n    uintptr_t alloc, alloc_ex, map, map_ex;\n    uintptr_t *alloc_slot = entry(mh, slide, \"_NtAllocateVirtualMemory\", &alloc);\n    uintptr_t *alloc_ex_slot = entry(mh, slide, \"_NtAllocateVirtualMemoryEx\", &alloc_ex);\n    uintptr_t *map_slot = entry(mh, slide, \"_NtMapViewOfSection\", &map);\n    uintptr_t *map_ex_slot = entry(mh, slide, \"_NtMapViewOfSectionEx\", &map_ex);\n    if (!alloc_slot || !alloc_ex_slot || !map_slot || !map_ex_slot) return;\n    real_alloc = (alloc_fn)alloc;\n    real_alloc_ex = (alloc_ex_fn)alloc_ex;\n    real_map = (map_fn)map;\n    real_map_ex = (map_ex_fn)map_ex;\n    query_section = (query_section_fn)api->symbol(mh, slide, \"_NtQuerySection\");\n    // All four or none: the Ex calls are what the others ask through.\n    if (!api->swap_pointer(alloc_ex_slot, alloc_ex, (uintptr_t)alloc_ex_hook)) {\n        api->log(TAG, \"the syscall table could not be written, not armed\");\n        return;\n    }\n    if (!api->swap_pointer(map_ex_slot, map_ex, (uintptr_t)map_ex_hook)\n        || !api->swap_pointer(alloc_slot, alloc, (uintptr_t)alloc_hook)\n        || !api->swap_pointer(map_slot, map, (uintptr_t)map_hook)) {\n        api->log(TAG, \"only part of the syscall table could be written; what was written stays\");\n        return;\n    }\n    api->log(TAG, \"allocations with no address are asked below 0x7ff000000000 first\");\n}"
         },
         {
@@ -881,7 +881,7 @@
       "pageUrl": "https://github.com/MathiasKowoll/MacGameFix/blob/main/legacy/wiki/Kingdom-Hearts.md",
       "graphicsBackend": "d3dmetal",
       "gptk": null,
-      "notNeededFromGptk": null
+      "notNeededFromGptk": "4.0b3"
     },
     {
       "title": "Life is Strange: Double Exposure",
