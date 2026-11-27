@@ -15,18 +15,14 @@
 // More than one or none, and the module is left as it is.
 //
 // The table's GetValue is pointed at get_value() below, which the game's own threads then run as
-// Windows code: on the game's stack and with the Windows thread block in gs, so it calls nothing
-// of macOS, not even the C library, and keeps to memory it is handed. It asks the store as
-// before; only when the container was asked for and the answer is empty, it asks the same store
-// for the endpoint's GUID (which mmdevapi answers as text, in memory the caller frees), sends
-// that through Wine's unix call dispatcher to audio.c (mmdevapi.h), and where audio.c knows a
-// container gives the same memory back with the 16 bytes of it, as VT_CLSID.
+// Windows code (windows.h). It asks the store as before; only when the container was asked for
+// and the answer is empty, it asks the same store for the endpoint's GUID (which mmdevapi answers
+// as text, in memory the caller frees), sends that through Wine's unix call dispatcher to audio.c
+// (mmdevapi.h), and where audio.c knows a container gives the same memory back with the 16 bytes
+// of it, as VT_CLSID.
 //
 // An mmdevapi.dll that already answers (the Wine modules') is asked first and its answer kept.
 // Where winecoreaudio.so is MacGameFix's own there is nothing to ask, and nothing is.
-//
-// Not covered: this function has no Windows unwind data, so an exception raised inside
-// mmdevapi's GetValue could not unwind through it. It raises none.
 //
 // Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 // SPDX-License-Identifier: LGPL-2.1-or-later
@@ -34,15 +30,14 @@
 #include "mmdevapi.h"
 #include "pad.h"
 #include "pe.h"
+#include "windows.h"
 
 #if defined(__x86_64__)
-#define WINAPI __attribute__((ms_abi))
 typedef int32_t (WINAPI *get_value_fn)(void *store, const struct property_key *key, struct prop_variant *value);
-typedef int32_t (WINAPI *unix_call_fn)(uint64_t handle, uint32_t code, void *args);
 typedef void (WINAPI *free_fn)(void *memory);
 
 static get_value_fn real_get_value;
-static unix_call_fn dispatcher;
+static win_unix_call_fn dispatcher;
 // Two of mmdevapi's own imports, read when they are needed: the loader has bound them by then.
 static uintptr_t *ntdll_import, *free_import;
 
@@ -56,40 +51,12 @@ static bool same_key(const struct property_key *a, const struct property_key *b)
     return x[0] == y[0] && x[1] == y[1] && x[2] == y[2] && x[3] == y[3] && x[4] == y[4];
 }
 
-// Wine's unix call dispatcher: ntdll.dll exports a pointer to it, "__wine_unix_call_dispatcher".
-// ntdll.dll is found from a function of it that mmdevapi imports: its image starts at the
-// nearest 64 KB boundary below that holds a PE header.
-static unix_call_fn find_dispatcher(void) {
-    static const char wanted[] = "__wine_unix_call_dispatcher";
-    const uint8_t *base = (const uint8_t *)(*ntdll_import & ~(uintptr_t)0xffff);
-    for (unsigned i = 0;; i++, base -= 0x10000) {
-        if (i == 0x200) return NULL;
-        if (base[0] != 'M' || base[1] != 'Z') continue;
-        uint32_t nt = *(const uint32_t *)(base + 0x3c);
-        if (nt < 0x1000 - 0x108 && *(const uint32_t *)(base + nt) == 0x4550) break;
-    }
-    const uint8_t *opt = base + *(const uint32_t *)(base + 0x3c) + 24;
-    const uint32_t *d = (const uint32_t *)(base + *(const uint32_t *)(opt + 112));
-    // The export directory: the count of names at 24, then the arrays of functions, names, ordinals.
-    uint32_t count = d[6];
-    const uint32_t *functions = (const uint32_t *)(base + d[7]), *names = (const uint32_t *)(base + d[8]);
-    const uint16_t *ordinals = (const uint16_t *)(base + d[9]);
-    for (uint32_t i = 0; i < count; i++) {
-        const char *name = (const char *)base + names[i];
-        unsigned c = 0;
-        while (wanted[c] && name[c] == wanted[c]) c++;
-        if (wanted[c] || name[c]) continue;
-        return *(unix_call_fn *)(base + functions[ordinals[i]]);
-    }
-    return NULL;
-}
-
 static WINAPI int32_t get_value(void *store, const struct property_key *key, struct prop_variant *value) {
     struct mgf_container_request request;
     int32_t result = real_get_value(store, key, value);
 
     if (result || value->vt != VT_EMPTY || !same_key(key, &container_key) || !mgf_audio_unix_handle) return result;
-    if (!dispatcher && !(dispatcher = find_dispatcher())) return result;
+    if (!dispatcher && !(dispatcher = win_dispatcher(*ntdll_import))) return result;
     if (real_get_value(store, &endpoint_guid_key, value) || value->vt != VT_LPWSTR || !value->pointer) {
         value->vt = VT_EMPTY;
         value->pointer = NULL;

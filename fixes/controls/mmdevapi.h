@@ -35,4 +35,17 @@ extern const char mgf_container_request_tag;
 // Wine's dispatcher is called with. 0 until then, and for good where that file is MacGameFix's own.
 extern uintptr_t mgf_audio_unix_handle;
 
+// A line for pad.log from a function run as Windows code, which cannot write it itself: sent the
+// same way, told by its own tag. `value` is printed after the text, in hexadecimal.
+struct mgf_log_request {
+    const void *tag;  // &mgf_log_request_tag
+    const char *text;
+    uint64_t value;
+};
+extern const char mgf_log_request_tag;
+
+// endpoints.c: an endpoint mmdevapi has just asked about (flow 0 render, 1 capture) is listed in
+// SetupAPI, with `container`, or with the computer's when it has none of its own.
+void mgf_endpoint_listed(const wine_guid *guid, int flow, const wine_guid *container);
+
 #endif

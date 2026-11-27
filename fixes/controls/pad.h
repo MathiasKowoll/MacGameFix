@@ -52,4 +52,7 @@ uint64_t pad_ticks(double seconds);
 double pad_seconds(uint64_t ticks);
 void pad_realtime(double period, double constraint);
 
+// Whether MGF_CONTROLS_WITHOUT names this part of the Windows side.
+bool pad_part_off(const char *part);
+
 #endif

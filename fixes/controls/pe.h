@@ -55,6 +55,9 @@ uint32_t pe_code(const struct pe_image *image, const uint8_t *at);
 // Where the loader puts the address of `name`, imported from `dll`, when it binds the image's
 // imports (after the module's part is called); NULL when the image does not import it by name.
 uintptr_t *pe_import_slot(const struct pe_image *image, const char *dll, const char *name);
+// The same for the first thing the image imports from `dll`, whatever it is: an address inside
+// that module, to find the module by.
+uintptr_t *pe_import_first(const struct pe_image *image, const char *dll);
 // A pointer inside the image changed, whatever its page's protection.
 bool pe_write_pointer(uintptr_t *slot, uintptr_t value);
 

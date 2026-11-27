@@ -795,22 +795,27 @@ static uint32_t (*real_get_prop_value)(void *);
 // endpoint's device in every question of its own, and asks one of each endpoint when it lists
 // them: the devices are kept by GUID from those.
 const char mgf_container_request_tag = 0;
+const char mgf_log_request_tag = 0;
 uintptr_t mgf_audio_unix_handle;
 
 static struct { wine_guid guid; char device[256]; } endpoints[64];
 static unsigned endpoint_count;
 
-static void remember_endpoint(const wine_guid *guid, const char *device) {
+// True the first time an endpoint is seen with this device.
+static bool remember_endpoint(const wine_guid *guid, const char *device) {
+    bool fresh = false;
     unsigned i;
-    if (!guid || !device || strlen(device) >= sizeof(endpoints[0].device)) return;
+    if (!guid || !device || strlen(device) >= sizeof(endpoints[0].device)) return false;
     pthread_mutex_lock(&mgf_lock);
     for (i = 0; i < endpoint_count && memcmp(&endpoints[i].guid, guid, sizeof(*guid)); i++);
-    if (i < COUNT_OF(endpoints)) {
+    if (i < COUNT_OF(endpoints) && (i == endpoint_count || strcmp(endpoints[i].device, device))) {
         endpoints[i].guid = *guid;
         strcpy(endpoints[i].device, device);
         if (i == endpoint_count) endpoint_count++;
+        fresh = true;
     }
     pthread_mutex_unlock(&mgf_lock);
+    return fresh;
 }
 
 // "{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}" in UTF-16.
@@ -858,7 +863,14 @@ static uint32_t get_prop_value(void *args) {
         container_request(args);
         return 0;
     }
-    remember_endpoint(params->guid, params->device);
+    if (*(const void **)args == &mgf_log_request_tag) {
+        const struct mgf_log_request *line = args;
+        pad_log("controls: %s (%llx)\n", line->text, (unsigned long long)line->value);
+        return 0;
+    }
+    // Engine patch 0009 (endpoints.c): the endpoint is listed in SetupAPI, with its container.
+    if (remember_endpoint(params->guid, params->device))
+        mgf_endpoint_listed(params->guid, params->flow, usb_container(params->device, &container) ? &container : NULL);
     if (!memcmp(params->prop, &container_key, sizeof(container_key)) && usb_container(params->device, &container)) {
         if (*params->buffer_size < sizeof(container)) {
             params->result = E_NOT_SUFFICIENT_BUFFER;
