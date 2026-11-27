@@ -72,7 +72,8 @@ static const unsigned char FUNCTION[] = {
 
 // ntdll.so is built for the host ABI, not ms_abi.
 typedef NTSTATUS (*map_fn)(HANDLE section, HANDLE process, void **addr, uintptr_t zero_bits, size_t commit,
-                           const int64_t *offset, size_t *size, uint32_t inherit, uint32_t type, uint32_t protect);
+                           const int64_t *offset, size_t *size, uint32_t inherit, mgf_stack_u32 type,
+                           mgf_stack_u32 protect);
 typedef NTSTATUS (*alloc_fn)(HANDLE process, void **addr, uintptr_t zero_bits, size_t *size, uint32_t type,
                              uint32_t protect);
 typedef NTSTATUS (*protect_fn)(HANDLE process, void **addr, size_t *size, uint32_t prot, uint32_t *old);
@@ -208,7 +209,8 @@ static void add_name(uint8_t *base, uint32_t image_size, struct export_directory
 }
 
 static NTSTATUS map_hook(HANDLE section, HANDLE process, void **addr, uintptr_t zero_bits, size_t commit,
-                         const int64_t *offset, size_t *size, uint32_t inherit, uint32_t type, uint32_t protect_) {
+                         const int64_t *offset, size_t *size, uint32_t inherit, mgf_stack_u32 type,
+                         mgf_stack_u32 protect_) {
     NTSTATUS status = real_map(section, process, addr, zero_bits, commit, offset, size, inherit, type, protect_);
     if (status >= 0 && process == CURRENT_PROCESS && addr && *addr && !__atomic_load_n(&done, __ATOMIC_RELAXED)) {
         uint32_t image_size, dir_size;
@@ -235,9 +237,9 @@ static void arm(const struct mach_header_64 *mh, intptr_t slide, const char *ima
         api->log(TAG, "ntdll.so lacks a memory function this uses, not armed");
         return;
     }
-    int refs = api->count_pointers(mh, slide, map, &slot);
-    if (refs != 1) {
-        api->log(TAG, "%d syscall table entries point at NtMapViewOfSection instead of 1, not armed", refs);
+    // What the entry holds: the function, or the thunk to it (FEX side), which the hook chains to.
+    if (!(slot = mgf_syscall_slot(api, mh, slide, "_NtMapViewOfSection", &map))) {
+        api->log(TAG, "no one syscall table entry for NtMapViewOfSection, not armed");
         return;
     }
     real_map = (map_fn)map;

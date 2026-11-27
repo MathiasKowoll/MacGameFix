@@ -67,7 +67,8 @@ typedef NTSTATUS (*alloc_fn)(HANDLE process, void **addr, uintptr_t zero_bits, s
 typedef NTSTATUS (*alloc_ex_fn)(HANDLE process, void **addr, size_t *size, uint32_t type, uint32_t protect,
                                 mem_extended_parameter *params, uint32_t count);
 typedef NTSTATUS (*map_fn)(HANDLE section, HANDLE process, void **addr, uintptr_t zero_bits, size_t commit,
-                           const int64_t *offset, size_t *size, uint32_t inherit, uint32_t type, uint32_t protect);
+                           const int64_t *offset, size_t *size, uint32_t inherit, mgf_stack_u32 type,
+                           mgf_stack_u32 protect);
 typedef NTSTATUS (*query_section_fn)(HANDLE section, int info_class, void *info, size_t len, size_t *ret_len);
 typedef NTSTATUS (*map_ex_fn)(HANDLE section, HANDLE process, void **addr, const int64_t *offset, size_t *size,
                               uint32_t type, uint32_t protect, mem_extended_parameter *params, uint32_t count);
@@ -158,7 +159,8 @@ static NTSTATUS alloc_ex_hook(HANDLE process, void **addr, size_t *size, uint32_
 }
 
 static NTSTATUS map_hook(HANDLE section, HANDLE process, void **addr, uintptr_t zero_bits, size_t commit,
-                         const int64_t *offset, size_t *size, uint32_t inherit, uint32_t type, uint32_t protect) {
+                         const int64_t *offset, size_t *size, uint32_t inherit, mgf_stack_u32 type,
+                         mgf_stack_u32 protect) {
     // NtMapViewOfSectionEx has no commit size or inheritance: only a request that leaves both
     // at what it uses (none, and ViewShare = 1) is asked low through it.
     if (!zero_bits && !commit && inherit == 1 && wants_low(process, addr, type) && size && !is_image(section)) {
@@ -199,19 +201,15 @@ static NTSTATUS map_ex_hook(HANDLE section, HANDLE process, void **addr, const i
     return real_map_ex(section, process, addr, offset, size, type, protect, params, count);
 }
 
-// The syscall table's one entry for a function, or NULL.
+// The syscall table's one entry for a function, or NULL. *fn gets what the entry holds: the
+// function, or the thunk to it (FEX side), which the hook chains to.
 static uintptr_t *entry(const struct mach_header_64 *mh, intptr_t slide, const char *name, uintptr_t *fn) {
-    uintptr_t *slot = NULL;
-    *fn = api->symbol(mh, slide, name);
-    if (!*fn) {
+    if (!api->symbol(mh, slide, name)) {
         api->log(TAG, "ntdll.so has no %s, not armed", name);
         return NULL;
     }
-    int refs = api->count_pointers(mh, slide, *fn, &slot);
-    if (refs != 1) {
-        api->log(TAG, "%d syscall table entries point at %s instead of 1, not armed", refs, name);
-        return NULL;
-    }
+    uintptr_t *slot = mgf_syscall_slot(api, mh, slide, name, fn);
+    if (!slot) api->log(TAG, "no one syscall table entry for %s, not armed", name + 1);
     return slot;
 }
 
