@@ -5,9 +5,11 @@
 // library into every process of a game whose row is on, winedevice.exe included (it gets the
 // game's environment): when winebus.so is loaded this takes its IOKit calls (bus.c), and when
 // winecoreaudio.so is, its CoreAudio calls (audio.c). What engine patches 0004-0016 and 0030 do
-// inside those two files is done from here, by the game's settings in Game Feel (pad.d). Their
-// Windows halves (winebus.sys, hidclass, xinput, mmdevapi, setupapi, xaudio2) are still the Wine
-// modules' own.
+// inside those two files is done from here, by the game's settings in Game Feel (pad.d).
+//
+// The Windows side moves here too, module by module (pe.h): setupapi.dll's is done (setupapi.c).
+// winebus.sys, hidclass.sys, xinput, mmdevapi.dll and xaudio2 are still the Wine modules' own
+// files in the runner.
 //
 // Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 // SPDX-License-Identifier: LGPL-2.1-or-later
@@ -15,10 +17,12 @@
 #include <mach-o/getsect.h>
 #include <mach-o/loader.h>
 #include "pad.h"
+#include "pe.h"
 #include "../../app/notproton-plugins/notproton_plugin.h"
 
 void mgf_controls_bus_arm(const struct np_plugin_api *api, const struct mach_header_64 *mh, intptr_t slide);
 void mgf_controls_audio_arm(const struct np_plugin_api *api, const struct mach_header_64 *mh, intptr_t slide);
+void mgf_controls_setupapi(void);
 
 static const struct np_plugin_api *api;
 
@@ -43,11 +47,19 @@ static void bus_loaded(const struct mach_header_64 *mh, intptr_t slide, const ch
     if (!ours(mh, "winebus.so")) mgf_controls_bus_arm(api, mh, slide);
 }
 
+// The Windows side (pe.h): each part says which module it changes, then NtMapViewOfSection is taken.
+static void ntdll_loaded(const struct mach_header_64 *mh, intptr_t slide, const char *path) {
+    (void)path;
+    mgf_controls_setupapi();
+    pe_arm(api, mh, slide);
+}
+
 __attribute__((constructor)) static void mgf_controls_init(void) {
     if (!(api = np_plugin_api())) {
         pad_log("controls: plugin-host.dylib isn't loaded, the controls are not armed\n");
         return;
     }
+    api->on_first_image("ntdll.so", "-unix/", ntdll_loaded);
     api->on_first_image("winebus.so", "-unix/", bus_loaded);
     api->on_first_image("winecoreaudio.so", "-unix/", audio_loaded);
 }
