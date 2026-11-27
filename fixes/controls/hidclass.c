@@ -13,10 +13,10 @@
 //                  as to everyone else (xinput.c lets xinput read it).
 //
 // hidclass registers and switches a device's interface with two of ntoskrnl.exe's exports, and
-// announces the device to raw input through one of win32u.dll's. When hidclass.sys is mapped,
-// those three exports are pointed at functions here (run as Windows code, windows.h), so that
-// hidclass.sys, and the drivers loaded after it, are bound to them; they act for hidclass.sys
-// alone, told by the return address:
+// announces the device to raw input through one of win32u.dll's. Before the loader binds
+// hidclass.sys's imports, those three exports are pointed at functions here (run as Windows code,
+// windows.h), so that hidclass.sys, and what is loaded after it, are bound to them; they act for
+// hidclass.sys alone, told by the return address:
 //   IoRegisterDeviceInterface  after the HID interface of a collection that is one of the two
 //                              above, the WINEXINPUT one is registered for the same device
 //   IoSetDeviceInterfaceState  and switched with it; the motors-only collection's HID interface
@@ -191,34 +191,49 @@ static WINAPI uintptr_t hwnd_param(void *window, uintptr_t param, uint32_t code)
 
 // ---- Run on the macOS side, as the modules are mapped.
 
+// The three exports are taken once CodeWeavers' hidclass.sys has been seen and the module that has
+// them is mapped, whichever comes last: in winedevice.exe ntoskrnl.exe is there long before
+// hidclass.sys, and win32u.dll comes after it, as one of the modules hidclass.sys itself needs
+// (found in a game on 2026-11-27, where the first version waited for both to be there first and
+// armed nothing). Either way it is before the loader binds hidclass.sys's imports, which it does
+// when everything hidclass.sys needs has been mapped.
 static struct pe_image ntoskrnl, win32u;
+static bool hidclass_seen;
 
-static void ntoskrnl_mapped(const struct pe_image *image) { ntoskrnl = *image; }
-static void win32u_mapped(const struct pe_image *image) { win32u = *image; }
+static void arm(void) {
+    static int told;
+    if (!hidclass_seen) return;
+    if (ntoskrnl.base && !real_register &&
+        (!pe_take_export(&ntoskrnl, "IoRegisterDeviceInterface", register_interface, (void **)&real_register) ||
+         !pe_take_export(&ntoskrnl, "IoSetDeviceInterfaceState", set_state, (void **)&real_set_state)))
+        pad_log("controls: ntoskrnl.exe's exports could not be pointed elsewhere, xinput may not find the pad\n");
+    if (win32u.base && !real_hwnd_param &&
+        !pe_take_export(&win32u, "NtUserCallHwndParam", hwnd_param, (void **)&real_hwnd_param))
+        pad_log("controls: win32u.dll's export could not be pointed elsewhere, the collection with motors alone "
+                "is announced to raw input\n");
+    if (real_register && real_set_state && real_hwnd_param && !__atomic_exchange_n(&told, 1, __ATOMIC_RELAXED))
+        pad_log("controls: hidclass.sys offers a pad's collection with motors to xinput\n");
+}
+
+static void ntoskrnl_mapped(const struct pe_image *image) {
+    ntoskrnl = *image;
+    arm();
+}
+
+static void win32u_mapped(const struct pe_image *image) {
+    win32u = *image;
+    arm();
+}
 
 static void hidclass_mapped(const struct pe_image *image) {
-    static int told;
-
     if (pe_has_text(image, "offered to xinput")) {
         pad_log("controls: hidclass.sys is MacGameFix's own here, which does this itself: left alone\n");
         return;
     }
-    if (!real_register) {
-        if (!ntoskrnl.base || !win32u.base) {
-            pad_log("controls: ntoskrnl.exe or win32u.dll was not seen before hidclass.sys, it is left as it is\n");
-            return;
-        }
-        if (!pe_take_export(&ntoskrnl, "IoRegisterDeviceInterface", register_interface, (void **)&real_register) ||
-            !pe_take_export(&ntoskrnl, "IoSetDeviceInterfaceState", set_state, (void **)&real_set_state) ||
-            !pe_take_export(&win32u, "NtUserCallHwndParam", hwnd_param, (void **)&real_hwnd_param)) {
-            pad_log("controls: an export hidclass.sys calls could not be pointed elsewhere, xinput may not find the pad\n");
-            return;
-        }
-    }
     hidclass_end = (uintptr_t)image->base + image->size;
     hidclass_start = (uintptr_t)image->base;
-    if (!__atomic_exchange_n(&told, 1, __ATOMIC_RELAXED))
-        pad_log("controls: hidclass.sys offers a pad's collection with motors to xinput\n");
+    hidclass_seen = true;
+    arm();
 }
 #endif
 
