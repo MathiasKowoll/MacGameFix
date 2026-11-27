@@ -160,28 +160,35 @@ WINDOW_PE=""; [ -z "$suffix" ] && [ "${WINDOW_MODULES:-}" = yes ] && WINDOW_PE="
   || { tail -30 "$BUILD/make.log"; exit 1; }
 
 # win32u.so, built as CodeWeavers build theirs: with FreeType and Vulkan (MoltenVK), which it
-# opens by name when it runs (libfreetype.6.dylib, libMoltenVK.dylib). The build directory
-# above is configured without them, for the modules it makes, so win32u gets one of its own
-# from the same tree. FreeType's headers are the CrossOver sources' own, beside Wine's; the
-# two libraries are only for configure's link tests, from a CrossOver of this build
-# (CROSSOVER_LIB, its CrossOver/lib folder; a NotProton runner of this build by default),
-# copied to a path without spaces, which Wine's build system does not survive.
+# opens by name when it runs (libfreetype.6.dylib, libMoltenVK.dylib; CrossOver 26.3's opens
+# libfreetype.dylib, a link to the same file, and FREETYPE_SONAME in its build.conf says so).
+# The build directory above is configured without them, for the modules it makes, so win32u
+# gets one of its own from the same tree. FreeType's headers are the CrossOver sources' own,
+# beside Wine's; the two libraries are only for configure's link tests, from a CrossOver of
+# this build (CROSSOVER_LIB, its CrossOver/lib folder, or CrossOver/lib64 for 26.3, which
+# keeps its libraries there; a NotProton runner of this build by default), copied to a path
+# without spaces, which Wine's build system does not survive.
 WIN32U_SO=""
 if [ -n "$PROTECTION_PE" ]; then
   LIBSIDE=x86_64; [ "$CPU" = arm64 ] && LIBSIDE=aarch64
+  FREETYPE_SONAME="${FREETYPE_SONAME:-libfreetype.6.dylib}"
   CXLIB="${CROSSOVER_LIB:-}"
   if [ -z "$CXLIB" ]; then
     for r in "$HOME/Library/Application Support/notproton/runners/crossover-$ID-fex" "$HOME/Library/Application Support/notproton/runners/crossover-$ID"; do
       [ -d "$r/CrossOver/lib/$LIBSIDE" ] && { CXLIB="$r/CrossOver/lib"; break; }
+      [ "$LIBSIDE" = x86_64 ] && [ -f "$r/CrossOver/lib64/libfreetype.6.dylib" ] && { CXLIB="$r/CrossOver/lib64"; break; }
     done
   fi
-  FT_INCLUDE="$(dirname "$SRC")/freetype/include"
-  [ -f "$CXLIB/$LIBSIDE/libfreetype.6.dylib" ] && [ -f "$CXLIB/$LIBSIDE/libMoltenVK.dylib" ] \
-    || { echo "no libfreetype.6.dylib and libMoltenVK.dylib of CrossOver $ID for $LIBSIDE (set CROSSOVER_LIB to its CrossOver/lib)"; exit 1; }
+  # The side's own folder (lib/x86_64), or lib64 itself, which holds the Intel side's.
+  CXSIDE="$CXLIB/$LIBSIDE"; [ -d "$CXSIDE" ] || CXSIDE="$CXLIB"
+  # FREETYPE_INCLUDE when the Wine tree was extracted without its FreeType beside it.
+  FT_INCLUDE="${FREETYPE_INCLUDE:-$(dirname "$SRC")/freetype/include}"
+  [ -f "$CXSIDE/libfreetype.6.dylib" ] && [ -f "$CXSIDE/libMoltenVK.dylib" ] \
+    || { echo "no libfreetype.6.dylib and libMoltenVK.dylib of CrossOver $ID for $LIBSIDE (set CROSSOVER_LIB to its CrossOver/lib, or lib64)"; exit 1; }
   [ -f "$FT_INCLUDE/ft2build.h" ] || { echo "FreeType's headers are not at $FT_INCLUDE"; exit 1; }
   WLIBS="$here/.build/libs-$ID-$LIBSIDE"; WBUILD="$here/.build/build-$ID-$ARCH-win32u"
   mkdir -p "$WLIBS"
-  cp "$CXLIB/$LIBSIDE/libfreetype.6.dylib" "$CXLIB/$LIBSIDE/libMoltenVK.dylib" "$WLIBS/"
+  cp "$CXSIDE/libfreetype.6.dylib" "$CXSIDE/libMoltenVK.dylib" "$WLIBS/"
   ln -sf libfreetype.6.dylib "$WLIBS/libfreetype.dylib"
   if [ ! -f "$WBUILD/Makefile" ]; then
     echo "==> configuring $ARCH for win32u.so in $(basename "$WBUILD") (log: $WBUILD/configure.log)"
@@ -193,12 +200,12 @@ if [ -n "$PROTECTION_PE" ]; then
       --without-opencl --without-pcap --without-usb --without-v4l2 --without-sane --without-capi \
       --without-gphoto --without-netapi --without-pulse --without-alsa --without-oss --without-udev \
       $UNWIND_FLAG --without-ffmpeg --without-inotify \
-      FREETYPE_CFLAGS="-I$FT_INCLUDE" FREETYPE_LIBS="-L$WLIBS -lfreetype" \
+      FREETYPE_CFLAGS="-I$FT_INCLUDE" FREETYPE_LIBS="-L$WLIBS -lfreetype" ac_cv_lib_soname_freetype="$FREETYPE_SONAME" \
       SDL2_CFLAGS="-I$SDL2_INCLUDE -D_THREAD_SAFE" ac_cv_lib_soname_SDL2=libSDL2-2.0.0.dylib \
       ac_cv_func_pipe2=no \
       >"$WBUILD/configure.log" 2>&1) || { tail -20 "$WBUILD/configure.log"; exit 1; }
   fi
-  grep -q 'SONAME_LIBFREETYPE "libfreetype.6.dylib"' "$WBUILD/include/config.h" && grep -q 'SONAME_LIBVULKAN "libMoltenVK.dylib"' "$WBUILD/include/config.h" \
+  grep -q "SONAME_LIBFREETYPE \"$FREETYPE_SONAME\"" "$WBUILD/include/config.h" && grep -q 'SONAME_LIBVULKAN "libMoltenVK.dylib"' "$WBUILD/include/config.h" \
     || { echo "win32u.so would be built without FreeType or MoltenVK: see $WBUILD/include/config.h"; exit 1; }
   echo "==> building win32u.so for $ARCH (log: $WBUILD/make.log)"
   (cd "$WBUILD" && make -j10 dlls/win32u/all >"$WBUILD/make.log" 2>&1) || { tail -30 "$WBUILD/make.log"; exit 1; }
