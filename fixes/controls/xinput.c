@@ -85,7 +85,7 @@ static struct sony_pad {
     int32_t y_min, y_max, rz_min, rz_max, hat_min, hat_max;
 } sony_pads[8];
 
-// ---- Run as Windows code: nothing below calls out of this file, except through pointers.
+// ---- Run as Windows code (windows.h).
 
 static bool from_xinput(uintptr_t caller) {
     for (unsigned i = 0; i < 8; i++)
@@ -125,12 +125,15 @@ static WINAPI uint8_t get_preparsed(void *device, void **preparsed) {
         !range_of(*preparsed, HID_USAGE_RZ, &pad.rz_min, &pad.rz_max))
         return got;
     range_of(*preparsed, HID_USAGE_HAT, &pad.hat_min, &pad.hat_max);
-    for (unsigned i = 0; i < 8; i++) {
+    for (unsigned i = 0; i < COUNT_OF(sony_pads); i++) {
         void *none = NULL;
         if (__atomic_compare_exchange_n(&sony_pads[i].preparsed, &none, (void *)1, false, __ATOMIC_SEQ_CST,
                                         __ATOMIC_SEQ_CST)) {
+            static int told;
             pad.preparsed = *preparsed;
             sony_pads[i] = pad;
+            if (!__atomic_exchange_n(&told, 1, __ATOMIC_RELAXED))
+                win_log("xinput: a Sony pad's own descriptor is read in Sony's order, product", attributes.product);
             break;
         }
     }
@@ -194,17 +197,8 @@ static WINAPI int32_t usages(int type, uint16_t page, uint16_t collection, uint1
 
 // ---- Run on the macOS side, as the modules are mapped.
 
-static bool has_text(const struct pe_image *image, const char *text) {
-    uint8_t *start;
-    uint32_t size;
-    bool code;
-    for (unsigned i = 0; pe_section(image, i, &start, &size, &code); i++)
-        if (!code && size && memmem(start, size, text, strlen(text))) return true;
-    return false;
-}
-
 static void xinput_mapped(const struct pe_image *image) {
-    if (has_text(image, "Sony's axis and button order")) {
+    if (pe_has_text(image, "Sony's axis and button order")) {
         pad_log("controls: this xinput is MacGameFix's own, which reads a Sony pad itself: not translated for\n");
         return;
     }
@@ -225,36 +219,17 @@ static void hid_mapped(const struct pe_image *image) {
         {"HidP_GetUsageValue", usage_value, (void **)&real_usage_value},
         {"HidP_GetUsages", usages, (void **)&real_usages},
     };
-    enum { COUNT = sizeof(taken) / sizeof(taken[0]), JUMP = 12 };
     static int told;
-    uint8_t *found[COUNT], *room;
 
     get_attributes = (get_attributes_fn)pe_export(image, "HidD_GetAttributes");
     specific_caps = (specific_caps_fn)pe_export(image, "HidP_GetSpecificValueCaps");
-    for (unsigned i = 0; i < COUNT; i++) found[i] = pe_export(image, taken[i].name);
-    for (unsigned i = 0; i < COUNT; i++)
-        if (!found[i] || !get_attributes || !specific_caps) {
+    for (unsigned i = 0; i < COUNT_OF(taken); i++)
+        if (!get_attributes || !specific_caps || !pe_export(image, taken[i].name)) {
             pad_log("controls: hid.dll lacks an export xinput's translation needs, left as it is\n");
             return;
         }
-    if (!(room = pe_room(image, COUNT * JUMP))) {
-        pad_log("controls: no memory free within 4 GB above hid.dll, left as it is\n");
-        return;
-    }
-    // An export's entry reaches 4 GB above the image, so each goes through a jump in memory there:
-    // mov rax, <the function here>; jmp rax.
-    for (unsigned i = 0; i < COUNT; i++) {
-        uint8_t jump[JUMP] = {0x48, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xe0};
-        memcpy(jump + 2, &taken[i].with, 8);
-        memcpy(room + i * JUMP, jump, JUMP);
-        *taken[i].real = found[i];
-    }
-    if (!pe_runs(room, COUNT * JUMP)) {
-        pad_log("controls: hid.dll could not be written, left as it is\n");
-        return;
-    }
-    for (unsigned i = 0; i < COUNT; i++)
-        if (!pe_point_export(image, taken[i].name, room + i * JUMP)) {
+    for (unsigned i = 0; i < COUNT_OF(taken); i++)
+        if (!pe_take_export(image, taken[i].name, taken[i].with, taken[i].real)) {
             pad_log("controls: hid.dll's %s could not be pointed elsewhere\n", taken[i].name);
             return;
         }
@@ -268,7 +243,7 @@ void mgf_controls_xinput(void) {
     static const char *const dlls[] = {"xinput1_1.dll", "xinput1_2.dll", "xinput1_3.dll",
                                        "xinput1_4.dll", "xinput9_1_0.dll", "xinputuap.dll"};
     if (pad_part_off("xinput")) return;
-    for (unsigned i = 0; i < sizeof(dlls) / sizeof(dlls[0]); i++) pe_on_map(dlls[i], xinput_mapped);
+    for (unsigned i = 0; i < COUNT_OF(dlls); i++) pe_on_map(dlls[i], xinput_mapped);
     pe_on_map("hid.dll", hid_mapped);
 #endif
 }

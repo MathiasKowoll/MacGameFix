@@ -20,6 +20,7 @@
 #include <pthread.h>
 #include <sys/stat.h>
 #include <mach/mach.h>
+#include "nt.h"
 #include <mach/mach_time.h>
 #include <mach/thread_policy.h>
 
@@ -51,6 +52,16 @@ float pad_number(const char *s);
 uint64_t pad_ticks(double seconds);
 double pad_seconds(uint64_t ticks);
 void pad_realtime(double period, double constraint);
+
+#define COUNT_OF(a) (sizeof(a) / sizeof((a)[0]))
+
+// Between the parts.
+// endpoints.c: an endpoint mmdevapi has just asked about (flow 0 render, 1 capture) is listed in
+// SetupAPI, with `container`, or with the computer's when it has none of its own.
+void mgf_endpoint_listed(const wine_guid *guid, int flow, const wine_guid *container);
+// audio.c: the container of the audio endpoint a function run as Windows code asks about.
+struct mgf_container_request;
+void mgf_audio_container(struct mgf_container_request *request);
 
 #define XINPUT_RUMBLE 1  // xinput=rumble: XInput's vibration on the pad's motors
 #define XINPUT_PAD    2  // xinput=pad: the pad itself an XInput controller

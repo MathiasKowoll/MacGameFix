@@ -10,7 +10,6 @@
 #include "pad.h"
 #include "dualshock4.h"
 
-#define COUNT_OF(a) (sizeof(a) / sizeof((a)[0]))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 

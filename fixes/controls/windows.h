@@ -1,13 +1,15 @@
 // For the functions of this library that the game runs as Windows code: a COM method or an
-// export pointed at a function here (mmdevapi.c, xaudio2.c).
+// export pointed at a function here (mmdevapi.c, xaudio2.c, xinput.c, hidclass.c).
 //
 // Such a function runs on one of the game's own threads, on its stack, and on some of Wine's
 // builds with the Windows thread block in gs, where macOS keeps its own thread data. So it calls
-// nothing of macOS, not even the C library: it keeps to memory it is handed and to Windows functions, reached through pointers
-// (WINAPI is their calling convention). These helpers are all it has; they only read memory.
+// nothing of macOS, not even the C library: it keeps to memory it is handed and to Windows
+// functions, reached through pointers (WINAPI is their calling convention). These helpers are all
+// it has. They only read memory, but for win_call, which is how such a function reaches the macOS
+// side of the library when it needs it.
 //
-// They have no Windows unwind data, as nothing here has: an exception raised in a Windows
-// function called from one of them could not unwind through it.
+// None of this has Windows unwind data: an exception raised in a Windows function called from
+// one of these could not unwind through it.
 //
 // Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 // SPDX-License-Identifier: LGPL-2.1-or-later
@@ -17,25 +19,56 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdint.h>
-#include "mmdevapi.h"
+#include "nt.h"
+
+// What win_call asks of the macOS side, each with what `data` points at (mgf-controls.c answers).
+#define MGF_CALL_LOG 1        // struct mgf_log_line: a line for pad.log
+#define MGF_CALL_CONTAINER 2  // struct mgf_container_request: an audio endpoint's container (audio.c)
+struct mgf_log_line {
+    const char *text;
+    uint64_t value;  // printed after the text, in hexadecimal
+};
+struct mgf_container_request {
+    uint16_t *endpoint;  // the endpoint's GUID as text, "{...}"; when found, its container instead: 16 bytes
+    int found;
+};
+// The registry key no key is: a call to set a value of it is a call for this library, which
+// container.c, holding NtSetValueKey's entry, hands to mgf_windows_call.
+#define MGF_CALL_KEY ((HANDLE)(uintptr_t)0x4d474643)
+NTSTATUS mgf_windows_call(uint32_t kind, void *data);
 
 #if defined(__x86_64__)
 #define WINAPI __attribute__((ms_abi))
 
-// The image an address is in: it starts at the nearest 64 KB boundary below that holds a PE
-// header. NULL when none is found within 32 MB.
-static inline const uint8_t *win_image_of(uintptr_t address) {
-    const uint8_t *base = (const uint8_t *)(address & ~(uintptr_t)0xffff);
-    for (unsigned i = 0; i < 0x200; i++, base -= 0x10000) {
-        if (base[0] != 'M' || base[1] != 'Z') continue;
-        uint32_t nt = *(const uint32_t *)(base + 0x3c);
-        if (nt < 0x1000 - 0x108 && *(const uint32_t *)(base + nt) == 0x4550) return base;
+// The calling thread's block. It is reached through its own address, which it keeps at 0x30, as
+// Windows code reaches it: that one slot holds whether gs is the block itself or macOS's thread
+// data with the block's address put there (CodeWeavers' Wine under Rosetta, where reading the
+// thread id from gs directly gave 0, 2026-11-27).
+static inline const uint8_t *win_thread_block(void) {
+    const uint8_t *block;
+    __asm__("movq %%gs:0x30, %0" : "=r"(block));
+    return block;
+}
+
+static inline uint32_t win_thread(void) { return *(const uint32_t *)(win_thread_block() + 0x48); }
+
+// A module the process has loaded, by its file's name ("ntdll.dll"), from the loader's own list:
+// where its image starts, or NULL.
+static inline const uint8_t *win_module(const char *name) {
+    const uint8_t *peb = *(const uint8_t *const *)(win_thread_block() + 0x60);
+    const uint8_t *loader = *(const uint8_t *const *)(peb + 0x18);
+    const uint8_t *head = loader + 0x10, *entry = *(const uint8_t *const *)head;
+    // Each entry: the list's links, the image's start at 0x30, its file's name at 0x58.
+    for (unsigned i = 0; i < 1024 && entry && entry != head; i++, entry = *(const uint8_t *const *)entry) {
+        const struct unicode_string *base_name = (const struct unicode_string *)(entry + 0x58);
+        unsigned chars = base_name->length / 2, c = 0;
+        while (c < chars && name[c] && (base_name->buffer[c] | 0x20) == (uint16_t)(name[c] | 0x20)) c++;
+        if (c == chars && !name[c]) return *(const uint8_t *const *)(entry + 0x30);
     }
     return NULL;
 }
 
-// Where an image's export is, by name: code or data. NULL when it has none by that name, or
+// Where a module's export is, by name: code or data. NULL when it has none by that name, or
 // forwards it to another module.
 static inline void *win_export(const uint8_t *base, const char *wanted) {
     if (!base) return NULL;
@@ -57,41 +90,31 @@ static inline void *win_export(const uint8_t *base, const char *wanted) {
     return NULL;
 }
 
-// The calling thread's id, from its thread block. The block is reached through its own address,
-// which it keeps at 0x30, as Windows code reaches it: that one slot holds whether gs is the block
-// itself or macOS's thread data with the block's address put there (CodeWeavers' Wine under
-// Rosetta, where reading 0x48 from gs directly gave 0, 2026-11-27).
-static inline uint32_t win_thread(void) {
-    const uint8_t *block;
-    __asm__("movq %%gs:0x30, %0" : "=r"(block));
-    return *(const uint32_t *)(block + 0x48);
+// The macOS side of the library asked for something (MGF_CALL_...): through ntdll.dll's
+// NtSetValueKey, a system call like any other, with the key that is none.
+static inline void win_call(uint32_t kind, void *data) {
+    NTSTATUS (WINAPI *set_value)(HANDLE key, void *name, uint32_t index, uint32_t type, const void *data,
+                                 uint32_t count) = win_export(win_module("ntdll.dll"), "NtSetValueKey");
+    if (set_value) set_value(MGF_CALL_KEY, NULL, 0, kind, data, 0);
 }
 
-// A line for pad.log: sent through Wine's unix call dispatcher, which ntdll.dll exports a pointer
-// to, to audio.c (mmdevapi.h). `ntdll` is any address inside ntdll.dll. Nothing is written where
-// audio.c has not taken winecoreaudio.so's calls.
-typedef int32_t (WINAPI *win_unix_call_fn)(uint64_t handle, uint32_t code, void *args);
-static inline win_unix_call_fn win_dispatcher(uintptr_t ntdll) {
-    win_unix_call_fn *exported = win_export(win_image_of(ntdll), "__wine_unix_call_dispatcher");
-    return exported ? *exported : NULL;
-}
-static inline void win_log(uintptr_t ntdll, const char *text, uint64_t value) {
-    struct mgf_log_request line = {&mgf_log_request_tag, text, value};
-    win_unix_call_fn dispatcher = mgf_audio_unix_handle ? win_dispatcher(ntdll) : NULL;
-    if (dispatcher) dispatcher(mgf_audio_unix_handle, UNIX_GET_PROP_VALUE, &line);
+static inline void win_log(const char *text, uint64_t value) {
+    struct mgf_log_line line = {text, value};
+    win_call(MGF_CALL_LOG, &line);
 }
 
 // A pointer in a page that may be read-only, written with ntdll.dll's NtProtectVirtualMemory.
-typedef int32_t (WINAPI *win_protect_fn)(void *process, void **address, size_t *size, uint32_t protection, uint32_t *old);
-static inline bool win_write_pointer(win_protect_fn protect, uintptr_t *slot, uintptr_t value) {
+static inline bool win_write_pointer(uintptr_t *slot, uintptr_t value) {
+    NTSTATUS (WINAPI *protect)(HANDLE process, void **address, size_t *size, uint32_t protection, uint32_t *old) =
+        win_export(win_module("ntdll.dll"), "NtProtectVirtualMemory");
     void *address = slot;
     size_t size = sizeof(*slot);
     uint32_t old;
-    if (!protect || protect((void *)(intptr_t)-1, &address, &size, 0x04 /* PAGE_READWRITE */, &old)) return false;
+    if (!protect || protect((HANDLE)(intptr_t)-1, &address, &size, 0x04 /* PAGE_READWRITE */, &old)) return false;
     *slot = value;
     address = slot;
     size = sizeof(*slot);
-    protect((void *)(intptr_t)-1, &address, &size, old, &old);
+    protect((HANDLE)(intptr_t)-1, &address, &size, old, &old);
     return true;
 }
 #endif

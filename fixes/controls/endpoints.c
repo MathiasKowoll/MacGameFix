@@ -29,32 +29,14 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "mmdevapi.h"
 #include "pad.h"
 #include "../../app/notproton-plugins/notproton_plugin.h"
-
-typedef int32_t NTSTATUS;
-typedef void *HANDLE;
 
 #define KEY_ALL_ACCESS 0xf003f
 #define OBJ_CASE_INSENSITIVE 0x40
 #define REG_OPTION_VOLATILE 1
 #define REG_CREATED_NEW_KEY 1
-#define REG_SZ 1
-#define REG_DWORD 4
 #define KeyBasicInformation 0
-
-struct unicode_string {
-    uint16_t length, maximum_length;  // in bytes
-    uint16_t *buffer;
-};
-struct object_attributes {
-    uint32_t length;
-    HANDLE root;
-    struct unicode_string *name;
-    uint32_t attributes;
-    void *security_descriptor, *security_quality_of_service;
-};
 
 // ntdll.so is built for the host ABI, not ms_abi.
 static NTSTATUS (*create_key)(HANDLE *key, uint32_t access, const struct object_attributes *attr, uint32_t title_index,

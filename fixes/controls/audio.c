@@ -30,8 +30,8 @@
 #include <mach-o/loader.h>
 #include <CoreAudio/CoreAudio.h>
 #include <AudioToolbox/AudioToolbox.h>
-#include "mmdevapi.h"
 #include "pad.h"
+#include "windows.h"
 #include "../../app/notproton-plugins/notproton_plugin.h"
 
 #define COUNT_OF(a) (sizeof(a) / sizeof((a)[0]))
@@ -768,6 +768,7 @@ struct get_prop_value_params {
     void *buffer;
     unsigned *buffer_size;
 };
+#define UNIX_GET_PROP_VALUE 29  // its index in winecoreaudio.so's __wine_unix_call_funcs
 #define E_NOT_SUFFICIENT_BUFFER ((int32_t)0x8007007a)
 
 static const struct property_key container_key = {{0x8c7ed206, 0x3f8a, 0x4827, {0xb3, 0xab, 0xae, 0x9e, 0x1f, 0xae, 0xfc, 0x6c}}, 2};
@@ -791,13 +792,9 @@ static bool usb_container(const char *device, wine_guid *guid) {
 static uint32_t (*real_get_prop_value)(void *);
 
 // Engine patch 0003, with mmdevapi.c: CodeWeavers' mmdevapi.dll never asks for an endpoint's
-// container, so mmdevapi.c asks it here, by the endpoint's GUID (mmdevapi.h). mmdevapi names an
-// endpoint's device in every question of its own, and asks one of each endpoint when it lists
-// them: the devices are kept by GUID from those.
-const char mgf_container_request_tag = 0;
-const char mgf_log_request_tag = 0;
-uintptr_t mgf_audio_unix_handle;
-
+// container, so mmdevapi.c asks it here, by the endpoint's GUID (mgf_audio_container). mmdevapi
+// names an endpoint's device in every question of its own, and asks one of each endpoint when it
+// lists them: the devices are kept by GUID from those.
 static struct { wine_guid guid; char device[256]; } endpoints[64];
 static unsigned endpoint_count;
 
@@ -841,7 +838,7 @@ static bool guid_of_text(const uint16_t *text, wine_guid *guid) {
     return true;
 }
 
-static void container_request(struct mgf_container_request *request) {
+void mgf_audio_container(struct mgf_container_request *request) {
     wine_guid endpoint, container;
     char device[256] = "";
 
@@ -859,15 +856,6 @@ static uint32_t get_prop_value(void *args) {
     struct get_prop_value_params *params = args;
     wine_guid container;
 
-    if (*(const void **)args == &mgf_container_request_tag) {
-        container_request(args);
-        return 0;
-    }
-    if (*(const void **)args == &mgf_log_request_tag) {
-        const struct mgf_log_request *line = args;
-        pad_log("controls: %s (%llx)\n", line->text, (unsigned long long)line->value);
-        return 0;
-    }
     // Engine patch 0009 (endpoints.c): the endpoint is listed in SetupAPI, with its container.
     if (remember_endpoint(params->guid, params->device))
         mgf_endpoint_listed(params->guid, params->flow, usb_container(params->device, &container) ? &container : NULL);
@@ -929,7 +917,6 @@ void mgf_controls_audio_arm(const struct np_plugin_api *api, const struct mach_h
         pad_log("controls: winecoreaudio.so's get_prop_value could not be taken, nothing is\n");
         return;
     }
-    mgf_audio_unix_handle = (uintptr_t)table;
     for (unsigned i = 0; i < COUNT; i++)
         if (!api->swap_pointer(slots[i], fns[i], (uintptr_t)hooks[i].replacement)) {
             pad_log("controls: winecoreaudio.so's %s could not be written, %u of %u taken\n", hooks[i].name, i,

@@ -25,6 +25,9 @@
 // has. A Bluetooth pad shown as wired gets its container the same way: bus.c gives it interface
 // number 3, and CodeWeavers' winebus.sys answers for a device with an interface number.
 //
+// Holding this entry, the hook is also where the functions the game runs as Windows code reach
+// the macOS side of the library: a value set on the key that is none (windows.h).
+//
 // Not covered: winebus.sys gives a second device at one location the index after it, so two HID
 // interfaces of one USB device would get two containers. A DualSense has one.
 //
@@ -34,18 +37,11 @@
 #include <stdint.h>
 #include <string.h>
 #include "pad.h"
+#include "windows.h"
 #include "../engine/mgf_hooks.h"
 
-typedef int32_t NTSTATUS;
-#define STATUS_SUCCESS ((NTSTATUS)0)
-#define REG_SZ 1
 #define KeyNameInformation 3
 #define GUID_CHARS 38  // {XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}
-
-struct unicode_string {
-    uint16_t length, maximum_length;  // in bytes
-    uint16_t *buffer;
-};
 
 // ntdll.so is built for the host ABI, not ms_abi.
 typedef NTSTATUS (*set_value_fn)(void *key, const struct unicode_string *name, uint32_t title_index, uint32_t type,
@@ -116,6 +112,8 @@ static NTSTATUS set_value_hook(void *key, const struct unicode_string *name, uin
     uint32_t first, hash, location;
     unsigned i;
 
+    // A call for the library from a function run as Windows code (windows.h), not a value.
+    if (key == MGF_CALL_KEY) return mgf_windows_call(type, (void *)data);
     if (type != REG_SZ || !name || !name->buffer || name->length != 11 * 2 || !is(name->buffer, 11, "containerid") ||
         !data || count < GUID_CHARS * 2 || count > (GUID_CHARS + 1) * 2 || text[0] != '{' || text[9] != '-' ||
         text[GUID_CHARS - 1] != '}' || !hex(text + 1, 8, &first))
