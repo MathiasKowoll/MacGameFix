@@ -16,10 +16,12 @@
 # sign-in, then stay forever in its blurred loading screen. With the proxy it
 # reaches PLEASE WAIT, Optimizing for your PC and the normal game load. The
 # companion ws2_32 proxy keeps FH5's Xbox UDP socket open for Horizon Life.
+# On NotProton's runner for CrossOver Preview 41303 it also gives the game a
+# NotProton row that keeps the Xbox sign-in page from closing it (below).
 #
 # MGVF-SCOPE: prefix
 # MGVF-GAME: Forza Horizon 5 | ForzaHorizon5.exe |
-# MGVF-WHY: After Xbox sign-in it never leaves the blurred loading screen: a source-built D3D12 proxy translates the NVIDIA-style descriptor layout Forza expects to D3DMetal and fills the D3D12 gaps it reaches; the Xbox UDP proxy keeps online play's socket open.
+# MGVF-WHY: After Xbox sign-in it never leaves the blurred loading screen: a source-built D3D12 proxy translates the NVIDIA-style descriptor layout Forza expects to D3DMetal and fills the D3D12 gaps it reaches; the Xbox UDP proxy keeps online play's socket open. On NotProton's CrossOver Preview 41303 runner it also keeps the Xbox sign-in page from closing the game.
 # MGVF-LOG: fh5-netfix.log
 # MGVF-CREDIT: xvferxedd, fh5-d3dmetal-fix (github.com/xvferxedd/fh5-d3dmetal-fix, no longer online) | https://github.com/Andytizer/fh5-crossover-steam-fix/tree/main/upstream/source
 # MGVF-CREDIT: Andytizer, who preserved it (fh5-crossover-steam-fix) | https://github.com/Andytizer/fh5-crossover-steam-fix
@@ -139,6 +141,47 @@ WV_ARG_KEY="Software\\Policies\\Microsoft\\Edge\\WebView2\\AdditionalBrowserArgu
 WV_ARG_NAME="ForzaHorizon5.exe"
 WV_ARG_DATA="--disable-features=CalculateNativeWinOcclusion"
 SIGNIN_STATE="$PFX/.mgf-fh5-signin"
+
+# THE SIGN-IN WINDOW'S ROW, on NotProton's runner for CrossOver Preview 41303
+# (Rosetta). The sign-in page is drawn by a WebView2 process into a window of
+# the game's. CodeWeavers' win32u.so flushes such a window's surface with a
+# message to the other process, and did so with the USER lock held when the
+# window's shape was set: Wine's check for that stopped the browser process,
+# and the game closed two seconds later (engine/README.md, "Forza Horizon 5:
+# the Xbox sign-in window"). The Wine modules' win32u.so has the fix in its
+# source (engine patch 0043), which a CrossOver app gets with Rosetta's
+# improvement; NotProton's shared runner keeps CodeWeavers' file, so there the
+# game gets a row of its own (np-plugin-fh5.conf): a patch of win32u.so in
+# memory, for this game alone. Only where NotProton has its plugin host and
+# every NotProton in Steam reads "patch"; elsewhere nothing changes.
+# With the row, the sign-in completed on 2026-11-26.
+ROWS_ON=0; ROWS_KNOWN=0
+if [ -f "$(dirname "$PFX")/notproton-build" ] && [ -d "$HOME/Library/Application Support/notproton" ] \
+   && [ -f "$HERE/notproton-plugins.sh" ] && [ -f "$HERE/np-plugin-fh5.conf" ] && [ -f "$HERE/steam-launch-options.pl" ]; then
+  . "$HERE/notproton-plugins.sh"
+  np_plugins_setup 1551360 "$PFX" "$HERE/np-plugin-fh5.conf"
+  ROWS_KNOWN=1
+  FH5_STEAM="${MGVF_STEAM_ROOT:-$HOME/Library/Application Support/Steam}"
+  fh5_runs=0; fh5_patch=1
+  for run in "$FH5_STEAM"/compatibilitytools.d/notproton-*/run; do
+    [ -f "$run" ] || continue
+    fh5_runs=1
+    LC_ALL=C /usr/bin/grep -q 'split("label description.* patch ' "$run" || fh5_patch=0
+    # The group "MacGameFix" where NotProton knows groups, as the shared rows.
+    LC_ALL=C /usr/bin/grep -qF 'names[i] == "group"' "$run" && NP_SHARED_GROUP="MacGameFix"
+  done
+  case "${MGVF_NOTPROTON_GROUPS:-}" in 0) NP_SHARED_GROUP="" ;; 1) NP_SHARED_GROUP="MacGameFix" ;; esac
+  # notproton-build: the runner's build, then what it runs on ("... - Rosetta" or "... - FEX").
+  fh5_build=""; fh5_side=""
+  { IFS= read -r fh5_build || true; IFS= read -r fh5_side || true; } < "$(dirname "$PFX")/notproton-build"
+  case "$fh5_build" in 27.0.0.41303|27.0.0.41303-fex)
+    case "$fh5_side" in *Rosetta*)
+      [ -f "$NP_SUPPORT/plugin-host.dylib" ] && [ "$fh5_runs" = 1 ] && [ "$fh5_patch" = 1 ] && ROWS_ON=1 ;;
+    esac ;;
+  esac
+fi
+# The row's files and its first switch only: a row the player switched off is not a broken fix.
+rows_ok() { [ "$ROWS_ON" = 0 ] || [ "$(np_plugins_status 2>/dev/null | tail -1)" = installed ]; }
 
 [ -f "$PROXY" ] || { echo "error: d3d12-fh5.dll is not beside this installer" >&2; exit 1; }
 [ -x "$NET_INSTALLER" ] && [ -f "$NET_PROXY" ] || {
@@ -299,8 +342,11 @@ status() {
   read -r pieces total < <(d3d_parts)
   net="$(net_status || true)"
   echo "looking at $PFX and $RUNNER"
-  if [ "$pieces" -eq "$total" ] && [ "$net" = installed ]; then
+  if [ "$pieces" -eq "$total" ] && [ "$net" = installed ] && rows_ok; then
     echo installed
+  elif [ "$pieces" -eq "$total" ] && [ "$net" = installed ]; then
+    echo "Why: NotProton's Xbox sign-in window row is not in place, or was never switched on: quit Steam and install again" >&2
+    echo half
   elif [ "$pieces" -gt 0 ] || [ "$net" = installed ] || [ "$net" = half ]; then
     echo "Why: $pieces of $total D3D parts are in place; network fix is ${net:-absent}" >&2
     echo half
@@ -376,6 +422,9 @@ case "$MODE" in
       [ -L "$cu" ] && [ "$(readlink "$cu")" = "../../$CLONE_BACKEND/wine/x86_64-unix/d3d12.so" ] && rm -f "$cu"
     fi
     drop_owner
+    if [ "$ROWS_KNOWN" = 1 ] && { [ -f "$NP_CONF" ] || [ -f "$NP_SWITCHED" ] || [ -f "$NP_JOURNAL" ]; }; then
+      np_plugins_restore || net_rc=1
+    fi
     echo "restored the game's D3D12 path and the FH5 network fix"
     [ "$net_rc" = 0 ] || exit "$net_rc"
     echo restored
@@ -385,6 +434,7 @@ case "$MODE" in
 esac
 
 stopped || exit 1
+if [ "$ROWS_ON" = 1 ]; then np_plugins_preflight || exit 1; fi
 
 # Refuse ambiguous files before changing anything.
 if [ -f "$KEPT" ] && is_proxy "$KEPT"; then
@@ -438,6 +488,13 @@ MGVF_CX="$RUNNER" MGVF_BOTTLE="$PFX" "$NET_INSTALLER" "$GAME" --install || {
   echo "       Run this installer again after correcting the reported network-fix issue." >&2
   exit 1
 }
+
+if [ "$ROWS_ON" = 1 ]; then
+  np_plugins_install || {
+    echo "error: the fixes are installed, but NotProton's Xbox sign-in window row could not be written." >&2
+    exit 1
+  }
+fi
 
 echo "installed the source-built FH5 D3DMetal and Xbox UDP fixes, and the Xbox sign-in values"
 # D3DMetal reads the GPU identity with the native getenv, inside D3DMetal.framework,
