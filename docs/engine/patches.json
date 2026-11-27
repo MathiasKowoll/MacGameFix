@@ -81,5 +81,6 @@
   "wine-11.21/0040-directmanipulation-viewport-set-up.patch": "A Direct Manipulation viewport can be set up (event handler, Enable, the manager's Activate, the update manager's Update) and never gets a contact, as nothing in Wine routes a pointer to it, so a program that needs the set-up to succeed opens its window; both sides, directmanipulation.dll",
   "wine-11.21/0041-kernelbase-FindPackagesByPackageFamily.patch": "FindPackagesByPackageFamily, which Wine 11.21 does not have, exists in kernelbase.dll, and kernel32.dll forwards to it. It reports no packages (count 0, ERROR_SUCCESS), as GetPackagesByPackageFamily does. EA SPORTS FC 27's activation looks it up in KERNEL32.dll, and without it the game ends at \"There is a problem with your game's setup. Please reinstall your game.\"; both sides, kernelbase.dll and kernel32.dll",
   "wine-11.0/0042-controls-diagnostics.patch": "What only diagnostics on writes to the pad's log, kept apart from the controls' patches",
-  "wine-11.21/0042-controls-diagnostics.patch": "What only diagnostics on writes to the pad's log, kept apart from the controls' patches"
+  "wine-11.21/0042-controls-diagnostics.patch": "What only diagnostics on writes to the pad's log, kept apart from the controls' patches",
+  "wine-11.21/0043-win32u-shm-surface-flush-without-the-user-lock.patch": "A window drawn from another process is not flushed while Wine's USER lock is held. Forza Horizon 5's Xbox sign-in page (WebView2) stopped on Wine's lock check there, and the game closed with it"
 }

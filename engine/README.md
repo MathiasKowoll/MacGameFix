@@ -806,6 +806,46 @@ modules from this tree, put in by hand: the game started. Not done: these signed
 themselves, the FEX side, and a program that gets packages back from the function on
 Windows.
 
+## Forza Horizon 5: the Xbox sign-in window
+
+`0043` (wine-11.21, `win32u.so`, both sides) keeps a shared-memory window surface from
+being flushed while the USER lock is held.
+
+- **What it is:** a window whose parent is in another process gets CodeWeavers'
+  shared-memory surface (CX HACK 23950, `dlls/win32u/dce.c`). Its flush is a message to the
+  parent's process, `WM_WINE_FLUSHSHMSURFACE`, sent with `send_message_timeout`. No message
+  is sent with the USER lock held: `send_inter_thread_message` calls
+  `user_check_not_lock`, which asserts.
+- **Where it went wrong:** `apply_window_pos` calls `update_surface_region` while it holds
+  the window pointer, which is the USER lock, and `update_surface_region` holds it too when
+  it calls `window_surface_set_shape`. That ends in `window_surface_flush`, and so in the
+  surface's flush: a driver call for every other surface, a message for this one. With
+  something to flush at that moment, the process aborts: `err:system:user_check_not_lock
+  BUG: holding USER lock`, `Assertion failed: (0), function user_check_not_lock, file
+  sysparams.c, line 351`.
+- **Who it stopped:** Forza Horizon 5 (Steam) on NotProton's runner for CrossOver Preview
+  41303. The game's WebView2 browser process (`msedgewebview2.exe`, thread `CrBrowserMain`)
+  aborted so while the Xbox sign-in page was up, and the game faulted two seconds later, as
+  it does when its WebView2 window goes away (a read of 0 at `exe+0x53441F9`). Seen on
+  2026-11-18, twice, while the page was typed in, and on 2026-11-26 with the stack: its
+  return addresses, read in CodeWeavers' `win32u.so`, are `apply_window_pos`,
+  `window_surface_set_shape`, `window_surface_flush`'s call through `funcs->flush`, and
+  `send_message_timeout( 0x80000011, SMTO_ABORTIFHUNG | SMTO_BLOCK, 500 )`. A player who is
+  signed in already does not meet it: the browser's window is then never drawn.
+- **With `0043`:** with the lock held the flush does nothing and says so, so the surface's
+  bounds stay as they are, and the message loop's own flush (`flush_window_surfaces`),
+  which holds no lock, sends them, as it sends every other draw. The lock's check is
+  unchanged.
+- **Where it reaches a game:** a CrossOver app gets `win32u.so` with Rosetta's
+  improvement. NotProton's 41303 runner keeps CodeWeavers' `win32u.so` (`LEAVE` in
+  `engine-modules.sh`), so there the fix is to come to the game alone, as a NotProton
+  `patch =` row once NotProton's plugins are released: `window_surface_set_shape` ends in
+  a jump to `window_surface_flush`, and turning that jump into a return (one byte, found
+  once in CodeWeavers' file) leaves the shape to the message loop's flush as well.
+
+The same code is in Wine 11.0 and 11.17 as CrossOver ships them; `win32u.so` is built for
+41303 alone.
+
 ## Measured
 
 Measured on 2026-10-18 on CrossOver Preview 27.0.0.41069, in a NotProton runner,
