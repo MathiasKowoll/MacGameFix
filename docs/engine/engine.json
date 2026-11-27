@@ -804,6 +804,16 @@
           ],
           "commit": "ffd991717cdbbacafe2c4c5b6ab207b8d71cf585",
           "url": "https://github.com/MathiasKowoll/MacGameFix/blob/ffd991717cdbbacafe2c4c5b6ab207b8d71cf585/engine/patches/wine-11.21/0037-ntdll-tcp-noopt-on-request.patch"
+        },
+        {
+          "name": "0043-win32u-shm-surface-flush-without-the-user-lock.patch",
+          "file": "engine/patches/wine-11.21/0043-win32u-shm-surface-flush-without-the-user-lock.patch",
+          "subject": "A window drawn from another process is not flushed while Wine's USER lock is held. Forza Horizon 5's Xbox sign-in page (WebView2) stopped on Wine's lock check there, and the game closed with it",
+          "modules": [
+            "win32u"
+          ],
+          "commit": "c5e1594c83ec799d4910936d3271d949b4a7794c",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/c5e1594c83ec799d4910936d3271d949b4a7794c/engine/patches/wine-11.21/0043-win32u-shm-surface-flush-without-the-user-lock.patch"
         }
       ]
     }
