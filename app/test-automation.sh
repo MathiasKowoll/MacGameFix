@@ -1473,6 +1473,51 @@ rm -f "$NPP"/*.conf "$NPP"/*.dylib "$NPNOTE"
 rm -rf "$CT"
 unset MACGAMEFIX_LAUNCH_OPTIONS MACGAMEFIX_ROWS_TABLE MGVF_STEAM_RUNNING MGVF_NOTPROTON_RUNNING MGVF_NOTPROTON_VERSION
 
+echo "== Native ports with their own installer"
+# NightSightProductions' ports come as a disk image with an installer. MacGameFix downloads the one
+# file the catalog names, checks its size and SHA-256, takes the installer out and lets the image go
+# (NativeInstallers.swift). A disk image made here stands in for a port's, at a file:// address.
+NIRES="$HERE/MacGameFix.app/Contents/Resources"
+check '/usr/bin/python3 -c "
+import json, re, sys
+t = json.load(open(sys.argv[1]))
+ok = t[\"schema\"] == 1 and len(t[\"ports\"]) == 5 and all(re.fullmatch(\"[0-9a-f]{64}\", p[\"sha256\"]) and p[\"size\"] > 0 and p[\"url\"].startswith(\"https://github.com/NightSightProductions/\") and p[\"url\"].endswith(\".dmg\") and \"/v\" + p[\"version\"] + \"/\" in p[\"url\"] for p in t[\"ports\"])
+sys.exit(0 if ok else 1)" "$NIRES/native-installers.json"' "the app carries the table of five ports, each with one release's file by its address, size and SHA-256"
+NI="$T/ni"; mkdir -p "$NI/dmg/Install Fake Recomp.app/Contents/MacOS"
+printf '#!/bin/sh\n' > "$NI/dmg/Install Fake Recomp.app/Contents/MacOS/Install"; chmod +x "$NI/dmg/Install Fake Recomp.app/Contents/MacOS/Install"
+/usr/bin/hdiutil create -volname Fake -srcfolder "$NI/dmg" -ov -format UDZO "$NI/Fake.dmg" >/dev/null
+NISHA=$(/usr/bin/shasum -a 256 "$NI/Fake.dmg" | cut -d" " -f1); NISIZE=$(/usr/bin/stat -f %z "$NI/Fake.dmg")
+nitable() { printf '{"schema": %s, "ports": [{"id": "fake-port", "title": "Fake, native", "summary": "s", "by": "Someone", "steamApp": "5151", "gameExecutable": "Fake_x64.exe", "app": "Fake.app", "installer": "%s", "version": "%s", "url": "file://%s", "sha256": "%s", "size": %s, "page": "https://example.com"}]}\n' "$1" "$2" "$3" "$NI/Fake.dmg" "$4" "$NISIZE" > "$NI/table.json"; }
+export MACGAMEFIX_NATIVE_INSTALLERS="$NI/table.json"
+nitable 1 "Install Fake Recomp.app" 1.2.0 "$NISHA"
+NIDIR="$SUPPORT/MacGameFix/native-installers"
+nirep() { "$BIN" --native-installers-report; }
+check '[ "$(nirep)" = "fake-port 1.2.0: not installed; the game is in no Steam library" ]' "a port is not installed until its app is in Applications, and its game is looked for in the Steam libraries"
+NIST="$MACGAMEFIX_HOME/Library/Application Support/Steam/steamapps"; mkdir -p "$NIST/common/FakeGame"
+printf '"AppState"\n{\n\t"appid"\t\t"5151"\n\t"installdir"\t\t"FakeGame"\n}\n' > "$NIST/appmanifest_5151.acf"
+check 'has "$(nirep)" "the game is in no Steam library" && : > "$NIST/common/FakeGame/Fake_x64.exe" && has "$(nirep)" "the game is in a Steam library"' "the game counts as there where its Steam folder holds the Windows program"
+OUT=$("$BIN" --native-installer-stage fake-port) && RC=0 || RC=$?
+check '[ "$RC" = 0 ] && [ "$OUT" = "$NIDIR/fake-port/Install Fake Recomp.app" ] && [ -x "$OUT/Contents/MacOS/Install" ] && [ -f "$NIDIR/fake-port-1.2.0.dmg" ] && [ ! -e "$NIDIR/mount-fake-port" ] && ! /usr/bin/hdiutil info | /usr/bin/grep -q "mount-fake-port"' "the installer is downloaded, checked and taken out of its disk image, and the image is not left mounted"
+nitable 1 "Install Fake Recomp.app" 1.2.0 "0000000000000000000000000000000000000000000000000000000000000000"
+OUT=$("$BIN" --native-installer-stage fake-port) && RC=0 || RC=$?
+check '[ "$RC" = 1 ] && has "$OUT" "is not the installer MacGameFix'"'"'s catalog names" && [ ! -e "$NIDIR/fake-port-1.2.0.dmg" ]' "a file that is not the one the catalog names, by its SHA-256, is deleted and not opened"
+nitable 1 "Install Nothing.app" 1.2.0 "$NISHA"
+OUT=$("$BIN" --native-installer-stage fake-port) && RC=0 || RC=$?
+check '[ "$RC" = 1 ] && has "$OUT" "The disk image has no Install Nothing.app" && [ ! -e "$NIDIR/fake-port/Install Nothing.app" ] && ! /usr/bin/hdiutil info | /usr/bin/grep -q "mount-fake-port"' "a disk image without the installer the catalog names is refused, and let go"
+nitable 1 "Install Fake Recomp.app" 1.2.0 "$NISHA"
+mkdir -p "$MACGAMEFIX_HOME/Applications/Fake.app"
+check 'has "$(nirep)" "fake-port 1.2.0: installed, by an installer MacGameFix did not open"' "a port whose app is in Applications is installed, whoever installed it"
+printf 'fake-port 1.1.0\n' > "$SUPPORT/MacGameFix/native-installers.installed"
+check 'has "$(nirep)" "fake-port 1.2.0: installed, 1.1.0; 1.2.0 to install"' "a later version in the catalog than the installer last opened is an update to install"
+printf 'fake-port 1.2.0\n' > "$SUPPORT/MacGameFix/native-installers.installed"
+check 'has "$(nirep)" "fake-port 1.2.0: installed, 1.2.0;"' "and the same version is up to date"
+nitable 2 "Install Fake Recomp.app" 1.2.0 "$NISHA"
+check '[ "$(nirep)" = "native installers: none" ]' "a table of a newer schema than the app reads is not used"
+nitable 1 "../Install Fake Recomp.app" 1.2.0 "$NISHA"
+check '[ "$(nirep)" = "native installers: none" ] && ! "$BIN" --native-installer-stage fake-port >/dev/null' "an installer name that is a path is not a port"
+rm -rf "$NI" "$NIDIR" "$SUPPORT/MacGameFix/native-installers.installed" "$MACGAMEFIX_HOME/Applications/Fake.app" "$NIST/appmanifest_5151.acf" "$NIST/common/FakeGame"
+unset MACGAMEFIX_NATIVE_INSTALLERS
+
 echo "== Game Mode for CrossOver's games"
 GM="$MACGAMEFIX_HOME/Applications/CrossOver GM.app"
 GW="$GM/Contents/SharedSupport/CrossOver/lib/wine"

@@ -214,6 +214,8 @@ done
 PAYLOAD+=("notproton-every-game.sh")
 # The rows switched on per game (RowsByGame.swift): the table, and the program that writes them.
 PAYLOAD+=("notproton-rows.json" "steam-launch-options.pl")
+# The native ports that come with an installer of their own (NativeInstallers.swift): which file of each.
+PAYLOAD+=("native-installers.json")
 PAYLOAD=($(printf '%s\n' "${PAYLOAD[@]}" | sort -u))
 
 missing=0
@@ -226,7 +228,7 @@ rm -rf "$APP"
 mkdir -p "$MACOS" "$RES" "$CACHE"
 
 echo "==> compiling"
-swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/ShaderCache.swift" "$HERE/Fans.swift" "$HERE/PrefixRunner.swift" "$HERE/ProcessorsRow.swift" "$HERE/GeneralRows.swift" "$HERE/NotProtonPlugins.swift" "$HERE/RowsByGame.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Probe.swift" "$HERE/Automation.swift" "$HERE/AppUpdate.swift" "$HERE/MenuBar.swift" "$HERE/Instructions.swift" "$HERE/NativePort.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
+swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/ShaderCache.swift" "$HERE/Fans.swift" "$HERE/PrefixRunner.swift" "$HERE/ProcessorsRow.swift" "$HERE/GeneralRows.swift" "$HERE/NotProtonPlugins.swift" "$HERE/RowsByGame.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Probe.swift" "$HERE/Automation.swift" "$HERE/AppUpdate.swift" "$HERE/MenuBar.swift" "$HERE/Instructions.swift" "$HERE/NativePort.swift" "$HERE/NativeInstallers.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
   -o "$MACOS/MacGameFix" \
   -framework SwiftUI -framework AppKit -framework IOKit -framework UserNotifications -framework GameController \
   -framework AVFoundation -framework CoreAudio -framework AudioToolbox \

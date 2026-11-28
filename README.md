@@ -383,8 +383,11 @@ sheet, **DualSense controllers in this game**: Turn On writes the row's
 variable into the game's launch options in Steam, with Steam closed, and keeps
 what each account had so that Turn Off gives it back
 (`fixes/steam-launch-options.pl`, as a game's fix switches its rows on). A row
-switched on in Steam's own page reads On and is switched off there. It is
-offered for a Steam game on one of the tools the row is for, with the plugin
+switched on in Steam's own page reads On and is switched off there. So does
+one that stands in front of another fix's program in the game's launch options
+(a mod tool's play script, as EA SPORTS FC 27's): Game Feel reads the row
+there, and leaves writing such options to the fix that put the program in. It
+is offered for a Steam game on one of the tools the row is for, with the plugin
 installed. MacGameFix also switches the row on by itself, once, for a game
 whose pad was set up in Game Feel (`app/RowsByGame.swift`); the two write
 through one journal and one record, so a row turned off in Game Feel is not
@@ -555,6 +558,36 @@ covered. A library only the Mac's own Steam lists is NotProton's, and is left
 out: NotProton runs its games from a bundle of its own. Game Feel's
 options are read when the bottle starts, so in CrossOver change them before you
 open Steam there (engine/README.md, "The options").
+
+## Native ports
+
+The **Native** tab has the games that run as Apple silicon programs built on
+this Mac from the copy you own, without CrossOver or Wine. MacGameFix carries
+nothing of any game. There are two kinds.
+
+**Built from sources** (`app/NativePort.swift`): Batman: Arkham Asylum and
+BioShock Infinite, whose Mac versions are 32-bit Intel programs that macOS no
+longer runs. MacGameFix gets the port's sources, runs their own build, shows
+how far it is, and starts what was built. Sources that are not MacGameFix's
+author's are taken at one commit, the one that was read.
+
+**With an installer of their own** (`app/NativeInstallers.swift`):
+NightSightProductions' ports of DOOM (2016), Wolfenstein: The New Order,
+The Old Blood, II: The New Colossus and Youngblood, which never had a Mac
+version. Each is released as a disk image with an installer that finds your
+Windows copy of the game, builds the port in about a quarter of an hour, and
+leaves the game's app in Applications. Their author agreed to MacGameFix
+getting that installer and running it for the player. **Install** downloads
+the file the signed catalog names (`fixes/native-installers.json`: its address,
+size and SHA-256), refuses and deletes any other, takes the installer out of
+its disk image and opens it; the installer's own window does the rest. The
+installers are not notarized by Apple, and a file MacGameFix downloads is not
+quarantined, so macOS does not ask before opening it: the catalog's hash is
+what stands for that question. When the catalog names a later release the
+button reads **Update**; that needs a catalog update, not a new app. The hash
+says which published file is opened; it is not a review of what the installer
+does. These ports need the Windows release of the game, which Steam for Mac
+installs through a Steam Play tool such as NotProton.
 
 ## The games
 
@@ -1436,6 +1469,13 @@ how, is in the game's page under `legacy/wiki/`.
   three halves on, and handed us the change that adds it.
   They ported four of MacGameFix's fixes to NotProton plugins, which MacGameFix
   carries as they wrote them (`app/notproton-plugins/`).
+- **[NightSightProductions](https://github.com/NightSightProductions)**
+  (MIT): the Recomp-Framework behind the native ports, and the ports of DOOM
+  (2016) and four Wolfenstein games whose installers the Native tab gets and
+  opens, with their author's agreement.
+- **[bioshock-infinite-recomp](https://github.com/bmbowdish/bioshock-infinite-recomp)
+  by bmbowdish**: the native port of BioShock Infinite, and the change that
+  added it to MacGameFix.
 - **The Cyberpunk 2077 patch** comes from a community script published
   anonymously; its author is not known. MacGameFix writes one of its five
   words.
