@@ -11,8 +11,8 @@
 +    long long settings_stamp;  /* their modification times then */
      UInt64 trigger_at[2];
      const char *model;
-     UINT32 powers_told[8], features_told[8];
-@@ -385,40 +390,71 @@
+     BOOL told_motors, told_triggers, told_power, told_xinput;
+@@ -330,35 +335,66 @@
  static char pad_lines[32][96];
  static int pad_count = -1, pad_game_count;
  
@@ -21,15 +21,10 @@
 + * id) and pad.conf. */
 +static void pad_paths(char game_path[1024], char every_path[1024], char game[24])
 +{
-+    const char *home = getenv("HOME");
-+
-+    game_path[0] = every_path[0] = 0;
 +    pad_game(game, 24);
-+    if (!home) return;
-+    if (game[0]) snprintf(game_path, 1024, "%s/Library/Application Support/MacGameFix/pad.d/%s.conf", home, game);
-+    snprintf(every_path, 1024, "%s/Library/Application Support/MacGameFix/pad.conf", home);
++    mgf_pad_conf(game, 0, game_path, 1024);
++    mgf_pad_conf(game, 1, every_path, 1024);
 +}
-+
 +/* Reads both files into `lines`, the game's own first. */
 +static int pad_load(char lines[32][96], int *game_count, BOOL *from_game, char game[24])
  {
@@ -58,12 +53,7 @@
          {
 -            for (pass = 0; pass < 2; pass++)
 -            {
--                if (pass == 0 && !game[0]) continue;
--                if (pass == 0)
--                    snprintf(path, sizeof(path), "%s/Library/Application Support/MacGameFix/pad.d/%s.conf", home, game);
--                else
--                    snprintf(path, sizeof(path), "%s/Library/Application Support/MacGameFix/pad.conf", home);
--                if (!(f = fopen(path, "r"))) continue;
+-                if (!mgf_pad_conf(game, pass, path, sizeof(path)) || !(f = fopen(path, "r"))) continue;
 -                if (pass == 0) from_game = TRUE;
 -                while (pad_count < 32 && fgets(line, sizeof(line), f))
 -                {
@@ -112,7 +102,7 @@
          pad_log("settings: %s%s\n", game[0] ? "game " : "no game id, ", game[0] ? game : "every game's");
          if (from_game) pad_log("settings: pad.d/%s.conf read before pad.conf\n", game);
      }
-@@ -427,6 +463,22 @@
+@@ -367,6 +403,22 @@
      return "";
  }
  
@@ -135,15 +125,15 @@
  /* Whether the game's own settings, pad.d/<app id>.conf, say "key=value";
   * every game's pad.conf does not count. */
  static BOOL pad_game_option(const char *option)
-@@ -1013,6 +1065,7 @@
+@@ -892,6 +944,7 @@
  }
  
  static void pad_triggers_follow(struct iohid_device *impl, const BYTE *input, UINT length);
 +static void pad_settings_follow(struct iohid_device *impl);
  static BOOL trigger_chosen(const struct iohid_device *impl, unsigned int side);
  
- /* With diagnostics=on, every 2 s: how many input reports the pad sent and the
-@@ -1364,10 +1417,13 @@
+ static void handle_IOHIDDeviceIOHIDReportCallback(void *context,
+@@ -1172,10 +1225,13 @@
      unsigned int side, set = 0;
      FILE *f;
  
@@ -157,7 +147,7 @@
          if (!trigger_chosen(impl, side)) continue;
          set |= 4 << side;
          if (impl->trigger_kind[side] == TRIGGER_OFF) continue;
-@@ -1394,11 +1450,71 @@
+@@ -1202,11 +1258,71 @@
          fprintf(f, "%u\n", set);
          fclose(f);
      }
@@ -191,7 +181,7 @@
 +    char path[64];
 +    FILE *f;
 +
-+    if (!impl->settings_checked || now - impl->settings_checked < bt_ticks(1.0)) return;
++    if (!impl->settings_checked || now - impl->settings_checked < mgf_pad_ticks(1.0)) return;
 +    impl->settings_checked = now;
 +    if ((stamp = pad_settings_stamp()) == impl->settings_stamp) return;
 +    impl->settings_stamp = stamp;
@@ -231,7 +221,7 @@
  }
  
  /* From the pad's input report 0x01 (L2 at byte 5, R2 at byte 6): a side with a
-@@ -1410,10 +1526,13 @@
+@@ -1218,10 +1334,13 @@
      unsigned int side;
      BOOL held, pressed;
  
@@ -245,7 +235,7 @@
          own = input[side ? 5 : 6];
          pressed = impl->trigger_pressed[side] ? own >= 20 : own >= 40;
          if (pressed != impl->trigger_pressed[side] && (impl->trigger_pressed[side] = pressed))
-@@ -1450,6 +1569,29 @@
+@@ -1258,6 +1377,29 @@
          trigger_active(impl, side, &kind, &strength);
          field = report + 11 + 11 * side;
          mode = field[0];

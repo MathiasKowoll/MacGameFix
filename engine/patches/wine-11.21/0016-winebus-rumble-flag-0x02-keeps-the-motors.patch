@@ -1,6 +1,6 @@
 --- a/dlls/winebus.sys/bus_iohid.c
 +++ b/dlls/winebus.sys/bus_iohid.c
-@@ -916,18 +916,22 @@
+@@ -798,18 +798,22 @@
              memcpy(merged + bt_fields[i].offset, pad->pending + bt_fields[i].offset, bt_fields[i].length);
          }
      }
@@ -31,7 +31,7 @@
      memcpy(pad->pending, merged, sizeof(merged));
      pad->dirty = TRUE;
      pthread_mutex_unlock(&pad->lock);
-@@ -1624,7 +1628,8 @@
+@@ -1410,7 +1414,8 @@
          if (kind == TRIGGER_OFF) continue;
          if (kind == TRIGGER_RUMBLE || kind == TRIGGER_RECOIL)
          {
@@ -41,22 +41,3 @@
              motor = kind == TRIGGER_RECOIL ? max(report[3], report[4]) : report[side ? 4 : 3];
              step = motor < 4 ? 0 : 1 + (motor - 4) * 8 / 252;
              if (step == impl->trigger_step[side] ||
-@@ -1950,12 +1955,14 @@
-     /* Said before any copy is made: whether the game wrote it, or XInput did. */
-     from_game = report != motors;
- 
--    /* The motors' values, whenever the game writes: with a rumble bit they are its
--     * motors, without one the emulated rumble is off (see bt_queue_output). */
-+    /* The motors' values, whenever the game writes: with 0x01 (or the improved
-+     * emulation's bit) they are its motors, with 0x02 alone they stay as they were,
-+     * and with neither the emulated rumble is off (see bt_queue_output). */
-     if (output)
-     {
--        BOOL rumble = (report[1] & 0x03) || (length > 39 && (report[39] & 0x04));
--        pad_motors_told(impl, rumble ? report[4] : 0, rumble ? report[3] : 0);
-+        BOOL rumble = (report[1] & 0x01) || (length > 39 && (report[39] & 0x04));
-+        if (rumble) pad_motors_told(impl, report[4], report[3]);
-+        else if (!(report[1] & 0x02)) pad_motors_told(impl, 0, 0);
-     }
- 
-     /* How the game drives the pad, said once each, for MacGameFix's list of what

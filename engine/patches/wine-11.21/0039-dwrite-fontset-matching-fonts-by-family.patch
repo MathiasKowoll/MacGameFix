@@ -1,0 +1,120 @@
+From: MacGameFix
+Subject: dwrite: IDWriteFontSet::GetMatchingFonts by family, weight, stretch and style
+
+The method was a stub that returned E_NOTIMPL, so a program that looks its fonts up
+through it finds none. One built on GPUI gives up before it opens a window:
+"failed to resolve font '.SystemUIFont' or any of the fallbacks: .ZedMono, .ZedSans,
+Helvetica, Segoe UI, Ubuntu, Adwaita Sans, Cantarell, Noto Sans, DejaVu Sans, Arial"
+(Swofty Launcher 1.10.35 on NotProton's runner for CrossOver Preview 41303, Rosetta,
+2026-11-23).
+
+It now returns the set's fonts of that family, the closest to the weight, stretch and
+style asked for first, in the order a family's own GetMatchingFonts gives. The family is
+matched on the Win32 family name, the one family name a set's entry can be asked for in
+this file; a family whose faces carry Win32 names of their own (a "Light" or "Semibold"
+face) gives only the faces under the name asked for. An entry's weight, stretch and
+style are read from its font file, with what the entry simulates on top.
+
+With this and 0040 the launcher's log goes from the panic to "fallback fonts installed",
+"window drawn" and "window opened".
+
+--- a/dlls/dwrite/font.c
++++ b/dlls/dwrite/font.c
+@@ -7631,12 +7631,95 @@
+     return TRUE;
+ }
+ 
++/* The fonts of one family, the closest to the weight, stretch and style asked for first.
++ *
++ * It was a stub, and a program that looks its fonts up here found none: one built on GPUI
++ * gives up with "failed to resolve font" before it opens a window (Swofty Launcher,
++ * 2026-11-23). The family is matched on the Win32 family name, the one name of a family a
++ * set's entry can be asked for here; a family whose faces carry other Win32 names (a "Light"
++ * or "Semibold" face of its own name) gives only the faces under the name asked for. An
++ * entry's weight, stretch and style come from its font file, with what it simulates on top.
++ * The order is the one a family's own GetMatchingFonts gives. */
+ static HRESULT WINAPI dwritefontset_GetMatchingFonts_(IDWriteFontSet3 *iface, WCHAR const *family, DWRITE_FONT_WEIGHT weight,
+         DWRITE_FONT_STRETCH stretch,  DWRITE_FONT_STYLE style, IDWriteFontSet **fontset)
+ {
+-    FIXME("%p, %s, %d, %d, %d, %p.\n", iface, debugstr_w(family), weight, stretch, style, fontset);
++    struct dwrite_fontset *set = impl_from_IDWriteFontSet3(iface);
++    DWRITE_FONT_PROPERTY prop = { DWRITE_FONT_PROPERTY_ID_WIN32_FAMILY_NAME, family, L"" };
++    struct dwrite_fontset_entry **entries, *entry;
++    struct dwrite_font_propvec req, *vecs, vec;
++    unsigned int i, j, count = 0;
++    struct dwrite_fontset *object;
+ 
+-    return E_NOTIMPL;
++    TRACE("%p, %s, %d, %d, %d, %p.\n", iface, debugstr_w(family), weight, stretch, style, fontset);
++
++    if (!fontset)
++        return E_INVALIDARG;
++    *fontset = NULL;
++    if (!family)
++        return E_INVALIDARG;
++
++    object = calloc(1, sizeof(*object));
++    entries = calloc(set->count ? set->count : 1, sizeof(*entries));
++    vecs = calloc(set->count ? set->count : 1, sizeof(*vecs));
++    if (!object || !entries || !vecs)
++    {
++        free(object);
++        free(entries);
++        free(vecs);
++        return E_OUTOFMEMORY;
++    }
++
++    for (i = 0; i < set->count; ++i)
++    {
++        struct file_stream_desc stream_desc = { 0 };
++        struct dwrite_font_props props = { 0 };
++
++        entry = set->entries[i];
++        if (!fontset_entry_is_matching(entry, &prop, 1))
++            continue;
++
++        props.weight = DWRITE_FONT_WEIGHT_NORMAL;
++        props.stretch = DWRITE_FONT_STRETCH_NORMAL;
++        props.style = DWRITE_FONT_STYLE_NORMAL;
++        get_filestream_from_file(entry->file, &stream_desc.stream);
++        if (stream_desc.stream)
++        {
++            stream_desc.face_type = entry->face_type;
++            stream_desc.face_index = entry->face_index;
++            opentype_get_font_properties(&stream_desc, &props);
++            IDWriteFontFileStream_Release(stream_desc.stream);
++        }
++        if (entry->simulations & DWRITE_FONT_SIMULATIONS_BOLD)
++            props.weight = DWRITE_FONT_WEIGHT_BOLD;
++        if (entry->simulations & DWRITE_FONT_SIMULATIONS_OBLIQUE)
++            props.style = DWRITE_FONT_STYLE_OBLIQUE;
++
++        init_font_prop_vec(props.weight, props.stretch, props.style, &vecs[count]);
++        entries[count++] = addref_fontset_entry(entry);
++    }
++
++    init_font_prop_vec(weight, stretch, style, &req);
++    for (i = 1; i < count; ++i)
++    {
++        for (j = i; j > 0 && is_better_font_match(&vecs[j], &vecs[j - 1], &req); --j)
++        {
++            entry = entries[j]; entries[j] = entries[j - 1]; entries[j - 1] = entry;
++            vec = vecs[j]; vecs[j] = vecs[j - 1]; vecs[j - 1] = vec;
++        }
++    }
++    free(vecs);
++
++    if (!count)
++    {
++        free(entries);
++        entries = NULL;
++    }
++
++    init_fontset(object, set->factory, entries, count, FALSE);
++
++    *fontset = (IDWriteFontSet *)&object->IDWriteFontSet3_iface;
++
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI dwritefontset_GetMatchingFonts(IDWriteFontSet3 *iface, DWRITE_FONT_PROPERTY const *props, UINT32 count,

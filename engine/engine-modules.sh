@@ -94,7 +94,14 @@ if [ -z "$WINE" ] || [ "$HAVE" != "wine-$WINE" ]; then
   [ "$MODE" = --restore ] || exit 1
 fi
 
-src() { printf '%s/engine-%s-%s' "$HERE" "$BUILD" "$(printf '%s' "$1" | tr / -)"; }
+# In this catalog (1.6.7's, with the latest Preview's app brought up to date) a CrossOver app of
+# 41303 gets newer modules than its NotProton runner, flat as engine-<build>-app-<dir>-<file>
+# (engine/modules-app). The runner keeps the ones the catalog before it gave it, under their usual
+# names, which Forza Horizon 6's fix reads too (fixes/fh6-runtime.sh): the runner's turn comes with
+# NotProton's in-memory rows, which are not published yet.
+SET="$BUILD"
+[ -n "$APP" ] && [ -f "$HERE/engine-$BUILD-app-x86_64-unix-winebus.so" ] && SET="$BUILD-app"
+src() { printf '%s/engine-%s-%s' "$HERE" "$SET" "$(printf '%s' "$1" | tr / -)"; }
 XINPUT_DLLS="xinput1_1.dll xinput1_2.dll xinput1_3.dll xinput1_4.dll xinput9_1_0.dll xinputuap.dll"
 FILES=""
 for side in x86_64 aarch64; do
@@ -135,9 +142,9 @@ done
 # runner variant its fix writes (fixes/install-f125-swofty.sh).
 # A CrossOver app keeps every module, and so does the FEX side. One put in before is retired: the
 # kept file goes back, while ours is still there.
-# In this catalog (1.6.7's, with CrossOver 26.3's whole engine) only 26.3's runner leaves them:
-# 41303's runner gets its modules as the catalog before it gave them, until the in-memory rows
-# that replace them are published.
+# In this catalog (1.6.7's) only 26.3's runner leaves them: 41303's runner gets its modules as the
+# catalog before it gave them (see SET above), until the in-memory rows that replace them are
+# published.
 # NotProton's runner for CrossOver 26.3 leaves the same modules (26.3 has no ntdll.dll of ours):
 # from 2026-11-26 the modules that change Wine for a game go into the CrossOver 26.3 app alone, and
 # a NotProton runner gets a game's fixes in memory, from NotProton's rows, where a row supports

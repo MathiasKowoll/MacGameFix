@@ -49,4 +49,22 @@ previews = [b["build"] for b in builds if b["support"] == "maintained" and "Prev
 if len(previews) > 1:
     sys.exit("error: more than one Preview is maintained (" + ", ".join(previews)
              + "): name the older ones under \"kept\" in engine/support.json")
+# A build whose CrossOver app gets newer modules than its NotProton runner (engine/modules-app,
+# 1.6.7's catalog for the latest Preview): bundled as engine-<build>-app-<dir>-<file>, which
+# engine-modules.sh takes for a CrossOver app of that build.
+extra = os.path.join(os.path.dirname(os.path.abspath(mods)), "modules-app")
+for b in sorted(os.listdir(extra)) if os.path.isdir(extra) else []:
+    meta = os.path.join(extra, b, "built-for.json")
+    if not os.path.isfile(meta):
+        continue
+    d = json.load(open(meta))
+    if d["build"] != b or b not in [x["build"] for x in builds]:
+        sys.exit(f"error: engine/modules-app/{b} is not a build of engine/modules")
+    for rel, want in sorted(d["files"].items()):
+        src = os.path.join(extra, b, rel)
+        if hashlib.sha256(open(src, "rb").read()).hexdigest() != want:
+            sys.exit(f"error: engine/modules-app/{b}/{rel} is not what its built-for.json recorded")
+        name = f"engine-{b}-app-{rel.replace('/', '-')}"
+        shutil.copy2(src, os.path.join(res, name))
+        print(name)
 json.dump({"builds": builds}, open(os.path.join(res, "engine-modules.json"), "w"), indent=2)

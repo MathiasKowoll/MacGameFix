@@ -463,7 +463,7 @@ fi
 echo
 PAYLOAD_TEAM=8S57F2XC5G   # the team of MacGameFix's Developer ID
 sig_drift=0
-for d in fixes engine/modules; do
+for d in fixes engine/modules engine/modules-app; do
   "$ROOT/tools/check-signatures.sh" "$ROOT/$d" "$PAYLOAD_TEAM" > "$TMP/signatures" 2>&1
   case $? in
     0) echo "  signatures: $(tail -1 "$TMP/signatures" | sed 's/^ *//')" ;;
