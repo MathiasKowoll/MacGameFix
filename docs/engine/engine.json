@@ -1045,8 +1045,7 @@
       "wine": "11.21",
       "series": "wine-11.21",
       "support": "maintained",
-      "appSupport": "kept",
-      "appKeptSince": "2026-11-26"
+      "appSupport": "maintained"
     }
   ],
   "excerpts": {

@@ -11,10 +11,10 @@
 # maintained at once is refused, so a new Preview cannot come in without the one
 # before it being named there.
 #
-# A CrossOver app is maintained in its stable release alone (2026-11-26): a Preview whose
-# NotProton runner is maintained has its app only kept, which "appsKept" in support.json
-# names with the day, and each build's "appSupport" says so for its apps. The app still
-# installs and removes their modules.
+# A build's CrossOver app can be kept while its NotProton runner is maintained: "appsKept" in
+# support.json names it with the day, and each build's "appSupport" says so for its apps. The
+# app still installs and removes their modules. None is today: since 2026-11-28 the latest
+# Preview's app is maintained like the stable one's (41303 was only kept from 2026-11-26).
 #
 #   python3 bundle-engine.py <engine/modules> <bundle Resources>
 #

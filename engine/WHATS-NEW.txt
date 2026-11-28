@@ -3,6 +3,7 @@
 # "notes"; the app shows them with the update and the agent in its notification.
 # Rewrite them with every change to the modules: what stays here is said again with
 # the next catalog. Lines that start with # are not carried.
+CrossOver Preview 20261111 (41303): the Preview app is maintained again, like CrossOver 26.3: it gets the whole engine as Wine modules in place of CodeWeavers' files, which MacGameFix keeps to put back. NotProton's runners are unchanged: CodeWeavers' Wine files, and each game's fix from its own row.
 CrossOver 26.3: the whole engine now comes to CrossOver 26.3, the stable release, built from its own sources: the fixes for EA SPORTS FC 27's start, Forza Horizon 5's Xbox sign-in window, Red Dead Online's connection, Forza Horizon 6's online sessions, Swofty Launcher's window and copy protection that makes its own system calls, beside the controllers' and Rosetta's.
 CrossOver 26.3: none of it has been played on 26.3 yet; the system-call, network and missing-function fixes were checked with test programs.
 NotProton's runner for 26.3: like 41303's, it keeps CodeWeavers' own Wine files and gets only the controllers' modules. The Rosetta file of ours it had goes back to CodeWeavers' with the next install; a game gets its fixes from NotProton's rows instead, where a row supports 26.3.
