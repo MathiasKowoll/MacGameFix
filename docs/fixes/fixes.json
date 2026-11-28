@@ -287,6 +287,11 @@
           "name": "xAranaktu",
           "url": "https://github.com/xAranaktu/FC-27-Live-Editor",
           "note": "FC 27 Live Editor, the mod tool the game starts with. Each player downloads it from its author and gives the install its folder; it is not part of MacGameFix and is not downloaded by it."
+        },
+        {
+          "name": "xAranaktu",
+          "url": "https://github.com/xAranaktu/FIFASquadFileDownloader",
+          "note": "FIFASquadFileDownloader (MIT), whose squad unpacker and saved-file layout fc27-squads.pl ports to add EA's newest squads at each Play."
         }
       ],
       "excerpts": [
@@ -328,10 +333,10 @@
           "symbol": null,
           "note": "Live Editor is the player's to provide: from MacGameFix's window the install asks for its folder with macOS's folder chooser, every time, which is also how a new version goes in.",
           "language": "bash",
-          "startLine": 202,
-          "endLine": 208,
-          "commit": "eedec1b39ee7f272d13a862e87ff44fade1267dc",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/eedec1b39ee7f272d13a862e87ff44fade1267dc/fixes/install-fc27-live-editor.sh#L202-L208",
+          "startLine": 207,
+          "endLine": 213,
+          "commit": "97b99e6f8245724efc6a1475032e8d4c5e36afc2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/97b99e6f8245724efc6a1475032e8d4c5e36afc2/fixes/install-fc27-live-editor.sh#L207-L213",
           "code": "ask_folder() {\n  local prompt=\"Choose your FC 27 Live Editor folder: the one that holds Launcher.exe and FCLiveEditor.DLL.\"\n  editor_ok && prompt=\"$prompt Cancel keeps the Live Editor already in use.\"\n  if [ -n \"${MGVF_CHOOSER:-}\" ]; then \"$MGVF_CHOOSER\" \"$prompt\" 2>/dev/null || true; return 0; fi\n  /usr/bin/osascript -e 'on run argv' -e 'try' -e 'return POSIX path of (choose folder with prompt (item 1 of argv))' \\\n    -e 'on error' -e 'return \"\"' -e 'end try' -e 'end run' \"$prompt\" 2>/dev/null || true\n}"
         },
         {
@@ -339,10 +344,10 @@
           "symbol": null,
           "note": "Live Editor's launcher injects 100 ms after the game appears, and at that the game hung at \"Injecting\" in 2 starts of 10. Its own setting is raised to 1000 ms; a longer one the player set is kept.",
           "language": "bash",
-          "startLine": 56,
-          "endLine": 59,
-          "commit": "5ac18177dcf4702ee6bf84fc0793743265694863",
-          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/5ac18177dcf4702ee6bf84fc0793743265694863/fixes/fc27-le-play.sh#L56-L59",
+          "startLine": 65,
+          "endLine": 68,
+          "commit": "97b99e6f8245724efc6a1475032e8d4c5e36afc2",
+          "url": "https://github.com/MathiasKowoll/MacGameFix/blob/97b99e6f8245724efc6a1475032e8d4c5e36afc2/fixes/fc27-le-play.sh#L65-L68",
           "code": "config=\"${STEAM_COMPAT_DATA_PATH:-}/pfx/drive_c/FC 27 Live Editor/le_config.json\"\nif [ -f \"$config\" ] && [ \"$opens\" != window ]; then\n  /usr/bin/perl -0pi -e 's/(\"dll_inject_delay\"\\s*:\\s*)(\\d+)/$1 . ($2 < 1000 ? 1000 : $2)/e; s/(\"auto_inject\"\\s*:\\s*)false/${1}true/' \"$config\"\nfi"
         },
         {

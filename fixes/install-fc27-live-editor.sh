@@ -63,7 +63,8 @@
 # WHAT IT PUTS WHERE.
 #   - The Live Editor folder the player chose, copied to
 #     ~/Library/Application Support/MacGameFix/fc27-live-editor/LiveEditor.
-#   - fc27-le-play.sh and fc27-le-run.cmd beside it.
+#   - fc27-le-play.sh and fc27-le-run.cmd beside it, and fc27-squads.pl, which the play script
+#     runs at each start to add EA's newest squads to the game's saved squads.
 #   - In Steam's launch options for the game: the play script before %command%
 #     (steam-launch-options.pl; Steam must be closed).
 #   - In NotProton's plugins folder: no row of its own. The game is added to MacGameFix's shared
@@ -78,7 +79,9 @@
 #     refuses without it. An earlier install's rows of its own, mgf-d3dmetal-hookable.dylib and
 #     mgf-package-family.dylib are taken out.
 # Nothing is written into the prefix. Live Editor's launcher keeps its own settings there
-# (C:\FC 27 Live Editor), and the play script raises one of them, the injection delay.
+# (C:\FC 27 Live Editor), and the play script raises one of them, the injection delay. At
+# each Play, fc27-squads.pl adds a saved squad file to the game's settings folder when EA has
+# new squads; it never replaces one, and removing the fix leaves those files to the player.
 #
 # THE GAME FOLDER. This script puts nothing in it. Live Editor's launcher does, while a session
 # starts: it keeps EA AntiCheat's launcher as EAAntiCheat.GameServiceLauncher.exe.backup, puts
@@ -99,6 +102,7 @@
 # MGVF-BY-HAND: It asks you for your Live Editor folder, so it is never run in the background: install it again from here when a game update needs a new Live Editor.
 # MGVF-WHY: The Steam copy only starts on a Mac with FC 27 Live Editor in it, a mod tool you download and provide: EA AntiCheat's launcher starts nothing here, and the game closed the moment the editor's window went in. This asks you for your Live Editor folder and copies it, gives the game, alone, the Windows function its activation asks for, loads a library that lets its Direct3D hooks work on D3DMetal and makes Steam's Play start the game with it. Offline, without EA AntiCheat or online modes. NotProton with CrossOver Preview 41303 (Rosetta) only. AT YOUR OWN RISK: MacGameFix does not answer for failures in the game, its saves, its mods or your account.
 # MGVF-CREDIT: xAranaktu, FC 27 Live Editor, the mod tool this starts and does not include | https://github.com/xAranaktu/FC-27-Live-Editor
+# MGVF-CREDIT: xAranaktu, FIFASquadFileDownloader, whose squad unpacker fc27-squads.pl ports (MIT) | https://github.com/xAranaktu/FIFASquadFileDownloader
 #
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -126,6 +130,7 @@ case "$MODE" in --install|install|--status|--restore) ;; *) usage ;; esac
 APPID=4080220
 PLAY="$HERE/fc27-le-play.sh"
 RUN="$HERE/fc27-le-run.cmd"
+SQUADS="$HERE/fc27-squads.pl"
 OPTIONS="$HERE/steam-launch-options.pl"
 ENGINE="$HERE/mgf-engine.dylib"
 SHARED_ROWS="$HERE/np-plugin-shared.conf"
@@ -230,8 +235,8 @@ take_editor() {  # <folder>
   echo "  copied from $from"
 }
 
-scripts_ok() { cmp -s "$PLAY" "$STORE/fc27-le-play.sh" && cmp -s "$RUN" "$STORE/fc27-le-run.cmd"; }
-scripts_any() { [ -e "$STORE/fc27-le-play.sh" ] || [ -e "$STORE/fc27-le-run.cmd" ]; }
+scripts_ok() { cmp -s "$PLAY" "$STORE/fc27-le-play.sh" && cmp -s "$RUN" "$STORE/fc27-le-run.cmd" && cmp -s "$SQUADS" "$STORE/fc27-squads.pl"; }
+scripts_any() { [ -e "$STORE/fc27-le-play.sh" ] || [ -e "$STORE/fc27-le-run.cmd" ] || [ -e "$STORE/fc27-squads.pl" ]; }
 
 stopped() {
   local rc=0
@@ -278,7 +283,7 @@ case "$MODE" in
   [ ! -f "$JOURNAL" ] || options restore >/dev/null || exit 1
   # After the play script is out of the launch options: the rows' switches are plain variables.
   np_plugins_restore || exit 1
-  rm -f "$STORE/fc27-le-play.sh" "$STORE/fc27-le-run.cmd"
+  rm -f "$STORE/fc27-le-play.sh" "$STORE/fc27-le-run.cmd" "$STORE/fc27-squads.pl" "$STORE/fc27-squads.log"
   # What a session that was cut short leaves in the game folder: the game's own file, kept by
   # Live Editor's launcher under another name, with the stand-in in its place.
   if [ -f "$GAME/$AC.backup" ]; then
@@ -320,6 +325,7 @@ editor_ok || refuse "the Live Editor folder is not usable in $EDITOR."
 echo "[2/3] the play script"
 cp "$PLAY" "$STORE/fc27-le-play.sh.new" && chmod 755 "$STORE/fc27-le-play.sh.new" && mv -f "$STORE/fc27-le-play.sh.new" "$STORE/fc27-le-play.sh"
 cp "$RUN" "$STORE/fc27-le-run.cmd.new" && mv -f "$STORE/fc27-le-run.cmd.new" "$STORE/fc27-le-run.cmd"
+cp "$SQUADS" "$STORE/fc27-squads.pl.new" && mv -f "$STORE/fc27-squads.pl.new" "$STORE/fc27-squads.pl"
 
 echo "[3/3] NotProton's rows and library, and Steam's launch options"
 np_plugins_install || exit 1
@@ -340,5 +346,6 @@ echo "  ************************************************************************
 echo
 echo "  Steam's Play now starts EA SPORTS FC 27 with Live Editor; F9 shows its window in the game."
 echo "  The first Play only has Live Editor's launcher write its settings, and asks you to press Play again."
+echo "  Each Play also adds EA's newest squads, when there are new ones: Customise > Squads > Load Squads."
 echo "  On the game's Compatibility page in NotProton, \"Play opens\" chooses Live Editor's launcher window, or exception notes for a report."
 echo "  A new version of Live Editor: download and unpack it, install this again and choose the new folder."

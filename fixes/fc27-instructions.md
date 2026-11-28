@@ -33,6 +33,17 @@ The game does not start here without Live Editor: EA AntiCheat's own launcher st
 
 While a session starts, Live Editor's launcher replaces one file in the game folder (`EAAntiCheat.GameServiceLauncher.exe`, keeping the game's own as `.backup`) and gives it back when it closes. If Steam ever says the game's files need repair after a session that was cut short, let it verify them, or remove the fix: Remove puts the file back.
 
+# EA's newest squads
+
+Each Play also asks EA's servers for the newest squads, the ones EA sends to the game online, in the background while the game starts. When there are new ones, they are added to your saved squads as **EA_Squads** and the date EA made them (for example `EA_Squads20261123000000`). To use them: **Customise > Squads > Load Squads**, and pick that file.
+
+- Nothing is loaded for you, and nothing you saved is replaced: it only adds a file, and only when EA has a new one.
+- It brings players, ratings, transfers and teams, not faces. A new face comes with a game update.
+- Its notes for the last start are in `fc27-squads.log`, beside the other logs below.
+- Removing the fix leaves the squad files it added in the game's settings: they are yours.
+
+The squad unpacker comes from xAranaktu's [FIFASquadFileDownloader](https://github.com/xAranaktu/FIFASquadFileDownloader) (MIT).
+
 # The rows in NotProton
 
 The fix adds no row of its own. It uses three of MacGameFix's rows, in the group **MacGameFix** on the game's Compatibility page in NotProton, which every game with a MacGameFix fix shares, each with its own settings:
@@ -70,6 +81,7 @@ The play script's notes for the last start are in `~/Library/Application Support
 | The game closes right after the EA SPORTS logo | The row **Engine fixes** is off or lost its library, or Live Editor is not the version for this game. Install the fix again; check Live Editor's version. |
 | Play starts nothing | The row **Start through the mod tool** is off. Switch it on in the game's Compatibility page. |
 | The fix reads partial after a NotProton or prefix update | Install it again, with Steam closed. |
+| No EA_Squads file in Load Squads | It appears after a Play once EA has squads newer than the files you have; `fc27-squads.log` says what EA has and whether it was added. |
 
 For a report of a game that closes, set the row **Play opens** to **The game, with exception notes for a report** for one start, and send NotProton's Wine log for the game with the three logs above. Set it back to **The game** afterwards: the log grows fast.
 

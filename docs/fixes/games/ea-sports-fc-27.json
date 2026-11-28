@@ -34,6 +34,11 @@
       "name": "xAranaktu",
       "url": "https://github.com/xAranaktu/FC-27-Live-Editor",
       "note": "FC 27 Live Editor, the mod tool the game starts with. Each player downloads it from its author and gives the install its folder; it is not part of MacGameFix and is not downloaded by it."
+    },
+    {
+      "name": "xAranaktu",
+      "url": "https://github.com/xAranaktu/FIFASquadFileDownloader",
+      "note": "FIFASquadFileDownloader (MIT), whose squad unpacker and saved-file layout fc27-squads.pl ports to add EA's newest squads at each Play."
     }
   ],
   "excerpts": [
