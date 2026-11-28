@@ -305,6 +305,8 @@ enum NotProtonPlugins {
         list.save()
         var said = keep(everyGame: false)
         if rows == .notInstalled || rows == .behind { said += EveryGameRows.run([]) }
+        // The rows the catalog and Game Feel want, switched on for their games now that both are closed.
+        said += RowsByGame.pass()
         return (said, false)
     }
 
@@ -342,6 +344,8 @@ enum NotProtonPlugins {
                 said.append("\(p.name) library: removed")
             }
         }
+        // Each game it was switched on for gets its launch options back as they were.
+        said += RowsByGame.undo(p.id)
         list.waiting[p.id] = nil
         list.save()
         return (said, false)

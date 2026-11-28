@@ -212,6 +212,8 @@ done
 # The rows kept for every game have no game's installer to name their script (NotProtonPlugins.swift
 # runs it); what it names is already what the games' installers name.
 PAYLOAD+=("notproton-every-game.sh")
+# The rows switched on per game (RowsByGame.swift): the table, and the program that writes them.
+PAYLOAD+=("notproton-rows.json" "steam-launch-options.pl")
 PAYLOAD=($(printf '%s\n' "${PAYLOAD[@]}" | sort -u))
 
 missing=0
@@ -224,7 +226,7 @@ rm -rf "$APP"
 mkdir -p "$MACOS" "$RES" "$CACHE"
 
 echo "==> compiling"
-swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/ShaderCache.swift" "$HERE/Fans.swift" "$HERE/PrefixRunner.swift" "$HERE/ProcessorsRow.swift" "$HERE/GeneralRows.swift" "$HERE/NotProtonPlugins.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Probe.swift" "$HERE/Automation.swift" "$HERE/AppUpdate.swift" "$HERE/MenuBar.swift" "$HERE/Instructions.swift" "$HERE/NativePort.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
+swiftc "$HERE/Core.swift" "$HERE/Engine.swift" "$HERE/GameMode.swift" "$HERE/ShaderCache.swift" "$HERE/Fans.swift" "$HERE/PrefixRunner.swift" "$HERE/ProcessorsRow.swift" "$HERE/GeneralRows.swift" "$HERE/NotProtonPlugins.swift" "$HERE/RowsByGame.swift" "$HERE/Pad.swift" "$HERE/PadTester.swift" "$HERE/Probe.swift" "$HERE/Automation.swift" "$HERE/AppUpdate.swift" "$HERE/MenuBar.swift" "$HERE/Instructions.swift" "$HERE/NativePort.swift" "$HERE/MacGameFix.swift" -O -parse-as-library \
   -o "$MACOS/MacGameFix" \
   -framework SwiftUI -framework AppKit -framework IOKit -framework UserNotifications -framework GameController \
   -framework AVFoundation -framework CoreAudio -framework AudioToolbox \
@@ -283,6 +285,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>MacGameFixPrereleaseTag</key><string>$PRERELEASE_TAG</string>
   <key>MacGameFixUpdatesBase</key><string>$UPDATES_BASE</string>
   <key>MacGameFixUpdatesSecret</key><string>$UPDATES_SECRET</string>
+  <key>MacGameFixRowsSchemaVersion</key><integer>1</integer>
   <key>CFBundleName</key><string>MacGameFix</string>
   <key>CFBundleDisplayName</key><string>MacGameFix</string>
   <key>CFBundleIdentifier</key><string>io.github.macgamefix</string>
