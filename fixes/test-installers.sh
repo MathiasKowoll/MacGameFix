@@ -1128,7 +1128,7 @@ fnp --install > /dev/null 2>&1
 # field: NotProton then offers the row on the game's page when it is off. For one that does not
 # read it, the descriptor is what it was before the field existed.
 fnconf0="$(printf '%s\n' '# MacGameFix writes this file for app 1551360 and removes it with the fix; edits do not last.' \
-  '[NOTPROTON_MGF_FH5_SIGNIN_1551360]' 'label = Xbox sign-in window' 'group = MacGameFix' \
+  '[NOTPROTON_MGF_FH5_SIGNIN_1551360]' 'label = Xbox sign-in window' 'group = MacGameFix / Game fixes' \
   'description = Keeps the Xbox sign-in page from closing the game. Leave it on' 'on = 1' 'tools = notproton-fex-rosetta*' \
   'patch = win32u.so/x86_64: 48 8d 7b 38 e8 ?? ?? ?? ?? 48 89 df 48 83 c4 08 5b 41 5e 41 5f 5d e9=c3 ?? ?? ?? ??' 'apps = 1551360')"
 [ "$(cat "$fnconf")" = "$fnconf0" ] && say ok "fh5 in NotProton: a NotProton that does not read needed_for gets the row as before the field" \

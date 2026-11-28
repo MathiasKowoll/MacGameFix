@@ -1203,9 +1203,9 @@ check '[ "$(MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240 "$BIN" --rows-keep)
 cp "$CT/notproton-a/run" "$T/run-with-patch"
 # A NotProton from before needed_for and improves refuses a row that carries them: it gets the
 # rows as they were before the fields.
-DXR0="$(printf '%s\n' '[NOTPROTON_MGF_DXR_OFF]' 'label = Ray tracing off' 'group = MacGameFix · D3DMetal' \
+DXR0="$(printf '%s\n' '[NOTPROTON_MGF_DXR_OFF]' 'label = Ray tracing off' 'group = MacGameFix / D3DMetal' \
   'description = The game sees no ray tracing. For a game that closes as a level loads: Phantom Blade Zero with DLSS on' 'section = dev' 'on = 1' 'env = D3DM_SUPPORT_DXR=0')"
-NVD0="$(printf '%s\n' '[NOTPROTON_MGF_NVIDIA_DRIVER]' 'label = NVIDIA driver version' 'group = MacGameFix · D3DMetal' \
+NVD0="$(printf '%s\n' '[NOTPROTON_MGF_NVIDIA_DRIVER]' 'label = NVIDIA driver version' 'group = MacGameFix / D3DMetal' \
   'description = The game sees a newer NVIDIA driver and stops asking for a driver update. Played with EA SPORTS FC 27' 'on = 1' 'tools = notproton-fex-rosetta*' \
   'patch = D3DMetal/x86_64: 48 c7 42 04 02=9f e1=86 00=01 00 48 b8 72 36 31 36 5f 34 31 | 48 c7 42 04 2d=9f db=86 00=01 00 48 b8 72 35 36 30 5f 38 38' \
   'patch = D3DMetal/x86_64: c7 01 02=9f e1=86 00=01 00 48 b8 72 36 31 36 5f 34 31 | c7 01 2d=9f db=86 00=01 00 48 b8 72 35 36 30 5f 38 38')"
@@ -1255,7 +1255,7 @@ check '[ "$("$BIN" --plugins-report | /usr/bin/grep -c ": in place$")" = 5 ]' "w
 check '[ "$("$BIN" --rows-keep)" = "rows: nothing to do" ]' "plugins already right are left as they are"
 check 'has "$T6" "improves = 1174180 Red Dead Online connects to its servers." && has "$T6" "improves = 1404210 Red Dead Online connects to its servers." && ! has "$T6" "needed_for"' "a NotProton that reads improves is told the Red Dead Online row is for Red Dead Redemption 2 and Red Dead Online"
 check '! /usr/bin/grep -Eq "^(improves|needed_for)" "$NPU" "$NPZ" "$NPN" "$NPC"' "the rows whose games this repository does not name by Steam app name none"
-RDO0="$(printf '%s\n' '[NOTPROTON_TCP_NOOPT]' 'label = Red Dead Online fix' 'group = MacGameFix · Per game' 'description = Lets Red Dead Online connect. Played online on NotProton 41303' \
+RDO0="$(printf '%s\n' '[NOTPROTON_TCP_NOOPT]' 'label = Red Dead Online fix' 'group = MacGameFix / Game fixes' 'description = Lets Red Dead Online connect. Played online on NotProton 41303' \
   'on = 1' 'inject = 1' 'apps = 1174180' 'apps = 1404210' 'requires = Library/Application Support/notproton/plugins/tcp-noopt.dylib')"
 cp "$CT/notproton-a/run" "$T/run-with-fields"
 printf '      split("label description description_on section on off depends requires inject env overrides stage tools type choice min max step default suffix hide_crossover apps patch variants group", f, " ")\n' > "$CT/notproton-a/run"
