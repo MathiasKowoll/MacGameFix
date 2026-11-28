@@ -392,8 +392,17 @@ opens, and NotProton's app lists it and deletes from it. With either open the
 install says which and changes nothing. From then on the menu bar item and the
 window keep what was installed current on their own, with Steam open or not: a
 row that changed, a library a newer MacGameFix carries. A plugin deleted in
-NotProton's Plugins page stays out until **Install** is pressed again; until
-2026-11-28 every pass wrote whatever was missing, so it came back. On a Mac
+NotProton's Plugins page stays out until it is installed again; until
+2026-11-28 every pass wrote whatever was missing, so it came back.
+
+Each plugin has its own button too: **Install** puts in that one alone, and
+**Remove** takes it out, its row and its library, and it stays out. Both want
+Steam and NotProton closed. A game that had the row switched on keeps the
+variable in its launch options, which then names no row. Engine fixes removed
+while a game's fix uses it stays for that game, and the removal says so. The
+section also counts the rows in NotProton's folder, everyone's, of the 32
+NotProton reads. `--plugins-install [<id>]` and `--plugins-remove <id>` do the
+same from the command line. On a Mac
 that had them before that, the ones already there count as installed. The tab
 shows how each one stands: in place, not in place yet, not installed, or why it
 is not offered.
