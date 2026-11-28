@@ -1236,7 +1236,18 @@ rm -f "$NPU" "$NPZ" "$NPN" "$NPT" "$NPC" "$NPP"/d3dmetal-freeze.dylib "$NPP"/d3d
 mkdir -p "$CT/notproton-a"
 printf '      split("label description description_on section on off depends requires inject env overrides stage tools type choice min max step default suffix hide_crossover apps patch variants group improves needed_for", f, " ")\n' > "$CT/notproton-a/run"
 check '[ -f "$NPLIB/d3dmetal-freeze.dylib" ] && [ -f "$NPLIB/d3dmetal-notifier.dylib" ] && [ -f "$NPLIB/tcp-noopt.dylib" ] && has "$(lipo -archs "$NPLIB/tcp-noopt.dylib")" arm64 && has "$(lipo -archs "$NPLIB/tcp-noopt.dylib")" x86_64 && has "$(lipo -archs "$NPLIB/mgf-controls.dylib")" arm64 && has "$(lipo -archs "$NPLIB/mgf-controls.dylib")" x86_64' "the app carries the four libraries, for both architectures"
-OUT=$("$BIN" --rows-keep)
+# Nothing goes into NotProton until the player installs, and an install wants Steam and NotProton
+# closed. MGVF_STEAM_RUNNING and MGVF_NOTPROTON_RUNNING answer for the Steam of the Mac the tests run on.
+export MGVF_STEAM_RUNNING=0 MGVF_NOTPROTON_RUNNING=0 MGVF_NOTPROTON_VERSION=1.2.8
+NPNOTE="$SUPPORT/MacGameFix/notproton-plugins.installed"; rm -f "$NPNOTE"
+"$BIN" --rows-keep >/dev/null
+check '[ ! -e "$NPU" ] && [ ! -e "$NPC" ] && has "$("$BIN" --plugins-report)" "Unreal video fix: not installed"' "the agent's pass puts no plugin in that the player has not installed"
+OUT=$(MGVF_STEAM_RUNNING=1 "$BIN" --plugins-install) && RC=0 || RC=$?
+check '[ "$RC" = 1 ] && has "$OUT" "Steam is open. Quit it, then install. Nothing was changed." && [ ! -e "$NPU" ]' "with Steam open the install is refused, and nothing is written"
+OUT=$(MGVF_NOTPROTON_RUNNING=1 "$BIN" --plugins-install) && RC=0 || RC=$?
+check '[ "$RC" = 1 ] && has "$OUT" "NotProton is open. Quit it, then install." && [ ! -e "$NPU" ]' "and with NotProton's app open"
+check 'has "$(MGVF_STEAM_RUNNING=1 MGVF_NOTPROTON_RUNNING=1 "$BIN" --plugins-install || true)" "Steam and NotProton are open. Quit them, then install."' "both open are both named"
+OUT=$("$BIN" --plugins-install)
 check 'has "$OUT" "Unreal video row: written" && [ -f "$NPU" ] && [ ! -e "$NPZ" ] && [ ! -e "$NPN" ] && [ ! -e "$NPT" ] && [ ! -e "$NPC" ] && [ ! -e "$NPP/tcp-noopt.dylib" ] && [ ! -e "$NPP/mgf-controls.dylib" ]' "without NotProton's plugin host, only the Unreal row: a library would load and do nothing"
 OUT=$("$BIN" --plugins-report)
 check 'has "$OUT" "Unreal video fix: in place" && has "$OUT" "D3DMetal freeze fix: not offered, NotProton'"'"'s plugin host is not installed"' "the window says which plugins are in place and why one is not offered"
@@ -1272,7 +1283,36 @@ printf '[NOTPROTON_D3DMETAL_NOTIFIER]\nlabel = Theirs\non = 1\n' > "$NPP/someone
 check 'has "$("$BIN" --plugins-report)" "D3DMetal video crash fix: another plugin file has it"' "an id another file declares shows as theirs"
 check 'has "$("$BIN" --rows-keep)" "another plugin file has NOTPROTON_D3DMETAL_NOTIFIER, left alone" && [ ! -e "$NPN" ] && [ "$(cat "$NPP/d3dmetal-notifier.dylib")" = theirs ]' "an id another file declares is left alone, and so is its library"
 rm -f "$NPP/someone-else.conf" "$NPP/d3dmetal-notifier.dylib"
-"$BIN" --rows-keep >/dev/null
+# NotProton's Plugins page deletes a plugin by moving its row and its library to the Trash.
+OUT=$(MGVF_STEAM_RUNNING=1 "$BIN" --rows-keep)
+check 'has "$OUT" "D3DMetal video crash row: deleted from NotProton'"'"'s plugins, left out until it is installed again" && [ ! -e "$NPN" ] && [ ! -e "$NPP/d3dmetal-notifier.dylib" ] && [ "$("$BIN" --rows-keep)" = "rows: nothing to do" ] && has "$("$BIN" --plugins-report)" "D3DMetal video crash fix: not installed"' "a plugin deleted in NotProton is not put back by the agent's pass"
+check '! MGVF_STEAM_RUNNING=1 "$BIN" --plugins-install >/dev/null && [ ! -e "$NPN" ]' "nor by an install while Steam is open"
+OUT=$("$BIN" --plugins-install)
+check 'has "$OUT" "D3DMetal video crash library: put in place" && has "$OUT" "D3DMetal video crash row: written" && [ -f "$NPN" ] && cmp -s "$NPLIB/d3dmetal-notifier.dylib" "$NPP/d3dmetal-notifier.dylib" && ! has "$OUT" "Unreal" && ! has "$OUT" "DualSense"' "installing again brings it back, and touches no other plugin"
+# Engine fixes, the row for every game: the catalog's script writes it, into the file the games' installers share.
+NPS="$NPP/mgf-shared.conf"; NPE="$NPP/mgf-engine.dylib"; NPRES="$HERE/MacGameFix.app/Contents/Resources"
+check 'has "$("$BIN" --plugins-report)" "Engine fixes: not offered, this catalog of fixes has no installer for it"' "a downloaded catalog from before the installer existed does not offer Engine fixes"
+# The app's own catalog from here: the downloaded one of the tests above is put back after.
+mv "$SUPPORT/MacGameFix/catalog" "$T/catalog-aside"
+check '[ -x "$NPRES/notproton-every-game.sh" ] && [ -f "$NPRES/mgf-engine.dylib" ] && has "$("$BIN" --plugins-report)" "Engine fixes: not installed" && [ ! -e "$NPS" ]' "the app carries the installer of the rows for every game, and nothing of them is there before an install"
+check 'has "$(MGVF_STEAM_RUNNING=1 "$BIN" --plugins-install || true)" "Steam is open" && [ ! -e "$NPS" ] && [ ! -e "$NPE" ]' "with every other plugin installed, Engine fixes alone still waits for Steam to close"
+OUT=$("$BIN" --plugins-install)
+check 'has "$OUT" "Engine fixes: NotProton: 1 row(s) for every game" && has "$(cat "$NPS")" "[NOTPROTON_MGF_ENGINE]" && ! /usr/bin/grep -q "^apps" "$NPS" && has "$(cat "$NPS")" "requires = Library/Application Support/notproton/plugins/mgf-engine.dylib" && cmp -s "$NPRES/mgf-engine.dylib" "$NPE" && has "$("$BIN" --plugins-report)" "Engine fixes: in place" && [ "$("$BIN" --plugins-install)" = "plugins: nothing to do" ]' "the install puts Engine fixes on every game's page, with no game's fix installed, and its library beside it"
+echo "description = edited by hand" >> "$NPS"
+check 'has "$("$BIN" --plugins-report)" "Engine fixes: not in place yet" && has "$(MGVF_STEAM_RUNNING=1 "$BIN" --rows-keep)" "Engine fixes: " && ! /usr/bin/grep -q "edited by hand" "$NPS" && has "$("$BIN" --plugins-report)" "Engine fixes: in place"' "once installed it is kept current by the agent's pass, with Steam open too"
+printf 'not a build of ours' > "$NPE"
+check 'has "$("$BIN" --rows-keep)" "Engine fixes: error: mgf-engine.dylib in NotProton'"'"'s plugins folder is not one MacGameFix shipped; nothing was changed." && [ "$(cat "$NPE")" = "not a build of ours" ]' "a library there that MacGameFix never shipped is left as it is, and the pass says so"
+rm -f "$NPS" "$NPE"
+check 'has "$("$BIN" --plugins-report)" "Engine fixes: not installed" && [ "$(MGVF_STEAM_RUNNING=1 "$BIN" --rows-keep)" = "rows: nothing to do" ] && [ ! -e "$NPS" ]' "deleted in NotProton, it stays out as well"
+rm -f "$NPP/mgf-every-game.uses"
+# A Mac from before the notes, where a game's fix put Engine fixes in: the first pass takes it as
+# installed, as it does the plugins whose rows are there.
+rm -f "$NPNOTE"
+printf '# MacGameFix writes this file for app 4080220 and removes it with the fix; edits do not last.\n# shared rows: NOTPROTON_MGF_ENGINE\n' > "$NPP/mgf-4080220.uses"
+( HOME="$MACGAMEFIX_HOME"; . "$NPRES/notproton-plugins.sh"; NP_SHARED_TEMPLATE="$NPRES/np-plugin-shared.conf"; NP_SHARED_GROUP=""; np_shared_write ); cp "$NPRES/mgf-engine.dylib" "$NPE"
+check 'has "$("$BIN" --plugins-report)" "Engine fixes: not installed" && [ "$(MGVF_STEAM_RUNNING=1 "$BIN" --rows-keep)" = "rows: nothing to do" ] && [ -f "$NPP/mgf-every-game.uses" ] && [ "$("$BIN" --plugins-report | /usr/bin/grep -c ": in place$")" = 6 ]' "on a Mac from before the notes, what is already there is taken as installed: Engine fixes a game's fix put in, and the five plugins"
+rm -f "$NPP/mgf-4080220.uses" "$NPP/mgf-every-game.uses" "$NPS" "$NPE"
+mv "$T/catalog-aside" "$SUPPORT/MacGameFix/catalog"
 rm -f "$NPHOST"
 OUT=$("$BIN" --rows-keep)
 check 'has "$OUT" "D3DMetal freeze row: taken out, NotProton'"'"'s plugin host is not installed" && [ ! -e "$NPZ" ] && [ ! -e "$NPN" ] && [ ! -e "$NPT" ] && [ ! -e "$NPC" ] && [ -f "$NPU" ]' "with the plugin host gone, the library rows come out and the Unreal row stays"
@@ -1280,9 +1320,9 @@ printf '      split("label description section on off depends requires inject en
 printf '[NOTPROTON_D3DMETAL_NODEGUARD]\nlabel = Written by hand\non = 1\n' > "$NPZ"
 OUT=$("$BIN" --rows-keep)
 check 'has "$OUT" "Unreal video row: taken out, the NotProton in Steam does not read patch" && [ ! -e "$NPU" ] && [ -f "$NPZ" ]' "a NotProton that does not read patch loses the Unreal row; a file MacGameFix did not write stays"
-rm -f "$NPZ" "$NPP"/*.dylib "$NPF" "$NPD" "$NPV" "$NPR"
+rm -f "$NPZ" "$NPP"/*.dylib "$NPF" "$NPD" "$NPV" "$NPR" "$NPNOTE"
 rm -rf "$CT"
-unset MACGAMEFIX_CPUS MACGAMEFIX_DISPLAY
+unset MACGAMEFIX_CPUS MACGAMEFIX_DISPLAY MGVF_STEAM_RUNNING MGVF_NOTPROTON_RUNNING MGVF_NOTPROTON_VERSION
 
 echo "== Game Mode for CrossOver's games"
 GM="$MACGAMEFIX_HOME/Applications/CrossOver GM.app"

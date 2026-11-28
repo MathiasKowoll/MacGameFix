@@ -376,10 +376,27 @@ work its row is taken out again. A row another plugin file already declares is
 left alone, with its library, so a NotProton that ships the same plugins keeps
 its own.
 
-There is nothing to install by hand: the menu bar item puts them in place, and
-so does the window each time it looks for games. The Improvements tab shows
-whether each one is in place, or why it is not offered, and its **Put in Place**
-button does now what the menu bar item would do on its next pass.
+And one is for every game:
+
+- **Engine fixes** (`mgf-shared.conf`, `mgf-engine.dylib`, the Rosetta tools):
+  each game gets its own fixes from the library, and a game no fix knows gets
+  Rosetta's CPU as its copy protection expects it, which a game with Denuvo
+  needs to start. It used to arrive only with the fix of one of five games.
+  The games' installers write the same row into the same file, so here the
+  app runs the catalog's `fixes/notproton-every-game.sh` rather than write it
+  itself.
+
+**Installing them.** Improvements, NotProton plugins, **Install**, with Steam
+and NotProton closed: Steam reads the plugins folder each time a game's page
+opens, and NotProton's app lists it and deletes from it. With either open the
+install says which and changes nothing. From then on the menu bar item and the
+window keep what was installed current on their own, with Steam open or not: a
+row that changed, a library a newer MacGameFix carries. A plugin deleted in
+NotProton's Plugins page stays out until **Install** is pressed again; until
+2026-11-28 every pass wrote whatever was missing, so it came back. On a Mac
+that had them before that, the ones already there count as installed. The tab
+shows how each one stands: in place, not in place yet, not installed, or why it
+is not offered.
 
 **Offered on the game's page.** NotProton's plugin branch reads two more fields
 in a row, `needed_for` and `improves`, each a Steam app and one sentence. While

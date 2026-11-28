@@ -496,6 +496,68 @@ f1 > /dev/null 2>&1
 [ "$(printf '4080220 NOTPROTON_MGF_ENGINE\n4080220 NOTPROTON_MGF_MODTOOL\n' | HOME="$fhome" MGVF_NOTPROTON_VERSION=1.2.8 /bin/bash -c '. "$1"; NP_SHARED_TEMPLATE=""; np_shared_expected' _ "$FIX/notproton-plugins.sh" | /usr/bin/grep -c '^apps = ')" = 1 ] \
   && say ok "shared rows: written by a game that names no template, Engine fixes still shows on every game" || say FAIL "shared rows: Engine fixes got apps from a game that names no template"
 rm -f "$fplug/mgf-4080220.uses" "$fplug/mgf-shared.conf" "$fplug/mgf-engine.dylib"
+# The rows kept for every game (notproton-every-game.sh): Engine fixes for a Mac where no game's
+# fix was installed, put in only with Steam and NotProton closed, by the writer the games use.
+egh="$W/every/home"; egnp="$egh/Library/Application Support/notproton"; egp="$egnp/plugins"
+egtool="$egh/Library/Application Support/Steam/compatibilitytools.d/notproton-a"; mkdir -p "$egtool"
+printf '      split("label description section on off depends requires inject env tools type choice default apps patch group improves needed_for", f, " ")\n      if (names[i] == "group") next\n' > "$egtool/run"
+eg() { HOME="$egh" MGVF_NOTPROTON_VERSION=1.2.8 MGVF_STEAM_RUNNING="${egsteam:-0}" MGVF_NOTPROTON_RUNNING="${egapp:-0}" /bin/bash "$FIX/notproton-every-game.sh" "$@"; }
+egst() { eg --status 2>/dev/null | tail -1; }
+[ "$(egst)" = unavailable ] && ! eg > /dev/null 2>&1 && [ ! -d "$egp" ] \
+  && say ok "every game's rows: with no NotProton there is nothing to install into, and nothing is made" || say FAIL "every game's rows: no NotProton ($(egst))"
+mkdir -p "$egnp"
+[ "$(egst)" = unavailable ] && eg --status 2>&1 | /usr/bin/grep -q "plugin host is not installed" \
+  && say ok "every game's rows: a NotProton with no plugin host could not load the library, so they are not offered" || say FAIL "every game's rows: no plugin host ($(egst))"
+echo host > "$egnp/plugin-host.dylib"
+[ "$(egst)" = absent ] && say ok "every game's rows: absent before an install" || say FAIL "every game's rows: before an install ($(egst))"
+egout="$(egsteam=1 eg 2>&1)" && egrc=0 || egrc=$?
+[ "$egrc" = 1 ] && printf '%s' "$egout" | /usr/bin/grep -q "Steam is open. Quit Steam" && [ ! -d "$egp" ] \
+  && say ok "every game's rows: with Steam open the install is refused and nothing is written" || say FAIL "every game's rows: Steam open ($egrc, $egout)"
+egout="$(egapp=1 eg 2>&1)" && egrc=0 || egrc=$?
+[ "$egrc" = 1 ] && printf '%s' "$egout" | /usr/bin/grep -q "NotProton is open. Quit NotProton" && [ ! -d "$egp" ] \
+  && say ok "every game's rows: and with NotProton's app open" || say FAIL "every game's rows: NotProton open ($egrc, $egout)"
+eg > /dev/null 2>&1
+[ "$(egst)" = installed ] && /usr/bin/grep -qx '\[NOTPROTON_MGF_ENGINE\]' "$egp/mgf-shared.conf" && [ "$(/usr/bin/grep -c '^\[' "$egp/mgf-shared.conf")" = 1 ] \
+  && ! /usr/bin/grep -q '^apps' "$egp/mgf-shared.conf" && /usr/bin/grep -qx 'group = MacGameFix / Game fixes' "$egp/mgf-shared.conf" \
+  && /usr/bin/grep -q '^needed_for = 3059520 ' "$egp/mgf-shared.conf" && cmp -s "$FIX/mgf-engine.dylib" "$egp/mgf-engine.dylib" \
+  && /usr/bin/grep -qx '# shared rows: NOTPROTON_MGF_ENGINE' "$egp/mgf-every-game.uses" \
+  && say ok "every game's rows: installed with both closed, Engine fixes is on every game's page with its library, and no other shared row" || say FAIL "every game's rows: install ($(egst), $(cat "$egp/mgf-shared.conf" 2>/dev/null | tr '\n' '|'))"
+# A game's fix that uses the shared rows, after: its rows join, Engine fixes is still for every
+# game, and removing the game's leaves Engine fixes and the library.
+printf '# MacGameFix writes this file for app 4080220 and removes it with the fix; edits do not last.\n# shared rows: NOTPROTON_MGF_ENGINE NOTPROTON_MGF_MODTOOL\n' > "$egp/mgf-4080220.uses"
+egwrite() { ( HOME="$egh"; export MGVF_NOTPROTON_VERSION=1.2.8; . "$FIX/notproton-plugins.sh"; NP_SHARED_TEMPLATE="$FIX/np-plugin-shared.conf"; NP_SHARED_LIBRARY="$FIX/mgf-engine.dylib"; NP_SHARED_GROUP=MacGameFix; np_shared_write ); }
+egwrite
+[ "$(/usr/bin/grep -c '^\[' "$egp/mgf-shared.conf")" = 2 ] && [ "$(/usr/bin/grep -c '^apps = ' "$egp/mgf-shared.conf")" = 1 ] && /usr/bin/grep -qx 'apps = 4080220' "$egp/mgf-shared.conf" \
+  && ! /usr/bin/grep -qx 'apps = 0' "$egp/mgf-shared.conf" && [ "$(egst)" = installed ] \
+  && say ok "every game's rows: a game's fix adds its own rows to the same file, for its app alone, and Engine fixes stays for every game" || say FAIL "every game's rows: with a game ($(cat "$egp/mgf-shared.conf" | tr '\n' '|'))"
+rm -f "$egp/mgf-4080220.uses"; egwrite
+[ "$(/usr/bin/grep -c '^\[' "$egp/mgf-shared.conf")" = 1 ] && [ "$(egst)" = installed ] && [ -f "$egp/mgf-engine.dylib" ] \
+  && say ok "every game's rows: the game's fix removed, Engine fixes and its library stay" || say FAIL "every game's rows: after the game left ($(egst))"
+echo "description = edited by hand" >> "$egp/mgf-shared.conf"
+[ "$(egst)" = half ] && egsteam=1 eg > /dev/null 2>&1 && [ "$(egst)" = installed ] \
+  && say ok "every game's rows: once installed they are brought up to date with Steam open too" || say FAIL "every game's rows: upkeep ($(egst))"
+printf 'not a build of ours' > "$egp/mgf-engine.dylib"
+! eg > /dev/null 2>&1 && [ "$(cat "$egp/mgf-engine.dylib")" = "not a build of ours" ] \
+  && say ok "every game's rows: a library there that MacGameFix never shipped is not replaced" || say FAIL "every game's rows: foreign library"
+cp "$FIX/mgf-engine.dylib" "$egp/mgf-engine.dylib"
+# NotProton's Plugins page deletes the file and the library it requires; the note stays.
+rm -f "$egp/mgf-shared.conf" "$egp/mgf-engine.dylib"
+[ "$(egst)" = absent ] && ! egsteam=1 eg > /dev/null 2>&1 && [ ! -e "$egp/mgf-shared.conf" ] && eg > /dev/null 2>&1 && [ "$(egst)" = installed ] \
+  && say ok "every game's rows: deleted in NotProton they read absent, and come back only by an install with Steam closed" || say FAIL "every game's rows: deleted in NotProton ($(egst))"
+# A Mac from before the note, where a game's fix put Engine fixes in: adopted, it reads installed
+# with nothing rewritten, and it stays when that game's fix goes.
+rm -f "$egp/mgf-every-game.uses"
+printf '# MacGameFix writes this file for app 4080220 and removes it with the fix; edits do not last.\n# shared rows: NOTPROTON_MGF_ENGINE\n' > "$egp/mgf-4080220.uses"
+egwrite; egbefore="$(cat "$egp/mgf-shared.conf")"
+[ "$(egst)" = absent ] && egsteam=1 eg --adopt > /dev/null 2>&1 && [ "$(egst)" = installed ] && [ "$(cat "$egp/mgf-shared.conf")" = "$egbefore" ] \
+  && rm -f "$egp/mgf-4080220.uses" && egwrite && [ "$(egst)" = installed ] && ! eg --adopt > /dev/null 2>&1 \
+  && say ok "every game's rows: where a game's fix already put them in they are adopted as installed, with Steam open and nothing rewritten" || say FAIL "every game's rows: adopt ($(egst))"
+rm -f "$egp/mgf-every-game.uses" "$egp/mgf-shared.conf"
+! eg --adopt > /dev/null 2>&1 && [ ! -e "$egp/mgf-every-game.uses" ] && eg > /dev/null 2>&1 \
+  && say ok "every game's rows: with no row there, there is nothing to adopt" || say FAIL "every game's rows: adopt with nothing"
+! egsteam=1 eg --restore > /dev/null 2>&1 && [ "$(egst)" = installed ] && eg --restore > /dev/null 2>&1 && [ "$(egst)" = absent ] \
+  && [ ! -e "$egp/mgf-shared.conf" ] && [ ! -e "$egp/mgf-engine.dylib" ] && [ ! -e "$egp/mgf-every-game.uses" ] \
+  && say ok "every game's rows: removed with both closed, the file, the library and the note are gone" || say FAIL "every game's rows: restore ($(egst), $(ls "$egp" | tr '\n' ' '))"
 # An earlier install's mgf-low-allocations.dylib, the build PR #154 shipped, is taken out; a file of that name that is not that build stays.
 if /usr/bin/git -C "$FIX" show 1a2cb2a:fixes/mgf-low-allocations.dylib > "$W/f125-old-lib" 2>/dev/null; then
   mkdir -p "$fplug"; cp "$W/f125-old-lib" "$fplug/mgf-low-allocations.dylib"
