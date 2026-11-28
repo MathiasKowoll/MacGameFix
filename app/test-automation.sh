@@ -1481,13 +1481,13 @@ NIRES="$HERE/MacGameFix.app/Contents/Resources"
 check '/usr/bin/python3 -c "
 import json, re, sys
 t = json.load(open(sys.argv[1]))
-ok = t[\"schema\"] == 1 and len(t[\"ports\"]) == 5 and all(re.fullmatch(\"[0-9a-f]{64}\", p[\"sha256\"]) and p[\"size\"] > 0 and p[\"url\"].startswith(\"https://github.com/NightSightProductions/\") and p[\"url\"].endswith(\".dmg\") and \"/v\" + p[\"version\"] + \"/\" in p[\"url\"] for p in t[\"ports\"])
+ok = t[\"schema\"] == 1 and len(t[\"ports\"]) == 5 and all(p[\"bundle\"] == \"recomp\" and re.fullmatch(\"[0-9a-f]{64}\", p[\"sha256\"]) and p[\"size\"] > 0 and p[\"url\"].startswith(\"https://github.com/NightSightProductions/\") and p[\"url\"].endswith(\".dmg\") and \"/v\" + p[\"version\"] + \"/\" in p[\"url\"] for p in t[\"ports\"])
 sys.exit(0 if ok else 1)" "$NIRES/native-installers.json"' "the app carries the table of five ports, each with one release's file by its address, size and SHA-256"
 NI="$T/ni"; mkdir -p "$NI/dmg/Install Fake Recomp.app/Contents/MacOS"
 printf '#!/bin/sh\n' > "$NI/dmg/Install Fake Recomp.app/Contents/MacOS/Install"; chmod +x "$NI/dmg/Install Fake Recomp.app/Contents/MacOS/Install"
 /usr/bin/hdiutil create -volname Fake -srcfolder "$NI/dmg" -ov -format UDZO "$NI/Fake.dmg" >/dev/null
 NISHA=$(/usr/bin/shasum -a 256 "$NI/Fake.dmg" | cut -d" " -f1); NISIZE=$(/usr/bin/stat -f %z "$NI/Fake.dmg")
-nitable() { printf '{"schema": %s, "ports": [{"id": "fake-port", "title": "Fake, native", "summary": "s", "by": "Someone", "steamApp": "5151", "gameExecutable": "Fake_x64.exe", "app": "Fake.app", "installer": "%s", "version": "%s", "url": "file://%s", "sha256": "%s", "size": %s, "page": "https://example.com"}]}\n' "$1" "$2" "$3" "$NI/Fake.dmg" "$4" "$NISIZE" > "$NI/table.json"; }
+nitable() { printf '{"schema": %s, "ports": [{"id": "fake-port", "title": "Fake, native", "summary": "s", "by": "Someone", "steamApp": "5151", "gameExecutable": "Fake_x64.exe", "app": "Fake.app", "bundle": "recomp", "installer": "%s", "version": "%s", "url": "file://%s", "sha256": "%s", "size": %s, "page": "https://example.com"}]}\n' "$1" "$2" "$3" "$NI/Fake.dmg" "$4" "$NISIZE" > "$NI/table.json"; }
 export MACGAMEFIX_NATIVE_INSTALLERS="$NI/table.json"
 nitable 1 "Install Fake Recomp.app" 1.2.0 "$NISHA"
 NIDIR="$SUPPORT/MacGameFix/native-installers"
@@ -1505,7 +1505,12 @@ nitable 1 "Install Nothing.app" 1.2.0 "$NISHA"
 OUT=$("$BIN" --native-installer-stage fake-port) && RC=0 || RC=$?
 check '[ "$RC" = 1 ] && has "$OUT" "The disk image has no Install Nothing.app" && [ ! -e "$NIDIR/fake-port/Install Nothing.app" ] && ! /usr/bin/hdiutil info | /usr/bin/grep -q "mount-fake-port"' "a disk image without the installer the catalog names is refused, and let go"
 nitable 1 "Install Fake Recomp.app" 1.2.0 "$NISHA"
-mkdir -p "$MACGAMEFIX_HOME/Applications/Fake.app"
+# Steam leaves a shortcut called after the game in the user's Applications: an application with no
+# bundle identifier, which is not the port.
+mkdir -p "$MACGAMEFIX_HOME/Applications/Fake.app/Contents"
+printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>CFBundleExecutable</key><string>run.sh</string></dict></plist>\n' > "$MACGAMEFIX_HOME/Applications/Fake.app/Contents/Info.plist"
+check 'has "$(nirep)" "fake-port 1.2.0: not installed"' "an application with the name of the port that is not the port, as a Steam shortcut called after the game, is not the port installed"
+printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>com.example.Fake-Recomp</string></dict></plist>\n' > "$MACGAMEFIX_HOME/Applications/Fake.app/Contents/Info.plist"
 check 'has "$(nirep)" "fake-port 1.2.0: installed, by an installer MacGameFix did not open"' "a port whose app is in Applications is installed, whoever installed it"
 printf 'fake-port 1.1.0\n' > "$SUPPORT/MacGameFix/native-installers.installed"
 check 'has "$(nirep)" "fake-port 1.2.0: installed, 1.1.0; 1.2.0 to install"' "a later version in the catalog than the installer last opened is an update to install"

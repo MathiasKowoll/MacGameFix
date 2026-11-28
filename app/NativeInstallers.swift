@@ -48,8 +48,10 @@ enum NativeInstallers {
         /// The Windows game's Steam app id, and its program in the game's folder.
         let steamApp: String
         let gameExecutable: String
-        /// What the installer leaves in Applications, and the installer inside the disk image.
+        /// What the installer leaves in Applications, a part of that app's bundle identifier, and the
+        /// installer inside the disk image.
         let app: String
+        let bundle: String
         let installer: String
         let version: String
         let url: String
@@ -86,7 +88,7 @@ enum NativeInstallers {
         (table()?.ports ?? []).filter { port in
             !port.id.isEmpty && port.id.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" }
                 && [port.app, port.installer].allSatisfy { $0.hasSuffix(".app") && !$0.contains("/") && !$0.hasPrefix(".") }
-                && port.sha256.count == 64 && port.size > 0
+                && port.sha256.count == 64 && port.size > 0 && !port.bundle.isEmpty
         }
     }
 
@@ -121,12 +123,19 @@ enum NativeInstallers {
         return nil
     }
 
-    /// The port's app, where its installer puts it: Applications, or the user's own.
+    /// The port's app, where its installer puts it: Applications, or the user's own. An application
+    /// of that name is the port's only where its bundle identifier has the part the catalog names:
+    /// Steam leaves a shortcut called after the game ("DOOM.app") in the user's Applications, which
+    /// has no identifier at all, and read as the port installed (found on 2026-11-28).
     static func installedApp(_ port: Port) -> URL? {
         var places = [Paths.home.appendingPathComponent("Applications")]
         // The tests' home stands for the whole Mac: its /Applications is not theirs to look in.
         if ProcessInfo.processInfo.environment["MACGAMEFIX_HOME"] == nil { places.insert(URL(fileURLWithPath: "/Applications"), at: 0) }
-        return places.map { $0.appendingPathComponent(port.app) }.first { FileManager.default.fileExists(atPath: $0.path) }
+        return places.map { $0.appendingPathComponent(port.app) }.first { app in
+            guard let info = NSDictionary(contentsOf: app.appendingPathComponent("Contents/Info.plist")),
+                  let id = info["CFBundleIdentifier"] as? String else { return false }
+            return id.localizedCaseInsensitiveContains(port.bundle)
+        }
     }
 
     static func state(_ port: Port) -> State {
