@@ -1332,7 +1332,7 @@ GFV="$PSTEAM/userdata/1/config/localconfig.vdf"; mkdir -p "$(dirname "$GFV")" "$
 printf '"UserLocalConfigStore"\n{\n\t"Software"\n\t{\n\t\t"Valve"\n\t\t{\n\t\t\t"Steam"\n\t\t\t{\n\t\t\t\t"apps"\n\t\t\t\t{\n\t\t\t\t\t"4242"\n\t\t\t\t\t{\n\t\t\t\t\t\t"LaunchOptions"\t\t"MTL_HUD_ENABLED=0 %%command%%"\n\t\t\t\t\t}\n\t\t\t\t\t"4343"\n\t\t\t\t\t{\n\t\t\t\t\t\t"LastPlayed"\t\t"1"\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n}\n' > "$GFV"
 cp "$GFV" "$T/localconfig.before"
 mkmap "$(maprow 4242 notproton-fex-rosetta-41303; maprow 4343 notproton-fex-rosetta-41303; maprow 4444 notproton-fex-41303; maprow 4545 notproton-fex-rosetta-41303)"
-GFJ="$SUPPORT/MacGameFix/controls-row/4242.json"
+GFJ="$SUPPORT/MacGameFix/notproton-rows/4242-NOTPROTON_MGF_CONTROLS.json"
 gfrow() { "$BIN" --controls-row "$@"; }
 check '[ "$(gfrow status 4242)" = off ] && [ ! -e "$GFJ" ]' "Game Feel reads the DualSense controllers row as off for a game whose launch options do not carry it"
 OUT=$(MGVF_STEAM_RUNNING=1 gfrow on 4242) && RC=0 || RC=$?
@@ -1341,6 +1341,7 @@ check '[ "$(gfrow on 4242)" = "on, switched on here" ] && /usr/bin/grep -q "\"NO
 OUT=$(MGVF_STEAM_RUNNING=1 gfrow off 4242) && RC=0 || RC=$?
 check '[ "$RC" = 1 ] && has "$OUT" "Quit it, then turn it off" && [ "$(gfrow status 4242)" = "on, switched on here" ]' "nor switched off with Steam open"
 check '[ "$(gfrow off 4242)" = off ] && cmp -s "$GFV" "$T/localconfig.before" && [ ! -e "$GFJ" ]' "switched off, the settings of Steam are byte for byte what they were"
+check '/usr/bin/grep -qx "4242 NOTPROTON_MGF_CONTROLS off" "$SUPPORT/MacGameFix/notproton-rows.applied"' "and it is noted as switched off, where the agent reads which rows it may switch on"
 check '[ "$(gfrow on 4343)" = "on, switched on here" ] && /usr/bin/grep -q "\"NOTPROTON_MGF_CONTROLS=1 %command%\"" "$GFV" && [ "$(gfrow off 4343)" = off ] && /usr/bin/grep -q "\"LaunchOptions\" \"\"" "$GFV" && [ "$(/usr/bin/grep -v "\"LaunchOptions\" \"\"" "$GFV")" = "$(cat "$T/localconfig.before")" ]' "a game with no launch options gets them, and switched off is left with empty ones, as Steam writes them, and nothing else changed"
 sed -i '' 's|"MTL_HUD_ENABLED=0 %command%"|"NOTPROTON_MGF_CONTROLS=1 MTL_HUD_ENABLED=0 %command%"|' "$GFV"
 OUT=$(gfrow off 4242) && RC=0 || RC=$?
@@ -1353,7 +1354,7 @@ check '[ "$(gfrow status 18155907846443630592)" = "a game added to Steam" ]' "a 
 "$BIN" --plugins-remove NOTPROTON_MGF_CONTROLS >/dev/null
 check '[ "$(gfrow status 4242)" = "not installed" ]' "with the plugin removed from NotProton, the row is not offered for a game"
 "$BIN" --plugins-install NOTPROTON_MGF_CONTROLS >/dev/null
-rm -rf "$PSTEAM/userdata" "$PSTEAM/config" "$SUPPORT/MacGameFix/controls-row"
+rm -rf "$PSTEAM/userdata" "$PSTEAM/config" "$SUPPORT/MacGameFix/notproton-rows" "$SUPPORT/MacGameFix/notproton-rows.applied"
 mv "$T/catalog-aside" "$SUPPORT/MacGameFix/catalog"
 # Engine fixes, the row for every game: the catalog's script writes it, into the file the games' installers share.
 NPS="$NPP/mgf-shared.conf"; NPE="$NPP/mgf-engine.dylib"; NPRES="$HERE/MacGameFix.app/Contents/Resources"
@@ -1412,6 +1413,12 @@ mkdir -p "$RG/steamapps" "$(dirname "$RGVDF")"
 for a in 387290 4115450 1174180; do printf '"AppState"\n{\n\t"appid"\t\t"%s"\n\t"installdir"\t\t"G%s"\n}\n' "$a" "$a" > "$RG/steamapps/appmanifest_$a.acf"; done
 printf '"UserLocalConfigStore"\n{\n\t"Software" { "Valve" { "Steam" { "apps" {\n\t\t"387290" { "LaunchOptions" "MINE=1 %%command%%" }\n\t\t"4115450" { "LaunchOptions" "\\"/x/wrap.sh\\" %%command%%" }\n\t\t"1174180" { "LaunchOptions" "" }\n\t} } } }\n}\n' > "$RGVDF"
 RGVDF0="$(cat "$RGVDF")"
+# Each game's tool: NotProton's Rosetta one, but 2222 on FEX's, where the controls row is not offered.
+mkdir -p "$RG/config"
+mkmap "$(for a in 387290 4115450 1174180 1057090 3333; do maprow $a notproton-fex-rosetta-41303; done; maprow 2222 notproton-fex-41303)"
+for a in 2222 3333; do printf '"AppState"\n{\n\t"appid"\t\t"%s"\n}\n' "$a" > "$RG/steamapps/appmanifest_$a.acf"; done
+/usr/bin/perl -pi -e 's/(\t\t"1174180")/\t\t"2222" { "LaunchOptions" "" }\n\t\t"3333" { "LaunchOptions" "" }\n$1/' "$RGVDF"
+RGVDF0="$(cat "$RGVDF")"
 cp "$NPRES/steam-launch-options.pl" "$T/slo.pl" && sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$T/slo.pl"
 export MACGAMEFIX_LAUNCH_OPTIONS="$T/slo.pl" MACGAMEFIX_ROWS_TABLE="$NPRES/notproton-rows.json"
 /usr/bin/python3 - "$P/pad.json" <<'PYRG'
@@ -1421,6 +1428,8 @@ try:
 except OSError:
     d = {}
 d.setdefault("games", {})["1174180"] = {"name": "Red Dead Redemption 2", "options": {"xinput": "pad"}}
+d["games"]["2222"] = {"name": "A game on the FEX tool", "options": {"xinput": "pad"}}
+d["games"]["3333"] = {"name": "A game switched off in Game Feel", "options": {"xinput": "pad"}}
 json.dump(d, open(sys.argv[1], "w"))
 PYRG
 opts() { /usr/bin/perl -ne 'print "$1\n" if /"'"$1"'" \{ "LaunchOptions" "((?:\\.|[^"\\])*)"/' "$RGVDF"; }
@@ -1430,6 +1439,9 @@ OUT=$("$BIN" --plugins-install 2>&1 || true)
 check 'has "$OUT" "387290 NOTPROTON_MGF_SHADERS: switched on (catalog)" && [ "$(opts 387290)" = "NOTPROTON_MGF_SHADERS=1 MINE=1 %command%" ]' "installing the plugin with Steam closed puts the catalog's row in front of the game's own options"
 check 'has "$OUT" "1174180 NOTPROTON_MGF_CONTROLS: switched on (Game Feel)" && [ "$(opts 1174180)" = "NOTPROTON_MGF_CONTROLS=1 %command%" ]' "a game set up in Game Feel gets the DualSense controllers row"
 check 'has "$OUT" "4115450 NOTPROTON_MGF_SHADERS: not switched on, the game'"'"'s launch options start with a program" && has "$(opts 4115450)" "wrap.sh"' "options that start with a program are left as they are, and that is said"
+check '[ "$(opts 2222)" = "" ] && ! has "$OUT" "2222" && has "$("$BIN" --rows-by-game-report)" "2222 NOTPROTON_MGF_CONTROLS (Game Feel): the game does not run on a NotProton tool the row is for"' "a game set up in Game Feel that runs on a tool the row is not for is left alone, and the report says why"
+# Game Feel's own switch writes through the same journal and record: turned off there, the pass leaves it off.
+check '[ "$(opts 3333)" = "NOTPROTON_MGF_CONTROLS=1 %command%" ] && [ "$("$BIN" --controls-row status 3333)" = "on, switched on here" ] && [ "$("$BIN" --controls-row off 3333)" = off ] && [ "$(opts 3333)" = "" ] && [ -z "$("$BIN" --rows-by-game | /usr/bin/grep ": switched on (")" ] && [ "$(opts 3333)" = "" ] && has "$("$BIN" --rows-by-game-report)" "3333 NOTPROTON_MGF_CONTROLS (Game Feel): switched off in Game Feel"' "a row the pass switched on reads in Game Feel as switched on here; turned off there, the pass does not switch it on again"
 check 'has "$("$BIN" --rows-by-game-report)" "1057090 NOTPROTON_MGF_SHADERS (catalog): the game is not installed" && ! has "$(cat "$RGVDF")" "1057090"' "a game no library has is left out"
 # Installed later, while Steam is open: it waits for Steam to close.
 printf '"AppState"\n{\n\t"appid"\t\t"1057090"\n}\n' > "$RG/steamapps/appmanifest_1057090.acf"
@@ -1448,7 +1460,7 @@ check 'has "$OUT" "1174180 NOTPROTON_MGF_CONTROLS: launch options given back" &&
 printf '{"schema": 2, "games": [{"appid": "387290", "title": "x", "rows": ["NOTPROTON_MGF_SHADERS"]}]}\n' > "$T/rows-2.json"
 check '! has "$(MACGAMEFIX_ROWS_TABLE="$T/rows-2.json" "$BIN" --rows-by-game-report)" "(catalog)"' "a table of a newer schema than the app reads is not applied"
 "$BIN" --plugins-remove NOTPROTON_MGF_SHADERS >/dev/null
-rm -rf "$RG/steamapps/appmanifest_"* "$RG/userdata" "$SUPPORT/MacGameFix/notproton-rows" "$SUPPORT/MacGameFix/notproton-rows.applied" "$NPHOST"
+rm -rf "$RG/steamapps/appmanifest_"* "$RG/userdata" "$RG/config" "$SUPPORT/MacGameFix/notproton-rows" "$SUPPORT/MacGameFix/notproton-rows.applied" "$NPHOST"
 rm -f "$NPP"/*.conf "$NPP"/*.dylib "$NPNOTE"
 rm -rf "$CT"
 unset MACGAMEFIX_LAUNCH_OPTIONS MACGAMEFIX_ROWS_TABLE MGVF_STEAM_RUNNING MGVF_NOTPROTON_RUNNING MGVF_NOTPROTON_VERSION

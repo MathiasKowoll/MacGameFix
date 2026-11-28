@@ -503,6 +503,9 @@ enum EveryGameRows {
 /// Feel writes it too, so a game's pad is set up in one place: with the catalog's
 /// steam-launch-options.pl, as a game's fix switches its rows on, which keeps what each account
 /// had so that turning it off gives that back, and writes nothing while Steam runs.
+/// RowsByGame switches the same row on by itself for a game set up in Game Feel; both write
+/// through RowsByGame's journal and note what they did in its record, so a row turned off here
+/// is not switched on again by the agent's pass.
 enum ControlsRow {
     static let id = "NOTPROTON_MGF_CONTROLS"
 
@@ -519,12 +522,10 @@ enum ControlsRow {
         case noNotProton
     }
 
-    static var script: URL { Catalog.active(.fixes).dir.appendingPathComponent("steam-launch-options.pl") }
+    static var script: URL { RowsByGame.writer }
 
     /// What each Steam account had before, kept so that turning the row off gives it back.
-    static func journal(_ appid: String) -> URL {
-        Paths.support.appendingPathComponent("controls-row").appendingPathComponent("\(appid).json")
-    }
+    static func journal(_ appid: String) -> URL { RowsByGame.journal(appid, id) }
 
     /// The tools the row is for, from its own "tools" line, without the trailing "*".
     static var tools: [String] {
@@ -534,8 +535,7 @@ enum ControlsRow {
     }
 
     private static func run(_ mode: String, _ appid: String) -> (Int32, String) {
-        NotProtonPlugins.command("/usr/bin/perl", [script.path, mode, appid, journal(appid).path, "\(id)=1"],
-                                 ["HOME": Paths.home.path, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"])
+        RowsByGame.options(mode, appid, id)
     }
 
     static func state(_ game: InstalledGame) -> State {
@@ -565,7 +565,9 @@ enum ControlsRow {
             return "Game Feel did not switch it on: turn it off in the game's NotProton options in Steam."
         }
         let (code, text) = run(on ? "install" : "restore", game.appid)
-        return code == 0 ? nil : (text.isEmpty ? "The game's launch options could not be changed." : text)
+        guard code == 0 else { return text.isEmpty ? "The game's launch options could not be changed." : text }
+        RowsByGame.note(game.appid, id, on ? "on" : "off")
+        return nil
     }
 }
 

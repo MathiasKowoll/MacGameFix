@@ -11,9 +11,13 @@
 //                 controllers row, which loads the library that reads those options.
 //
 // A row is switched on only where its plugin is installed and in place, only for a game a Steam
-// library has, only while Steam is closed (Steam writes the launch options back when it quits),
-// and only once for each game: steam-launch-options.pl writes it in front of the game's options
-// and keeps a journal of what was there. A row the player then switches off in Steam stays off.
+// library has that runs on a NotProton tool the row is for (a game set up in Game Feel may run
+// on FEX's tool, where the controls row is not offered, or not on NotProton at all), only while
+// Steam is closed (Steam writes the launch options back when it quits), and only once for each
+// game: steam-launch-options.pl writes it in front of the game's options and keeps a journal of
+// what was there. A row the player then switches off, in Steam or in Game Feel, stays off.
+// Game Feel's own switch for the controls row (ControlsRow, NotProtonPlugins.swift) writes
+// through the same journal and the same record, so the two never disagree about a game.
 // Removing the plugin gives each game's launch options back as they were, through its journal.
 // Options that start with a program rather than variables are not touched, and that is noted.
 //
@@ -104,6 +108,23 @@ enum RowsByGame {
         }
     }
 
+    /// Whether the game runs on a tool the row is for: the tools its row names, or any of
+    /// NotProton's where it names none. A row on a tool it is not for would only be a variable
+    /// in the game's launch options that nothing reads.
+    static func runsOn(_ appid: String, _ id: String) -> Bool {
+        guard let tool = PrefixRunner.mappedTool(appid)?.lowercased() else { return false }
+        let tools = (NotProtonPlugins.all.first { $0.id == id }?.rest ?? []).filter { $0.hasPrefix("tools = ") }
+            .map { String($0.dropFirst(8)).trimmingCharacters(in: CharacterSet(charactersIn: "*")).lowercased() }
+        return tools.isEmpty ? tool.hasPrefix("notproton") : tools.contains { tool.hasPrefix($0) }
+    }
+
+    /// What Game Feel did for a game and a row, "on" or "off", noted where the pass reads it.
+    static func note(_ appid: String, _ id: String, _ what: String) {
+        var all = done()
+        all["\(appid) \(id)"] = what
+        save(all)
+    }
+
     /// The program that writes a game's launch options. MACGAMEFIX_LAUNCH_OPTIONS stands in for it
     /// in the tests, which must not ask whether the Mac's own Steam is running.
     static var writer: URL {
@@ -126,7 +147,9 @@ enum RowsByGame {
     static func pass() -> [String] {
         let ready = ready()
         var done = done()
-        let todo = wanted().filter { ready.contains($0.id) && done["\($0.appid) \($0.id)"] == nil && installed($0.appid) }
+        let todo = wanted().filter {
+            ready.contains($0.id) && done["\($0.appid) \($0.id)"] == nil && installed($0.appid) && runsOn($0.appid, $0.id)
+        }
         guard !todo.isEmpty, !NotProtonHost.open().contains("Steam") else { return [] }
         try? FileManager.default.createDirectory(at: journals, withIntermediateDirectories: true)
         var said: [String] = []
@@ -175,9 +198,13 @@ enum RowsByGame {
         let lines = wanted().map { want -> String in
             let key = "\(want.appid) \(want.id)"
             let state: String
-            if let d = done[key] { state = d == "on" ? "switched on" : d.replacingOccurrences(of: "refused ", with: "not switched on, ") }
+            if let d = done[key] {
+                state = d == "on" ? "switched on" : d == "off" ? "switched off in Game Feel"
+                    : d.replacingOccurrences(of: "refused ", with: "not switched on, ")
+            }
             else if !ready.contains(want.id) { state = "waits for its plugin" }
             else if !installed(want.appid) { state = "the game is not installed" }
+            else if !runsOn(want.appid, want.id) { state = "the game does not run on a NotProton tool the row is for" }
             else { state = "to switch on while Steam is closed" }
             return "\(key) (\(want.why)): \(state)"
         }
