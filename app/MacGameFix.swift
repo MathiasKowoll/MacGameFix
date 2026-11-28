@@ -3329,6 +3329,13 @@ enum Entry {
             print(said.isEmpty ? "plugins: nothing to do" : said.joined(separator: "\n"))
             exit(refused ? 1 : 0)
         }
+        if args.contains("--rows-by-game") || args.contains("--rows-by-game-report") {
+            // NotProton rows switched on per game (RowsByGame.swift), as the agent does it while Steam is
+            // closed; then, or alone with --rows-by-game-report, how each one stands.
+            if args.contains("--rows-by-game") { RowsByGame.pass().forEach { print($0) } }
+            print(RowsByGame.report())
+            exit(0)
+        }
         if args.contains("--plugins-report") {
             // How each NotProton plugin MacGameFix carries stands (NotProtonPlugins.swift); nothing written.
             print(NotProtonPlugins.report())
