@@ -3408,6 +3408,22 @@ enum Entry {
             }
             exit(0)
         }
+        if args.contains("--native-installers-report") {
+            // The native ports with their own installer (NativeInstallers.swift): how each one stands; nothing written.
+            print(NativeInstallers.report())
+            exit(0)
+        }
+        if let i = args.firstIndex(of: "--native-installer-stage"), i + 1 < args.count {
+            // One port's installer downloaded, checked and taken out of its disk image, as the Native tab's
+            // Install does before it opens it: where it is, or why not.
+            guard let port = NativeInstallers.ports().first(where: { $0.id == args[i + 1] }) else {
+                print("\(args[i + 1]) is no port the catalog names."); exit(1)
+            }
+            switch NativeInstallers.stage(port) {
+            case .success(let installer): print(installer.path); exit(0)
+            case .failure(let why): print(why.text); exit(1)
+            }
+        }
         if args.contains("--plugins-report") {
             // How each NotProton plugin MacGameFix carries stands (NotProtonPlugins.swift); nothing written.
             print(NotProtonPlugins.report())

@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "note": "Native ports that come with an installer of their own, which MacGameFix downloads, checks and opens (app/NativeInstallers.swift). Each entry names one published file by its SHA-256 and size: the installer is not notarized, so MacGameFix opens that file and no other. A new release of a port reaches players when its entry here is changed. steamApp is the Windows game's Steam app id; app is what the installer leaves in Applications; installer is the application inside the disk image.",
+  "ports": [
+    {
+      "id": "doom-2016",
+      "title": "DOOM (2016), native",
+      "summary": "DOOM never had a Mac version. NightSightProductions' port builds an Apple silicon app from your own Windows copy, with no Wine.",
+      "by": "NightSightProductions",
+      "steamApp": "379720",
+      "gameExecutable": "DOOMx64vk.exe",
+      "app": "DOOM.app",
+      "installer": "Install DOOM Recomp.app",
+      "version": "1.2.0",
+      "url": "https://github.com/NightSightProductions/DOOM-Recomp/releases/download/v1.2.0/DOOM-Recomp-macOS.dmg",
+      "sha256": "2bf4e99e4a85431f68a9cffc979ff5c4d4c49da88e3f70b5e72f71e96c495689",
+      "size": 4615416,
+      "page": "https://github.com/NightSightProductions/DOOM-Recomp"
+    },
+    {
+      "id": "wolfenstein-youngblood",
+      "title": "Wolfenstein: Youngblood, native",
+      "summary": "NightSightProductions' port builds an Apple silicon app from your own Windows copy, with no Wine.",
+      "by": "NightSightProductions",
+      "steamApp": "1056960",
+      "gameExecutable": "Youngblood_x64vk.exe",
+      "app": "Wolfenstein Youngblood.app",
+      "installer": "Install Wolfenstein Youngblood Recomp.app",
+      "version": "1.0.1",
+      "url": "https://github.com/NightSightProductions/Wolfenstein-YB-Recomp/releases/download/v1.0.1/Wolfenstein-Youngblood-Recomp-macOS.dmg",
+      "sha256": "7ba03e41ad6d275856b4518e942cca4c362c470fe79e741fd412a9ea4661380c",
+      "size": 4737726,
+      "page": "https://github.com/NightSightProductions/Wolfenstein-YB-Recomp"
+    },
+    {
+      "id": "wolfenstein-new-colossus",
+      "title": "Wolfenstein II: The New Colossus, native",
+      "summary": "NightSightProductions' port builds an Apple silicon app from your own Windows copy, with no Wine.",
+      "by": "NightSightProductions",
+      "steamApp": "612880",
+      "gameExecutable": "NewColossus_x64vk.exe",
+      "app": "Wolfenstein II The New Colossus.app",
+      "installer": "Install Wolfenstein II Recomp.app",
+      "version": "1.0.0",
+      "url": "https://github.com/NightSightProductions/Wolfenstein-TNC-Recomp/releases/download/v1.0.0/Wolfenstein-II-Recomp-macOS.dmg",
+      "sha256": "455aa81a46d0d40201dfaaf10fd743304f5c35c5f6d8419f497a65c91347c39d",
+      "size": 4352258,
+      "page": "https://github.com/NightSightProductions/Wolfenstein-TNC-Recomp"
+    },
+    {
+      "id": "wolfenstein-old-blood",
+      "title": "Wolfenstein: The Old Blood, native",
+      "summary": "NightSightProductions' port builds an Apple silicon app from your own Windows copy, with no Wine.",
+      "by": "NightSightProductions",
+      "steamApp": "350080",
+      "gameExecutable": "WolfOldBlood_x64.exe",
+      "app": "Wolfenstein The Old Blood.app",
+      "installer": "Install Wolfenstein Old Blood Recomp.app",
+      "version": "1.0.0",
+      "url": "https://github.com/NightSightProductions/Wolfenstein-TOB-Recomp/releases/download/v1.0.0/Wolfenstein-TOB-Recomp-macOS.dmg",
+      "sha256": "cd3a027e1ed61de3bda74ea09041b82477716cd3825a554e509897390bea4192",
+      "size": 1462672,
+      "page": "https://github.com/NightSightProductions/Wolfenstein-TOB-Recomp"
+    },
+    {
+      "id": "wolfenstein-new-order",
+      "title": "Wolfenstein: The New Order, native",
+      "summary": "NightSightProductions' port builds an Apple silicon app from your own Windows copy, with no Wine.",
+      "by": "NightSightProductions",
+      "steamApp": "201810",
+      "gameExecutable": "WolfNewOrder_x64.exe",
+      "app": "Wolfenstein The New Order.app",
+      "installer": "Install Wolfenstein Recomp.app",
+      "version": "1.0.0",
+      "url": "https://github.com/NightSightProductions/Wolfenstein-TNO-Recomp/releases/download/v1.0.0/Wolfenstein-TNO-Recomp-macOS.dmg",
+      "sha256": "b27e39eebc31dcbfaa451fcdb1ad632b7c82a7bce630fac672afcee08d6bd7b3",
+      "size": 1117643,
+      "page": "https://github.com/NightSightProductions/Wolfenstein-TNO-Recomp"
+    }
+  ]
+}

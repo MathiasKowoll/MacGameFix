@@ -377,6 +377,7 @@ struct NativeBuildsView: View {
             }
             NativePortSection(port: NativePort.batman, extra: model.extraFolders)
             NativePortSection(port: NativePort.bioshock, extra: model.extraFolders)
+            NativeInstallersView(extra: model.extraFolders)
         }
         .formStyle(.grouped)
     }
