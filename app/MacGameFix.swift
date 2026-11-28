@@ -67,8 +67,10 @@ final class Model: ObservableObject {
     @Published var fansError = ""
     /// The NotProton plugins MacGameFix carries (NotProtonPlugins.swift): how each stands, nil
     /// when there is no NotProton, and what the last "Put in Place" did.
-    @Published var plugins: [(label: String, state: NotProtonPlugins.State)]? = nil
+    @Published var plugins: [(id: String, label: String, state: NotProtonPlugins.State)]? = nil
     @Published var pluginsLine = ""
+    /// The rows in NotProton's folder, of the 32 it reads.
+    @Published var pluginRows = 0
     @Published var agentOn = LaunchAgent.enabled
     @Published var events: [AgentEvent] = []
     @Published var updateLine = ""
@@ -273,16 +275,23 @@ final class Model: ObservableObject {
     }
 
     func refreshPlugins() {
-        Task { plugins = await Task.detached { NotProtonPlugins.states() }.value }
+        Task {
+            plugins = await Task.detached { NotProtonPlugins.states() }.value
+            pluginRows = await Task.detached { NotProtonPlugins.rows() }.value
+        }
     }
 
     /// The plugins not installed yet put into NotProton, with Steam and NotProton closed, and
     /// the installed ones brought up to date as the agent's next pass would.
-    func installPlugins() {
+    func installPlugins(only id: String? = nil, remove: Bool = false) {
         busy = true
         Task {
-            let said = await Task.detached { NotProtonPlugins.install().said }.value
+            let said = await Task.detached {
+                if let id, remove { return NotProtonPlugins.remove(id).said }
+                return NotProtonPlugins.install(only: id).said
+            }.value
             pluginsLine = said.isEmpty ? "Nothing to do." : said.joined(separator: "\n")
+            pluginRows = await Task.detached { NotProtonPlugins.rows() }.value
             plugins = await Task.detached { NotProtonPlugins.states() }.value
             busy = false
         }
@@ -1881,22 +1890,39 @@ struct NotProtonPluginsSection: View {
     var body: some View {
         Section {
             if let plugins = model.plugins {
-                ForEach(plugins, id: \.label) { plugin in
+                ForEach(plugins, id: \.id) { plugin in
                     LabeledContent(plugin.label) {
-                        switch plugin.state {
-                        case .inPlace: Text("In place")
-                        case .behind: Text("Not in place yet").foregroundStyle(.orange)
-                        case .notInstalled: Text("Not installed").foregroundStyle(.secondary)
-                        case .unworkable(let why): Text("Not offered: \(why)").foregroundStyle(.secondary)
-                        case .foreign: Text("Another plugin file has it").foregroundStyle(.secondary)
+                        HStack(spacing: 10) {
+                            switch plugin.state {
+                            case .inPlace: Text("In place")
+                            case .behind: Text("Not in place yet").foregroundStyle(.orange)
+                            case .notInstalled: Text("Not installed").foregroundStyle(.secondary)
+                            case .unworkable(let why): Text("Not offered: \(why)").foregroundStyle(.secondary)
+                            case .foreign: Text("Another plugin file has it").foregroundStyle(.secondary)
+                            }
+                            // One plugin at a time; both want Steam and NotProton closed.
+                            switch plugin.state {
+                            case .notInstalled:
+                                Button("Install") { model.installPlugins(only: plugin.id) }
+                                    .controlSize(.small).disabled(model.busy).frame(width: 64)
+                                    .help("Puts this plugin into NotProton. Quit Steam and NotProton first.")
+                            case .inPlace, .behind:
+                                Button("Remove") { model.installPlugins(only: plugin.id, remove: true) }
+                                    .controlSize(.small).disabled(model.busy).frame(width: 64)
+                                    .help("Takes this plugin out of NotProton, and it stays out. Quit Steam and NotProton first.")
+                            default:
+                                Color.clear.frame(width: 64, height: 1)
+                            }
                         }
                     }
                 }
                 HStack {
+                    Text("\(model.pluginRows) of the \(NotProtonRow.maxRows) rows NotProton reads are in its folder.")
+                        .font(.caption).foregroundStyle(model.pluginRows >= NotProtonRow.maxRows ? .orange : .secondary)
                     Spacer()
-                    Button(plugins.contains { $0.state == .notInstalled } ? "Install" : "Put in Place") { model.installPlugins() }
+                    Button(plugins.contains { $0.state == .notInstalled } ? "Install All" : "Put in Place") { model.installPlugins() }
                         .disabled(model.busy || !plugins.contains { $0.state == .behind || $0.state == .notInstalled })
-                        .help("Puts the plugins that are not installed into NotProton: quit Steam and NotProton first. "
+                        .help("Puts every plugin that is not installed into NotProton: quit Steam and NotProton first. "
                               + "The installed ones are then kept up to date on their own.")
                 }
                 if !model.pluginsLine.isEmpty {
@@ -1911,8 +1937,8 @@ struct NotProtonPluginsSection: View {
                               summary: "MacGameFix's fixes and its DualSense controls as NotProton plugins.",
                               count: model.plugins.map { "\($0.filter { $0.state == .inPlace }.count) of \($0.count)" } ?? "Off")
         } footer: {
-            Text("Installed with Steam and NotProton closed, then kept up to date. One you delete in NotProton "
-                 + "stays out until you install again. "
+            Text("Installed and removed with Steam and NotProton closed; an installed one is then kept up to date. "
+                 + "One you remove, here or in NotProton, stays out until you install it again. "
                  + "Each one is off until you turn it on for a game, in NotProton's options for that game, under "
                  + "MacGameFix: Controllers, D3DMetal, Game fixes or Video. "
                  + "All but the Unreal one need NotProton's plugin host, which NotProton's Update installs.")
@@ -3302,9 +3328,17 @@ enum Entry {
             print(lines.isEmpty ? "rows: nothing to do" : lines.joined(separator: "\n"))
             exit(0)
         }
-        if args.contains("--plugins-install") {
-            // The NotProton plugins installed as the window's Install does: Steam and NotProton closed.
-            let (said, refused) = NotProtonPlugins.install()
+        if let i = args.firstIndex(of: "--plugins-remove"), i + 1 < args.count {
+            // One NotProton plugin taken out, by its id, as the window's Remove does.
+            let (said, refused) = NotProtonPlugins.remove(args[i + 1])
+            print(said.isEmpty ? "plugins: nothing to do" : said.joined(separator: "\n"))
+            exit(refused ? 1 : 0)
+        }
+        if let i = args.firstIndex(of: "--plugins-install") {
+            // The NotProton plugins installed as the window's Install does, every one or the one
+            // whose id follows: Steam and NotProton closed.
+            let only = i + 1 < args.count && !args[i + 1].hasPrefix("--") ? args[i + 1] : nil
+            let (said, refused) = NotProtonPlugins.install(only: only)
             print(said.isEmpty ? "plugins: nothing to do" : said.joined(separator: "\n"))
             exit(refused ? 1 : 0)
         }

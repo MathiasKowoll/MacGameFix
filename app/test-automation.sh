@@ -1289,6 +1289,24 @@ check 'has "$OUT" "D3DMetal video crash row: deleted from NotProton'"'"'s plugin
 check '! MGVF_STEAM_RUNNING=1 "$BIN" --plugins-install >/dev/null && [ ! -e "$NPN" ]' "nor by an install while Steam is open"
 OUT=$("$BIN" --plugins-install)
 check 'has "$OUT" "D3DMetal video crash library: put in place" && has "$OUT" "D3DMetal video crash row: written" && [ -f "$NPN" ] && cmp -s "$NPLIB/d3dmetal-notifier.dylib" "$NPP/d3dmetal-notifier.dylib" && ! has "$OUT" "Unreal" && ! has "$OUT" "DualSense"' "installing again brings it back, and touches no other plugin"
+# One plugin at a time: removed, it is out of NotProton and of the note, and stays out; installed by
+# its id, it alone comes back. Both want Steam and NotProton closed.
+check 'has "$("$BIN" --plugins-report | tail -1)" "rows: $(cat "$NPP"/*.conf | /usr/bin/grep -c "^\[") of 32"' "the report counts the rows in NotProton's folder, of the 32 it reads"
+OUT=$(MGVF_STEAM_RUNNING=1 "$BIN" --plugins-remove NOTPROTON_MGF_CONTROLS) && RC=0 || RC=$?
+check '[ "$RC" = 1 ] && has "$OUT" "Steam is open. Quit it, then remove it. Nothing was changed." && [ -f "$NPC" ] && [ -f "$NPP/mgf-controls.dylib" ]' "with Steam open a plugin is not removed"
+OUT=$("$BIN" --plugins-remove NOTPROTON_MGF_CONTROLS)
+check 'has "$OUT" "DualSense controllers row: removed" && has "$OUT" "DualSense controllers library: removed" && [ ! -e "$NPC" ] && [ ! -e "$NPP/mgf-controls.dylib" ] && ! /usr/bin/grep -q NOTPROTON_MGF_CONTROLS "$NPNOTE" && [ -f "$NPT" ] && [ -f "$NPP/tcp-noopt.dylib" ] && [ -f "$NPU" ]' "removed with both closed: its row, its library and its place in the note, and no other plugin"
+check '[ "$(MGVF_STEAM_RUNNING=1 "$BIN" --rows-keep)" = "rows: nothing to do" ] && [ ! -e "$NPC" ] && has "$("$BIN" --plugins-report)" "DualSense controllers: not installed"' "a removed plugin is not put back by the agent's pass"
+"$BIN" --plugins-remove NOTPROTON_TCP_NOOPT >/dev/null
+OUT=$("$BIN" --plugins-install NOTPROTON_MGF_CONTROLS)
+check 'has "$OUT" "DualSense controllers row: written" && [ -f "$NPC" ] && cmp -s "$NPLIB/mgf-controls.dylib" "$NPP/mgf-controls.dylib" && [ ! -e "$NPT" ] && has "$("$BIN" --plugins-report)" "Red Dead Online fix: not installed"' "installed by its id, that plugin alone comes back: another one removed stays out"
+check '! MGVF_NOTPROTON_RUNNING=1 "$BIN" --plugins-install NOTPROTON_TCP_NOOPT >/dev/null && [ ! -e "$NPT" ] && "$BIN" --plugins-install NOTPROTON_TCP_NOOPT >/dev/null && [ -f "$NPT" ] && [ "$("$BIN" --plugins-report | /usr/bin/grep -c ": in place$")" = 5 ]' "one plugin's install waits for NotProton to close too, and with it back all five are in place"
+OUT=$("$BIN" --plugins-remove NOTPROTON_NO_SUCH_PLUGIN) && RC=0 || RC=$?
+check '[ "$RC" = 1 ] && has "$OUT" "is no plugin of MacGameFix"' "an id that is no plugin of MacGameFix's is refused"
+cp "$NPZ" "$T/freeze-row"; printf '[NOTPROTON_D3DMETAL_NODEGUARD]\nlabel = Written by hand\non = 1\n' > "$NPZ"
+OUT=$("$BIN" --plugins-remove NOTPROTON_D3DMETAL_NODEGUARD) && RC=0 || RC=$?
+check '[ "$RC" = 1 ] && has "$OUT" "is not one MacGameFix wrote, left alone" && has "$(cat "$NPZ")" "Written by hand"' "a row under a plugin's file name that MacGameFix did not write is not removed"
+cp "$T/freeze-row" "$NPZ"
 # Engine fixes, the row for every game: the catalog's script writes it, into the file the games' installers share.
 NPS="$NPP/mgf-shared.conf"; NPE="$NPP/mgf-engine.dylib"; NPRES="$HERE/MacGameFix.app/Contents/Resources"
 check 'has "$("$BIN" --plugins-report)" "Engine fixes: not offered, this catalog of fixes has no installer for it"' "a downloaded catalog from before the installer existed does not offer Engine fixes"
@@ -1298,6 +1316,14 @@ check '[ -x "$NPRES/notproton-every-game.sh" ] && [ -f "$NPRES/mgf-engine.dylib"
 check 'has "$(MGVF_STEAM_RUNNING=1 "$BIN" --plugins-install || true)" "Steam is open" && [ ! -e "$NPS" ] && [ ! -e "$NPE" ]' "with every other plugin installed, Engine fixes alone still waits for Steam to close"
 OUT=$("$BIN" --plugins-install)
 check 'has "$OUT" "Engine fixes: NotProton: 1 row(s) for every game" && has "$(cat "$NPS")" "[NOTPROTON_MGF_ENGINE]" && ! /usr/bin/grep -q "^apps" "$NPS" && has "$(cat "$NPS")" "requires = Library/Application Support/notproton/plugins/mgf-engine.dylib" && cmp -s "$NPRES/mgf-engine.dylib" "$NPE" && has "$("$BIN" --plugins-report)" "Engine fixes: in place" && [ "$("$BIN" --plugins-install)" = "plugins: nothing to do" ]' "the install puts Engine fixes on every game's page, with no game's fix installed, and its library beside it"
+# Removed as any other plugin; where a game's fix uses the row it stays, and the removal says so.
+OUT=$(MGVF_STEAM_RUNNING=1 "$BIN" --plugins-remove NOTPROTON_MGF_ENGINE) && RC=0 || RC=$?
+check '[ "$RC" = 1 ] && has "$OUT" "Steam is open" && [ -f "$NPS" ]' "Engine fixes is not removed with Steam open"
+check '[ "$("$BIN" --plugins-remove NOTPROTON_MGF_ENGINE)" = "Engine fixes: removed" ] && [ ! -e "$NPS" ] && [ ! -e "$NPE" ] && [ ! -e "$NPP/mgf-every-game.uses" ] && has "$("$BIN" --plugins-report)" "Engine fixes: not installed" && [ "$(MGVF_STEAM_RUNNING=1 "$BIN" --rows-keep)" = "rows: nothing to do" ] && [ ! -e "$NPS" ]' "removed with both closed, its file, its library and its note are gone, and no pass puts it back"
+"$BIN" --plugins-install NOTPROTON_MGF_ENGINE >/dev/null
+printf '# MacGameFix writes this file for app 4080220 and removes it with the fix; edits do not last.\n# shared rows: NOTPROTON_MGF_ENGINE\n' > "$NPP/mgf-4080220.uses"
+check 'has "$("$BIN" --plugins-report)" "Engine fixes: in place" && has "$("$BIN" --plugins-remove NOTPROTON_MGF_ENGINE)" "Engine fixes: NotProton: the row stays, the fix of 1 game(s) uses it" && has "$(cat "$NPS")" "[NOTPROTON_MGF_ENGINE]" && [ -f "$NPE" ]' "installed by its id; and removed while a game's fix uses it, the row and the library stay for that game, and the removal says so"
+rm -f "$NPP/mgf-4080220.uses"; "$BIN" --plugins-install NOTPROTON_MGF_ENGINE >/dev/null
 echo "description = edited by hand" >> "$NPS"
 check 'has "$("$BIN" --plugins-report)" "Engine fixes: not in place yet" && has "$(MGVF_STEAM_RUNNING=1 "$BIN" --rows-keep)" "Engine fixes: " && ! /usr/bin/grep -q "edited by hand" "$NPS" && has "$("$BIN" --plugins-report)" "Engine fixes: in place"' "once installed it is kept current by the agent's pass, with Steam open too"
 printf 'not a build of ours' > "$NPE"

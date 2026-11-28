@@ -37,7 +37,7 @@ case "${MGVF_NOTPROTON_GROUPS:-}" in 0) NP_SHARED_GROUP="" ;; 1) NP_SHARED_GROUP
 
 case "$MODE" in
 --status) np_every_status ;;
---restore) np_every_restore || exit 1; echo "Restored." ;;
+--restore) np_every_restore || exit 1; np_every_kept; echo "Restored." ;;
 --adopt) np_every_adopt || exit 1; echo "Adopted." ;;
 *) np_every_install || exit 1; echo "Installed." ;;
 esac

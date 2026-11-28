@@ -584,6 +584,15 @@ np_every_adopt() {
   np_shared_write
 }
 
+# After a restore: a row some game's fix uses is still on every game's page, and this says so.
+np_every_kept() {
+  local id games
+  for id in $(np_every_ids); do
+    games="$(np_shared_table | /usr/bin/grep -c " $id\$")"
+    [ "$games" = 0 ] || echo "  NotProton: the row stays, the fix of $games game(s) uses it"
+  done
+}
+
 # The note gone, and the rows with it unless a game's fix uses them; the library when no
 # descriptor names it any more.
 np_every_restore() {

@@ -555,6 +555,12 @@ egwrite; egbefore="$(cat "$egp/mgf-shared.conf")"
 rm -f "$egp/mgf-every-game.uses" "$egp/mgf-shared.conf"
 ! eg --adopt > /dev/null 2>&1 && [ ! -e "$egp/mgf-every-game.uses" ] && eg > /dev/null 2>&1 \
   && say ok "every game's rows: with no row there, there is nothing to adopt" || say FAIL "every game's rows: adopt with nothing"
+# Removed while a game's fix uses the row: the note goes, the row and the library stay, and it says so.
+printf '# MacGameFix writes this file for app 4080220 and removes it with the fix; edits do not last.\n# shared rows: NOTPROTON_MGF_ENGINE\n' > "$egp/mgf-4080220.uses"
+egout="$(eg --restore 2>&1)"
+printf '%s' "$egout" | /usr/bin/grep -q "the row stays, the fix of 1 game(s) uses it" && [ "$(egst)" = absent ] && /usr/bin/grep -qx '\[NOTPROTON_MGF_ENGINE\]' "$egp/mgf-shared.conf" && [ -f "$egp/mgf-engine.dylib" ] \
+  && say ok "every game's rows: removed while a game's fix uses the row, it stays for that game and the removal says so" || say FAIL "every game's rows: restore with a game ($egout)"
+rm -f "$egp/mgf-4080220.uses"; eg > /dev/null 2>&1
 ! egsteam=1 eg --restore > /dev/null 2>&1 && [ "$(egst)" = installed ] && eg --restore > /dev/null 2>&1 && [ "$(egst)" = absent ] \
   && [ ! -e "$egp/mgf-shared.conf" ] && [ ! -e "$egp/mgf-engine.dylib" ] && [ ! -e "$egp/mgf-every-game.uses" ] \
   && say ok "every game's rows: removed with both closed, the file, the library and the note are gone" || say FAIL "every game's rows: restore ($(egst), $(ls "$egp" | tr '\n' ' '))"
