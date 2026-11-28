@@ -3,6 +3,6 @@
 # "notes"; the app shows them with the update and the agent in its notification.
 # Rewrite them with every change to the modules: what stays here is said again with
 # the next catalog. Lines that start with # are not carried.
-CrossOver Preview 20261111 (41303): the Preview app is maintained again, like CrossOver 26.3, and its modules catch up: F1 25's start on high memory addresses, Swofty Launcher's window, EA SPORTS FC 27's activation check and rebuilt controllers' modules.
+CrossOver Preview 20261111 (41303): the Preview app is maintained again, like CrossOver 26.3, and its modules catch up: F1 25's start on high memory addresses, EA SPORTS FC 27's activation check and rebuilt controllers' modules.
 CrossOver Preview 20261111 (41303): these fixes were played on NotProton's runner; on the Preview app they were installed and checked, not played yet.
 NotProton's runner for 41303: unchanged, it keeps the modules the catalog before this one gave it, until NotProton's plugins are released.
