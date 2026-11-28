@@ -378,6 +378,15 @@ work its row is taken out again. A row another plugin file already declares is
 left alone, with its library, so a NotProton that ships the same plugins keeps
 its own.
 
+The row is switched on game by game. Game Feel does it from the game's own
+sheet, **DualSense controllers in this game**: Turn On writes the row's
+variable into the game's launch options in Steam, with Steam closed, and keeps
+what each account had so that Turn Off gives it back
+(`fixes/steam-launch-options.pl`, as a game's fix switches its rows on). A row
+switched on in Steam's own page reads On and is switched off there. It is
+offered for a Steam game on one of the tools the row is for, with the plugin
+installed.
+
 And one is for every game:
 
 - **Engine fixes** (`mgf-shared.conf`, `mgf-engine.dylib`, the Rosetta tools):

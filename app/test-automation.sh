@@ -1323,6 +1323,38 @@ cp "$NPZ" "$T/freeze-row"; printf '[NOTPROTON_D3DMETAL_NODEGUARD]\nlabel = Writt
 OUT=$("$BIN" --plugins-remove NOTPROTON_D3DMETAL_NODEGUARD) && RC=0 || RC=$?
 check '[ "$RC" = 1 ] && has "$OUT" "is not one MacGameFix wrote, left alone" && has "$(cat "$NPZ")" "Written by hand"' "a row under a plugin's file name that MacGameFix did not write is not removed"
 cp "$T/freeze-row" "$NPZ"
+# Game Feel switches "DualSense controllers" on for one game: the row's variable in the game's Steam
+# launch options, with what the account had kept so that turning it off gives it back. Only with
+# Steam closed, for a game on a tool the row is for, with the plugin installed.
+# With the app's own catalog: the downloaded one of the tests above is put back after.
+mv "$SUPPORT/MacGameFix/catalog" "$T/catalog-aside"
+GFV="$PSTEAM/userdata/1/config/localconfig.vdf"; mkdir -p "$(dirname "$GFV")" "$PSTEAM/config"
+printf '"UserLocalConfigStore"\n{\n\t"Software"\n\t{\n\t\t"Valve"\n\t\t{\n\t\t\t"Steam"\n\t\t\t{\n\t\t\t\t"apps"\n\t\t\t\t{\n\t\t\t\t\t"4242"\n\t\t\t\t\t{\n\t\t\t\t\t\t"LaunchOptions"\t\t"MTL_HUD_ENABLED=0 %%command%%"\n\t\t\t\t\t}\n\t\t\t\t\t"4343"\n\t\t\t\t\t{\n\t\t\t\t\t\t"LastPlayed"\t\t"1"\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n}\n' > "$GFV"
+cp "$GFV" "$T/localconfig.before"
+mkmap "$(maprow 4242 notproton-fex-rosetta-41303; maprow 4343 notproton-fex-rosetta-41303; maprow 4444 notproton-fex-41303; maprow 4545 notproton-fex-rosetta-41303)"
+GFJ="$SUPPORT/MacGameFix/controls-row/4242.json"
+gfrow() { "$BIN" --controls-row "$@"; }
+check '[ "$(gfrow status 4242)" = off ] && [ ! -e "$GFJ" ]' "Game Feel reads the DualSense controllers row as off for a game whose launch options do not carry it"
+OUT=$(MGVF_STEAM_RUNNING=1 gfrow on 4242) && RC=0 || RC=$?
+check '[ "$RC" = 1 ] && has "$OUT" "Steam is open. Quit it, then turn it on. Nothing was changed." && cmp -s "$GFV" "$T/localconfig.before" && [ ! -e "$GFJ" ]' "with Steam open it is not switched on, and the settings of Steam are untouched"
+check '[ "$(gfrow on 4242)" = "on, switched on here" ] && /usr/bin/grep -q "\"NOTPROTON_MGF_CONTROLS=1 MTL_HUD_ENABLED=0 %command%\"" "$GFV" && [ -f "$GFJ" ] && [ "$(gfrow status 4242)" = "on, switched on here" ]' "switched on with Steam closed, the variable goes in front of what the options of the game had, and what they had is kept"
+OUT=$(MGVF_STEAM_RUNNING=1 gfrow off 4242) && RC=0 || RC=$?
+check '[ "$RC" = 1 ] && has "$OUT" "Quit it, then turn it off" && [ "$(gfrow status 4242)" = "on, switched on here" ]' "nor switched off with Steam open"
+check '[ "$(gfrow off 4242)" = off ] && cmp -s "$GFV" "$T/localconfig.before" && [ ! -e "$GFJ" ]' "switched off, the settings of Steam are byte for byte what they were"
+check '[ "$(gfrow on 4343)" = "on, switched on here" ] && /usr/bin/grep -q "\"NOTPROTON_MGF_CONTROLS=1 %command%\"" "$GFV" && [ "$(gfrow off 4343)" = off ] && /usr/bin/grep -q "\"LaunchOptions\" \"\"" "$GFV" && [ "$(/usr/bin/grep -v "\"LaunchOptions\" \"\"" "$GFV")" = "$(cat "$T/localconfig.before")" ]' "a game with no launch options gets them, and switched off is left with empty ones, as Steam writes them, and nothing else changed"
+sed -i '' 's|"MTL_HUD_ENABLED=0 %command%"|"NOTPROTON_MGF_CONTROLS=1 MTL_HUD_ENABLED=0 %command%"|' "$GFV"
+OUT=$(gfrow off 4242) && RC=0 || RC=$?
+check '[ "$(gfrow status 4242)" = on ] && [ "$RC" = 1 ] && has "$OUT" "Game Feel did not switch it on" && /usr/bin/grep -q "NOTPROTON_MGF_CONTROLS=1 MTL_HUD_ENABLED=0" "$GFV"' "a row the player switched on in Steam reads on, and is theirs to switch off there"
+cp "$T/localconfig.before" "$GFV"
+OUT=$(gfrow on 4545) && RC=0 || RC=$?
+check '[ "$RC" = 1 ] && has "$OUT" "Start it once in Steam first" && cmp -s "$GFV" "$T/localconfig.before"' "a game Steam has no settings for yet is not switched on, and says to start it once"
+check '[ "$(gfrow status 4444)" = "not for notproton-fex-41303" ] && has "$(gfrow status 4646)" "not for this game"' "a game on a tool the row is not for, or on none, is told so"
+check '[ "$(gfrow status 18155907846443630592)" = "a game added to Steam" ]' "a game added to Steam keeps its options elsewhere: it is pointed to Steam"
+"$BIN" --plugins-remove NOTPROTON_MGF_CONTROLS >/dev/null
+check '[ "$(gfrow status 4242)" = "not installed" ]' "with the plugin removed from NotProton, the row is not offered for a game"
+"$BIN" --plugins-install NOTPROTON_MGF_CONTROLS >/dev/null
+rm -rf "$PSTEAM/userdata" "$PSTEAM/config" "$SUPPORT/MacGameFix/controls-row"
+mv "$T/catalog-aside" "$SUPPORT/MacGameFix/catalog"
 # Engine fixes, the row for every game: the catalog's script writes it, into the file the games' installers share.
 NPS="$NPP/mgf-shared.conf"; NPE="$NPP/mgf-engine.dylib"; NPRES="$HERE/MacGameFix.app/Contents/Resources"
 check 'has "$("$BIN" --plugins-report)" "Engine fixes: not offered, this catalog of fixes has no installer for it"' "a downloaded catalog from before the installer existed does not offer Engine fixes"
