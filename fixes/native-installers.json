@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "note": "Native ports that come with an installer of their own, which MacGameFix downloads, checks and opens (app/NativeInstallers.swift). Each entry names one published file by its SHA-256 and size: the installer is not notarized, so MacGameFix opens that file and no other. A new release of a port reaches players when its entry here is changed. steamApp is the Windows game's Steam app id; app is what the installer leaves in Applications; installer is the application inside the disk image.",
+  "note": "Native ports that come with an installer of their own, which MacGameFix downloads, checks and opens (app/NativeInstallers.swift). Each entry names one published file by its SHA-256 and size: the installer is not notarized, so MacGameFix opens that file and no other. A new release of a port reaches players when its entry here is changed. steamApp is the Windows game's Steam app id; app is what the installer leaves in Applications, and bundle a part of that app's bundle identifier, which tells it from another application of the same name (Steam leaves a shortcut called after the game in the same folder); installer is the application inside the disk image.",
   "ports": [
     {
       "id": "doom-2016",
@@ -10,6 +10,7 @@
       "steamApp": "379720",
       "gameExecutable": "DOOMx64vk.exe",
       "app": "DOOM.app",
+      "bundle": "recomp",
       "installer": "Install DOOM Recomp.app",
       "version": "1.2.0",
       "url": "https://github.com/NightSightProductions/DOOM-Recomp/releases/download/v1.2.0/DOOM-Recomp-macOS.dmg",
@@ -25,6 +26,7 @@
       "steamApp": "1056960",
       "gameExecutable": "Youngblood_x64vk.exe",
       "app": "Wolfenstein Youngblood.app",
+      "bundle": "recomp",
       "installer": "Install Wolfenstein Youngblood Recomp.app",
       "version": "1.0.1",
       "url": "https://github.com/NightSightProductions/Wolfenstein-YB-Recomp/releases/download/v1.0.1/Wolfenstein-Youngblood-Recomp-macOS.dmg",
@@ -40,6 +42,7 @@
       "steamApp": "612880",
       "gameExecutable": "NewColossus_x64vk.exe",
       "app": "Wolfenstein II The New Colossus.app",
+      "bundle": "recomp",
       "installer": "Install Wolfenstein II Recomp.app",
       "version": "1.0.0",
       "url": "https://github.com/NightSightProductions/Wolfenstein-TNC-Recomp/releases/download/v1.0.0/Wolfenstein-II-Recomp-macOS.dmg",
@@ -55,6 +58,7 @@
       "steamApp": "350080",
       "gameExecutable": "WolfOldBlood_x64.exe",
       "app": "Wolfenstein The Old Blood.app",
+      "bundle": "recomp",
       "installer": "Install Wolfenstein Old Blood Recomp.app",
       "version": "1.0.0",
       "url": "https://github.com/NightSightProductions/Wolfenstein-TOB-Recomp/releases/download/v1.0.0/Wolfenstein-TOB-Recomp-macOS.dmg",
@@ -70,6 +74,7 @@
       "steamApp": "201810",
       "gameExecutable": "WolfNewOrder_x64.exe",
       "app": "Wolfenstein The New Order.app",
+      "bundle": "recomp",
       "installer": "Install Wolfenstein Recomp.app",
       "version": "1.0.0",
       "url": "https://github.com/NightSightProductions/Wolfenstein-TNO-Recomp/releases/download/v1.0.0/Wolfenstein-TNO-Recomp-macOS.dmg",
