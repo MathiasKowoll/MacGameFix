@@ -1817,7 +1817,7 @@ struct EngineView: View {
                                                                               set: { model.setShaderCache($0) }))
                     .help("macOS keeps the shaders a game compiled in one of several files, and hands the game whichever is "
                           + "free at its next start: sometimes an empty one, and the game compiles them all again. With "
-                          + "this on, once a game is closed its fullest file is copied over the others, so every "
+                          + "this on, once a game is closed the file it last wrote is copied over the others, so every "
                           + "start finds them. The copies take no space of their own.")
                 if model.settings.shaderCache && !model.shaderLine.isEmpty {
                     Text(model.shaderLine).font(.caption).foregroundStyle(.secondary)

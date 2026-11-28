@@ -110,7 +110,7 @@ enum NotProtonPlugins {
     ///   over Bluetooth and on a cable, Crysis 3 Remastered (XInput, triggers) and Crash
     ///   Bandicoot 4 (DualShock 4 mode).
     /// - Shaders kept whole: ShaderCache.swift's work, done by the game as it starts (mgf-shaders.c):
-    ///   the first process of a start clones the fullest Metal cache file over the others while
+    ///   the first process of a start clones the latest full Metal cache file over the others while
     ///   none is held, so the game gets them all whatever file it takes. The agent still does it
     ///   after a game closes, for every game; the row is for a game that should not wait for that,
     ///   or a Mac without the agent. It names Ori and Phantom Blade Zero to NotProton (improves),

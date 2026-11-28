@@ -24,11 +24,19 @@
 // In a game that compiles as it goes (Ori and the Will of the Wisps), the same draw of
 // the lot is the hitches of the first visit coming back in places already seen.
 //
-// So while no process holds any of a game's files, the fullest one is copied over
+// So while no process holds any of a game's files, the latest full one is copied over
 // the others. A copy is an APFS clone: it takes no space of its own until a game
-// writes to it. What only a smaller file held is lost and compiled again when the game
+// writes to it. What only another file held is lost and compiled again when the game
 // next draws it; from then on every start begins from the same full file, so it is
 // lost once.
+//
+// The latest, not the largest (source(sizes:lists:written:)): a file Metal wrote for one
+// tool is no use to another. Ori and the Blind Forest's four files were filled under Rosetta
+// on 2026-11-19 (28,925,952 bytes) and the game moved to FEX's tool that night. On
+// 2026-11-28 under FEX, Metal made the game's file empty at the start and the game compiled
+// it all again (27,656,192 bytes in six minutes, the stutter of a first start); the largest
+// file was still Rosetta's, so every pass since the move had copied it back over FEX's and
+// every start had compiled again. The game's own file is the last written when it closes.
 //
 // CrossOver's own folder (com.codeweavers.CrossOver.wineloader) is left alone: every
 // game in every bottle shares its four files, each holds a different mix of games, and
@@ -95,24 +103,40 @@ enum ShaderCache {
         ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.intValue ?? -1
     }
 
+    private static func written(_ url: URL) -> Date {
+        ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date) ?? .distantPast
+    }
+
+    /// The file the others are made the same as: of those holding at least a quarter of the largest,
+    /// the one written last, and of two written at once the larger. A game's own file is the last one
+    /// written when it closes; the quarter keeps out a file Metal has just made empty and a helper
+    /// process's few shaders. nil when no file holds anything.
+    static func source(sizes: [Int], lists: [Int], written: [Date]) -> Int? {
+        guard let most = sizes.max(), most > 0 else { return nil }
+        return sizes.indices
+            .filter { sizes[$0] > 0 && lists[$0] >= 0 && sizes[$0] * 4 >= most }
+            .max { (written[$0], sizes[$0]) < (written[$1], sizes[$1]) }
+    }
+
     enum Outcome: Equatable {
         /// The four are the same already.
         case whole
         /// A process holds one of them: the game, or its launcher, is running.
         case inUse
-        /// The fullest was copied over this many of the others.
+        /// The latest was copied over this many of the others.
         case copied(Int)
         case failed(String)
     }
 
-    /// Makes one folder's files the same as its fullest, unless they are already or one is held.
+    /// Makes one folder's files the same as its latest full one (source), unless they are already or one is held.
     static func keep(_ folder: Folder) -> Outcome {
         let fm = FileManager.default
         let files = Self.names(in: folder.dir)
         let data = files.map { folder.dir.appendingPathComponent($0 + ".data") }
         let list = files.map { folder.dir.appendingPathComponent($0 + ".list") }
         let sizes = data.map(size), lists = list.map(size)
-        guard let most = sizes.max(), most > 0, let best = sizes.firstIndex(of: most), lists[best] >= 0 else { return .whole }
+        guard let best = source(sizes: sizes, lists: lists, written: data.map(written)) else { return .whole }
+        let most = sizes[best]
         // The same sizes all round, data and list: nothing was added to any of them since they were made the same.
         if sizes.allSatisfy({ $0 == most }) && lists.allSatisfy({ $0 == lists[best] }) { return .whole }
 
@@ -154,7 +178,7 @@ enum ShaderCache {
         for folder in folders() {
             switch keep(folder) {
             case .copied(let n) where n > 0:
-                lines.append("\(folder.bundle): the fullest shader cache copied over \(n) other\(n == 1 ? "" : "s")")
+                lines.append("\(folder.bundle): the latest shader cache copied over \(n) other\(n == 1 ? "" : "s")")
             case .failed(let why):
                 lines.append("\(folder.bundle): \(why)")
             default: break

@@ -10,10 +10,10 @@
 //
 // NotProton loads this library into every process of a game whose row is on, before the game's
 // code runs. Each looks at its bundle's folders: while no process holds any of the files, the
-// fullest is cloned over the others (an APFS clone, no space of its own until written to), with
+// latest full one is cloned over the others (an APFS clone, no space of its own until written to), with
 // every file locked until the clones are in place. The first process of a start finds them free
 // and does it; the ones after find them the same, or one held, and leave them. So the game starts
-// from the fullest file at every start, where the menu bar agent does it only after the game is
+// from its latest full file at every start, where the menu bar agent does it only after the game is
 // closed, and only on a Mac where it runs.
 //
 // Nothing else: no hook, no patch, nothing of the game's or Wine's code is touched.
@@ -44,6 +44,12 @@ static const struct np_plugin_api *api;
 static long long file_size(const char *path) {
     struct stat st;
     return stat(path, &st) == 0 ? (long long)st.st_size : -1;
+}
+
+// When a file was last written, in nanoseconds; 0 when it is not there.
+static long long file_written(const char *path) {
+    struct stat st;
+    return stat(path, &st) == 0 ? (long long)st.st_mtimespec.tv_sec * 1000000000LL + st.st_mtimespec.tv_nsec : 0;
 }
 
 // functions, functions1, functions2, functions3, and any further numbered one Metal made.
@@ -89,15 +95,23 @@ static int clone_over(const char *from, const char *to) {
 static int keep(const char *dir) {
     int files[MAX_FILES];
     int n = names(dir, files);
-    long long data[MAX_FILES], list[MAX_FILES], most = -1;
+    long long data[MAX_FILES], list[MAX_FILES], written[MAX_FILES], largest = 0;
     int best = -1;
     char path[PATH_MAX];
     for (int i = 0; i < n; i++) {
-        file_path(path, sizeof path, dir, files[i], "data"); data[i] = file_size(path);
+        file_path(path, sizeof path, dir, files[i], "data"); data[i] = file_size(path); written[i] = file_written(path);
         file_path(path, sizeof path, dir, files[i], "list"); list[i] = file_size(path);
-        if (data[i] > most) { most = data[i]; best = i; }
+        if (data[i] > largest) largest = data[i];
     }
-    if (best < 0 || most <= 0 || list[best] < 0) return 0;
+    // The source, as ShaderCache.source: of the files holding at least a quarter of the largest,
+    // the one written last, and of two written at once the larger. A file Metal wrote for one tool
+    // (Rosetta, FEX) is no use to another, and the game's own is the last written when it closes.
+    for (int i = 0; i < n; i++) {
+        if (data[i] <= 0 || list[i] < 0 || data[i] * 4 < largest) continue;
+        if (best < 0 || written[i] > written[best] || (written[i] == written[best] && data[i] > data[best])) best = i;
+    }
+    if (best < 0) return 0;
+    long long most = data[best];
     int same = 1;
     for (int i = 0; i < n; i++) same &= data[i] == most && list[i] == list[best];
     if (same) return 0;
@@ -125,7 +139,7 @@ static int keep(const char *dir) {
         copied++;
     }
     if (copied) {
-        say("the fullest shader cache (%lld bytes) cloned over %d other%s in %s", most, copied, copied == 1 ? "" : "s", dir);
+        say("the latest shader cache (%lld bytes) cloned over %d other%s in %s", most, copied, copied == 1 ? "" : "s", dir);
         result = 1;
     }
 out:
