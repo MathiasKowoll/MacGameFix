@@ -262,6 +262,13 @@ done
 if [ "$SIGN_ID" != - ]; then
   codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$RES/notproton-plugins/mgf-controls.dylib"
 fi
+# Each game's compiled shaders kept whole as it starts (notproton-plugins/mgf-shaders.c).
+clang -arch arm64 -arch x86_64 -mmacosx-version-min=15.0 -Werror=unguarded-availability-new -std=c17 \
+  -dynamiclib -O2 -Wall -Wextra -framework CoreFoundation -install_name "@rpath/mgf-shaders.dylib" \
+  -o "$RES/notproton-plugins/mgf-shaders.dylib" "$HERE/notproton-plugins/mgf-shaders.c"
+if [ "$SIGN_ID" != - ]; then
+  codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$RES/notproton-plugins/mgf-shaders.dylib"
+fi
 
 echo "==> Info.plist"
 if [ -n "$UPDATES_BASE" ] && [ -n "$UPDATES_SECRET" ]; then

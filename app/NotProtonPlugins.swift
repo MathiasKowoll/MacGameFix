@@ -7,9 +7,10 @@
 //   55-d3dmetal-notifier.conf  D3DMetal video crash fix  d3dmetal-notifier.dylib
 //   60-red-dead-online.conf    Red Dead Online fix       tcp-noopt.dylib, RDR2 and RDO only
 //
-// and one of MacGameFix's own, kept the same way:
+// and two of MacGameFix's own, kept the same way:
 //
 //   mgf-controls.conf          DualSense controllers     mgf-controls.dylib (fixes/controls)
+//   mgf-shaders.conf           Shaders kept whole        mgf-shaders.dylib (notproton-plugins/mgf-shaders.c)
 //
 // They carry NotProton's own file names, so a NotProton that installs the same plugins writes
 // the same files rather than a second copy: NotProton refuses an id two files declare, and
@@ -108,6 +109,12 @@ enum NotProtonPlugins {
     ///   them alone. Played on NotProton 41303 (Rosetta), 2026-11-26: Marvel's Spider-Man 2
     ///   over Bluetooth and on a cable, Crysis 3 Remastered (XInput, triggers) and Crash
     ///   Bandicoot 4 (DualShock 4 mode).
+    /// - Shaders kept whole: ShaderCache.swift's work, done by the game as it starts (mgf-shaders.c):
+    ///   the first process of a start clones the fullest Metal cache file over the others while
+    ///   none is held, so the game gets them all whatever file it takes. The agent still does it
+    ///   after a game closes, for every game; the row is for a game that should not wait for that,
+    ///   or a Mac without the agent. It names Ori and Phantom Blade Zero to NotProton (improves),
+    ///   whose starts are the ones the split cache costs most.
     static let all: [Plugin] = [
         Plugin(
             name: "Unreal video", file: "40-unreal-video.conf", id: "NOTPROTON_UNREAL_VIDEO",
@@ -143,6 +150,15 @@ enum NotProtonPlugins {
             description: "The DualSense in this game: Bluetooth as a cable, haptics, XInput, triggers. Set it up in MacGameFix's Game Feel",
             library: "mgf-controls.dylib", fields: [],
             rest: ["on = 1", "inject = 1", "tools = notproton-fex-rosetta*"]),
+        Plugin(
+            name: "Shaders kept whole", file: "mgf-shaders.conf", id: "NOTPROTON_MGF_SHADERS",
+            group: "MacGameFix / Performance", label: "Shaders kept whole",
+            description: "The game starts from all the shaders it compiled before, not from a part of them",
+            library: "mgf-shaders.dylib", fields: [],
+            rest: ["on = 1", "inject = 1"],
+            improves: ["387290 Ori and the Blind Forest starts without compiling its shaders again.",
+                       "1057090 Ori and the Will of the Wisps does not hitch again where it already was.",
+                       "4115450 Phantom Blade Zero starts from all the shaders it compiled before."]),
     ]
 
     static func text(_ p: Plugin, grouped: Bool) -> String {

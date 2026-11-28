@@ -1229,13 +1229,13 @@ cp "$T/run-with-patch" "$CT/notproton-a/run"
 rm -f "$NPF" "$NPD" "$NPV" "$NPR"
 rm -rf "$CT"
 echo "== The NotProton plugins MacGameFix carries"
-NPU="$NPP/40-unreal-video.conf"; NPZ="$NPP/50-d3dmetal-freeze.conf"; NPN="$NPP/55-d3dmetal-notifier.conf"; NPT="$NPP/60-red-dead-online.conf"; NPC="$NPP/mgf-controls.conf"
+NPU="$NPP/40-unreal-video.conf"; NPZ="$NPP/50-d3dmetal-freeze.conf"; NPN="$NPP/55-d3dmetal-notifier.conf"; NPT="$NPP/60-red-dead-online.conf"; NPC="$NPP/mgf-controls.conf"; NPH="$NPP/mgf-shaders.conf"
 NPLIB="$HERE/MacGameFix.app/Contents/Resources/notproton-plugins"; NPHOST="$SUPPORT/notproton/plugin-host.dylib"
 export MACGAMEFIX_CPUS=16,12 MACGAMEFIX_DISPLAY=120,240
-rm -f "$NPU" "$NPZ" "$NPN" "$NPT" "$NPC" "$NPP"/d3dmetal-freeze.dylib "$NPP"/d3dmetal-notifier.dylib "$NPP"/tcp-noopt.dylib "$NPP"/mgf-controls.dylib
+rm -f "$NPU" "$NPZ" "$NPN" "$NPT" "$NPC" "$NPH" "$NPP"/d3dmetal-freeze.dylib "$NPP"/d3dmetal-notifier.dylib "$NPP"/tcp-noopt.dylib "$NPP"/mgf-controls.dylib "$NPP"/mgf-shaders.dylib
 mkdir -p "$CT/notproton-a"
 printf '      split("label description description_on section on off depends requires inject env overrides stage tools type choice min max step default suffix hide_crossover apps patch variants group improves needed_for", f, " ")\n' > "$CT/notproton-a/run"
-check '[ -f "$NPLIB/d3dmetal-freeze.dylib" ] && [ -f "$NPLIB/d3dmetal-notifier.dylib" ] && [ -f "$NPLIB/tcp-noopt.dylib" ] && has "$(lipo -archs "$NPLIB/tcp-noopt.dylib")" arm64 && has "$(lipo -archs "$NPLIB/tcp-noopt.dylib")" x86_64 && has "$(lipo -archs "$NPLIB/mgf-controls.dylib")" arm64 && has "$(lipo -archs "$NPLIB/mgf-controls.dylib")" x86_64' "the app carries the four libraries, for both architectures"
+check '[ -f "$NPLIB/d3dmetal-freeze.dylib" ] && [ -f "$NPLIB/d3dmetal-notifier.dylib" ] && [ -f "$NPLIB/tcp-noopt.dylib" ] && has "$(lipo -archs "$NPLIB/tcp-noopt.dylib")" arm64 && has "$(lipo -archs "$NPLIB/tcp-noopt.dylib")" x86_64 && has "$(lipo -archs "$NPLIB/mgf-controls.dylib")" arm64 && has "$(lipo -archs "$NPLIB/mgf-controls.dylib")" x86_64 && has "$(lipo -archs "$NPLIB/mgf-shaders.dylib")" arm64 && has "$(lipo -archs "$NPLIB/mgf-shaders.dylib")" x86_64' "the app carries the five libraries, for both architectures"
 # Nothing goes into NotProton until the player installs, and an install wants Steam and NotProton
 # closed. MGVF_STEAM_RUNNING and MGVF_NOTPROTON_RUNNING answer for the Steam of the Mac the tests run on.
 export MGVF_STEAM_RUNNING=0 MGVF_NOTPROTON_RUNNING=0 MGVF_NOTPROTON_VERSION=1.2.8
@@ -1248,7 +1248,7 @@ OUT=$(MGVF_NOTPROTON_RUNNING=1 "$BIN" --plugins-install) && RC=0 || RC=$?
 check '[ "$RC" = 1 ] && has "$OUT" "NotProton is open. Quit it, then install." && [ ! -e "$NPU" ]' "and with NotProton's app open"
 check 'has "$(MGVF_STEAM_RUNNING=1 MGVF_NOTPROTON_RUNNING=1 "$BIN" --plugins-install || true)" "Steam and NotProton are open. Quit them, then install."' "both open are both named"
 OUT=$("$BIN" --plugins-install)
-check 'has "$OUT" "Unreal video row: written" && [ -f "$NPU" ] && [ ! -e "$NPZ" ] && [ ! -e "$NPN" ] && [ ! -e "$NPT" ] && [ ! -e "$NPC" ] && [ ! -e "$NPP/tcp-noopt.dylib" ] && [ ! -e "$NPP/mgf-controls.dylib" ]' "without NotProton's plugin host, only the Unreal row: a library would load and do nothing"
+check 'has "$OUT" "Unreal video row: written" && [ -f "$NPU" ] && [ ! -e "$NPZ" ] && [ ! -e "$NPN" ] && [ ! -e "$NPT" ] && [ ! -e "$NPC" ] && [ ! -e "$NPP/tcp-noopt.dylib" ] && [ ! -e "$NPP/mgf-controls.dylib" ] && [ ! -e "$NPH" ] && [ ! -e "$NPP/mgf-shaders.dylib" ]' "without NotProton's plugin host, only the Unreal row: a library would load and do nothing"
 OUT=$("$BIN" --plugins-report)
 check 'has "$OUT" "Unreal video fix: in place" && has "$OUT" "D3DMetal freeze fix: not offered, NotProton'"'"'s plugin host is not installed"' "the window says which plugins are in place and why one is not offered"
 U=$(cat "$NPU")
@@ -1262,7 +1262,23 @@ T6=$(cat "$NPT")
 check 'has "$T6" "[NOTPROTON_TCP_NOOPT]" && has "$T6" "apps = 1174180" && has "$T6" "apps = 1404210" && has "$T6" "group = MacGameFix / Game fixes"' "the Red Dead Online row shows for Red Dead Redemption 2 and Red Dead Online only"
 C6=$(cat "$NPC")
 check 'has "$C6" "[NOTPROTON_MGF_CONTROLS]" && has "$C6" "label = DualSense controllers" && has "$C6" "group = MacGameFix / Controllers" && has "$C6" "inject = 1" && has "$C6" "tools = notproton-fex-rosetta*" && has "$C6" "requires = Library/Application Support/notproton/plugins/mgf-controls.dylib" && ! /usr/bin/grep -q "^apps" "$NPC" && cmp -s "$NPLIB/mgf-controls.dylib" "$NPP/mgf-controls.dylib"' "the DualSense controllers row is on every game's page, for the Rosetta tools, and loads the library the app carries"
-check '[ "$("$BIN" --plugins-report | /usr/bin/grep -c ": in place$")" = 5 ]' "with the plugin host, the window shows all five in place"
+S6=$(cat "$NPH")
+check 'has "$S6" "[NOTPROTON_MGF_SHADERS]" && has "$S6" "label = Shaders kept whole" && has "$S6" "group = MacGameFix / Performance" && has "$S6" "inject = 1" && has "$S6" "requires = Library/Application Support/notproton/plugins/mgf-shaders.dylib" && has "$S6" "improves = 387290 " && has "$S6" "improves = 1057090 " && has "$S6" "improves = 4115450 " && ! /usr/bin/grep -q "^apps" "$NPH" && cmp -s "$NPLIB/mgf-shaders.dylib" "$NPP/mgf-shaders.dylib"' "the shaders row is on every game's page, names Ori and Phantom Blade Zero to NotProton, and loads the library the app carries"
+# The library itself, loaded by a stand-in process on a stand-in cache (MGF_SHADERS_CACHE_DIR and
+# MGF_SHADERS_BUNDLE, honoured only together; HOME too, so it finds no real plugin host to log to): the
+# fullest file over the others, nothing while one is held.
+printf '#include <dlfcn.h>\nint main(int c, char **v) { (void)c; return dlopen(v[1], RTLD_NOW) ? 0 : 1; }\n' > "$T/load.c" && clang -o "$T/load" "$T/load.c"
+SB=com.notproton.launcher.387290; SC="$T/metal-cache"; SD="$SC/$SB/com.apple.metal/gpu"; mkdir -p "$SD"
+printf 1234567890 > "$SD/functions.data"; printf ab > "$SD/functions.list"; printf 123 > "$SD/functions1.data"; printf a > "$SD/functions1.list"
+/usr/bin/perl -e 'use Fcntl ":flock"; open my $f, "<", $ARGV[0]; flock($f, LOCK_EX); sleep 2' "$SD/functions1.data" & SHELD=$!; sleep 0.5
+HOME="$T" MGF_SHADERS_CACHE_DIR="$SC" MGF_SHADERS_BUNDLE=$SB "$T/load" "$NPLIB/mgf-shaders.dylib" 2>/dev/null
+check '[ "$(cat "$SD/functions1.data")" = 123 ] && [ ! -e "$SD/functions2.data" ]' "the shaders library leaves the files alone while a process holds one"
+wait "$SHELD"
+HOME="$T" MGF_SHADERS_CACHE_DIR="$SC" "$T/load" "$NPLIB/mgf-shaders.dylib" 2>/dev/null
+check '[ "$(cat "$SD/functions1.data")" = 123 ]' "and, outside a game's bundle, without the stand-in bundle too"
+HOME="$T" MGF_SHADERS_CACHE_DIR="$SC" MGF_SHADERS_BUNDLE=$SB "$T/load" "$NPLIB/mgf-shaders.dylib" 2>/dev/null
+check '( for k in 1 2 3; do cmp -s "$SD/functions.data" "$SD/functions$k.data" && cmp -s "$SD/functions.list" "$SD/functions$k.list" || exit 1; done ) && [ ! -e "$SD/functions1.data.mgf-new" ]' "with none held, the fullest file and its list are cloned over the other three"
+check '[ "$("$BIN" --plugins-report | /usr/bin/grep -c ": in place$")" = 6 ]' "with the plugin host, the window shows all six in place"
 check '[ "$("$BIN" --rows-keep)" = "rows: nothing to do" ]' "plugins already right are left as they are"
 check 'has "$T6" "improves = 1174180 Red Dead Online connects to its servers." && has "$T6" "improves = 1404210 Red Dead Online connects to its servers." && ! has "$T6" "needed_for"' "a NotProton that reads improves is told the Red Dead Online row is for Red Dead Redemption 2 and Red Dead Online"
 check '! /usr/bin/grep -Eq "^(improves|needed_for)" "$NPU" "$NPZ" "$NPN" "$NPC"' "the rows whose games this repository does not name by Steam app name none"
@@ -1271,10 +1287,10 @@ RDO0="$(printf '%s\n' '[NOTPROTON_TCP_NOOPT]' 'label = Red Dead Online fix' 'gro
 cp "$CT/notproton-a/run" "$T/run-with-fields"
 printf '      split("label description description_on section on off depends requires inject env overrides stage tools type choice min max step default suffix hide_crossover apps patch variants group", f, " ")\n' > "$CT/notproton-a/run"
 OUT=$("$BIN" --rows-keep)
-check 'has "$OUT" "Red Dead Online row: written" && ! has "$OUT" "Unreal" && ! has "$OUT" "D3DMetal freeze" && ! has "$OUT" "video crash" && ! has "$OUT" "DualSense" && ! has "$OUT" "library" && [ "$(cat "$NPT")" = "$RDO0" ] && [ "$("$BIN" --plugins-report | /usr/bin/grep -c ": in place$")" = 5 ]' "a NotProton that does not read improves gets the Red Dead Online row as it was before the field, and no other carried plugin changes"
+check 'has "$OUT" "Red Dead Online row: written" && ! has "$OUT" "Unreal" && ! has "$OUT" "D3DMetal freeze" && ! has "$OUT" "video crash" && has "$OUT" "Shaders kept whole row: written" && ! /usr/bin/grep -q "^improves" "$NPH" && ! has "$OUT" "DualSense" && ! has "$OUT" "library" && [ "$(cat "$NPT")" = "$RDO0" ] && [ "$("$BIN" --plugins-report | /usr/bin/grep -c ": in place$")" = 6 ]' "a NotProton that does not read improves gets the Red Dead Online and shaders rows without the field, and no other carried plugin changes"
 cp "$T/run-with-fields" "$CT/notproton-a/run"
 OUT=$("$BIN" --rows-keep)
-check 'has "$OUT" "Red Dead Online row: written" && [ "$(/usr/bin/grep -v "^improves = " "$NPT")" = "$RDO0" ] && [ "$(/usr/bin/grep -c "^improves = " "$NPT")" = 2 ] && [ "$("$BIN" --rows-keep)" = "rows: nothing to do" ]' "and one that reads it again gets the two lines back, and nothing else"
+check 'has "$OUT" "Red Dead Online row: written" && [ "$(/usr/bin/grep -v "^improves = " "$NPT")" = "$RDO0" ] && [ "$(/usr/bin/grep -c "^improves = " "$NPT")" = 2 ] && [ "$(/usr/bin/grep -c "^improves = " "$NPH")" = 3 ] && [ "$("$BIN" --rows-keep)" = "rows: nothing to do" ]' "and one that reads it again gets the two lines back, and nothing else"
 printf 'an older build' > "$NPP/tcp-noopt.dylib"
 check 'has "$("$BIN" --plugins-report)" "Red Dead Online fix: not in place yet"' "a library that differs shows as not in place yet"
 check '[ "$("$BIN" --rows-keep)" = "Red Dead Online library: put in place" ] && cmp -s "$NPLIB/tcp-noopt.dylib" "$NPP/tcp-noopt.dylib" && [ ! -e "$NPP/.tcp-noopt.dylib.mgf-new" ]' "a library that differs is replaced, through a rename, and nothing is left beside it"
@@ -1300,7 +1316,7 @@ check '[ "$(MGVF_STEAM_RUNNING=1 "$BIN" --rows-keep)" = "rows: nothing to do" ] 
 "$BIN" --plugins-remove NOTPROTON_TCP_NOOPT >/dev/null
 OUT=$("$BIN" --plugins-install NOTPROTON_MGF_CONTROLS)
 check 'has "$OUT" "DualSense controllers row: written" && [ -f "$NPC" ] && cmp -s "$NPLIB/mgf-controls.dylib" "$NPP/mgf-controls.dylib" && [ ! -e "$NPT" ] && has "$("$BIN" --plugins-report)" "Red Dead Online fix: not installed"' "installed by its id, that plugin alone comes back: another one removed stays out"
-check '! MGVF_NOTPROTON_RUNNING=1 "$BIN" --plugins-install NOTPROTON_TCP_NOOPT >/dev/null && [ ! -e "$NPT" ] && "$BIN" --plugins-install NOTPROTON_TCP_NOOPT >/dev/null && [ -f "$NPT" ] && [ "$("$BIN" --plugins-report | /usr/bin/grep -c ": in place$")" = 5 ]' "one plugin's install waits for NotProton to close too, and with it back all five are in place"
+check '! MGVF_NOTPROTON_RUNNING=1 "$BIN" --plugins-install NOTPROTON_TCP_NOOPT >/dev/null && [ ! -e "$NPT" ] && "$BIN" --plugins-install NOTPROTON_TCP_NOOPT >/dev/null && [ -f "$NPT" ] && [ "$("$BIN" --plugins-report | /usr/bin/grep -c ": in place$")" = 6 ]' "one plugin's install waits for NotProton to close too, and with it back all six are in place"
 OUT=$("$BIN" --plugins-remove NOTPROTON_NO_SUCH_PLUGIN) && RC=0 || RC=$?
 check '[ "$RC" = 1 ] && has "$OUT" "is no plugin of MacGameFix"' "an id that is no plugin of MacGameFix's is refused"
 cp "$NPZ" "$T/freeze-row"; printf '[NOTPROTON_D3DMETAL_NODEGUARD]\nlabel = Written by hand\non = 1\n' > "$NPZ"
@@ -1336,7 +1352,7 @@ rm -f "$NPP/mgf-every-game.uses"
 rm -f "$NPNOTE"
 printf '# MacGameFix writes this file for app 4080220 and removes it with the fix; edits do not last.\n# shared rows: NOTPROTON_MGF_ENGINE\n' > "$NPP/mgf-4080220.uses"
 ( HOME="$MACGAMEFIX_HOME"; . "$NPRES/notproton-plugins.sh"; NP_SHARED_TEMPLATE="$NPRES/np-plugin-shared.conf"; NP_SHARED_GROUP=""; np_shared_write ); cp "$NPRES/mgf-engine.dylib" "$NPE"
-check 'has "$("$BIN" --plugins-report)" "Engine fixes: not installed" && [ "$(MGVF_STEAM_RUNNING=1 "$BIN" --rows-keep)" = "rows: nothing to do" ] && [ -f "$NPP/mgf-every-game.uses" ] && [ "$("$BIN" --plugins-report | /usr/bin/grep -c ": in place$")" = 6 ]' "on a Mac from before the notes, what is already there is taken as installed: Engine fixes a game's fix put in, and the five plugins"
+check 'has "$("$BIN" --plugins-report)" "Engine fixes: not installed" && [ "$(MGVF_STEAM_RUNNING=1 "$BIN" --rows-keep)" = "rows: nothing to do" ] && [ -f "$NPP/mgf-every-game.uses" ] && [ "$("$BIN" --plugins-report | /usr/bin/grep -c ": in place$")" = 7 ]' "on a Mac from before the notes, what is already there is taken as installed: Engine fixes a game's fix put in, and the six plugins"
 rm -f "$NPP/mgf-4080220.uses" "$NPP/mgf-every-game.uses" "$NPS" "$NPE"
 mv "$T/catalog-aside" "$SUPPORT/MacGameFix/catalog"
 rm -f "$NPHOST"
