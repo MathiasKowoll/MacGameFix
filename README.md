@@ -383,8 +383,11 @@ sheet, **DualSense controllers in this game**: Turn On writes the row's
 variable into the game's launch options in Steam, with Steam closed, and keeps
 what each account had so that Turn Off gives it back
 (`fixes/steam-launch-options.pl`, as a game's fix switches its rows on). A row
-switched on in Steam's own page reads On and is switched off there. It is
-offered for a Steam game on one of the tools the row is for, with the plugin
+switched on in Steam's own page reads On and is switched off there. So does
+one that stands in front of another fix's program in the game's launch options
+(a mod tool's play script, as EA SPORTS FC 27's): Game Feel reads the row
+there, and leaves writing such options to the fix that put the program in. It
+is offered for a Steam game on one of the tools the row is for, with the plugin
 installed. MacGameFix also switches the row on by itself, once, for a game
 whose pad was set up in Game Feel (`app/RowsByGame.swift`); the two write
 through one journal and one record, so a row turned off in Game Feel is not
