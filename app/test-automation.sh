@@ -1346,6 +1346,14 @@ check '[ "$(gfrow on 4343)" = "on, switched on here" ] && /usr/bin/grep -q "\"NO
 sed -i '' 's|"MTL_HUD_ENABLED=0 %command%"|"NOTPROTON_MGF_CONTROLS=1 MTL_HUD_ENABLED=0 %command%"|' "$GFV"
 OUT=$(gfrow off 4242) && RC=0 || RC=$?
 check '[ "$(gfrow status 4242)" = on ] && [ "$RC" = 1 ] && has "$OUT" "Game Feel did not switch it on" && /usr/bin/grep -q "NOTPROTON_MGF_CONTROLS=1 MTL_HUD_ENABLED=0" "$GFV"' "a row the player switched on in Steam reads on, and is theirs to switch off there"
+# A game whose options run a program of another fix before the game (a mod tool's play script):
+# the row in front of it is read, and where it is not there Game Feel does not write past a program.
+cp "$T/localconfig.before" "$GFV"
+sed -i '' 's|"MTL_HUD_ENABLED=0 %command%"|"NOTPROTON_MGF_CONTROLS=1 MTL_HUD_ENABLED=0 \\"/x/play.sh\\" %command%"|' "$GFV"
+check '[ "$(gfrow status 4242)" = on ]' "a row in front of another program in the launch options reads on"
+sed -i '' 's|"NOTPROTON_MGF_CONTROLS=1 MTL_HUD_ENABLED=0 |"MTL_HUD_ENABLED=0 |' "$GFV"
+OUT=$(gfrow on 4242) && RC=0 || RC=$?
+check '[ "$(gfrow status 4242)" = off ] && [ "$RC" = 1 ] && has "$OUT" "start with a program" && /usr/bin/grep -q "\"MTL_HUD_ENABLED=0 .*play.sh.* %command%\"" "$GFV"' "without it the game reads off, and Game Feel does not write options that run a program: it says to set them by hand"
 cp "$T/localconfig.before" "$GFV"
 OUT=$(gfrow on 4545) && RC=0 || RC=$?
 check '[ "$RC" = 1 ] && has "$OUT" "Start it once in Steam first" && cmp -s "$GFV" "$T/localconfig.before"' "a game Steam has no settings for yet is not switched on, and says to start it once"
