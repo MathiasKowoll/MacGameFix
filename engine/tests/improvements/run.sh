@@ -223,6 +223,26 @@ check '[ "$(st3 "$R6" --part=rosetta)" = outdated ]' "41303, a runner whose FEX 
 E3 "$R6" --part=rosetta >/dev/null
 check 'npfex6 && ! grep -q ntdll "$S6/installed.list" && [ "$(st3 "$R6" --part=rosetta)" = nomodules ]' "an install puts the runner's own FEX ntdll.so back and takes it off the list"
 check 'ours3 "$R6" aarch64-unix/winecoreaudio.so && grep -q winecoreaudio "$S6/installed.list"' "and the FEX side's controls stay"
+# 41303's Intel side leaves the controls too (2026-11-27): NotProton's DualSense controllers row does
+# them in memory for a game, on CodeWeavers' files. Ones the modules put in before are retired; the
+# FEX side's go in as before, and a CrossOver app keeps both sides'.
+R7="$T/notproton/runners/crossover-$B3-fex7/CrossOver"; S7="$MGVF_ENGINE_BACKUP/crossover-$B3-fex7"
+C7="x86_64-unix/winecoreaudio.so x86_64-windows/winebus.sys x86_64-windows/mmdevapi.dll aarch64-unix/winecoreaudio.so aarch64-windows/winebus.sys aarch64-windows/mmdevapi.dll"
+for f in $C7; do printf 'ours %s wine-11.21\n' "$f" >"$CAT/engine-$B3-$(printf '%s' "$f" | tr / -)"; done
+mkdir -p "$R7/lib/wine/x86_64-unix" "$R7/lib/wine/x86_64-windows" "$R7/lib/wine/aarch64-unix" "$R7/lib/wine/aarch64-windows"
+for f in x86_64-unix/ntdll.so $C7; do printf "CodeWeavers' %s wine-11.21\n" "$f" >"$R7/lib/wine/$f"; done
+for f in x86_64-windows/winebus.sys x86_64-windows/mmdevapi.dll; do printf "CodeWeavers' %s wine-11.21\n" "$f" >"$X3/lib/wine/$f"; done
+cwca7() { [ "$(cat "$R7/lib/wine/x86_64-unix/winecoreaudio.so")" = "CodeWeavers' x86_64-unix/winecoreaudio.so wine-11.21" ]; }
+E3 "$R7" --part=controls >/dev/null
+check 'cwca7 && ours3 "$R7" aarch64-unix/winecoreaudio.so && ours3 "$R7" aarch64-windows/winebus.sys && ! grep -q x86_64 "$S7/installed.list" && [ "$(st3 "$R7" --part=controls)" = installed ]' "41303, a NotProton runner: its Intel side keeps CodeWeavers' controls, its FEX side gets ours"
+mkdir -p "$S7/x86_64-unix"; cp "$R7/lib/wine/x86_64-unix/winecoreaudio.so" "$S7/x86_64-unix/winecoreaudio.so"
+cp "$CAT/engine-$B3-x86_64-unix-winecoreaudio.so" "$R7/lib/wine/x86_64-unix/winecoreaudio.so"
+printf '%s  %s\n' "$(shasum -a 256 "$R7/lib/wine/x86_64-unix/winecoreaudio.so" | cut -d' ' -f1)" x86_64-unix/winecoreaudio.so >>"$S7/installed.list"
+check '[ "$(st3 "$R7" --part=controls)" = outdated ]' "41303, a runner whose Intel side still has the modules' controls: outdated"
+E3 "$R7" --part=controls >/dev/null
+check 'cwca7 && ours3 "$R7" aarch64-unix/winecoreaudio.so && ! grep -q x86_64 "$S7/installed.list" && [ "$(st3 "$R7" --part=controls)" = installed ]' "an install puts CodeWeavers' Intel-side controls back, takes them off the list and leaves the FEX side's"
+E3 "$X3" --part=controls >/dev/null
+check 'ours3 "$X3" x86_64-unix/winecoreaudio.so && ours3 "$X3" x86_64-windows/winebus.sys && [ "$(st3 "$X3" --part=controls)" = installed ]' "41303, a CrossOver app: the Intel side's controls go in, as before"
 # 26.3 (CrossOver stable): the app gets the whole engine, ntdll.so, win32u.so, kernelbase.dll and
 # the rest; NotProton's runner for 26.3 leaves those to CodeWeavers, as 41303's does, and the
 # ntdll.so earlier modules put in it goes back to CodeWeavers'. The controls go into both.
