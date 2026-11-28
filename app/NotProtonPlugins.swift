@@ -20,10 +20,47 @@
 // offered. The Unreal row needs a NotProton that reads "patch". Where a row cannot work, the
 // one MacGameFix wrote is taken out; a file MacGameFix did not write is never touched.
 //
+// INSTALLED BY THE PLAYER, KEPT BY THE AGENT. Nothing goes into NotProton's folder until the
+// player installs the plugins (Improvements, NotProton plugins; or --plugins-install), and an
+// install wants Steam and NotProton's own app closed: Steam reads the folder each time a game's
+// page opens, and NotProton's app lists it and deletes from it. What was installed is noted in
+// MacGameFix's own folder (notproton-plugins.installed), and from then on the agent's pass and
+// the window's scan keep those plugins current with Steam open or not, as before: a row that
+// changed, a library a newer MacGameFix carries. A plugin whose row is gone from NotProton's
+// folder was deleted there (NotProton's Plugins page moves the row and its library to the
+// Trash): it leaves the note and is not put back until the player installs again. Until
+// 2026-11-28 every pass wrote whatever was missing, so a plugin deleted in NotProton came back
+// at the next one. A Mac with no note yet starts with the plugins it already has.
+//
+// "Engine fixes" is one more, kept the same way but written by the catalog's own script
+// (fixes/notproton-every-game.sh), since every game's installer writes that row too.
+//
 // Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import Foundation
+
+/// What has to be closed for an install: Steam, and NotProton's own app.
+enum NotProtonHost {
+    /// The names of those that are open. MGVF_STEAM_RUNNING and MGVF_NOTPROTON_RUNNING, 0 or 1,
+    /// answer for a test, which must not see the Steam of the Mac it runs on.
+    static func open() -> [String] {
+        let env = ProcessInfo.processInfo.environment
+        var names: [String]?
+        func running(_ key: String, _ match: (String) -> Bool) -> Bool {
+            if let forced = env[key], forced == "0" || forced == "1" { return forced == "1" }
+            if names == nil {
+                names = NotProtonPlugins.command("/bin/ps", ["-axo", "comm="], [:]).1
+                    .split(separator: "\n").map(String.init)
+            }
+            return names!.contains(where: match)
+        }
+        // Steam's process is Steam.AppBundle/Steam/Contents/MacOS/steam_osx.
+        let steam = running("MGVF_STEAM_RUNNING") { $0.hasSuffix("/steam_osx") || $0.contains("/Steam.app/Contents/MacOS/steam") }
+        let notproton = running("MGVF_NOTPROTON_RUNNING") { $0.contains("/NotProton.app/Contents/MacOS/") }
+        return (steam ? ["Steam"] : []) + (notproton ? ["NotProton"] : [])
+    }
+}
 
 enum NotProtonPlugins {
     struct Plugin {
@@ -134,17 +171,61 @@ enum NotProtonPlugins {
     /// How a plugin stands on this Mac, for the window; nothing is written.
     enum State: Sendable, Equatable {
         case inPlace
-        /// Missing or not the one this MacGameFix carries: the next pass puts it in place.
+        /// Installed, and not the one this MacGameFix carries: the next pass puts it in place.
         case behind
+        /// Never installed, or deleted in NotProton: only an install puts it in.
+        case notInstalled
         case unworkable(String)
         case foreign
     }
 
-    static func state(_ p: Plugin) -> State {
+    /// The plugins the player installed, by id, each with whether its row is out for now because
+    /// it could not work (the pass that finds it can again puts it back).
+    struct Installed {
+        var waiting: [String: Bool] = [:]
+        static var file: URL { Paths.support.appendingPathComponent("notproton-plugins.installed") }
+
+        /// nil when nothing was ever noted on this Mac.
+        static func load() -> Installed? {
+            guard let text = try? String(contentsOf: file, encoding: .utf8) else { return nil }
+            var list = Installed()
+            for line in text.split(separator: "\n") {
+                let words = line.split(separator: " ")
+                guard let id = words.first else { continue }
+                list.waiting[String(id)] = words.dropFirst().first == "waiting"
+            }
+            return list
+        }
+
+        /// A Mac from before the note: the plugins whose rows MacGameFix wrote are the installed ones.
+        static func found() -> Installed {
+            var list = Installed()
+            for p in all where NotProtonPlugins.mine(p) { list.waiting[p.id] = false }
+            return list
+        }
+
+        func save() {
+            let text = waiting.keys.sorted().map { waiting[$0] == true ? "\($0) waiting" : $0 }.joined(separator: "\n")
+            try? FileManager.default.createDirectory(at: Paths.support, withIntermediateDirectories: true)
+            try? (text + "\n").write(to: Installed.file, atomically: true, encoding: .utf8)
+        }
+    }
+
+    /// Whether the row in NotProton's folder is one MacGameFix wrote: its id, and the mark.
+    static func mine(_ p: Plugin) -> Bool {
+        guard let row = try? String(contentsOf: NotProtonRow.folder.appendingPathComponent(p.file), encoding: .utf8)
+        else { return false }
+        return row.hasPrefix("[\(p.id)]\n") && row.contains(mark)
+    }
+
+    static func state(_ p: Plugin) -> State { state(p, Installed.load() ?? Installed.found()) }
+
+    static func state(_ p: Plugin, _ list: Installed) -> State {
         if let why = unworkable(p) { return .unworkable(why) }
         if NotProtonRow.headers(besides: p.file).contains("[\(p.id)]") { return .foreign }
         let fm = FileManager.default
         let row = try? String(contentsOf: NotProtonRow.folder.appendingPathComponent(p.file), encoding: .utf8)
+        guard let waiting = list.waiting[p.id], row != nil || waiting else { return .notInstalled }
         guard row == text(p, grouped: NotProtonRow.knowsGroups()) else { return .behind }
         if let library = p.library {
             guard let source = bundled?.appendingPathComponent(library),
@@ -158,7 +239,8 @@ enum NotProtonPlugins {
     /// Each plugin's label and state; nil when there is no NotProton in Steam.
     static func states() -> [(label: String, state: State)]? {
         guard FileManager.default.fileExists(atPath: Engine.notproton.path) else { return nil }
-        return all.map { ($0.label, state($0)) }
+        let list = Installed.load() ?? Installed.found()
+        return all.map { ($0.label, state($0, list)) } + [(EveryGameRows.label, EveryGameRows.state())]
     }
 
     /// One line per plugin, for --plugins-report and the tests.
@@ -168,31 +250,66 @@ enum NotProtonPlugins {
             switch state {
             case .inPlace: return "\(label): in place"
             case .behind: return "\(label): not in place yet"
+            case .notInstalled: return "\(label): not installed"
             case .unworkable(let why): return "\(label): not offered, \(why)"
             case .foreign: return "\(label): another plugin file has it"
             }
         }.joined(separator: "\n")
     }
 
-    /// Every plugin put in place, brought up to date, or taken out where it cannot work. What
-    /// was done; nothing when all was already right or there is no NotProton.
-    static func keep() -> [String] {
+    /// Every plugin: the ones not installed yet put in, and the rest kept. Refused, with nothing
+    /// changed, while Steam or NotProton is open and there is one to put in. What was done, and
+    /// whether it was refused.
+    static func install() -> (said: [String], refused: Bool) {
+        guard FileManager.default.fileExists(atPath: Engine.notproton.path) else { return ([], false) }
+        var list = Installed.load() ?? Installed.found()
+        let fresh = all.filter { list.waiting[$0.id] == nil || (!mine($0) && list.waiting[$0.id] == false) }
+        let rows = EveryGameRows.state()
+        if !fresh.isEmpty || rows == .notInstalled {
+            let open = NotProtonHost.open()
+            guard open.isEmpty else {
+                return (["\(open.joined(separator: " and ")) \(open.count == 1 ? "is" : "are") open. "
+                         + "Quit \(open.count == 1 ? "it" : "them"), then install. Nothing was changed."], true)
+            }
+        }
+        // Noted as installed and out for now: the pass below puts each one in.
+        for p in fresh { list.waiting[p.id] = true }
+        list.save()
+        var said = keep(everyGame: false)
+        if rows == .notInstalled || rows == .behind { said += EveryGameRows.run() }
+        return (said, false)
+    }
+
+    /// Every installed plugin brought up to date, taken out where it cannot work, and left out
+    /// where it was deleted in NotProton. What was done; nothing when all was already right or
+    /// there is no NotProton.
+    static func keep(everyGame: Bool = true) -> [String] {
         let fm = FileManager.default
         guard fm.fileExists(atPath: Engine.notproton.path) else { return [] }
         var said: [String] = []
+        let noted = Installed.load()
+        var list = noted ?? Installed.found()
+        let before = list.waiting
+        defer { if noted == nil || list.waiting != before { list.save() } }
         for p in all {
+            guard let waiting = list.waiting[p.id] else { continue }
             let path = NotProtonRow.folder.appendingPathComponent(p.file)
             if let why = unworkable(p) {
                 // Only a row MacGameFix wrote: its id, and the mark.
-                if let mine = try? String(contentsOf: path, encoding: .utf8),
-                   mine.hasPrefix("[\(p.id)]\n"), mine.contains(mark) {
+                if mine(p) {
                     try? fm.removeItem(at: path)
                     said.append("\(p.name) row: taken out, \(why)")
                 }
+                list.waiting[p.id] = true
                 continue
             }
             if NotProtonRow.headers(besides: p.file).contains("[\(p.id)]") {
                 said.append("\(p.name) row: another plugin file has \(p.id), left alone")
+                continue
+            }
+            if !waiting && !fm.fileExists(atPath: path.path) {
+                list.waiting[p.id] = nil
+                said.append("\(p.name) row: deleted from NotProton's plugins, left out until it is installed again")
                 continue
             }
             if let library = p.library {
@@ -212,8 +329,31 @@ enum NotProtonPlugins {
                                             text: { .success(text(p, grouped: $0)) }) {
                 said.append(line)
             }
+            if fm.fileExists(atPath: path.path) { list.waiting[p.id] = false }
         }
+        // A Mac from before the note: the rows for every game that a game's fix already put in
+        // are taken as installed, as the plugins above were.
+        if noted == nil { EveryGameRows.adopt() }
+        // The rows for every game, once installed, are kept by the catalog's script.
+        if everyGame && EveryGameRows.state() == .behind { said += EveryGameRows.run() }
         return said
+    }
+
+    /// A command's exit status and its output, trimmed; -1 when it could not be started.
+    static func command(_ executable: String, _ arguments: [String], _ environment: [String: String]) -> (Int32, String) {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: executable)
+        proc.arguments = arguments
+        var env = ProcessInfo.processInfo.environment
+        for (k, v) in environment { env[k] = v }
+        proc.environment = env
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = pipe
+        do { try proc.run() } catch { return (-1, error.localizedDescription) }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        proc.waitUntilExit()
+        return (proc.terminationStatus, String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     /// The carried library copied over the one in NotProton's folder when they differ, through a
@@ -235,5 +375,51 @@ enum NotProtonPlugins {
             try? fm.removeItem(at: staged)
             return .failure(error)
         }
+    }
+}
+
+
+/// "Engine fixes", the row MacGameFix keeps on every game's page for a game no fix knows (one
+/// with Denuvo needs it to start), and the library it loads. Every game's installer writes that
+/// row too, into one file they share, so the app writes nothing itself: it runs the catalog's
+/// script (fixes/notproton-every-game.sh), which says how the row stands and installs it.
+enum EveryGameRows {
+    static let label = "Engine fixes"
+
+    static var script: URL { Catalog.active(.fixes).dir.appendingPathComponent("notproton-every-game.sh") }
+
+    private static func run(_ arguments: [String]) -> (Int32, String) {
+        NotProtonPlugins.command("/bin/bash", [script.path] + arguments,
+                                 ["HOME": Paths.home.path, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"])
+    }
+
+    static func state() -> NotProtonPlugins.State {
+        guard FileManager.default.fileExists(atPath: script.path) else {
+            return .unworkable("this catalog of fixes has no installer for it")
+        }
+        let lines = run(["--status"]).1.split(separator: "\n").map(String.init)
+        switch lines.last {
+        case "installed": return .inPlace
+        case "half": return .behind
+        case "absent": return .notInstalled
+        default:
+            let why = lines.first { $0.hasPrefix("Why: ") }.map { String($0.dropFirst(5)) }
+            return .unworkable(why ?? "its installer could not say how it stands")
+        }
+    }
+
+    /// Rows a game's fix already put in, noted as installed; nothing where there are none.
+    static func adopt() {
+        guard FileManager.default.fileExists(atPath: script.path) else { return }
+        _ = run(["--adopt"])
+    }
+
+    /// The script's install: what it said, each line named.
+    static func run() -> [String] {
+        let (code, text) = run([])
+        let lines = text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && $0 != "Installed." }
+        if code != 0 && lines.isEmpty { return ["\(label): its installer failed"] }
+        return lines.map { "\(label): \($0)" }
     }
 }

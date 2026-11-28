@@ -75,6 +75,9 @@
 
 NP_APPID=""
 NP_PFX=""
+# Empty until a game's installer names its game (np_plugins_setup); the rows kept for every game have none.
+NP_CONF=""
+NP_CONF_OTHER=""
 NP_TEMPLATES=()
 NP_SUPPORT="$HOME/Library/Application Support/notproton"
 NP_PLUGINS="$NP_SUPPORT/plugins"
@@ -84,6 +87,7 @@ NP_RECORDS_MAX=32
 
 NP_SHARED_CONF="$NP_PLUGINS/mgf-shared.conf"
 NP_SHARED_MARK="# shared rows:"
+NP_EVERY_NOTE="$NP_PLUGINS/mgf-every-game.uses"
 NP_SHARED_TEMPLATE=""
 NP_SHARED_LIBRARY=""
 NP_SHARED_USES=""
@@ -216,6 +220,8 @@ np_shared_table() {
   for f in "$NP_PLUGINS"/mgf-*.conf "$NP_PLUGINS"/mgf-*.uses; do
     [ -f "$f" ] && [ "$f" != "$NP_SHARED_CONF" ] || continue
     a="$(basename "$f")"; a="${a#mgf-}"; a="${a%.conf}"; a="${a%.uses}"
+    # The note of the rows kept for every game (np_every_install) stands in the table as app 0.
+    [ "$f" != "$NP_EVERY_NOTE" ] || a=0
     case "$a" in *[!0-9]*|"") continue ;; esac
     /usr/bin/sed -n "s/^$NP_SHARED_MARK //p" "$f" | tr ' ' '\n' | /usr/bin/grep . | /usr/bin/sed "s/^/$a /"
   done | sort -n -k1,1 -s
@@ -233,8 +239,8 @@ np_shared_choices() {
 # The shared rows' file for the table given on stdin: each record some game uses, with those
 # games as its apps; nothing when no game uses any. A record the template names on a
 # "# every game = <id>..." line gets no apps, so NotProton shows it on every game's page and the
-# player can switch it on for a game no fix knows; it is still written only while some game's
-# fix uses it.
+# player can switch it on for a game no fix knows; it is written while some game's fix uses it,
+# or while it is kept for every game (np_every_install, below).
 np_shared_expected() {
   local table apps=0
   table="$(cat)"
@@ -276,7 +282,7 @@ np_shared_expected() {
           }
         }
         delete taken
-        if (apps && !(id in every)) { m = split(use[id], a, " "); for (k = 1; k <= m; k++) print "apps = " a[k] }
+        if (apps && !(id in every)) { m = split(use[id], a, " "); for (k = 1; k <= m; k++) if (a[k] != 0) print "apps = " a[k] }
       }
       id = ""; nb = 0
     }
@@ -395,6 +401,12 @@ np_steam_running() {
   /bin/ps -axo comm= | /usr/bin/grep -qE '(/Steam\.app/Contents/MacOS/steam|/steam_osx)$'
 }
 
+# NotProton's own app, which lists and deletes plugins. MGVF_NOTPROTON_RUNNING=0 or 1 for a test.
+np_notproton_running() {
+  case "${MGVF_NOTPROTON_RUNNING:-}" in 0) return 1 ;; 1) return 0 ;; esac
+  /bin/ps -axo comm= | /usr/bin/grep -qE '/NotProton\.app/Contents/MacOS/[^/]+$'
+}
+
 np_plugins_install() {
   local l live
   [ -n "${NP_SWITCH:-}" ] || np_plugins_preflight || return 1
@@ -481,4 +493,104 @@ np_retire() {
       case "$shas" in *" $(np_sha "$live") "*) /bin/rm -f "$live"; echo "  NotProton: $file, which this fix no longer uses, taken out" ;; esac
     done < <(np_meta "$t" retired)
   done
+}
+
+
+# THE ROWS KEPT FOR EVERY GAME. The shared rows the template names on "# every game = " (Engine
+# fixes) are on every game's page, for a game no fix knows: one with Denuvo needs the row to
+# start. Written only by a game's fix, the row was there only for whoever had installed the fix
+# of one of five games. np_every_install keeps it whether or not any fix uses it: it puts the
+# library in, and a note, plugins/mgf-every-game.uses, that stands in the shared rows' table as
+# a game of its own (app 0), so the file is written by the one writer every game's installer
+# uses and no game's install or restore takes the row out. Called by notproton-every-game.sh,
+# which MacGameFix's app runs; it wants NP_SHARED_TEMPLATE, NP_SHARED_LIBRARY and NP_SHARED_GROUP
+# set as a game's installer sets them.
+#
+# Put in only with Steam and NotProton's app closed: Steam reads the folder each time a game's
+# page opens, and NotProton's app lists it and deletes from it. Once in, they are brought up to
+# date (a newer library, a row that changed) with Steam open or not, as a game's own rows are.
+# Deleted in NotProton's Plugins page (the file gone, the note left), they read absent and stay
+# out until they are installed again.
+np_every_ids() { /usr/bin/sed -n 's/^# every game = //p' "$(np_shared_template)" | tr ' ' '\n' | /usr/bin/grep .; }
+
+np_every_note() { printf '# MacGameFix keeps these rows for every game; edits do not last.\n%s %s\n' "$NP_SHARED_MARK" "$(np_every_ids | tr '\n' ' ' | /usr/bin/sed 's/ $//')"; }
+
+# The table with the every-game rows in it, as the note will give it.
+np_every_table() {
+  { np_shared_table | /usr/bin/grep -v '^0 '; np_every_ids | /usr/bin/sed 's/^/0 /'; } | sort -n -k1,1 -s
+}
+
+# unavailable (no NotProton, or one that cannot load a library), installed, half or absent.
+np_every_status() {
+  [ -d "$NP_SUPPORT" ] || { echo "Why: NotProton is not installed" >&2; echo unavailable; return; }
+  [ -f "$NP_SUPPORT/plugin-host.dylib" ] || { echo "Why: NotProton's plugin host is not installed: its Update installs it" >&2; echo unavailable; return; }
+  # Without the note they were never installed; without the file they were deleted in NotProton.
+  [ -f "$NP_EVERY_NOTE" ] && [ -f "$NP_SHARED_CONF" ] || { echo absent; return; }
+  [ "$(cat "$NP_EVERY_NOTE")" = "$(np_every_note)" ] || { echo "Why: plugins/$(basename "$NP_EVERY_NOTE") is not what MacGameFix writes" >&2; echo half; return; }
+  [ "$(cat "$NP_SHARED_CONF" 2>/dev/null)" = "$(np_shared_table | np_shared_expected)" ] || { echo "Why: plugins/mgf-shared.conf is missing or not what MacGameFix writes" >&2; echo half; return; }
+  cmp -s "$NP_SHARED_LIBRARY" "$NP_PLUGINS/$(basename "$NP_SHARED_LIBRARY")" || { echo "Why: $(basename "$NP_SHARED_LIBRARY") in NotProton's plugins folder is missing or another build" >&2; echo half; return; }
+  echo installed
+}
+
+# What an install would refuse, before anything changes.
+np_every_preflight() {
+  local id taken live
+  [ -d "$NP_SUPPORT" ] || { echo "error: NotProton is not installed." >&2; return 1; }
+  [ -f "$NP_SUPPORT/plugin-host.dylib" ] || { echo "error: NotProton's plugin host is not installed. Run NotProton's Update, then install again." >&2; return 1; }
+  # Putting the rows in wants both closed; keeping installed ones current does not.
+  if [ ! -f "$NP_EVERY_NOTE" ] || [ ! -f "$NP_SHARED_CONF" ]; then
+    if np_steam_running; then echo "error: Steam is open. Quit Steam, then install again; nothing was changed." >&2; return 1; fi
+    if np_notproton_running; then echo "error: NotProton is open. Quit NotProton, then install again; nothing was changed." >&2; return 1; fi
+  fi
+  [ -f "$NP_SHARED_LIBRARY" ] || { echo "error: $(basename "$NP_SHARED_LIBRARY") is missing beside the installer." >&2; return 1; }
+  live="$NP_PLUGINS/$(basename "$NP_SHARED_LIBRARY")"
+  if [ -f "$live" ] && ! np_lib_ours "$NP_SHARED_LIBRARY"; then
+    echo "error: $(basename "$live") in NotProton's plugins folder is not one MacGameFix shipped; nothing was changed." >&2; return 1
+  fi
+  taken="$(np_other_records)"
+  for id in $(np_every_ids); do
+    if printf '%s\n' "$taken" | /usr/bin/grep -qx "$id"; then
+      echo "error: another plugin file already has $id; nothing was changed." >&2; return 1
+    fi
+  done
+  if [ $(( $(printf '%s\n' "$taken" | /usr/bin/grep -c .) + $(np_every_table | np_shared_expected | /usr/bin/grep -c '^\[') )) -gt "$NP_RECORDS_MAX" ]; then
+    echo "error: NotProton reads at most $NP_RECORDS_MAX plugin rows, and with these there would be more." >&2
+    echo "       Remove a plugin you do not use in NotProton's Plugins page; nothing was changed." >&2
+    return 1
+  fi
+}
+
+np_every_install() {
+  local live
+  np_every_preflight || return 1
+  /bin/mkdir -p "$NP_PLUGINS"
+  live="$NP_PLUGINS/$(basename "$NP_SHARED_LIBRARY")"
+  # Renamed into place, so a game still running keeps the library it loaded.
+  cmp -s "$NP_SHARED_LIBRARY" "$live" || { cp -p "$NP_SHARED_LIBRARY" "$live.mgf-new" && mv -f "$live.mgf-new" "$live"; } || return 1
+  np_every_note > "$NP_EVERY_NOTE.mgf-new" && mv -f "$NP_EVERY_NOTE.mgf-new" "$NP_EVERY_NOTE" || return 1
+  np_shared_write || return 1
+  echo "  NotProton: $(np_every_ids | /usr/bin/grep -c .) row(s) for every game, in plugins/mgf-shared.conf, off until switched on for a game"
+}
+
+# A Mac from before the note, where a game's fix already put the rows in: the note alone is
+# written, so they read installed and stay when that game's fix goes. Nothing else changes (a
+# row for every game is written the same with the note or without), so this asks for nothing
+# to be closed. MacGameFix's app does it once, the first time it looks (NotProtonPlugins.swift).
+np_every_adopt() {
+  local id
+  [ ! -f "$NP_EVERY_NOTE" ] && [ -f "$NP_SHARED_CONF" ] || return 1
+  for id in $(np_every_ids); do /usr/bin/grep -qx "\[$id\]" "$NP_SHARED_CONF" || return 1; done
+  np_every_note > "$NP_EVERY_NOTE.mgf-new" && mv -f "$NP_EVERY_NOTE.mgf-new" "$NP_EVERY_NOTE" || return 1
+  np_shared_write
+}
+
+# The note gone, and the rows with it unless a game's fix uses them; the library when no
+# descriptor names it any more.
+np_every_restore() {
+  if np_steam_running; then echo "error: Steam is open. Quit Steam, then try again; nothing was changed." >&2; return 1; fi
+  if np_notproton_running; then echo "error: NotProton is open. Quit NotProton, then try again; nothing was changed." >&2; return 1; fi
+  /bin/rm -f "$NP_EVERY_NOTE"
+  np_shared_write || return 1
+  np_lib_named "$NP_SHARED_LIBRARY" || ! np_lib_ours "$NP_SHARED_LIBRARY" || /bin/rm -f "$NP_PLUGINS/$(basename "$NP_SHARED_LIBRARY")"
+  return 0
 }

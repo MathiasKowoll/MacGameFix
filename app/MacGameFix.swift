@@ -276,11 +276,12 @@ final class Model: ObservableObject {
         Task { plugins = await Task.detached { NotProtonPlugins.states() }.value }
     }
 
-    /// What the agent's next pass would do, done now.
-    func putPluginsInPlace() {
+    /// The plugins not installed yet put into NotProton, with Steam and NotProton closed, and
+    /// the installed ones brought up to date as the agent's next pass would.
+    func installPlugins() {
         busy = true
         Task {
-            let said = await Task.detached { NotProtonPlugins.keep() }.value
+            let said = await Task.detached { NotProtonPlugins.install().said }.value
             pluginsLine = said.isEmpty ? "Nothing to do." : said.joined(separator: "\n")
             plugins = await Task.detached { NotProtonPlugins.states() }.value
             busy = false
@@ -1885,6 +1886,7 @@ struct NotProtonPluginsSection: View {
                         switch plugin.state {
                         case .inPlace: Text("In place")
                         case .behind: Text("Not in place yet").foregroundStyle(.orange)
+                        case .notInstalled: Text("Not installed").foregroundStyle(.secondary)
                         case .unworkable(let why): Text("Not offered: \(why)").foregroundStyle(.secondary)
                         case .foreign: Text("Another plugin file has it").foregroundStyle(.secondary)
                         }
@@ -1892,10 +1894,10 @@ struct NotProtonPluginsSection: View {
                 }
                 HStack {
                     Spacer()
-                    Button("Put in Place") { model.putPluginsInPlace() }
-                        .disabled(model.busy || !plugins.contains { $0.state == .behind })
-                        .help("Does now what the menu bar item does on its own: writes the rows and libraries "
-                              + "that are missing or older than this MacGameFix's.")
+                    Button(plugins.contains { $0.state == .notInstalled } ? "Install" : "Put in Place") { model.installPlugins() }
+                        .disabled(model.busy || !plugins.contains { $0.state == .behind || $0.state == .notInstalled })
+                        .help("Puts the plugins that are not installed into NotProton: quit Steam and NotProton first. "
+                              + "The installed ones are then kept up to date on their own.")
                 }
                 if !model.pluginsLine.isEmpty {
                     Text(model.pluginsLine).font(.caption).foregroundStyle(.secondary)
@@ -1909,7 +1911,9 @@ struct NotProtonPluginsSection: View {
                               summary: "MacGameFix's fixes and its DualSense controls as NotProton plugins.",
                               count: model.plugins.map { "\($0.filter { $0.state == .inPlace }.count) of \($0.count)" } ?? "Off")
         } footer: {
-            Text("Each one is off until you turn it on for a game, in NotProton's options for that game, under "
+            Text("Installed with Steam and NotProton closed, then kept up to date. One you delete in NotProton "
+                 + "stays out until you install again. "
+                 + "Each one is off until you turn it on for a game, in NotProton's options for that game, under "
                  + "MacGameFix: Controllers, D3DMetal, Game fixes or Video. "
                  + "All but the Unreal one need NotProton's plugin host, which NotProton's Update installs.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -3297,6 +3301,12 @@ enum Entry {
             let lines = NotProtonRow.keepAll()
             print(lines.isEmpty ? "rows: nothing to do" : lines.joined(separator: "\n"))
             exit(0)
+        }
+        if args.contains("--plugins-install") {
+            // The NotProton plugins installed as the window's Install does: Steam and NotProton closed.
+            let (said, refused) = NotProtonPlugins.install()
+            print(said.isEmpty ? "plugins: nothing to do" : said.joined(separator: "\n"))
+            exit(refused ? 1 : 0)
         }
         if args.contains("--plugins-report") {
             // How each NotProton plugin MacGameFix carries stands (NotProtonPlugins.swift); nothing written.

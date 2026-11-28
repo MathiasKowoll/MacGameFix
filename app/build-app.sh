@@ -209,6 +209,9 @@ for s in "${SCRIPTS[@]}"; do
   while IFS= read -r want; do PAYLOAD+=("$want"); done < <(
     grep -oE '\$HERE/[A-Za-z0-9._-]+' "$ROOT/fixes/$s" | sed 's|\$HERE/||' | sort -u)
 done
+# The rows kept for every game have no game's installer to name their script (NotProtonPlugins.swift
+# runs it); what it names is already what the games' installers name.
+PAYLOAD+=("notproton-every-game.sh")
 PAYLOAD=($(printf '%s\n' "${PAYLOAD[@]}" | sort -u))
 
 missing=0
@@ -310,7 +313,7 @@ echo "==> bundling ${#PAYLOAD[@]} files"
 for f in "${PAYLOAD[@]}"; do
   cp -a "$ROOT/fixes/$f" "$RES/$f"
 done
-for s in "${SCRIPTS[@]}"; do chmod +x "$RES/$s"; done
+for s in "${SCRIPTS[@]}" notproton-every-game.sh; do chmod +x "$RES/$s"; done
 cp "$STAGE/games.json" "$RES/games.json"
 # The Controllers tab's presets: options measured per title.
 python3 -I -c 'import json,sys; json.load(open(sys.argv[1]))' "$HERE/pad-presets.json" || { echo "pad-presets.json is not valid JSON"; exit 1; }
