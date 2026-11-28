@@ -4,7 +4,9 @@
 #   steam-launch-options.pl status|preflight|install|restore APPID JOURNAL [--wrapper PATH] [KEY=VALUE...]
 #
 # status     exit 0 and "installed" when every KEY=VALUE is in the game's launch options in
-#            every Steam account that has the game; else "absent", exit 1. Reads only.
+#            every Steam account that has the game; else "absent", exit 1. Reads only, and
+#            reads the variables in front of a program too: options that start with one are
+#            refused only for writing.
 # preflight  what install would refuse, without writing.
 # install    each missing KEY=VALUE goes in front of the options; a KEY with another value
 #            gets ours. JOURNAL records what each account had, so restore can give it back.
@@ -61,6 +63,8 @@ sub words {
  while($s =~ /\G\s*((?:[^\s"'\\]|"(?:\\.|[^"\\])*"|'[^']*'|\\.)+)/gc){
   my($a,$b,$t)=($-[1],$+[1],$1);my @w=shellwords($t);die "Unsupported launch option quoting\n" unless @w==1;
   return {vars=>\@out,wrapper=>$wr,command=>$a} if $w[0] eq '%command%';
+  # status only reads: past the variables, a program that is not ours ends what there is to read.
+  return {vars=>\@out,wrapper=>$wr,command=>$a} if $mode eq 'status' && (defined $wr || !(defined $wrapper && $w[0] eq $wrapper)) && $w[0] !~ /^[A-Za-z_][A-Za-z0-9_]*=/s;
   die $program if defined $wr;
   if(defined $wrapper && $w[0] eq $wrapper){$wr=[$a,$b];next;}
   die $program unless $w[0] =~ /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s;
