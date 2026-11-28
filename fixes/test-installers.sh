@@ -438,6 +438,10 @@ f1 > /dev/null 2>&1
   && f1 --restore > /dev/null 2>&1 && [ "$(f1st)" = absent ] && /usr/bin/grep -qx 'apps = 4080220' "$fplug/mgf-shared.conf" && ! /usr/bin/grep -q 'apps = 3059520' "$fplug/mgf-shared.conf" \
   && cmp -s "$fplug/mgf-engine.dylib" "$FIX/mgf-engine.dylib" \
   && say ok "f1 25 in NotProton: two games share the rows, and removing one leaves them and the library for the other" || say FAIL "f1 25: shared engine row ($(f1st))"
+# A game whose fix uses no shared row writes the shared file again too, and names no template:
+# Engine fixes still gets no apps from it (FH5's install took the row off every other game's page).
+[ "$(printf '4080220 NOTPROTON_MGF_ENGINE\n4080220 NOTPROTON_MGF_MODTOOL\n' | HOME="$fhome" MGVF_NOTPROTON_VERSION=1.2.8 /bin/bash -c '. "$1"; NP_SHARED_TEMPLATE=""; np_shared_expected' _ "$FIX/notproton-plugins.sh" | /usr/bin/grep -c '^apps = ')" = 1 ] \
+  && say ok "shared rows: written by a game that names no template, Engine fixes still shows on every game" || say FAIL "shared rows: Engine fixes got apps from a game that names no template"
 rm -f "$fplug/mgf-4080220.uses" "$fplug/mgf-shared.conf" "$fplug/mgf-engine.dylib"
 # An earlier install's mgf-low-allocations.dylib, the build PR #154 shipped, is taken out; a file of that name that is not that build stays.
 if /usr/bin/git -C "$FIX" show 1a2cb2a:fixes/mgf-low-allocations.dylib > "$W/f125-old-lib" 2>/dev/null; then
