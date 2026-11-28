@@ -560,7 +560,7 @@ printf '27.0.0.41303-fex\nCrossOver 2026 11 11-ARM64 - Rosetta\n' > "$ec/compatd
 echo stock > "$ec/runner/lib/wine/x86_64-windows/kernel32.dll"
 # A Live Editor folder: <where> <what its DLL holds> <its DLL's time, touch -t>.
 editor() { mkdir -p "$1/FakeEAACLauncher" "$1/lua" "$1/Logs"; echo launcher > "$1/Launcher.exe"; echo "$2" > "$1/FCLiveEditor.DLL"; echo standin > "$1/FakeEAACLauncher/EAAntiCheat.GameServiceLauncher.exe"; echo used > "$1/Logs/a.log"; touch -t "$3" "$1/FCLiveEditor.DLL"; }
-for n in install-fc27-live-editor.sh bottles.sh fc27-le-play.sh fc27-le-run.cmd steam-launch-options.pl notproton-plugins.sh np-plugin-fc27-live-editor.conf mgf-engine.dylib np-plugin-shared.conf; do cp "$FIX/$n" "$ec/fixes/$n"; done
+for n in install-fc27-live-editor.sh bottles.sh fc27-le-play.sh fc27-le-run.cmd fc27-squads.pl steam-launch-options.pl notproton-plugins.sh np-plugin-fc27-live-editor.conf mgf-engine.dylib np-plugin-shared.conf; do cp "$FIX/$n" "$ec/fixes/$n"; done
 enp="$ehome/Library/Application Support/notproton"; mkdir -p "$enp"; eplug="$enp/plugins"; echo host > "$enp/plugin-host.dylib"
 sed -i '' 's|/bin/ps -axo comm=|/usr/bin/true|' "$ec/fixes/steam-launch-options.pl"
 evdf="$ehome/Library/Application Support/Steam/userdata/1/config/localconfig.vdf"; mkdir -p "$(dirname "$evdf")"
@@ -591,7 +591,7 @@ printf '%s/\n' "$edl" > "$ec/answer"   # the folder around it, as the chooser gi
 mkdir -p "$eplug"; /usr/bin/git -C "$FIX" show 17b51da:fixes/mgf-d3dmetal-hookable.dylib > "$eplug/mgf-d3dmetal-hookable.dylib" 2>/dev/null || rm -f "$eplug/mgf-d3dmetal-hookable.dylib"
 ewin > "$W/fc27.install.log" 2>&1 || say FAIL "fc 27: install failed: $(tail -2 "$W/fc27.install.log")"
 [ "$(e1st)" = installed ] && [ "$(cat "$estore/LiveEditor/FCLiveEditor.DLL")" = one ] && [ -f "$estore/LiveEditor/FakeEAACLauncher/EAAntiCheat.GameServiceLauncher.exe" ] && [ ! -e "$estore/LiveEditor/Logs" ] \
-  && cmp -s "$estore/fc27-le-play.sh" "$FIX/fc27-le-play.sh" && [ -x "$estore/fc27-le-play.sh" ] && cmp -s "$estore/fc27-le-run.cmd" "$FIX/fc27-le-run.cmd" \
+  && cmp -s "$estore/fc27-le-play.sh" "$FIX/fc27-le-play.sh" && [ -x "$estore/fc27-le-play.sh" ] && cmp -s "$estore/fc27-le-run.cmd" "$FIX/fc27-le-run.cmd" && cmp -s "$estore/fc27-squads.pl" "$FIX/fc27-squads.pl" \
   && eswitched NOTPROTON_MGF_MODTOOL NOTPROTON_MGF_ENGINE && /usr/bin/grep -q 'MGF_FANS=max' "$evdf" \
   && [ "$(/usr/bin/grep -c '^\[' "$eplug/mgf-4080220.uses")" = 0 ] && /usr/bin/grep -qx '# shared rows: NOTPROTON_MGF_ENGINE NOTPROTON_MGF_MODTOOL NOTPROTON_MGF_PLAY' "$eplug/mgf-4080220.uses" \
   && [ "$(/usr/bin/grep -c '^\[' "$eplug/mgf-shared.conf")" = 3 ] && [ "$(/usr/bin/grep -c '^apps = 4080220$' "$eplug/mgf-shared.conf")" = 2 ] \
@@ -635,7 +635,8 @@ printf '#!/bin/sh\nprintf "%%s|" "$@"; printf "\\nopens=%%s trace=%%s log=%%s\\n
 ecfg="$epfx/drive_c/FC 27 Live Editor/le_config.json"; mkdir -p "$(dirname "$ecfg")"
 ecfg_new() { printf '{\n    "launcher": {\n        "auto_inject": false,\n        "dll_inject_delay": 100,\n        "no_mods": false\n    }\n}\n' > "$ecfg"; }
 elink='steam2ea://launchgame/4080220?platform=steam&theme=fc27'
-eplay() { env -i HOME="$ehome" PATH=/usr/bin:/bin STEAM_COMPAT_APP_ID=4080220 STEAM_COMPAT_DATA_PATH="$ec/compatdata/4080220" "$@" "$estore/fc27-le-play.sh" "$ec/tool" waitforexitandrun "$elink"; }
+esrv="$ec/ea"; eset="$epfx/drive_c/users/steamuser/AppData/Local/EA SPORTS FC 27/settings"
+eplay() { env -i HOME="$ehome" PATH=/usr/bin:/bin STEAM_COMPAT_APP_ID=4080220 STEAM_COMPAT_DATA_PATH="$ec/compatdata/4080220" MGF_FC27_SQUADS_URL="file://$esrv" "$@" "$estore/fc27-le-play.sh" "$ec/tool" waitforexitandrun "$elink"; }
 ecfg_new; eout="$(eplay)"
 case "$eout" in "waitforexitandrun|$elink|"*) true ;; *) false ;; esac && /usr/bin/grep -q '"dll_inject_delay": 100,' "$ecfg" \
   && say ok "fc 27's play script: with the row off, Steam's own command goes through and Live Editor's settings are left alone" || say FAIL "fc 27 play: row off: $eout"
@@ -644,6 +645,32 @@ case "$eout" in "waitforexitandrun|cmd.exe|/d|/c|call|Z:$(printf '%s' "$estore/f
   && /usr/bin/grep -q '"dll_inject_delay": 1000,' "$ecfg" && /usr/bin/grep -q '"auto_inject": true,' "$ecfg" && /usr/bin/grep -q '"no_mods": false' "$ecfg" \
   && say ok "fc 27's play script: with the row on, the batch file takes the command's place, and the launcher's delay is raised and its injection switched on" || say FAIL "fc 27 play: row on: $eout / $(tr -d '\n' < "$ecfg")"
 sed -i '' 's/"dll_inject_delay": 1000/"dll_inject_delay": 2500/' "$ecfg"; eplay NOTPROTON_MGF_MODTOOL=1 > /dev/null
+# EA's newest squads, from a server of the test's: a rosterupdate.xml and a compressed database
+# of 20 literal bytes and a 5-byte copy back, "DB\0\x08" and 25 bytes unpacked. With the row on,
+# Play adds it to the game's saved squads in the background, wrapped as a saved squad file.
+# The earlier Plays started it too, with no settings folder to write to: they end first.
+squads_quiet() { local i=0; while [ $i -lt 50 ] && /usr/bin/pgrep -f "$estore/fc27-squads.pl" > /dev/null; do /bin/sleep 0.2; i=$((i+1)); done; }
+squads_quiet
+mkdir -p "$esrv/fc/fclive/genxtitle/roster/pc64" "$eset"
+printf '<squad><squadInfoSet><squadInfo platform="ps5"><dbMajor>1</dbMajor><dbMajorLoc>fc/fclive/genxtitle/roster/ps5/squads_20260101_1_1_n1.bin</dbMajorLoc></squadInfo><squadInfo platform="pc64"><dbMajor>7</dbMajor><dbMajorLoc>fc/fclive/genxtitle/roster/pc64/squads_20261101_7_1_n2.bin</dbMajorLoc></squadInfo></squadInfoSet></squad>\n' > "$esrv/fc/fclive/genxtitle/rosterupdate.xml"
+/usr/bin/perl -e 'print "\x10\xfb\x00\x00\x1d\x00\x00\x00\x00\x00", "\xe4", "ABCDEFGHIJKLMNOPQRST", "\x08\x13"' > "$esrv/fc/fclive/genxtitle/roster/pc64/squads_20261101_7_1_n2.bin"
+esq="$eset/Squads20261101000000"
+wait_squads() { /bin/sleep 0.2; squads_quiet; }
+rm -f "$estore/fc27-squads.log"; eplay NOTPROTON_MGF_MODTOOL=1 > /dev/null; wait_squads
+[ -f "$esq" ] && [ "$(/usr/bin/wc -c < "$esq" | tr -d ' ')" = $((1126 + 48 + 4 + 29 + 45985)) ] \
+  && /bin/dd if="$esq" bs=1 skip=1178 count=29 2>/dev/null | /usr/bin/cmp -s - <(printf 'DB\000\010ABCDEFGHIJKLMNOPQRSTABCDE') \
+  && [ "$(/bin/dd if="$esq" bs=1 skip=18 count=23 2>/dev/null)" = EA_Squads20261101000000 ] \
+  && [ "$(/bin/dd if="$esq" bs=1 skip=1126 count=15 2>/dev/null)" = SaveType_Squads ] \
+  && [ "$(/bin/dd if="$esq" bs=1 skip=1207 count=4 2>/dev/null)" = BNRY ] \
+  && say ok "fc 27's play script: with the row on, EA's newest squads (pc64) are unpacked and added to the game's saved squads, in the background" || say FAIL "fc 27 squads: added: $(cat "$estore/fc27-squads.log" 2>/dev/null)"
+echo mine > "$esq"; rm -f "$estore/fc27-squads.log"; eplay NOTPROTON_MGF_MODTOOL=1 > /dev/null; wait_squads
+[ "$(cat "$esq")" = mine ] && /usr/bin/grep -q 'has it' "$estore/fc27-squads.log" \
+  && say ok "fc 27's play script: a squad file already there is never replaced" || say FAIL "fc 27 squads: replaced: $(cat "$estore/fc27-squads.log" 2>/dev/null)"
+rm -f "$esq"; mv "$esrv" "$esrv.away"; rm -f "$estore/fc27-squads.log"; eout="$(eplay NOTPROTON_MGF_MODTOOL=1)"; wait_squads
+case "$eout" in "waitforexitandrun|cmd.exe|"*) true ;; *) false ;; esac && [ ! -e "$esq" ] && ! ls "$eset" | /usr/bin/grep -q part \
+  && /usr/bin/grep -q 'could not' "$estore/fc27-squads.log" \
+  && say ok "fc 27's play script: with EA's server out of reach the game still starts, nothing is added and the log says so" || say FAIL "fc 27 squads: offline: $eout / $(cat "$estore/fc27-squads.log" 2>/dev/null)"
+mv "$esrv.away" "$esrv"
 /usr/bin/grep -q '"dll_inject_delay": 2500,' "$ecfg" && say ok "fc 27's play script: a longer delay the player set is kept" || say FAIL "fc 27 play: lowered a delay"
 ecfg_new; eout="$(eplay NOTPROTON_MGF_MODTOOL=1 NOTPROTON_MGF_PLAY=window)"
 case "$eout" in *"opens=window trace= log="*) true ;; *) false ;; esac && /usr/bin/grep -q '"auto_inject": false,' "$ecfg" && /usr/bin/grep -q '"dll_inject_delay": 100,' "$ecfg" \

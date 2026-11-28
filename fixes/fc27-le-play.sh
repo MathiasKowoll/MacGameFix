@@ -29,6 +29,10 @@
 #
 # Anything else Steam runs through the tool goes through unchanged.
 #
+# Each start with Live Editor also asks EA's content server for the newest squads, in the
+# background so the game is not held up: fc27-squads.pl adds them to the game's saved squads
+# when EA has new ones, and leaves its notes in fc27-squads.log beside this script.
+#
 # Part of MacGameFix -- https://github.com/MathiasKowoll/MacGameFix
 # SPDX-License-Identifier: GPL-3.0-or-later
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -43,6 +47,11 @@ switch="${NOTPROTON_MGF_MODTOOL:-}"; play="${NOTPROTON_MGF_PLAY:-game}"
 opens=game; trace=off
 case "$play" in window) opens=window ;; notes) trace=on ;; esac
 [ "$switch" = 1 ] || exec "$@"
+
+# The newest squads, while the game starts. Only ever adds a file; a failure is only noted.
+if [ -f "$here/fc27-squads.pl" ] && [ -n "${STEAM_COMPAT_DATA_PATH:-}" ]; then
+  /usr/bin/perl "$here/fc27-squads.pl" "$STEAM_COMPAT_DATA_PATH/pfx" > "$here/fc27-squads.log" 2>&1 < /dev/null &
+fi
 
 # Live Editor's launcher keeps its settings in the prefix, in C:\FC 27 Live Editor\le_config.json,
 # which it writes when it closes. Two of them matter here, and both are its own to set:
