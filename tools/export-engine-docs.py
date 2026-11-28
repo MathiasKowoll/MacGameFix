@@ -165,8 +165,8 @@ def crossover():
         }
         if build in kept:
             entry['keptSince'] = kept[build]
-        # The CrossOver app is maintained in its stable release alone: a Preview's app is
-        # kept while its NotProton runner is maintained ("appsKept").
+        # A build's CrossOver app can be kept while its NotProton runner is maintained
+        # ("appsKept"); none is since 2026-11-28.
         entry['appSupport'] = 'kept' if build in kept or build in apps_kept else 'maintained'
         if build in apps_kept and build not in kept:
             entry['appKeptSince'] = apps_kept[build]

@@ -1129,10 +1129,10 @@ No game is played on 26.3 with them yet, the haptics on a cable included.
 
 #### The rest of the engine (2026-11-26)
 
-From 2026-11-26 the CrossOver 26.3 app is the one place that gets the whole engine as Wine
-modules, every one built from 26.3's own sources; NotProton's runners get a game's fixes in
-memory, from NotProton's rows, and keep CodeWeavers' files (see "Which CrossOver builds are
-maintained"). So `wine-11.0` now carries every `wine-11.21` patch whose defect is in Wine 11.0,
+From 2026-11-26 the CrossOver 26.3 app gets the whole engine as Wine modules, every one built
+from 26.3's own sources, as the latest Preview's app gets 41303's (that app is maintained the
+same way again since 2026-11-28); NotProton's runners get a game's fixes in memory, from
+NotProton's rows, and keep CodeWeavers' files (see "Which CrossOver builds are maintained"). So `wine-11.0` now carries every `wine-11.21` patch whose defect is in Wine 11.0,
 with the same numbers and names, and `build.conf` says `PROTECTION_MODULES=yes` and
 `WINDOW_MODULES=yes`: the modules go from fourteen files to twenty, `win32u.so`,
 `kernelbase.dll`, `kernel32.dll`, `user32.dll`, `dwrite.dll` and `directmanipulation.dll` with
@@ -1277,19 +1277,23 @@ do it.
 Two are: the stable CrossOver (26.3 now) and the latest Preview (20261111, build
 27.0.0.41303, now). New patches are built for those two, and what is played is played on them.
 
-How they get them differs since 2026-11-26. The CrossOver app is maintained only in its
-stable release, and it alone gets the whole engine as Wine modules, built from that release's
-own sources (`wine-11.0` for 26.3). NotProton's runners get a game's fix in memory, from
+How they get them differs by where a game runs. Both CrossOver apps, the stable one and the
+latest Preview, get the whole engine as Wine modules, copied over CodeWeavers' files in place
+with CodeWeavers' own kept in the backup folder: 26.3 built from that release's own sources
+(`wine-11.0`), 41303 from `wine-11.21`. NotProton's runners get a game's fix in memory, from
 NotProton's rows (`fixes/engine/mgf-engine.c` and the game's own rows), and keep CodeWeavers'
 `ntdll.so`, `win32u.so`, `kernel32.dll`, `kernelbase.dll`, `user32.dll`, `dwrite.dll` and
-`directmanipulation.dll` (`LEAVE` in `engine-modules.sh`, for 41303 and 26.3): the controls'
-modules still go into them. The Engine fixes row is for 41303's Rosetta tool alone so far, so
-NotProton's 26.3 runner has none of the Rosetta fixes until a row of it supports that runner. No
-Preview app is maintained: `"appsKept"` in `support.json` names a build whose CrossOver app is only
-kept while its NotProton runner is maintained (41303 since 2026-11-26). The app still installs and
-removes that app's modules as they were last built and says "No longer maintained" under it;
-`app/bundle-engine.py` writes it as each build's `"appSupport"`, and `tools/export-engine-docs.py`
-as `appSupport` and `appKeptSince` in `docs/engine/engine.json`.
+`directmanipulation.dll` (`LEAVE` in `engine-modules.sh`, for 41303 and 26.3); the controls'
+modules still go into the 26.3 runner and 41303's FEX side. The Engine fixes row is for 41303's
+Rosetta tool alone so far, so NotProton's 26.3 runner has none of the Rosetta fixes until a row
+of it supports that runner.
+
+`"appsKept"` in `support.json` can name a build whose CrossOver app is only kept while its
+NotProton runner is maintained: the app still installs and removes that app's modules as they
+were last built and says "No longer maintained" under it. `app/bundle-engine.py` writes it as
+each build's `"appSupport"`, and `tools/export-engine-docs.py` as `appSupport` and
+`appKeptSince` in `docs/engine/engine.json`. It names none: the 41303 app was only kept from
+2026-11-26 and is maintained again since 2026-11-28, like the stable one's.
 
 The modules of an older Preview are **kept, without support**: they stay in the catalog as
 they were last built, and the app still installs and removes them, so a CrossOver that is
