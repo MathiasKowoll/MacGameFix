@@ -9,6 +9,8 @@
 #
 # The modules are two improvements, each installed and removed on its own:
 #   controls  the DualSense's haptics, triggers, Bluetooth and XInput: every module but ntdll.so
+#             (a NotProton runner of 41303 keeps CodeWeavers' on its Intel side, where the
+#             DualSense controllers row does this in memory for a game: see LEAVE below)
 #   rosetta   Rosetta's CPU for copy protection: ntdll.so, which also carries the
 #             timer thread's fix (0021), on the FEX side too where a build has one; and
 #             where a build carries them, kernelbase.dll, user32.dll and win32u.so, which
@@ -145,11 +147,20 @@ done
 # from 2026-11-26 the modules that change Wine for a game go into the CrossOver 26.3 app alone, and
 # a NotProton runner gets a game's fixes in memory, from NotProton's rows, where a row supports
 # that runner (the Engine fixes row is for 41303's Rosetta tool only, so far). Its ntdll.so of
-# 0017-0020, which earlier modules put in, goes back to CodeWeavers'. The controls stay, as on 41303.
+# 0017-0020, which earlier modules put in, goes back to CodeWeavers'. Its controls stay.
+# 41303's Intel side leaves the controls too, from 2026-11-27: all thirteen modules (winebus.so,
+# winecoreaudio.so, winebus.sys, mmdevapi.dll, hidclass.sys, setupapi.dll, xaudio2_9.dll and the six
+# xinput DLLs). What they did comes to a game from NotProton's DualSense controllers row
+# (fixes/controls, mgf-controls.dylib), in memory, on CodeWeavers' files. A game whose row is off
+# has CodeWeavers' controls and nothing of ours. Played on CodeWeavers' thirteen files with the
+# row on, 2026-11-27: Marvel's Spider-Man 2 over Bluetooth (haptics), Crysis 3 Remastered (XInput),
+# Crash Bandicoot 4 (DualShock 4 mode). The FEX side keeps its controls modules: the row's Windows
+# side is x86_64 only.
 LEAVE=""
 if [ -z "$APP" ]; then case "$BUILD" in 27.0.0.41303|26.3.0.39832)
   LEAVE="x86_64-windows/ntdll.dll x86_64-unix/ntdll.so x86_64-windows/kernel32.dll x86_64-windows/kernelbase.dll x86_64-windows/user32.dll x86_64-unix/win32u.so x86_64-windows/dwrite.dll x86_64-windows/directmanipulation.dll" ;; esac
   case "$BUILD" in 27.0.0.41303)
+  LEAVE="$LEAVE x86_64-unix/winebus.so x86_64-unix/winecoreaudio.so x86_64-windows/winebus.sys x86_64-windows/mmdevapi.dll x86_64-windows/hidclass.sys x86_64-windows/setupapi.dll x86_64-windows/xaudio2_9.dll $(for x in $XINPUT_DLLS; do printf 'x86_64-windows/%s ' "$x"; done)"
   LEAVE="$LEAVE aarch64-unix/ntdll.so aarch64-windows/kernel32.dll aarch64-windows/kernelbase.dll aarch64-windows/user32.dll aarch64-unix/win32u.so aarch64-windows/dwrite.dll aarch64-windows/directmanipulation.dll" ;; esac; fi
 leaves() { case " $LEAVE " in *" $1 "*) return 0 ;; esac; return 1; }
 # The improvement asked for alone.
