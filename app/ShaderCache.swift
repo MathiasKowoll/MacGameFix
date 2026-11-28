@@ -111,6 +111,10 @@ enum ShaderCache {
     /// the one written last, and of two written at once the larger. A game's own file is the last one
     /// written when it closes; the quarter keeps out a file Metal has just made empty and a helper
     /// process's few shaders. nil when no file holds anything.
+    /// A limit, from the quarter: a game that compiles as it goes and changes tool fills its new
+    /// file a part per session, and while that is under a quarter of the old tool's file, the old
+    /// one is still copied back over it; it settles once one session compiles a quarter. A file
+    /// Metal made empty at a start is the sign the older files are no use, should that ever be needed.
     static func source(sizes: [Int], lists: [Int], written: [Date]) -> Int? {
         guard let most = sizes.max(), most > 0 else { return nil }
         return sizes.indices
