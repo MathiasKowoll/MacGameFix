@@ -168,9 +168,18 @@ np_switches() {
   [ -z "$NP_SHARED_USES" ] || np_shared_records | np_toggles " $NP_SHARED_USES "
 }
 
+# The shared rows' template: the one the game's installer names, else the one beside this file.
+# A game with no shared row of its own names none, and still writes the shared file again
+# (np_shared_write), so whatever reads the template has to find it the same way. Found on
+# 2026-11-28: the "every game" line was read only from the named one, so FH5's install, which
+# names none, gave Engine fixes its apps back and the row left every other game's page.
+np_shared_template() {
+  printf '%s\n' "${NP_SHARED_TEMPLATE:-$(dirname "${BASH_SOURCE[0]}")/np-plugin-shared.conf}"
+}
+
 # The shared template's records, without its comments.
 np_shared_records() {
-  /usr/bin/grep -v -E '^[[:space:]]*(#|$)' "${NP_SHARED_TEMPLATE:-$(dirname "${BASH_SOURCE[0]}")/np-plugin-shared.conf}"
+  /usr/bin/grep -v -E '^[[:space:]]*(#|$)' "$(np_shared_template)"
 }
 
 # "<app> <id>" for every shared row each game's descriptor in the folder uses.
@@ -205,7 +214,7 @@ np_shared_expected() {
   np_knows_apps && apps=1
   printf '# MacGameFix writes this file for the games whose fixes use its rows, and removes it with the last of them; edits do not last.\n'
   NP_TABLE="$table" NP_CHOICES="$(np_shared_choices)" np_shared_records | NP_TABLE="$table" NP_CHOICES="$(np_shared_choices)" \
-    NP_EVERY="$(/usr/bin/sed -n 's/^# every game = //p' "$NP_SHARED_TEMPLATE" 2>/dev/null)" \
+    NP_EVERY="$(/usr/bin/sed -n 's/^# every game = //p' "$(np_shared_template)" 2>/dev/null)" \
     /usr/bin/awk -v group="$NP_SHARED_GROUP" -v apps="$apps" -v max="$NP_CHOICES_MAX" '
     BEGIN { n = split(ENVIRON["NP_TABLE"], rows, "\n"); for (i = 1; i <= n; i++) { split(rows[i], f, " "); use[f[2]] = use[f[2]] " " f[1] }
             n = split(ENVIRON["NP_EVERY"], f, " "); for (i = 1; i <= n; i++) every[f[i]] = 1
