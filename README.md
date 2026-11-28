@@ -381,6 +381,46 @@ so does the window each time it looks for games. The Improvements tab shows
 whether each one is in place, or why it is not offered, and its **Put in Place**
 button does now what the menu bar item would do on its next pass.
 
+**Offered on the game's page.** NotProton's plugin branch reads two more fields
+in a row, `needed_for` and `improves`, each a Steam app and one sentence. While
+such a row is off for that game, the game's Compatibility page shows a box,
+**Fixes for This Game**, that lists it with the sentence: **Apply** switches it
+on, with the rows it depends on, and **Dismiss** stops offering it. So a row
+MacGameFix keeps for a game no longer has to be found in the list, or typed
+into the launch options. `needed_for` is for a row the game does not start or
+crashes without, `improves` for the rest. MacGameFix writes the lines where
+this repository names the game by its Steam app:
+
+| Row | Game | Field | The sentence |
+| --- | --- | --- | --- |
+| Xbox sign-in window | Forza Horizon 5 | `needed_for` | The Xbox sign-in page closes the game. |
+| Engine fixes | F1 25 | `needed_for` | The game crashes about a minute after it starts. |
+| Engine fixes | EA SPORTS FC 27 | `needed_for` | The game stops at start with a setup error. |
+| Engine fixes | Phantom Blade Zero | `needed_for` | The game never opens a window. |
+| Engine fixes | Persona 4 Golden | `needed_for` | The game crashes about 12 seconds after it starts. |
+| Engine fixes | STAR WARS: Galactic Racer | `needed_for` | The game closes before its first frame. |
+| Engine fixes | Forza Horizon 6 | `improves` | Online sessions connect, and an idle timer thread stops using the processor. |
+| Rosetta exception priority | Forza Horizon 6 | `improves` | Cuts the waits while Rosetta handles the game's exceptions. |
+| Rosetta pipeline cache | Phantom Blade Zero | `improves` | The game compiles far fewer shaders at each start. |
+| Ray tracing off | Phantom Blade Zero | `improves` | With DLSS on, the game no longer closes as a level loads. |
+| NVIDIA driver version | EA SPORTS FC 27 | `improves` | The game stops asking for a driver update at every start. |
+| Red Dead Online fix | Red Dead Redemption 2, Red Dead Online | `improves` | Red Dead Online connects to its servers. |
+
+The other rows name no game. NotProton allows neither field on a row with a
+type, which **Processors the game sees**, **Frame rate cap**, **Play opens**
+and **Mod profile** have. **Start through the mod tool** is a way to start a
+game, not a fix, and **Fans at full speed** is for whichever game runs hot. The
+**Unreal video**, **D3DMetal freeze** and **D3DMetal video crash** rows are for
+games this repository names by title only, or does not name: no Steam app was
+guessed for them. Engine fixes, Xbox sign-in window and the two Rosetta rows
+are there only once a game's fix has put them in place.
+
+A NotProton from before the fields refuses a row that carries one, so the lines
+are written only when every NotProton in Steam reads the field, which each
+tool's run script says; otherwise the rows are written as before. The box
+itself has not been looked at with these rows: that takes Steam open on a
+game's Compatibility page.
+
 ## Each game's compiled shaders, kept whole
 
 A game compiles each shader the first time it draws with it, and Metal keeps the

@@ -112,6 +112,14 @@ fh6_put() {
   [ -f "$dest.mgf-fh6-original" ] || cp -p "$dest" "$dest.mgf-fh6-original"
   cp -p "$src" "$dest.mgf-new" && mv -f "$dest.mgf-new" "$dest"
 }
+# The priority plugin's descriptor; with 1 it names Forza Horizon 6 as the game it improves.
+fh6_boost_conf() {
+  printf '[NOTPROTON_ROSETTA_TRAP_BOOST]\nlabel = Rosetta exception priority\n'
+  printf 'description = Raises Rosetta exception delivery priority for the FH6 profile\n'
+  [ "$1" != 1 ] || printf "improves = 2483190 Cuts the waits while Rosetta handles the game's exceptions.\n"
+  printf 'section = dev\non = 1\ninject = 1\n'
+  printf 'requires = Library/Application Support/notproton/plugins/notproton-rosetta-trap-boost.dylib\n'
+}
 fh6_install_runtime() {
   # Stage the matching pair via the existing Rosetta installer; prefixes and per-game
   # launch clones are coordinated here because the generic installer does not own them.
@@ -151,17 +159,18 @@ fh6_install_runtime() {
      && [ "$(fh6sha "$live")" = 28315251485196c816b3579c90a8e9fa81a4bb7b9b61d87c4269c8972c9f4197 ]; then
     cp -p "$HERE/notproton-rosetta-trap-boost.dylib" "$live.mgf-new" && mv -f "$live.mgf-new" "$live"
   fi
+  # Where NotProton reads "improves" the descriptor names this game, so the row is offered on
+  # FH6's Compatibility page when it is off (notproton-plugins.sh, "THE GAMES A ROW IS FOR");
+  # one that does not read the field refuses a row that carries it. A descriptor that is this
+  # installer's own, with the line or without, is brought to what NotProton reads.
+  local named=0 text have
+  if type np_knows_field >/dev/null 2>&1 && np_knows_field improves; then named=1; fi
+  text="$(fh6_boost_conf "$named")"; have="$(cat "$plugins/rosetta-trap-boost.conf" 2>/dev/null || true)"
   if [ ! -f "$plugins/rosetta-trap-boost.conf" ]; then
     cp -p "$HERE/notproton-rosetta-trap-boost.dylib" "$plugins/notproton-rosetta-trap-boost.dylib"
-    cat > "$plugins/rosetta-trap-boost.conf" <<'CONF'
-[NOTPROTON_ROSETTA_TRAP_BOOST]
-label = Rosetta exception priority
-description = Raises Rosetta exception delivery priority for the FH6 profile
-section = dev
-on = 1
-inject = 1
-requires = Library/Application Support/notproton/plugins/notproton-rosetta-trap-boost.dylib
-CONF
+    printf '%s\n' "$text" > "$plugins/rosetta-trap-boost.conf"
+  elif [ "$have" != "$text" ] && { [ "$have" = "$(fh6_boost_conf 0)" ] || [ "$have" = "$(fh6_boost_conf 1)" ]; }; then
+    printf '%s\n' "$text" > "$plugins/rosetta-trap-boost.conf.mgf-new" && mv -f "$plugins/rosetta-trap-boost.conf.mgf-new" "$plugins/rosetta-trap-boost.conf"
   fi
   fh6_options install
 }
