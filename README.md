@@ -282,13 +282,15 @@ installs or removes it. It can only raise the fans, and puts them back to
 automatic when no such game is running, when it is stopped, and when it is
 removed. Apple silicon only.
 
-A game asks for the fans with `MGF_FANS=max` in its launch options in Steam,
-before `%command%`; this is for the games NotProton runs. The fans start within
-a few seconds of the game's launch. MacGameFix also puts a row, **Fans at full
-speed**, into NotProton's plugins folder (`mgf-fans.conf`); switched on for a
-game it writes `NOTPROTON_MGF_FANS=1` into that game's launch options, which the
-helper (version 2 or later) takes as it takes `MGF_FANS=max`. The row shows only
-in a NotProton whose panel lists such rows, and the variable works without it.
+A game asks for the fans with the row **Fans at full speed** switched on in its
+NotProton options, under MacGameFix / Performance; this is for the games
+NotProton runs. MacGameFix puts the row into NotProton's plugins folder
+(`mgf-fans.conf`); switched on for a game it writes `NOTPROTON_MGF_FANS=1` into
+that game's launch options, which the helper (version 2 or later) reads. The
+fans start within a few seconds of the game's launch. In a NotProton whose
+panel does not list such rows, `MGF_FANS=max` in the game's launch options in
+Steam, before `%command%`, asks the same. The Improvements tab no longer shows
+the variables to type: both it and the processor count are NotProton rows.
 
 Either works for any game NotProton starts, also when the launch options put a
 script of their own before `%command%` and that script starts something else in
