@@ -212,7 +212,7 @@ One row per CrossOver app (in /Applications and ~/Applications) and per NotProto
   - Row tooltip: the install's root path (2089).
 
 Below the rows:
-- Empty state: "Looking…" or "No CrossOver or NotProton runner found." (1164-1166)
+- Empty state: "Looking…", "No CrossOver or NotProton runner found.", or, when the only ones found are NotProton runners the improvement has nothing for, "Nothing to install here. In NotProton each game gets this from its own options." Such a runner has no row; a CrossOver app without modules keeps its greyed row.
 - Toggle **"New CrossOver builds too"** (default on). Tooltip: "With updates on Automatic: when NotProton adds a runner for a new CrossOver build and there are modules for it, they go there too, once a runner that is on has them." (1167-1171)
 - Buttons, all disabled while busy (1172-1183):
   - **"All"** / **"None"**: each shows a confirmation alert, then installs into or removes from every row that has modules and is not already in that state.
