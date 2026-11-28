@@ -1785,8 +1785,8 @@ struct EngineView: View {
                     get: { model.fansState != .absent }, set: { model.setFans($0) }))
                     .disabled(model.busy)
                     .help("Installs a small helper that turns both fans to their maximum when a game that asks for it "
-                          + "starts, and hands them back to macOS when it closes. A game asks with MGF_FANS=max in its "
-                          + "Steam launch options, or with \"Fans at full speed\" switched on in its NotProton options. "
+                          + "starts, and hands them back to macOS when it closes. A game asks with \"Fans at full speed\" "
+                          + "switched on in its NotProton options (MGF_FANS=max in its Steam launch options does the same). "
                           + "macOS asks for your password, because only an administrator can set "
                           + "the fans. It can only raise them.")
                 if model.fansState == .outdated {
@@ -1795,19 +1795,6 @@ struct EngineView: View {
                     }
                     .foregroundStyle(.orange)
                 }
-                if model.fansState != .absent {
-                    LabeledContent("Fans at full speed, for a game") {
-                        Text(verbatim: "MGF_FANS=max").font(.system(.body, design: .monospaced)).textSelection(.enabled)
-                    }
-                    .help("Add it to the game's launch options in Steam, before %command%.")
-                }
-                LabeledContent("Fewer processors, for a game") {
-                    Text(verbatim: "NOTPROTON_ENV_WINENCPU=8").font(.system(.body, design: .monospaced)).textSelection(.enabled)
-                }
-                .help("Every game sees all of this Mac's \(ProcessInfo.processInfo.processorCount) processors. One that "
-                      + "runs hot can be shown fewer, so its engine starts fewer worker threads and the Mac runs cooler: "
-                      + "pick a count in NotProton's \"Processors the game sees\" for that game, which only offers counts "
-                      + "this Mac has, or add this to its launch options in Steam, before %command%. It needs no helper.")
                 if model.fansState != .absent && !model.fansLine.isEmpty {
                     Text(model.fansLine).font(.caption).foregroundStyle(.secondary)
                 }
@@ -1819,7 +1806,7 @@ struct EngineView: View {
                                   summary: "macOS raises the fans about a minute late; by then it has cut the processor to less than half its speed. With the fans already turning, it does not.",
                                   count: model.fansState == .absent ? "Off" : "On")
             } footer: {
-                Text("Write them in a game's launch options in Steam, before %command%, for example MGF_FANS=max NOTPROTON_ENV_WINENCPU=8 %command%. Without a count a game sees every processor. For the games NotProton runs. Apple silicon only.")
+                Text("Turn it on for a game in NotProton's options for that game, under MacGameFix / Performance: Fans at full speed. A game that runs hot can also be shown fewer processors there. For the games NotProton runs. Apple silicon only.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 

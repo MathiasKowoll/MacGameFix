@@ -285,13 +285,11 @@ Below the rows:
 **"Fans"** (Improvements tab, after Game Mode)
 - Header: fan symbol, "Fans", "macOS raises the fans about a minute late; by then it has cut the processor to less than half its speed. With the fans already turning, it does not.", and "On" or "Off".
 - Toggle **"Run the fans at full speed for the games that ask"** (default off). On installs the helper and off removes it; either way macOS shows its own password prompt, and cancelling it changes nothing. Disabled while the app is busy.
-  - Tooltip: "Installs a small helper that turns both fans to their maximum when a game that asks for it starts, and hands them back to macOS when it closes. A game asks with MGF_FANS=max in its Steam launch options, or with "Fans at full speed" switched on in its NotProton options. macOS asks for your password, because only an administrator can set the fans. It can only raise them."
+  - Tooltip: "Installs a small helper that turns both fans to their maximum when a game that asks for it starts, and hands them back to macOS when it closes. A game asks with "Fans at full speed" switched on in its NotProton options (MGF_FANS=max in its Steam launch options does the same). macOS asks for your password, because only an administrator can set the fans. It can only raise them."
 - **"This MacGameFix carries a newer helper"** with **"Update…"**, in orange, when the installed helper's version is older than the one in the app (the helper answers `--version`; another build of the same version is left alone).
-- With the helper in place: **"Fans at full speed, for a game"** with `MGF_FANS=max` in a monospaced, selectable font. Tooltip: "Add it to the game's launch options in Steam, before %command%."
-- Always: **"Fewer processors, for a game"** with `NOTPROTON_ENV_WINENCPU=8`, the same way. Tooltip: "Every game sees all of this Mac's <n> processors. One that runs hot can be shown fewer, so its engine starts fewer worker threads and the Mac runs cooler: pick a count in NotProton's "Processors the game sees" for that game, which only offers counts this Mac has, or add this to its launch options in Steam, before %command%. It needs no helper." (<n> is the Mac's processor count.)
 - With the helper in place, its last log line when there is one.
 - An error from installing or removing, in red.
-- Footer: "Write them in a game's launch options in Steam, before %command%, for example MGF_FANS=max NOTPROTON_ENV_WINENCPU=8 %command%. Without a count a game sees every processor. For the games NotProton runs. Apple silicon only."
+- Footer: "Turn it on for a game in NotProton's options for that game, under MacGameFix / Performance: Fans at full speed. A game that runs hot can also be shown fewer processors there. For the games NotProton runs. Apple silicon only." The two lines that gave the variables to type (`MGF_FANS=max`, `NOTPROTON_ENV_WINENCPU=8`) went on 2026-11-28: both are NotProton rows now.
 
 **"Shaders"** (Improvements tab, after Fans)
 - Header: stacked-squares symbol, "Shaders", "A game compiles each shader the first time it draws with it, and should not have to do it twice.", and "On" or "Off".
