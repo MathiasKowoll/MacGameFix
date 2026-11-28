@@ -1944,11 +1944,19 @@ struct ImprovementSection: View {
     @ObservedObject var model: Model
 
     var body: some View {
-        let rows = model.engineRows(part)
+        // A NotProton runner the improvement has nothing for is not listed. From 2.0.0 that is how
+        // it is meant to be: the runner keeps CodeWeavers' files and a game gets the same thing
+        // from a row in its own options, so "Not available for this build yet" promised modules
+        // that are not coming. A CrossOver app without modules stays listed, greyed.
+        let all = model.engineRows(part)
+        let rows = all.filter { !($0.state == .noModules && $0.target.app == nil) }
         let available = rows.filter { model.engineSelectable($0) }
         Section {
             if rows.isEmpty {
-                Text(model.busy ? "Looking…" : "No CrossOver or NotProton runner found.").foregroundStyle(.secondary)
+                Text(model.busy ? "Looking…"
+                     : all.isEmpty ? "No CrossOver or NotProton runner found."
+                     : "Nothing to install here. In NotProton each game gets this from its own options.")
+                    .foregroundStyle(.secondary)
             }
             ForEach(rows) { row in EngineSwitch(row: row, model: model) }
         } header: {
