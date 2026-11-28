@@ -993,15 +993,17 @@ fill "$MC/functions2.data" b 100; fill "$MC/functions2.list" b 8
 fill "$MC/functions4.data" c 20; fill "$MC/functions4.list" c 2
 fill "$CXC/functions.data" one 50; fill "$CXC/functions.list" one 5
 fill "$CXC/functions1.data" other 500; fill "$CXC/functions1.list" other 9
+# The full one was the last written, as a game's own file is when it closes.
+touch -t 202611190000 "$MC/functions.data" "$MC/functions2.data" "$MC/functions4.data"
 cp "$MC/functions1.data" "$T/full.data"; cp "$MC/functions1.list" "$T/full.list"
 shaders() { "$BIN" --shader-cache-keep 2>&1; }
 allfull() { for n in functions functions1 functions2 functions3 functions4; do cmp -s "$MC/$n.data" "$T/full.data" && cmp -s "$MC/$n.list" "$T/full.list" || return 1; done; }
 out="$(shaders)"
-check 'has "$out" "com.notproton.launcher.4242: the fullest shader cache copied over 4 others" && allfull' "the fullest of a game's cache files is copied over the others, a fifth one too, lists and all"
+check 'has "$out" "com.notproton.launcher.4242: the latest shader cache copied over 4 others" && allfull' "the latest full one of a game's cache files is copied over the others, a fifth one too, lists and all"
 check 'has "$out" "1 game with compiled shaders, 1 kept whole"' "and the game counts as whole"
 check 'out="$(shaders)"; ! has "$out" "copied" && allfull' "four files that are the same are left alone"
 check '[ "$(cat "$CXC/functions.data")" != "$(cat "$CXC/functions1.data")" ] && [ ! -e "$CXC/functions2.data" ]' "CrossOver's own folder, which every bottle game shares, is not touched"
-# The game ran and added to the file it took: that one is the fullest now. While a process still holds
+# The game ran and added to the file it took: that one is the latest now. While a process still holds
 # any of the four, nothing is copied.
 fill "$MC/functions2.data" fullmore 300; fill "$MC/functions2.list" fullmore 30
 cp "$MC/functions2.data" "$T/full.data"; cp "$MC/functions2.list" "$T/full.list"
@@ -1012,7 +1014,17 @@ for i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$T/held" ] && break; /usr/bin/python3 -c
 check 'out="$(shaders)"; ! has "$out" "copied" && ! allfull' "while a process holds one of the four, nothing is copied"
 kill "$HOLD_PID" 2>/dev/null; wait "$HOLD_PID" 2>/dev/null || true
 agent >/dev/null || true
-check 'allfull' "once it is free, the agent's next look copies the fullest over the others"
+check 'allfull' "once it is free, the agent's next look copies the latest over the others"
+# A game moved to another tool (Ori and the Blind Forest, Rosetta to FEX, 2026-11): a larger file
+# written for the old one, a file Metal has just made empty, and the game's own, smaller and last.
+fill "$MC/functions3.data" rosetta 500; fill "$MC/functions3.list" rosetta 50; touch -t 202611190000 "$MC/functions3.data" "$MC/functions3.list"
+fill "$MC/functions1.data" e 5; fill "$MC/functions1.list" e 1; touch -t 202611281514 "$MC/functions1.data"
+fill "$MC/functions2.data" fexrun 280; fill "$MC/functions2.list" fexrun 28
+cp "$MC/functions2.data" "$T/full.data"; cp "$MC/functions2.list" "$T/full.list"
+check 'out="$(shaders)"; has "$out" "the latest shader cache copied over" && allfull' "the file the game wrote last wins over a larger one written for another tool, and over one Metal just made empty"
+# A helper process that took a file and closed after the game: Metal's empty file is the newest of all.
+fill "$MC/functions4.data" e 5; fill "$MC/functions4.list" e 1
+check 'out="$(shaders)"; has "$out" "the latest shader cache copied over 1 other" && allfull' "an empty file written after the game's is not copied over it: the game's is copied over the empty one"
 fill "$MC/functions.data" fullest 400; fill "$MC/functions.list" fullest 40
 printf '{"kept":[],"updates":false,"shaderCache":false}' > "$SUPPORT/MacGameFix/automatic.json"
 agent >/dev/null || true
@@ -1266,10 +1278,11 @@ S6=$(cat "$NPH")
 check 'has "$S6" "[NOTPROTON_MGF_SHADERS]" && has "$S6" "label = Shaders kept whole" && has "$S6" "group = MacGameFix / Performance" && has "$S6" "inject = 1" && has "$S6" "requires = Library/Application Support/notproton/plugins/mgf-shaders.dylib" && has "$S6" "improves = 387290 " && has "$S6" "improves = 1057090 " && has "$S6" "improves = 4115450 " && ! /usr/bin/grep -q "^apps" "$NPH" && cmp -s "$NPLIB/mgf-shaders.dylib" "$NPP/mgf-shaders.dylib"' "the shaders row is on every game's page, names Ori and Phantom Blade Zero to NotProton, and loads the library the app carries"
 # The library itself, loaded by a stand-in process on a stand-in cache (MGF_SHADERS_CACHE_DIR and
 # MGF_SHADERS_BUNDLE, honoured only together; HOME too, so it finds no real plugin host to log to): the
-# fullest file over the others, nothing while one is held.
+# latest full file over the others, nothing while one is held.
 printf '#include <dlfcn.h>\nint main(int c, char **v) { (void)c; return dlopen(v[1], RTLD_NOW) ? 0 : 1; }\n' > "$T/load.c" && clang -o "$T/load" "$T/load.c"
 SB=com.notproton.launcher.387290; SC="$T/metal-cache"; SD="$SC/$SB/com.apple.metal/gpu"; mkdir -p "$SD"
 printf 1234567890 > "$SD/functions.data"; printf ab > "$SD/functions.list"; printf 123 > "$SD/functions1.data"; printf a > "$SD/functions1.list"
+touch -t 202611190000 "$SD/functions1.data" "$SD/functions1.list"
 /usr/bin/perl -e 'use Fcntl ":flock"; open my $f, "<", $ARGV[0]; flock($f, LOCK_EX); sleep 2' "$SD/functions1.data" & SHELD=$!; sleep 0.5
 HOME="$T" MGF_SHADERS_CACHE_DIR="$SC" MGF_SHADERS_BUNDLE=$SB "$T/load" "$NPLIB/mgf-shaders.dylib" 2>/dev/null
 check '[ "$(cat "$SD/functions1.data")" = 123 ] && [ ! -e "$SD/functions2.data" ]' "the shaders library leaves the files alone while a process holds one"
@@ -1277,7 +1290,11 @@ wait "$SHELD"
 HOME="$T" MGF_SHADERS_CACHE_DIR="$SC" "$T/load" "$NPLIB/mgf-shaders.dylib" 2>/dev/null
 check '[ "$(cat "$SD/functions1.data")" = 123 ]' "and, outside a game's bundle, without the stand-in bundle too"
 HOME="$T" MGF_SHADERS_CACHE_DIR="$SC" MGF_SHADERS_BUNDLE=$SB "$T/load" "$NPLIB/mgf-shaders.dylib" 2>/dev/null
-check '( for k in 1 2 3; do cmp -s "$SD/functions.data" "$SD/functions$k.data" && cmp -s "$SD/functions.list" "$SD/functions$k.list" || exit 1; done ) && [ ! -e "$SD/functions1.data.mgf-new" ]' "with none held, the fullest file and its list are cloned over the other three"
+check '( for k in 1 2 3; do cmp -s "$SD/functions.data" "$SD/functions$k.data" && cmp -s "$SD/functions.list" "$SD/functions$k.list" || exit 1; done ) && [ ! -e "$SD/functions1.data.mgf-new" ]' "with none held, the latest full file and its list are cloned over the other three"
+printf 12345678901234567890 > "$SD/functions3.data"; printf abcd > "$SD/functions3.list"; touch -t 202611190000 "$SD/functions3.data" "$SD/functions3.list"
+printf 123456789012 > "$SD/functions2.data"; printf abc > "$SD/functions2.list"
+HOME="$T" MGF_SHADERS_CACHE_DIR="$SC" MGF_SHADERS_BUNDLE=$SB "$T/load" "$NPLIB/mgf-shaders.dylib" 2>/dev/null
+check '( for k in "" 1 3; do [ "$(cat "$SD/functions$k.data")" = 123456789012 ] && [ "$(cat "$SD/functions$k.list")" = abc ] || exit 1; done )' "and the file written last wins over a larger one written before it"
 check '[ "$("$BIN" --plugins-report | /usr/bin/grep -c ": in place$")" = 6 ]' "with the plugin host, the window shows all six in place"
 check '[ "$("$BIN" --rows-keep)" = "rows: nothing to do" ]' "plugins already right are left as they are"
 check 'has "$T6" "improves = 1174180 Red Dead Online connects to its servers." && has "$T6" "improves = 1404210 Red Dead Online connects to its servers." && ! has "$T6" "needed_for"' "a NotProton that reads improves is told the Red Dead Online row is for Red Dead Redemption 2 and Red Dead Online"
