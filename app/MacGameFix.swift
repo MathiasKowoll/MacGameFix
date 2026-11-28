@@ -1258,6 +1258,8 @@ struct ContentView: View {
                     .tabItem { Text("Games") }
                 EngineView(model: model).padding(.top, 6)
                     .tabItem { Text("Improvements") }
+                NativeBuildsView(model: model).padding(.top, 6)
+                    .tabItem { Text("Native") }
                 if model.padAvailable {
                     ControllersView(model: model).padding(.top, 6)
                         .tabItem { Text("Game Feel") }
@@ -1279,7 +1281,7 @@ struct ContentView: View {
             }
         }
         .padding(16)
-        // Five tabs of 107 pt each (the width "Improvements" sets), centred clear of the window's buttons:
+        // Six tabs of 107 pt each (the width "Improvements" sets), centred clear of the window's buttons:
         // at 620 pt they went behind the toolbar's overflow menu (seen 2026-10-20).
         .frame(minWidth: 720, minHeight: 460)
         .onGeometryChange(for: CGSize.self, of: { $0.size }) { windowSize = $0 }
@@ -1830,9 +1832,6 @@ struct EngineView: View {
             }
 
             NotProtonPluginsSection(model: model)
-
-            NativePortSection(port: NativePort.batman, extra: model.extraFolders)
-            NativePortSection(port: NativePort.bioshock, extra: model.extraFolders)
 
             Section {
                 Toggle("Also into runners for new CrossOver builds", isOn: Binding(
