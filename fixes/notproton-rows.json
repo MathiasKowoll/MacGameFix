@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "note": "NotProton rows MacGameFix switches on once for each game named here, where the row's plugin is installed and Steam is closed (app/RowsByGame.swift). appid is the game's Steam app id; rows are NotProton row ids.",
+  "games": [
+    { "appid": "387290", "title": "Ori and the Blind Forest: Definitive Edition", "rows": ["NOTPROTON_MGF_SHADERS"] },
+    { "appid": "1057090", "title": "Ori and the Will of the Wisps", "rows": ["NOTPROTON_MGF_SHADERS"] },
+    { "appid": "4115450", "title": "Phantom Blade Zero", "rows": ["NOTPROTON_MGF_SHADERS"] }
+  ]
+}

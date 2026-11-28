@@ -305,6 +305,8 @@ enum NotProtonPlugins {
         list.save()
         var said = keep(everyGame: false)
         if rows == .notInstalled || rows == .behind { said += EveryGameRows.run([]) }
+        // The rows the catalog and Game Feel want, switched on for their games now that both are closed.
+        said += RowsByGame.pass()
         return (said, false)
     }
 
@@ -342,6 +344,8 @@ enum NotProtonPlugins {
                 said.append("\(p.name) library: removed")
             }
         }
+        // Each game it was switched on for gets its launch options back as they were.
+        said += RowsByGame.undo(p.id)
         list.waiting[p.id] = nil
         list.save()
         return (said, false)
@@ -493,3 +497,77 @@ enum EveryGameRows {
         return lines.map { "\(label): \($0)" }
     }
 }
+
+/// "DualSense controllers" switched on for one game. NotProton has one switch for a row: the
+/// row's variable in the game's Steam launch options, which its Compatibility page writes. Game
+/// Feel writes it too, so a game's pad is set up in one place: with the catalog's
+/// steam-launch-options.pl, as a game's fix switches its rows on, which keeps what each account
+/// had so that turning it off gives that back, and writes nothing while Steam runs.
+/// RowsByGame switches the same row on by itself for a game set up in Game Feel; both write
+/// through RowsByGame's journal and note what they did in its record, so a row turned off here
+/// is not switched on again by the agent's pass.
+enum ControlsRow {
+    static let id = "NOTPROTON_MGF_CONTROLS"
+
+    enum State: Equatable, Sendable {
+        /// On; `ours` when Game Feel switched it on, and so can switch it off again.
+        case on(ours: Bool)
+        case off
+        /// The plugin is not in NotProton: Improvements, NotProton plugins.
+        case notInstalled
+        /// The game runs on a tool the row is not for; the tool's name, or none.
+        case otherTool(String?)
+        /// A game added to Steam keeps its launch options elsewhere.
+        case nonSteam
+        case noNotProton
+    }
+
+    static var script: URL { RowsByGame.writer }
+
+    /// What each Steam account had before, kept so that turning the row off gives it back.
+    static func journal(_ appid: String) -> URL { RowsByGame.journal(appid, id) }
+
+    /// The tools the row is for, from its own "tools" line, without the trailing "*".
+    static var tools: [String] {
+        guard let plugin = NotProtonPlugins.all.first(where: { $0.id == id }) else { return [] }
+        return plugin.rest.filter { $0.hasPrefix("tools = ") }
+            .map { String($0.dropFirst(8)).trimmingCharacters(in: CharacterSet(charactersIn: "*")) }
+    }
+
+    private static func run(_ mode: String, _ appid: String) -> (Int32, String) {
+        RowsByGame.options(mode, appid, id)
+    }
+
+    static func state(_ game: InstalledGame) -> State {
+        guard FileManager.default.fileExists(atPath: Engine.notproton.path),
+              let plugin = NotProtonPlugins.all.first(where: { $0.id == id }) else { return .noNotProton }
+        if game.nonSteam { return .nonSteam }
+        switch NotProtonPlugins.state(plugin) {
+        case .inPlace, .behind: break
+        default: return .notInstalled
+        }
+        let tool = PrefixRunner.mappedTool(game.appid)
+        guard let tool, tools.contains(where: { tool.hasPrefix($0) }) else { return .otherTool(tool) }
+        guard run("status", game.appid).0 == 0 else { return .off }
+        return .on(ours: FileManager.default.fileExists(atPath: journal(game.appid).path))
+    }
+
+    /// The row switched on or off for the game; nil when done, else why not, with nothing changed.
+    static func set(_ game: InstalledGame, on: Bool) -> String? {
+        if NotProtonHost.open().contains("Steam") {
+            return "Steam is open. Quit it, then turn it \(on ? "on" : "off"). Nothing was changed."
+        }
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: script.path) else { return "This catalog of fixes cannot change a game's launch options." }
+        if on {
+            try? fm.createDirectory(at: journal(game.appid).deletingLastPathComponent(), withIntermediateDirectories: true)
+        } else if !fm.fileExists(atPath: journal(game.appid).path) {
+            return "Game Feel did not switch it on: turn it off in the game's NotProton options in Steam."
+        }
+        let (code, text) = run(on ? "install" : "restore", game.appid)
+        guard code == 0 else { return text.isEmpty ? "The game's launch options could not be changed." : text }
+        RowsByGame.note(game.appid, id, on ? "on" : "off")
+        return nil
+    }
+}
+

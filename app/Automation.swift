@@ -495,6 +495,8 @@ enum Agent {
         if settings.shaderCache { ShaderCache.keepAll().forEach { print($0) } }
         // NotProton's rows for every game, made for this Mac (GeneralRows.swift), and the fans row.
         NotProtonRow.keepAll().forEach { print($0) }
+        // NotProton rows the catalog and Game Feel want for a game, switched on once while Steam is closed.
+        RowsByGame.pass().forEach { print($0) }
         if let line = Fans.keepNotProtonRow() { print(line) }
         // What the Wine modules saw each game do, kept before a restart empties /tmp.
         if PadStore.exists {

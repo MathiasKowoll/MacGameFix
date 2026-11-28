@@ -123,7 +123,8 @@ for my $f(@files){
 }
 if($mode eq 'status'){ my $ok=$found && !$missing;print $ok?"installed\n":"absent\n";exit($ok?0:1); }
 die "The game is missing from Steam's user settings. Start it once in Steam first.\n" unless $found || $mode eq 'restore';
-if(@changes){my $ps=`/bin/ps -axo comm=`;die "Quit Steam first: it rewrites the launch options when it quits. Nothing was changed.\n" if $ps =~ m{(?:/Steam\.app/Contents/MacOS/steam|/steam_osx)\s*$}m;}
+# MGVF_STEAM_RUNNING=0 or 1 answers for a test, which must not see the Steam of the Mac it runs on.
+if(@changes){my $forced=$ENV{MGVF_STEAM_RUNNING}//'';my $ps=$forced eq '0'?'':$forced eq '1'?"/steam_osx\n":`/bin/ps -axo comm=`;die "Quit Steam first: it rewrites the launch options when it quits. Nothing was changed.\n" if $ps =~ m{(?:/Steam\.app/Contents/MacOS/steam|/steam_osx)\s*$}m;}
 exit 0 if $mode eq 'preflight';
 for my $c(@changes){die "Steam's settings changed meanwhile; try again with Steam closed.\n" unless readfile($c->[0]) eq $c->[1];}
 for my $c(@changes){my($f,$before,$after)=@$c;

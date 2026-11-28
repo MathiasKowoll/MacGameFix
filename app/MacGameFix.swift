@@ -2739,6 +2739,10 @@ struct PadGameSheet: View {
     @Environment(\.windowSize) private var windowSize
 
     private var preset: PadPreset? { model.padPresets[game.appid] }
+    /// NotProton's "DualSense controllers" row for this game; nil until it has been read.
+    @State private var row: ControlsRow.State?
+    @State private var rowLine = ""
+    @State private var rowBusy = false
     private var own: PadOptions { model.pad.games[game.appid]?.options ?? PadOptions() }
     /// What the game gets without options of its own.
     private var base: PadOptions { model.pad.base(game.appid, presets: model.padPresets) }
@@ -2768,10 +2772,61 @@ struct PadGameSheet: View {
         }
     }
 
+    private func readRow() {
+        let game = game
+        Task { row = await Task.detached { ControlsRow.state(game) }.value }
+    }
+
+    private func setRow(_ on: Bool) {
+        let game = game
+        rowBusy = true
+        Task {
+            rowLine = await Task.detached { ControlsRow.set(game, on: on) }.value ?? ""
+            row = await Task.detached { ControlsRow.state(game) }.value
+            rowBusy = false
+        }
+    }
+
+    /// The row that makes these settings reach the game on a runner with CodeWeavers' own files.
+    @ViewBuilder
+    private func controlsRow(_ row: ControlsRow.State) -> some View {
+        LabeledContent("DualSense controllers in this game") {
+            HStack(spacing: 10) {
+                switch row {
+                case .on(let ours):
+                    Text("On")
+                    if ours {
+                        Button("Turn Off") { setRow(false) }.controlSize(.small).disabled(rowBusy)
+                            .help("Takes the row's switch out of the game's launch options in Steam. Quit Steam first.")
+                    }
+                case .off:
+                    Text("Off").foregroundStyle(.secondary)
+                    Button("Turn On") { setRow(true) }.controlSize(.small).disabled(rowBusy)
+                        .help("Switches NotProton's DualSense controllers row on for this game, in its launch options "
+                              + "in Steam. Quit Steam first.")
+                case .notInstalled:
+                    Text("Not installed: Improvements, NotProton plugins").foregroundStyle(.secondary)
+                case .otherTool(let tool):
+                    Text("For NotProton's Rosetta tools; this game runs on \(tool ?? "another one")").foregroundStyle(.secondary)
+                case .nonSteam:
+                    Text("Turn it on in the game's NotProton options in Steam").foregroundStyle(.secondary)
+                case .noNotProton:
+                    EmptyView()
+                }
+            }
+        }
+        .help("The row loads the controls into this game; off, a NotProton runner that keeps CodeWeavers' files "
+              + "gives the game the pad as Wine does, and the settings below do not reach it.")
+        if !rowLine.isEmpty {
+            Text(rowLine).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Form {
                 Section {
+                    if let row, row != .noNotProton { controlsRow(row) }
                     PadOptionRows(flag: flag, choice: trigger, own: isOwn, perGame: true)
                 } header: {
                     HStack(alignment: .center, spacing: 14) {
@@ -2854,6 +2909,7 @@ struct PadGameSheet: View {
             .padding(16)
         }
         .padSheetSize(in: windowSize)
+        .onAppear { readRow() }
         .onDisappear { model.padTester.stop() }
     }
 }
@@ -3328,6 +3384,29 @@ enum Entry {
             let (said, refused) = NotProtonPlugins.install(only: only)
             print(said.isEmpty ? "plugins: nothing to do" : said.joined(separator: "\n"))
             exit(refused ? 1 : 0)
+        }
+        if args.contains("--rows-by-game") || args.contains("--rows-by-game-report") {
+            // NotProton rows switched on per game (RowsByGame.swift), as the agent does it while Steam is
+            // closed; then, or alone with --rows-by-game-report, how each one stands.
+            if args.contains("--rows-by-game") { RowsByGame.pass().forEach { print($0) } }
+            print(RowsByGame.report())
+            exit(0)
+        }
+        if let i = args.firstIndex(of: "--controls-row"), i + 2 < args.count {
+            // "DualSense controllers" for one game, as Game Feel reads and switches it: status, on or off, then the app id.
+            let game = InstalledGame(appid: args[i + 2], name: "", nonSteam: SteamShortcuts.isGameID(args[i + 2]))
+            if args[i + 1] == "on" || args[i + 1] == "off" {
+                if let why = ControlsRow.set(game, on: args[i + 1] == "on") { print(why); exit(1) }
+            }
+            switch ControlsRow.state(game) {
+            case .on(let ours): print(ours ? "on, switched on here" : "on")
+            case .off: print("off")
+            case .notInstalled: print("not installed")
+            case .otherTool(let tool): print("not for \(tool ?? "this game's tool")")
+            case .nonSteam: print("a game added to Steam")
+            case .noNotProton: print("no NotProton")
+            }
+            exit(0)
         }
         if args.contains("--plugins-report") {
             // How each NotProton plugin MacGameFix carries stands (NotProtonPlugins.swift); nothing written.
